@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora de Custo</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F3E7;
+    --stripe:#DCE8D2;
+    --stripe2:#EDF3E6;
+    --ink:#202B22;
+    --ink-soft:#5B6B5E;
+    --brick:#A8462B;
+    --brick-dark:#8A3821;
+    --copper:#B9773F;
+    --profit:#2E6B45;
+    --loss:#B23A2E;
+    --line:#C9C2A8;
+    --card:#FFFEF9;
+    --font-display:'Roboto Slab', serif;
+    --font-body:'IBM Plex Sans', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    padding:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:28px 20px 60px;
+  }
+  header.top{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:22px;
+  }
+  .title-block h1{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(24px,4vw,34px);
+    margin:0 0 4px;
+    letter-spacing:0.5px;
+  }
+  .title-block p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:13px;
+    font-family:var(--font-mono);
+    letter-spacing:0.5px;
+  }
+  .stamp{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:1.5px;
+    color:var(--brick);
+    border:2px solid var(--brick);
+    padding:5px 10px;
+    border-radius:3px;
+    text-transform:uppercase;
+    transform:rotate(-2deg);
+    white-space:nowrap;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:1.15fr 1fr;
+    gap:22px;
+    align-items:start;
+  }
+  @media (max-width:880px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:18px 20px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:700;
+    margin:0 0 14px;
+    text-transform:uppercase;
+    letter-spacing:0.8px;
+    color:var(--brick-dark);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    margin-bottom:5px;
+    color:var(--ink);
+  }
+  .field .hint{
+    font-size:11px;
+    color:var(--ink-soft);
+    font-weight:400;
+    margin-left:4px;
+  }
+  .input-row{
+    display:flex;
+    align-items:center;
+    border:1.5px solid var(--line);
+    border-radius:4px;
+    background:#fff;
+    overflow:hidden;
+    transition:border-color .15s;
+  }
+  .input-row:focus-within{
+    border-color:var(--brick);
+  }
+  .input-row .prefix{
+    padding:9px 10px;
+    background:var(--stripe2);
+    font-family:var(--font-mono);
+    font-size:13px;
+    color:var(--ink-soft);
+    border-right:1.5px solid var(--line);
+  }
+  .input-row input[type=text],
+  .input-row input[type=number]{
+    border:0;
+    outline:0;
+    padding:9px 10px;
+    font-family:var(--font-mono);
+    font-size:14px;
+    width:100%;
+    background:transparent;
+    color:var(--ink);
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
+
+  .toggle{
+    display:inline-flex;
+    border:1.5px solid var(--line);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .toggle button{
+    border:0;
+    background:#fff;
+    padding:8px 16px;
+    font-family:var(--font-body);
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition:background .15s,color .15s;
+  }
+  .toggle button + button{border-left:1.5px solid var(--line);}
+  .toggle button.active{
+    background:var(--brick);
+    color:#fff;
+  }
+  .toggle button:focus-visible{outline:2px solid var(--copper); outline-offset:-2px;}
+
+  .sub-field{
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px dashed var(--line);
+  }
+  .row2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+
+  /* Results ledger */
+  .ledger{
+    position:sticky;
+    top:20px;
+    background:repeating-linear-gradient(
+      var(--card) 0px, var(--card) 34px,
+      var(--stripe) 34px, var(--stripe) 68px
+    );
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .ledger-head{
+    background:var(--ink);
+    color:var(--paper);
+    padding:14px 20px;
+    font-family:var(--font-display);
+    font-size:14px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+  .hero{
+    padding:20px 20px 16px;
+    background:var(--card);
+    border-bottom:2px solid var(--ink);
+  }
+  .hero-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:10px;
+  }
+  .hero-row:last-child{margin-bottom:0;}
+  .hero-label{
+    font-size:12px;
+    font-weight:600;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .hero-value{
+    font-family:var(--font-mono);
+    font-size:26px;
+    font-weight:600;
+  }
+  .hero-value.profit{color:var(--profit);}
+  .hero-value.loss{color:var(--loss);}
+
+  .ledger-body{padding:6px 20px 4px;}
+  .lrow{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px 0;
+    font-size:13.5px;
+    line-height:34px;
+    height:34px;
+  }
+  .lrow .lname{color:var(--ink);}
+  .lrow .lval{
+    font-family:var(--font-mono);
+    font-weight:600;
+  }
+
+  .desc-box{
+    margin:14px 20px 18px;
+    padding:12px 14px;
+    background:#fff;
+    border:1px dashed var(--copper);
+    border-radius:4px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    white-space:pre-line;
+    color:var(--ink-soft);
+  }
+
+  .price-tier{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:11px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .price-tier:last-child{border-bottom:0;}
+  .price-tier .ptlabel{font-size:13px; font-weight:600; color:var(--ink);}
+  .price-tier .pthint{font-size:11px; color:var(--ink-soft); font-weight:400; margin-left:5px;}
+  .price-tier .ptvalue{font-family:var(--font-mono); font-size:18px; font-weight:700;}
+  .price-tier.minimo .ptvalue{color:var(--ink-soft);}
+  .price-tier.recomendado .ptvalue{color:var(--copper);}
+  .price-tier.ideal .ptvalue{color:var(--profit);}
+
+  /* Saved products */
+  .saved-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .saved-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:10px 12px;
+    flex-wrap:wrap;
+  }
+  .saved-item .info{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    min-width:200px;
+    flex:1;
+  }
+  .saved-item .nome{
+    font-weight:600;
+    font-size:13.5px;
+  }
+  .saved-item .desc{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    white-space:pre-line;
+  }
+  .saved-item .price-highlight{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 12px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:6px;
+  }
+  .saved-item .ph-venda{
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:15px;
+    color:var(--ink);
+    white-space:nowrap;
+  }
+  .saved-item .badge{
+    font-family:var(--font-mono);
+    font-size:12px;
+    font-weight:600;
+    padding:3px 8px;
+    border-radius:3px;
+    white-space:nowrap;
+  }
+  .saved-item .badge.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
+  .saved-item .badge.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
+  .saved-item .actions-mini{
+    display:flex;
+    gap:6px;
+  }
+  .saved-item .actions-mini button{
+    border:1px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:4px;
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-weight:600;
+  }
+  .saved-item .actions-mini button:hover{background:var(--stripe);}
+  .saved-item .actions-mini button.del{color:var(--loss); border-color:var(--loss);}
+  .supplier-group{ margin-bottom:14px; }
+  .supplier-group:last-child{ margin-bottom:0; }
+  .supplier-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .supplier-header:hover{ background:var(--stripe); }
+  .supplier-arrow{
+    display:inline-block;
+    font-size:11px;
+    color:var(--brick);
+    transition:transform .15s;
+  }
+  .supplier-arrow.collapsed{ transform:rotate(-90deg); }
+  .supplier-name{
+    flex:1;
+    font-weight:600;
+    font-size:13px;
+  }
+  .supplier-count{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .supplier-avg{
+    font-family:var(--font-mono);
+    font-size:11px;
+    font-weight:600;
+    padding:2px 8px;
+    border-radius:10px;
+    margin-left:auto;
+  }
+  .supplier-avg.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
+  .supplier-avg.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
+  .supplier-items{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top:8px;
+    padding-left:8px;
+    border-left:2px solid var(--line);
+  }
+
+  .empty-note{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+  .status-pill{
+    display:inline-block;
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    padding:5px 12px;
+    border-radius:20px;
+    margin-bottom:12px;
+  }
+  .status-pill.claude, .status-pill.local, .status-pill.firebase{
+    background:rgba(46,107,69,0.12);
+    color:var(--profit);
+  }
+  .status-pill.memoria{
+    background:#FCEFD6;
+    border:1px solid var(--copper);
+    color:var(--ink);
+  }
+
+  .btn{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:13px;
+    border:1.5px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    padding:9px 16px;
+    border-radius:4px;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  .btn:hover{opacity:0.85;}
+  .btn.secondary{
+    background:transparent;
+    color:var(--ink);
+  }
+  .btn:focus-visible, .chip button:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
+
+  .actions{
+    display:flex;
+    gap:10px;
+    margin-top:4px;
+    flex-wrap:wrap;
+  }
+
+  footer.note{
+    margin-top:24px;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    font-family:var(--font-mono);
+    line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1>Calculadora de Custo</h1>
+      <p>CUSTO · IMPOSTOS · FRETE · MARGEM DE VENDA</p>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
+      <button class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
+      <button class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
+      <div class="stamp">Uso interno</div>
+    </div>
+  </header>
+
+  <div id="viewFrete" style="display:none;">
+    <button class="btn secondary" id="voltarCalculadoraBtn2" style="margin-bottom:16px;">← Voltar à calculadora</button>
+
+    <div class="card" style="max-width:520px;">
+      <h2>Calculadora de Frete (R$/m²)</h2>
+      <div class="field">
+        <label for="freteTonelada">Preço por tonelada <span class="hint">valor cobrado pela transportadora, por t</span></label>
+        <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="freteTonelada" placeholder="0"></div>
+      </div>
+      <div class="field">
+        <label for="pesoM2">Peso do produto <span class="hint">peso de 1 m² desse produto</span></label>
+        <div class="input-row"><input type="number" step="0.01" id="pesoM2" placeholder="0"><span class="prefix">kg/m²</span></div>
+      </div>
+      <div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:6px;">
+        <div class="hero-row">
+          <span class="hero-label">Frete por m²</span>
+          <span class="hero-value" id="freteResultado">--</span>
+        </div>
+      </div>
+      <div class="actions" style="margin-top:16px;">
+        <button class="btn" id="usarFreteBtn">Usar este valor na calculadora</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewSync" style="display:none;">
+    <button class="btn secondary" id="voltarCalculadoraBtn3" style="margin-bottom:16px;">← Voltar à calculadora</button>
+
+    <div class="card" id="firebaseCard">
+      <h2>Sincronização (Firebase)</h2>
+      <div class="field">
+        <label for="firebaseConfigInput">Cole aqui o bloco "firebaseConfig" do Firebase Console</label>
+        <textarea id="firebaseConfigInput" rows="6" style="width:100%; font-family:var(--font-mono); font-size:12px; padding:10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink);" placeholder='const firebaseConfig = {&#10;  apiKey: "...",&#10;  authDomain: "...",&#10;  projectId: "...",&#10;  ...&#10;};'></textarea>
+      </div>
+      <div class="actions">
+        <button class="btn" id="firebaseSaveBtn">Conectar</button>
+        <button class="btn secondary" id="firebaseClearBtn">Desconectar</button>
+      </div>
+      <div class="empty-note" id="firebaseMsg" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
+  <div id="viewProdutos" style="display:none;">
+    <button class="btn secondary" id="voltarCalculadoraBtn" style="margin-bottom:16px;">← Voltar à calculadora</button>
+
+    <div class="card" id="savedCard">
+      <h2>Produtos salvos</h2>
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
+        <div id="storageStatus" class="status-pill" style="margin-bottom:0;"></div>
+        <button class="btn secondary" id="irSyncBtn" style="padding:5px 12px; font-size:12px;">⚙ Configurar sincronização</button>
+      </div>
+      <div class="field" style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
+        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaProduto" placeholder="Buscar produto pelo nome..."></div>
+        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaFornecedor" placeholder="Buscar fornecedor..."></div>
+      </div>
+      <div class="saved-list" id="savedList"></div>
+      <div class="empty-note" id="emptyNote">Nenhum produto salvo ainda. Preencha os dados e clique em "Salvar" abaixo.</div>
+      <div class="actions" style="margin-top:14px; border-top:1px dashed var(--line); padding-top:14px;">
+        <button class="btn secondary" id="backupBtn">⭳ Baixar backup (.json)</button>
+        <button class="btn secondary" id="restoreBtn">⭱ Importar backup</button>
+        <input type="file" id="restoreFile" accept="application/json" style="display:none;">
+      </div>
+    </div>
+  </div>
+
+  <div id="viewCalculadora">
+  <div class="grid">
+    <!-- LEFT: FORM -->
+    <div>
+      <div class="card">
+        <h2>Produto</h2>
+        <div class="field">
+          <label for="fornecedor">Fornecedor</label>
+          <div class="input-row">
+            <input type="text" id="fornecedor" placeholder="Ex: Cerbras">
+          </div>
+        </div>
+        <div class="field">
+          <label for="produto">Nome do produto</label>
+          <div class="input-row">
+            <input type="text" id="produto" placeholder="Ex: Porcelanato Onyx 60x60">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Custo de aquisição</h2>
+        <div class="row2">
+          <div class="field">
+            <label for="custoNFe">Custo NF-e</label>
+            <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="custoNFe" placeholder="0"></div>
+          </div>
+          <div class="field">
+            <label for="frete">Frete</label>
+            <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="frete" placeholder="0"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Credita ICMS sobre o frete?</label>
+          <div class="toggle" data-toggle="credIcmsFrete">
+            <button type="button" data-val="1">Sim</button>
+            <button type="button" data-val="0" class="active">Não</button>
+          </div>
+          <div class="sub-field" id="credFreteSub" style="display:none;">
+            <label for="pctCredFrete">% do crédito sobre o frete <span class="hint">ex: 12 = 12%</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="pctCredFrete" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Impostos &amp; Substituição Tributária</h2>
+        <div class="field">
+          <label>Produto com ST (Substituição Tributária)?</label>
+          <div class="toggle" data-toggle="comST">
+            <button type="button" data-val="1" class="active">Sim</button>
+            <button type="button" data-val="0">Não</button>
+          </div>
+          <div class="sub-field" id="stSub">
+            <label for="valorST">Valor ST <span class="hint">ex: 20 = 20% sobre o custo NF-e</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="valorST" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+          <div class="sub-field" id="icmsCreditoSub" style="display:none;">
+            <label for="icmsCredito">ICMS Crédito <span class="hint">% sobre o custo NF-e</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="icmsCredito" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ipi">IPI <span class="hint">% sobre o custo NF-e</span></label>
+          <div class="input-row"><input type="number" step="0.01" id="ipi" value="0.65"><span class="prefix">%</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Outros custos</h2>
+        <div class="row2">
+          <div class="field">
+            <label for="custoFinanceiroPct">Custo financeiro <span class="hint">taxa de cartão/antecipação</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="custoFinanceiroPct" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+          <div class="field">
+            <label for="avariasPct">Avarias <span class="hint">% de perda sobre a venda</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="avariasPct" value="1.5"><span class="prefix">%</span></div>
+          </div>
+        </div>
+        <div class="field" style="margin-top:4px;">
+          <label>Está com prejuízo contábil?</label>
+          <div class="toggle" data-toggle="prejuizoContabil">
+            <button type="button" data-val="1">Sim</button>
+            <button type="button" data-val="0" class="active">Não</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Preço de venda</h2>
+        <div class="field">
+          <label for="venda">Venda <span class="hint">preço que você quer testar</span></label>
+          <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="venda" placeholder="0"></div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="salvarBtn">Salvar este produto</button>
+          <button class="btn secondary" id="novoBtn">Novo cálculo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: RESULTS -->
+    <div class="ledger">
+      <div class="ledger-head">Resultado</div>
+      <div class="hero">
+        <div class="hero-row">
+          <span class="hero-label">Margem líquida</span>
+          <span class="hero-value" id="outMargem">--</span>
+        </div>
+        <div class="hero-row">
+          <span class="hero-label">Lucro</span>
+          <span class="hero-value" id="outLucro">--</span>
+        </div>
+      </div>
+      <div class="ledger-body">
+        <div class="lrow"><span class="lname">Custo do produto</span><span class="lval" id="outCusto">--</span></div>
+        <div class="lrow" id="rowCustoFinanceiro" style="display:none;"><span class="lname">Custo financeiro</span><span class="lval" id="outCustoFinanceiro">--</span></div>
+        <div class="lrow"><span class="lname">IRPJ</span><span class="lval" id="outIrpj">--</span></div>
+        <div class="lrow"><span class="lname">CSLL</span><span class="lval" id="outCsll">--</span></div>
+        <div class="lrow"><span class="lname">Avarias (R$)</span><span class="lval" id="outAvarias">--</span></div>
+        <div class="lrow" style="border-top:2px solid var(--ink); margin-top:4px; padding-top:10px;"><span class="lname" style="font-weight:700;">TOTAL</span><span class="lval" id="outTotal" style="font-size:15px;">--</span></div>
+      </div>
+      <div class="desc-box" id="outDescricao">Preencha os campos ao lado para calcular.</div>
+    </div>
+
+    <div class="card" id="sugestaoCard" style="margin-top:18px;">
+      <h2>Sugestão de preço</h2>
+      <div class="price-tier minimo">
+        <span class="ptlabel">Mínimo<span class="pthint">margem de 4%</span></span>
+        <span class="ptvalue" id="precoMinimo">--</span>
+      </div>
+      <div class="price-tier recomendado">
+        <span class="ptlabel">Aceitável<span class="pthint">margem de 8%</span></span>
+        <span class="ptvalue" id="precoRecomendado">--</span>
+      </div>
+      <div class="price-tier ideal">
+        <span class="ptlabel">Ideal<span class="pthint">margem de 13%</span></span>
+        <span class="ptvalue" id="precoIdeal">--</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <footer class="note">
+    PIS/COFINS 9,25%, IRPJ 25% e CSLL 9% sobre a base tributável.
+  </footer>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const fields = ['produto','fornecedor','custoNFe','frete','pctCredFrete','valorST','icmsCredito','ipi','custoFinanceiroPct','avariasPct','venda'];
+  const toggleDefaults = { credIcmsFrete:0, comST:1, prejuizoContabil:0 };
+  const toggles = { ...toggleDefaults };
+
+  // --- Camada de armazenamento em 4 níveis ---
+  // 1) firebase: Firestore — banco de dados de verdade, rápido e robusto
+  // 2) claude: window.storage, quando visto dentro de um artefato publicado do Claude
+  // 3) localStorage: guarda PERMANENTEMENTE neste computador/navegador, atrelado a este arquivo
+  // 4) memória: último recurso, só dura enquanto a aba estiver aberta.
+  const LS_KEY = 'calculadora_custo_produtos_v1';
+  const FIREBASE_CONFIG_KEY = 'calculadora_custo_firebase_config';
+  const FIREBASE_CONFIG_PADRAO = {
+    apiKey: "AIzaSyCYZmYORbmVpgN0rNDsdCwN0Xm2Ce1SRyU",
+    authDomain: "bd-calculadora-d2ce0.firebaseapp.com",
+    projectId: "bd-calculadora-d2ce0",
+    storageBucket: "bd-calculadora-d2ce0.firebasestorage.app",
+    messagingSenderId: "543548220495",
+    appId: "1:543548220495:web:b3559aff504028b3ad363a"
+  };
+  const memoryStore = {};
+  let firestoreDb = null;
+
+  function localStorageFunciona(){
+    try{
+      const k = '__ls_test__';
+      localStorage.setItem(k, '1');
+      localStorage.removeItem(k);
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function getFirebaseConfigSalva(){
+    try{
+      const raw = localStorage.getItem(FIREBASE_CONFIG_KEY);
+      // null = nunca configurado neste navegador -> usa a config padrão embutida.
+      // "null" (string literal) = usuário clicou em "Desconectar" explicitamente -> respeita a escolha.
+      if(raw === null) return FIREBASE_CONFIG_PADRAO;
+      if(raw === 'null') return null;
+      return JSON.parse(raw);
+    }catch(e){ return FIREBASE_CONFIG_PADRAO; }
+  }
+  function setFirebaseConfigSalva(config){
+    try{ localStorage.setItem(FIREBASE_CONFIG_KEY, config ? JSON.stringify(config) : 'null'); }catch(e){}
+  }
+
+  // Extrai os campos do bloco firebaseConfig colado (sem usar eval) via regex simples
+  function parseFirebaseConfig(texto){
+    const campos = ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'];
+    const config = {};
+    campos.forEach(campo=>{
+      const re = new RegExp(campo + '\\s*:\\s*["\']([^"\']+)["\']');
+      const m = texto.match(re);
+      if(m) config[campo] = m[1];
+    });
+    return config;
+  }
+
+  function inicializarFirebase(config){
+    if(typeof firebase === 'undefined') throw new Error('SDK do Firebase não carregou (sem internet?)');
+    try{
+      const nomeApp = 'calculadoraCusto';
+      const existente = firebase.apps.find(a => a.name === nomeApp);
+      if(existente) existente.delete();
+    }catch(e){ /* ignora */ }
+    const app = firebase.initializeApp(config, 'calculadoraCusto');
+    firestoreDb = app.firestore();
+  }
+
+  async function firebaseListar(){
+    const snap = await firestoreDb.collection('produtos').get();
+    const produtos = {};
+    snap.forEach(doc=>{
+      const nome = decodeURIComponent(doc.id);
+      const d = doc.data();
+      produtos[nome] = d.dados;
+    });
+    return produtos;
+  }
+  async function firebaseObter(nome){
+    const doc = await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).get();
+    if(!doc.exists) return null;
+    return doc.data().dados;
+  }
+  async function firebaseSalvar(nome, dados){
+    await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).set({
+      nome, dados, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+  async function firebaseExcluir(nome){
+    await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).delete();
+  }
+
+  function detectarBackendInicial(){
+    if(getFirebaseConfigSalva()) return 'firebase';
+    if(typeof window.storage !== 'undefined' && window.storage && typeof window.storage.set === 'function'){
+      return 'claude';
+    }
+    return localStorageFunciona() ? 'local' : 'memoria';
+  }
+
+  let storageBackend = detectarBackendInicial();
+
+  function lsLerTudo(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+  }
+  function lsGravarTudo(obj){
+    localStorage.setItem(LS_KEY, JSON.stringify(obj));
+  }
+
+  function atualizarStatusArmazenamento(){
+    const el = $('storageStatus');
+    if(!el) return;
+    el.className = 'status-pill ' + storageBackend;
+    if(storageBackend === 'firebase'){
+      el.textContent = '● Sincronizando com o Firebase';
+    } else if(storageBackend === 'claude'){
+      el.textContent = '● Salvando na sua conta Claude';
+    } else if(storageBackend === 'local'){
+      el.textContent = '● Salvando neste navegador (local e permanente neste arquivo/computador)';
+    } else {
+      el.textContent = '⚠ Sem armazenamento permanente nesta sessão — use os botões de backup abaixo';
+    }
+  }
+
+  function rebaixarBackend(){
+    if(storageBackend === 'firebase' || storageBackend === 'claude'){
+      storageBackend = localStorageFunciona() ? 'local' : 'memoria';
+    } else {
+      storageBackend = 'memoria';
+    }
+    atualizarStatusArmazenamento();
+  }
+
+  async function storageSet(key, value){
+    if(storageBackend === 'firebase'){
+      try{
+        const nome = decodeURIComponent(key.replace('calc:',''));
+        await firebaseSalvar(nome, JSON.parse(value));
+        return { key, value, shared:false };
+      }catch(e){ console.error('Erro Firebase (salvar):', e); rebaixarBackend(); }
+    }
+    if(storageBackend === 'claude'){
+      try{
+        const r = await window.storage.set(key, value, false);
+        if(r) return r;
+        throw new Error('resultado vazio');
+      }catch(e){ rebaixarBackend(); }
+    }
+    if(storageBackend === 'local'){
+      try{
+        const all = lsLerTudo();
+        all[key] = value;
+        lsGravarTudo(all);
+        return { key, value, shared:false };
+      }catch(e){ storageBackend = 'memoria'; atualizarStatusArmazenamento(); }
+    }
+    memoryStore[key] = value;
+    return { key, value, shared:false };
+  }
+
+  async function storageGet(key){
+    if(storageBackend === 'firebase'){
+      try{
+        const nome = decodeURIComponent(key.replace('calc:',''));
+        const dados = await firebaseObter(nome);
+        if(dados) return { key, value: JSON.stringify(dados), shared:false };
+        return null;
+      }catch(e){ console.error('Erro Firebase (get):', e); rebaixarBackend(); }
+    }
+    if(storageBackend === 'claude'){
+      try{
+        return await window.storage.get(key, false);
+      }catch(e){ rebaixarBackend(); }
+    }
+    if(storageBackend === 'local'){
+      const all = lsLerTudo();
+      if(Object.prototype.hasOwnProperty.call(all, key)){
+        return { key, value: all[key], shared:false };
+      }
+      return null;
+    }
+    if(Object.prototype.hasOwnProperty.call(memoryStore, key)){
+      return { key, value: memoryStore[key], shared:false };
+    }
+    return null;
+  }
+
+  async function storageDelete(key){
+    if(storageBackend === 'firebase'){
+      try{
+        const nome = decodeURIComponent(key.replace('calc:',''));
+        await firebaseExcluir(nome);
+        return { key, deleted:true, shared:false };
+      }catch(e){ console.error('Erro Firebase (excluir):', e); rebaixarBackend(); }
+    }
+    if(storageBackend === 'claude'){
+      try{
+        return await window.storage.delete(key, false);
+      }catch(e){ rebaixarBackend(); }
+    }
+    if(storageBackend === 'local'){
+      const all = lsLerTudo();
+      delete all[key];
+      lsGravarTudo(all);
+      return { key, deleted:true, shared:false };
+    }
+    delete memoryStore[key];
+    return { key, deleted:true, shared:false };
+  }
+
+  async function storageList(prefix){
+    if(storageBackend === 'firebase'){
+      try{
+        const produtos = await firebaseListar();
+        const keys = Object.keys(produtos).map(nome => 'calc:' + encodeURIComponent(nome)).filter(k=>k.startsWith(prefix));
+        return { keys, prefix, shared:false };
+      }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
+    }
+    if(storageBackend === 'claude'){
+      try{
+        return await window.storage.list(prefix, false);
+      }catch(e){ rebaixarBackend(); }
+    }
+    if(storageBackend === 'local'){
+      const all = lsLerTudo();
+      return { keys: Object.keys(all).filter(k=>k.startsWith(prefix)), prefix, shared:false };
+    }
+    return { keys: Object.keys(memoryStore).filter(k=>k.startsWith(prefix)), prefix, shared:false };
+  }
+
+  // Toggle wiring
+  document.querySelectorAll('[data-toggle]').forEach(group=>{
+    const key = group.dataset.toggle;
+    group.querySelectorAll('button').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        group.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        toggles[key] = parseInt(btn.dataset.val,10);
+        onToggleChange();
+        calcular();
+      });
+    });
+  });
+
+  function onToggleChange(){
+    $('credFreteSub').style.display = toggles.credIcmsFrete ? 'block' : 'none';
+    if(!toggles.credIcmsFrete){ $('pctCredFrete').value = 0; }
+
+    $('stSub').style.display = toggles.comST ? 'block' : 'none';
+    $('icmsCreditoSub').style.display = toggles.comST ? 'none' : 'block';
+    if(toggles.comST){ $('icmsCredito').value = 0; } else { $('valorST').value = 0; }
+  }
+
+  function toNum(v){
+    const n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function brl(v){
+    return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+  }
+  function pct(v){
+    return (v*100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '%';
+  }
+
+  // Pure calculation core - shared by the live form and by the saved-products preview list
+  function computeCalc(v){
+    const custoNFe = v.custoNFe;
+    const frete = v.frete;
+    const pctCredFrete = v.pctCredFrete/100;
+    const valorST = v.valorST/100;
+    const icmsCredito = v.icmsCredito/100;
+    const ipi = v.ipi/100;
+    const custoFinanceiroPct = v.custoFinanceiroPct/100;
+    const avariasPct = v.avariasPct/100;
+    const venda = v.venda;
+    const comST = !!v.comST;
+    const prejuizoContabil = !!v.prejuizoContabil;
+
+    const avariasRS = venda * avariasPct;
+    const parteST = comST ? (custoNFe * valorST) : (venda*0.205 - custoNFe*icmsCredito);
+    const creditoFrete = pctCredFrete !== 0 ? (pctCredFrete * frete) : 0;
+    const custo = parteST + custoNFe + frete + (ipi*custoNFe) + (venda*0.0925) - ((custoNFe+frete)*0.0925) - creditoFrete;
+
+    const base = venda - custo - (venda*custoFinanceiroPct) - avariasRS;
+    const semTributo = (base < 0) || prejuizoContabil;
+    const irpj = semTributo ? 0 : base*0.25;
+    const csll = semTributo ? 0 : base*0.09;
+
+    const lucro = venda*(1-custoFinanceiroPct) - custo - irpj - csll - avariasRS;
+    const margem = venda !== 0 ? (lucro/venda) : NaN;
+    const custoFinanceiroRS = venda * custoFinanceiroPct;
+    const total = custo + custoFinanceiroRS + irpj + csll + avariasRS; // soma de todos os custos = venda - lucro
+
+    const vista = custoFinanceiroPct === 0 ? ' à vista' : ' cartão';
+    const descricao = 'Custo NF-e R$ ' + custoNFe.toFixed(2) + ' | Frete R$ ' + frete.toFixed(2) + ' |\n' +
+      'Venda R$ ' + venda.toFixed(2) + vista;
+
+    return {custo, irpj, csll, avariasRS, custoFinanceiroRS, total, lucro, margem, descricao, venda, custoNFe, frete};
+  }
+
+  // Decompõe o custo em: custo = C0 + k*venda (k é a parte que varia com o preço:
+  // PIS/COFINS sobre a venda, e o débito de ICMS quando não há ST). Com isso dá pra
+  // resolver algebricamente qual "venda" produz uma margem-alvo específica.
+  function computeCoeficientes(v){
+    const custoNFe = v.custoNFe;
+    const frete = v.frete;
+    const pctCredFrete = v.pctCredFrete/100;
+    const valorST = v.valorST/100;
+    const icmsCredito = v.icmsCredito/100;
+    const ipi = v.ipi/100;
+    const custoFinanceiroPct = v.custoFinanceiroPct/100;
+    const avariasPct = v.avariasPct/100;
+    const comST = !!v.comST;
+    const creditoFrete = pctCredFrete !== 0 ? (pctCredFrete * frete) : 0;
+
+    let k, C0;
+    if(comST){
+      k = 0.0925;
+      C0 = custoNFe*valorST + custoNFe + frete + (ipi*custoNFe) - ((custoNFe+frete)*0.0925) - creditoFrete;
+    } else {
+      k = 0.205 + 0.0925;
+      C0 = -(custoNFe*icmsCredito) + custoNFe + frete + (ipi*custoNFe) - ((custoNFe+frete)*0.0925) - creditoFrete;
+    }
+    const m = 1 - k - custoFinanceiroPct - avariasPct;
+    return { C0, m };
+  }
+
+  // Resolve o preço de venda que resulta na margem-alvo informada (ex: 0.08 = 8%),
+  // considerando IRPJ 25% + CSLL 9% = 34% sobre a base tributável (lucro = 0.66 * base).
+  function precoParaMargem(v, targetMargem){
+    const { C0, m } = computeCoeficientes(v);
+    const denom = 0.66*m - targetMargem;
+    if(denom <= 0) return null; // custo alto demais para essa margem ser atingível
+    const preco = (0.66*C0) / denom;
+    if(!isFinite(preco) || preco <= 0) return null;
+    return preco;
+  }
+
+  // Arredonda para cima até o próximo valor terminado em ",90" (24.90, 25.90, 26.90...)
+  function arredondarNovanta(v){
+    if(v == null || !isFinite(v) || v <= 0) return null;
+    const inteiro = Math.floor(v);
+    let candidato = inteiro + 0.9;
+    if(candidato < v - 1e-9) candidato += 1;
+    return candidato;
+  }
+
+  function getFormValues(){
+    return {
+      custoNFe: toNum($('custoNFe').value),
+      frete: toNum($('frete').value),
+      pctCredFrete: toNum($('pctCredFrete').value),
+      valorST: toNum($('valorST').value),
+      icmsCredito: toNum($('icmsCredito').value),
+      ipi: toNum($('ipi').value),
+      custoFinanceiroPct: toNum($('custoFinanceiroPct').value),
+      avariasPct: toNum($('avariasPct').value),
+      venda: toNum($('venda').value),
+      comST: toggles.comST,
+      prejuizoContabil: toggles.prejuizoContabil
+    };
+  }
+
+  function calcular(){
+    const v = getFormValues();
+    const r = computeCalc(v);
+
+    $('outCusto').textContent = brl(r.custo);
+    $('outIrpj').textContent = brl(r.irpj);
+    $('outCsll').textContent = brl(r.csll);
+    $('outAvarias').textContent = brl(r.avariasRS);
+    $('outTotal').textContent = brl(r.total);
+
+    const rowCustoFinanceiro = $('rowCustoFinanceiro');
+    if(r.custoFinanceiroRS > 0){
+      $('outCustoFinanceiro').textContent = brl(r.custoFinanceiroRS);
+      rowCustoFinanceiro.style.display = 'flex';
+    } else {
+      rowCustoFinanceiro.style.display = 'none';
+    }
+
+    const lucroEl = $('outLucro');
+    const margemEl = $('outMargem');
+    if(v.venda === 0){
+      lucroEl.textContent = '--';
+      margemEl.textContent = '--';
+      lucroEl.className = 'hero-value';
+      margemEl.className = 'hero-value';
+    } else {
+      lucroEl.textContent = brl(r.lucro);
+      margemEl.textContent = pct(r.margem);
+      const cls = r.lucro >= 0 ? 'profit' : 'loss';
+      lucroEl.className = 'hero-value ' + cls;
+      margemEl.className = 'hero-value ' + cls;
+    }
+
+    $('outDescricao').textContent = r.descricao;
+
+    // Sugestão de preço: mínimo (4%), recomendado (8%) e ideal (13%), arredondados p/ ,90
+    const metas = [
+      { id:'precoMinimo', alvo:0.04 },
+      { id:'precoRecomendado', alvo:0.08 },
+      { id:'precoIdeal', alvo:0.13 }
+    ];
+    metas.forEach(({id, alvo})=>{
+      const bruto = precoParaMargem(v, alvo);
+      const arredondado = arredondarNovanta(bruto);
+      $(id).textContent = arredondado != null ? brl(arredondado) : '--';
+    });
+  }
+
+  fields.forEach(id=>{
+    $(id).addEventListener('input', calcular);
+  });
+
+  $('novoBtn').addEventListener('click', ()=>{
+    fields.forEach(id=>{ $(id).value = ''; });
+    $('ipi').value = 0.65;
+    $('avariasPct').value = 1.5;
+    document.querySelectorAll('[data-toggle]').forEach(group=>{
+      const key = group.dataset.toggle;
+      const def = toggleDefaults[key];
+      group.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+      group.querySelector('[data-val="'+def+'"]').classList.add('active');
+      toggles[key]=def;
+    });
+    onToggleChange();
+    calcular();
+  });
+
+  function coletarInputs(){
+    const data = { toggles: {...toggles} };
+    fields.forEach(id=>{ data[id] = $(id).value; });
+    return data;
+  }
+
+  function preencherForm(data){
+    fields.forEach(id=>{
+      if(data[id] !== undefined) $(id).value = data[id];
+    });
+    Object.keys(toggles).forEach(key=>{
+      toggles[key] = data.toggles && data.toggles[key] ? 1 : 0;
+      const group = document.querySelector('[data-toggle="'+key+'"]');
+      group.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+      group.querySelector('[data-val="'+toggles[key]+'"]').classList.add('active');
+    });
+    onToggleChange();
+    calcular();
+  }
+
+  let produtosCache = []; // [{nome, fornecedor, r}] - populado por atualizarListaSalvos, filtrado por renderListaSalvos
+  let gruposExpandidos = new Set(); // nomes de fornecedores abertos manualmente pelo usuário
+
+  function normalizarTexto(str){
+    return String(str || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // remove acentos p/ busca mais tolerante
+  }
+
+  async function atualizarListaSalvos(){
+    const countEl = $('produtosCount');
+    const emptyEl = $('emptyNote');
+    try{
+      const res = await storageList('calc:');
+      const keys = (res && res.keys) ? res.keys : [];
+      if(countEl) countEl.textContent = keys.length > 0 ? '(' + keys.length + ')' : '';
+
+      produtosCache = [];
+      for(const key of keys){
+        const nome = decodeURIComponent(key.replace('calc:',''));
+        let r = null;
+        let fornecedor = '';
+        try{
+          const res2 = await storageGet(key);
+          if(res2 && res2.value){
+            const data = JSON.parse(res2.value);
+            fornecedor = (data.fornecedor || '').toString().trim();
+            r = computeCalc({
+              custoNFe: toNum(data.custoNFe),
+              frete: toNum(data.frete),
+              pctCredFrete: toNum(data.pctCredFrete),
+              valorST: toNum(data.valorST),
+              icmsCredito: toNum(data.icmsCredito),
+              ipi: toNum(data.ipi),
+              custoFinanceiroPct: toNum(data.custoFinanceiroPct),
+              avariasPct: toNum(data.avariasPct),
+              venda: toNum(data.venda),
+              comST: data.toggles ? data.toggles.comST : 0,
+              prejuizoContabil: data.toggles ? data.toggles.prejuizoContabil : 0
+            });
+          }
+        }catch(e){ /* segue sem preview se der erro */ }
+        produtosCache.push({ nome, fornecedor: fornecedor || 'Sem fornecedor', r });
+      }
+      renderListaSalvos();
+    }catch(e){
+      produtosCache = [];
+      $('savedList').innerHTML = '';
+      if(emptyEl) emptyEl.style.display = 'block';
+    }
+  }
+
+  function criarItemProdutoEl(nome, r){
+    const item = document.createElement('div');
+    item.className = 'saved-item';
+
+    const info = document.createElement('div');
+    info.className = 'info';
+    const nomeEl = document.createElement('div');
+    nomeEl.className = 'nome';
+    nomeEl.textContent = nome;
+    info.appendChild(nomeEl);
+    if(r){
+      const descEl = document.createElement('div');
+      descEl.className = 'desc';
+      descEl.textContent = 'Custo NF-e R$ ' + r.custoNFe.toFixed(2) + ' | Frete R$ ' + r.frete.toFixed(2) + ' | ' + (r.custoFinanceiroRS > 0 ? 'Cartão' : 'À vista');
+      info.appendChild(descEl);
+    }
+    item.appendChild(info);
+
+    if(r && isFinite(r.margem)){
+      const destaque = document.createElement('div');
+      destaque.className = 'price-highlight';
+
+      const vendaEl = document.createElement('span');
+      vendaEl.className = 'ph-venda';
+      vendaEl.textContent = brl(r.venda);
+      destaque.appendChild(vendaEl);
+
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + (r.lucro >= 0 ? 'profit' : 'loss');
+      badge.textContent = pct(r.margem);
+      destaque.appendChild(badge);
+
+      item.appendChild(destaque);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'actions-mini';
+    const loadBtn = document.createElement('button');
+    loadBtn.type = 'button';
+    loadBtn.textContent = 'Carregar';
+    loadBtn.addEventListener('click', ()=>carregarProduto(nome));
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'del';
+    delBtn.textContent = 'Excluir';
+    delBtn.addEventListener('click', ()=>excluirProduto(nome));
+    actions.appendChild(loadBtn);
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+
+    return item;
+  }
+
+  function renderListaSalvos(){
+    const listEl = $('savedList');
+    const emptyEl = $('emptyNote');
+    const termo = normalizarTexto($('buscaProduto') ? $('buscaProduto').value : '');
+    const termoFornecedor = normalizarTexto($('buscaFornecedor') ? $('buscaFornecedor').value : '');
+
+    let filtrados = produtosCache;
+    if(termo) filtrados = filtrados.filter(p => normalizarTexto(p.nome).includes(termo));
+    if(termoFornecedor) filtrados = filtrados.filter(p => normalizarTexto(p.fornecedor).includes(termoFornecedor));
+
+    listEl.innerHTML = '';
+
+    if(produtosCache.length === 0){
+      emptyEl.textContent = 'Nenhum produto salvo ainda. Preencha os dados e clique em "Salvar" abaixo.';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    if(filtrados.length === 0){
+      emptyEl.textContent = 'Nenhum produto encontrado.';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    const filtroAtivo = !!termo || !!termoFornecedor;
+
+    // Agrupa por fornecedor
+    const grupos = {};
+    filtrados.forEach(p=>{
+      if(!grupos[p.fornecedor]) grupos[p.fornecedor] = [];
+      grupos[p.fornecedor].push(p);
+    });
+    const nomesGrupos = Object.keys(grupos).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+
+    nomesGrupos.forEach(nomeGrupo=>{
+      const itens = grupos[nomeGrupo];
+      // Enquanto há busca/filtro ativo, os grupos com resultado abrem sozinhos.
+      // Sem busca/filtro, respeita o que o usuário abriu/fechou manualmente (padrão: fechado).
+      const expandido = filtroAtivo || gruposExpandidos.has(nomeGrupo);
+      const colapsado = !expandido;
+
+      const grupoEl = document.createElement('div');
+      grupoEl.className = 'supplier-group';
+
+      const headerEl = document.createElement('div');
+      headerEl.className = 'supplier-header';
+
+      const seta = document.createElement('span');
+      seta.className = 'supplier-arrow' + (colapsado ? ' collapsed' : '');
+      seta.textContent = '▾';
+
+      const nomeGrupoEl = document.createElement('span');
+      nomeGrupoEl.className = 'supplier-name';
+      nomeGrupoEl.textContent = nomeGrupo;
+
+      const countGrupoEl = document.createElement('span');
+      countGrupoEl.className = 'supplier-count';
+      countGrupoEl.textContent = itens.length + (itens.length === 1 ? ' produto' : ' produtos');
+
+      headerEl.appendChild(seta);
+      headerEl.appendChild(nomeGrupoEl);
+      headerEl.appendChild(countGrupoEl);
+
+      const margensValidas = itens
+        .map(p => (p.r && isFinite(p.r.margem)) ? p.r.margem : null)
+        .filter(m => m !== null);
+      if(margensValidas.length > 0){
+        const margemMedia = margensValidas.reduce((a,b)=>a+b, 0) / margensValidas.length;
+        const avgEl = document.createElement('span');
+        avgEl.className = 'supplier-avg ' + (margemMedia >= 0 ? 'profit' : 'loss');
+        avgEl.textContent = 'margem média ' + pct(margemMedia);
+        headerEl.appendChild(avgEl);
+      }
+
+      headerEl.addEventListener('click', ()=>{
+        if(gruposExpandidos.has(nomeGrupo)) gruposExpandidos.delete(nomeGrupo);
+        else gruposExpandidos.add(nomeGrupo);
+        renderListaSalvos();
+      });
+      grupoEl.appendChild(headerEl);
+
+      if(!colapsado){
+        const itensContainer = document.createElement('div');
+        itensContainer.className = 'supplier-items';
+        itens.forEach(p=>{
+          itensContainer.appendChild(criarItemProdutoEl(p.nome, p.r));
+        });
+        grupoEl.appendChild(itensContainer);
+      }
+
+      listEl.appendChild(grupoEl);
+    });
+  }
+
+  async function salvarProduto(){
+    const nome = $('produto').value.trim();
+    if(!nome){
+      alert('Digite o nome do produto antes de salvar.');
+      return;
+    }
+    const key = 'calc:' + encodeURIComponent(nome);
+    const payload = JSON.stringify(coletarInputs());
+    try{
+      await storageSet(key, payload);
+      await atualizarListaSalvos();
+    }catch(e){
+      console.error('Erro ao salvar produto:', e);
+      alert('Não foi possível salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente novamente.');
+    }
+  }
+
+  async function carregarProduto(nome){
+    const key = 'calc:' + encodeURIComponent(nome);
+    try{
+      const res = await storageGet(key);
+      if(res && res.value){
+        preencherForm(JSON.parse(res.value));
+        mostrarViewCalculadora();
+      }
+    }catch(e){
+      alert('Não foi possível carregar esse produto.');
+    }
+  }
+
+  async function excluirProduto(nome){
+    const key = 'calc:' + encodeURIComponent(nome);
+    try{
+      await storageDelete(key);
+      await atualizarListaSalvos();
+    }catch(e){
+      // ignore
+    }
+  }
+
+  async function baixarBackup(){
+    try{
+      const res = await storageList('calc:');
+      const keys = (res && res.keys) ? res.keys : [];
+      const produtos = {};
+      for(const key of keys){
+        const nome = decodeURIComponent(key.replace('calc:',''));
+        const r = await storageGet(key);
+        if(r && r.value){
+          produtos[nome] = JSON.parse(r.value);
+        }
+      }
+      if(Object.keys(produtos).length === 0){
+        alert('Não há produtos salvos para gerar backup ainda.');
+        return;
+      }
+      const payload = JSON.stringify({ tipo:'calculadora-custo-backup', geradoEm: new Date().toISOString(), produtos }, null, 2);
+      const blob = new Blob([payload], { type:'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const dataStr = new Date().toISOString().slice(0,10);
+      a.href = url;
+      a.download = 'calculadora-custo-backup-' + dataStr + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }catch(e){
+      console.error('Erro ao gerar backup:', e);
+      alert('Não foi possível gerar o backup: ' + (e && e.message ? e.message : 'erro desconhecido'));
+    }
+  }
+
+  async function importarBackup(file){
+    try{
+      const texto = await file.text();
+      const json = JSON.parse(texto);
+      const produtos = json.produtos || json; // aceita tanto o formato do backup quanto um objeto simples {nome: dados}
+      const nomes = Object.keys(produtos);
+      if(nomes.length === 0){
+        alert('Esse arquivo não parece ter produtos salvos.');
+        return;
+      }
+      for(const nome of nomes){
+        const key = 'calc:' + encodeURIComponent(nome);
+        await storageSet(key, JSON.stringify(produtos[nome]));
+      }
+      await atualizarListaSalvos();
+      alert(nomes.length + ' produto(s) importado(s) com sucesso.');
+    }catch(e){
+      console.error('Erro ao importar backup:', e);
+      alert('Não foi possível importar esse arquivo. Confirme se é um backup gerado por este app.');
+    }
+  }
+
+  $('salvarBtn').addEventListener('click', salvarProduto);
+  $('backupBtn').addEventListener('click', baixarBackup);
+  $('restoreBtn').addEventListener('click', ()=> $('restoreFile').click());
+  $('restoreFile').addEventListener('change', (ev)=>{
+    const file = ev.target.files && ev.target.files[0];
+    if(file){ importarBackup(file); }
+    ev.target.value = '';
+  });
+
+  async function testarConexaoFirebase(mostrarMsg){
+    try{
+      await firebaseListar();
+      if(mostrarMsg) $('firebaseMsg').textContent = '✓ Conectado com sucesso.';
+      storageBackend = 'firebase';
+      atualizarStatusArmazenamento();
+      return true;
+    }catch(e){
+      console.error('Erro ao conectar ao Firebase:', e);
+      if(mostrarMsg) $('firebaseMsg').textContent = 'Não foi possível conectar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se colou o firebaseConfig certo e se publicou as regras do Firestore.';
+      rebaixarBackend();
+      return false;
+    }
+  }
+
+  $('firebaseSaveBtn').addEventListener('click', async ()=>{
+    const texto = $('firebaseConfigInput').value.trim();
+    if(!texto){ alert('Cole o firebaseConfig primeiro.'); return; }
+    const config = parseFirebaseConfig(texto);
+    if(!config.apiKey || !config.projectId || !config.appId){
+      $('firebaseMsg').textContent = 'Não consegui identificar apiKey/projectId/appId nesse texto. Confira se colou o bloco firebaseConfig completo.';
+      return;
+    }
+    $('firebaseMsg').textContent = 'Conectando...';
+    try{
+      inicializarFirebase(config);
+      setFirebaseConfigSalva(config);
+      storageBackend = 'firebase';
+      await testarConexaoFirebase(true);
+      await atualizarListaSalvos();
+    }catch(e){
+      console.error(e);
+      $('firebaseMsg').textContent = 'Erro ao inicializar: ' + (e && e.message ? e.message : 'erro desconhecido');
+      rebaixarBackend();
+    }
+  });
+
+  $('firebaseClearBtn').addEventListener('click', async ()=>{
+    setFirebaseConfigSalva(null);
+    $('firebaseConfigInput').value = '';
+    firestoreDb = null;
+    storageBackend = localStorageFunciona() ? 'local' : 'memoria';
+    $('firebaseMsg').textContent = 'Desconectado do Firebase.';
+    atualizarStatusArmazenamento();
+    await atualizarListaSalvos();
+  });
+
+  const firebaseConfigSalva = getFirebaseConfigSalva();
+  if(firebaseConfigSalva){
+    $('firebaseConfigInput').value = JSON.stringify(firebaseConfigSalva, null, 2);
+    try{ inicializarFirebase(firebaseConfigSalva); }catch(e){ console.error(e); }
+  }
+
+  function mostrarViewProdutos(){
+    $('viewProdutos').style.display = 'block';
+    $('viewFrete').style.display = 'none';
+    $('viewSync').style.display = 'none';
+    $('viewCalculadora').style.display = 'none';
+    atualizarListaSalvos();
+  }
+  function mostrarViewFrete(){
+    $('viewFrete').style.display = 'block';
+    $('viewProdutos').style.display = 'none';
+    $('viewSync').style.display = 'none';
+    $('viewCalculadora').style.display = 'none';
+  }
+  function mostrarViewSync(){
+    $('viewSync').style.display = 'block';
+    $('viewProdutos').style.display = 'none';
+    $('viewFrete').style.display = 'none';
+    $('viewCalculadora').style.display = 'none';
+  }
+  function mostrarViewCalculadora(){
+    $('viewProdutos').style.display = 'none';
+    $('viewFrete').style.display = 'none';
+    $('viewSync').style.display = 'none';
+    $('viewCalculadora').style.display = 'block';
+  }
+  $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
+  $('buscaProduto').addEventListener('input', renderListaSalvos);
+  $('buscaFornecedor').addEventListener('input', renderListaSalvos);
+  $('voltarCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
+  $('verFreteBtn').addEventListener('click', mostrarViewFrete);
+  $('voltarCalculadoraBtn2').addEventListener('click', mostrarViewCalculadora);
+  $('verSyncBtn').addEventListener('click', mostrarViewSync);
+  $('voltarCalculadoraBtn3').addEventListener('click', mostrarViewCalculadora);
+  $('irSyncBtn').addEventListener('click', mostrarViewSync);
+
+  function calcularFrete(){
+    const precoTon = toNum($('freteTonelada').value);
+    const peso = toNum($('pesoM2').value);
+    const valor = (precoTon/1000) * peso;
+    $('freteResultado').textContent = (precoTon > 0 && peso > 0) ? brl(valor) : '--';
+    return valor;
+  }
+  $('freteTonelada').addEventListener('input', calcularFrete);
+  $('pesoM2').addEventListener('input', calcularFrete);
+  $('usarFreteBtn').addEventListener('click', ()=>{
+    const valor = calcularFrete();
+    if(!(valor > 0)){
+      alert('Preencha o preço por tonelada e o peso do produto primeiro.');
+      return;
+    }
+    $('frete').value = valor.toFixed(2);
+    mostrarViewCalculadora();
+    calcular();
+  });
+
+  onToggleChange();
+  calcular();
+  atualizarStatusArmazenamento();
+  (async ()=>{
+    if(storageBackend === 'firebase'){
+      const ok = await testarConexaoFirebase(false);
+      $('firebaseMsg').textContent = ok
+        ? '✓ Conectado automaticamente.'
+        : 'Não foi possível conectar automaticamente. Verifique a configuração e clique em Conectar.';
+    }
+    await atualizarListaSalvos();
+  })();
+})();
+</script>
+</body>
+</html>
