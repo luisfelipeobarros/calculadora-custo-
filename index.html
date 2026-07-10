@@ -834,6 +834,20 @@
       </div>
       <div class="empty-note" id="firebaseMsg" style="margin-top:8px;"></div>
     </div>
+
+    <div class="card" id="geminiCard">
+      <h2>Leitura de PDF com IA (Gemini)</h2>
+      <p class="empty-note" style="display:block; margin-bottom:12px;">Usa o mesmo projeto Firebase acima. Precisa da IA Logic ativada e do App Check configurado (veja o passo a passo que o Claude te deu).</p>
+      <div class="field">
+        <label for="recaptchaSiteKey">Site Key do reCAPTCHA v3</label>
+        <div class="input-row"><input type="text" id="recaptchaSiteKey" placeholder="6Lc..."></div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="geminiSaveBtn">Conectar</button>
+        <button class="btn secondary" id="geminiClearBtn">Desconectar</button>
+      </div>
+      <div class="empty-note" id="geminiMsg" style="margin-top:8px;"></div>
+    </div>
   </div>
 
   <div id="viewProdutos" style="display:none;">
@@ -1018,6 +1032,96 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
   }
 </script>
+
+<!-- Ponte para o Firebase AI Logic (Gemini). É um SDK modular (ESM), por isso roda separado
+     do resto do app (que usa o SDK "compat"). Expõe funções em window.* pro script principal usar. -->
+<script type="module">
+  let geminiModel = null;
+  window.__geminiPronto = false;
+
+  window.geminiConectar = async function(firebaseConfig, recaptchaSiteKey){
+    try{
+      const { initializeApp, deleteApp, getApps } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/app/+esm');
+      const { initializeAppCheck, ReCaptchaV3Provider } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/app-check/+esm');
+      const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/ai/+esm');
+
+      // reinicializa do zero a cada conexão, pra aceitar troca de config/chave sem recarregar a página
+      const existente = getApps().find(a => a.name === 'geminiApp');
+      if(existente) await deleteApp(existente);
+
+      const app = initializeApp(firebaseConfig, 'geminiApp');
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+        isTokenAutoRefreshEnabled: true
+      });
+      const ai = getAI(app, { backend: new GoogleAIBackend() });
+
+      const schema = Schema.array({
+        items: Schema.object({
+          properties: {
+            codigo: Schema.string(),
+            produto: Schema.string(),
+            quantidade: Schema.number(),
+            valor: Schema.number()
+          },
+          optionalProperties: ['codigo']
+        })
+      });
+
+      geminiModel = getGenerativeModel(ai, {
+        model: 'gemini-2.5-flash',
+        generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
+      });
+
+      window.__geminiPronto = true;
+      return true;
+    }catch(e){
+      console.error('Erro ao conectar Gemini:', e);
+      window.__geminiPronto = false;
+      throw e;
+    }
+  };
+
+  window.geminiDesconectar = function(){
+    geminiModel = null;
+    window.__geminiPronto = false;
+  };
+
+  function arrayBufferParaBase64(buf){
+    let binario = '';
+    const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.byteLength; i++) binario += String.fromCharCode(bytes[i]);
+    return btoa(binario);
+  }
+
+  window.geminiExtrairPdf = async function(file){
+    if(!geminiModel) throw new Error('Gemini não está conectado.');
+    const buf = await file.arrayBuffer();
+    const base64 = arrayBufferParaBase64(buf);
+    const prompt = 'Extraia todos os itens de produto desta cotação/pedido em PDF. Para cada item, ' +
+      'retorne: codigo (código do produto, se houver — deixe vazio se não tiver), produto (nome completo do ' +
+      'produto, juntando o texto mesmo se a descrição estiver quebrada em várias linhas no documento), ' +
+      'quantidade (número), e valor (preço LÍQUIDO POR UNIDADE — nunca o subtotal da linha nem o valor total). ' +
+      'Ignore CNPJ, endereço, telefone, cabeçalhos e linhas de totais gerais. Responda só com os itens de produto de verdade.';
+
+    const result = await geminiModel.generateContent([
+      { inlineData: { mimeType: 'application/pdf', data: base64 } },
+      { text: prompt }
+    ]);
+    const texto = result.response.text();
+    const itens = JSON.parse(texto);
+    if(!Array.isArray(itens) || itens.length === 0){
+      throw new Error('O Gemini não encontrou itens neste PDF.');
+    }
+    return itens.map(it => ({
+      codigo: (it.codigo || '').toString().trim(),
+      produto: (it.produto || '').toString().trim(),
+      quantidade: (it.quantidade != null && !isNaN(it.quantidade)) ? Number(it.quantidade) : null,
+      valor: (it.valor != null && !isNaN(it.valor)) ? Number(it.valor) : null
+    })).filter(it => it.produto);
+  };
+</script>
+
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -1064,6 +1168,14 @@
   }
   function setFirebaseConfigSalva(config){
     try{ localStorage.setItem(FIREBASE_CONFIG_KEY, config ? JSON.stringify(config) : 'null'); }catch(e){}
+  }
+
+  const RECAPTCHA_KEY = 'calculadora_custo_recaptcha_key';
+  function getRecaptchaSiteKeySalva(){
+    try{ return localStorage.getItem(RECAPTCHA_KEY) || ''; }catch(e){ return ''; }
+  }
+  function setRecaptchaSiteKeySalva(v){
+    try{ localStorage.setItem(RECAPTCHA_KEY, v || ''); }catch(e){}
   }
 
   // Extrai os campos do bloco firebaseConfig colado (sem usar eval) via regex simples
@@ -1832,6 +1944,44 @@
     try{ inicializarFirebase(firebaseConfigSalva); }catch(e){ console.error(e); }
   }
 
+  async function conectarGemini(siteKey, mostrarMsg){
+    const config = getFirebaseConfigSalva();
+    if(!config){
+      if(mostrarMsg) $('geminiMsg').textContent = 'Conecte o Firebase primeiro (card acima) — o Gemini usa o mesmo projeto.';
+      return false;
+    }
+    try{
+      await window.geminiConectar(config, siteKey);
+      if(mostrarMsg) $('geminiMsg').textContent = '✓ Gemini conectado — os PDFs agora são lidos por IA.';
+      return true;
+    }catch(e){
+      console.error(e);
+      if(mostrarMsg) $('geminiMsg').textContent = 'Erro ao conectar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira a Site Key e se a AI Logic + App Check estão ativados no Firebase Console.';
+      return false;
+    }
+  }
+
+  $('geminiSaveBtn').addEventListener('click', async ()=>{
+    const siteKey = $('recaptchaSiteKey').value.trim();
+    if(!siteKey){ alert('Cole a Site Key do reCAPTCHA primeiro.'); return; }
+    $('geminiMsg').textContent = 'Conectando...';
+    setRecaptchaSiteKeySalva(siteKey);
+    await conectarGemini(siteKey, true);
+  });
+
+  $('geminiClearBtn').addEventListener('click', ()=>{
+    setRecaptchaSiteKeySalva('');
+    $('recaptchaSiteKey').value = '';
+    if(window.geminiDesconectar) window.geminiDesconectar();
+    $('geminiMsg').textContent = 'Desconectado. A leitura de PDF volta a usar o modo automático (sem IA).';
+  });
+
+  const recaptchaSiteKeySalva = getRecaptchaSiteKeySalva();
+  if(recaptchaSiteKeySalva){
+    $('recaptchaSiteKey').value = recaptchaSiteKeySalva;
+    conectarGemini(recaptchaSiteKeySalva, false);
+  }
+
   function mostrarViewProdutos(){
     $('viewProdutos').style.display = 'block';
     $('viewFrete').style.display = 'none';
@@ -2330,9 +2480,13 @@
     el.innerHTML = html;
   }
 
-  function renderPreviewPdf(itens){
+  function renderPreviewPdf(itens, viaGemini){
     const el = $('previewPdf');
-    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>';
+    const selo = viaGemini
+      ? '<span class="status-badge down">✨ lido por IA (Gemini)</span>'
+      : '<span class="status-badge neutral">modo automático</span>';
+    let html = '<div style="margin-bottom:8px;">'+selo+'</div>';
+    html += '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>';
     itens.forEach(i=>{
       html += '<tr><td>'+escapeHtml(i.codigo||'-')+'</td><td>'+escapeHtml(i.produto)+'</td><td>'+(i.quantidade!=null?i.quantidade:'-')+'</td><td>'+(i.valor!=null?brl(i.valor):'-')+'</td></tr>';
     });
@@ -2418,10 +2572,22 @@
   $('arquivoPdf').addEventListener('change', async (ev)=>{
     const file = ev.target.files[0];
     if(!file) return;
-    $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">Lendo PDF...</div>';
+
+    if(window.__geminiPronto){
+      $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">Lendo PDF com IA (Gemini)...</div>';
+      try{
+        ultimosRecebidos = await window.geminiExtrairPdf(file);
+        renderPreviewPdf(ultimosRecebidos, true);
+        return;
+      }catch(e){
+        console.error('Gemini falhou, caindo para o modo automático:', e);
+        $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">IA falhou (' + escapeHtml(e.message || '') + '), tentando modo automático...</div>';
+      }
+    }
+
     try{
       ultimosRecebidos = await parsePdfFornecedor(file);
-      renderPreviewPdf(ultimosRecebidos);
+      renderPreviewPdf(ultimosRecebidos, false);
     }catch(e){
       console.error(e);
       ultimosRecebidos = [];
