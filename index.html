@@ -607,6 +607,7 @@
 
     <div class="actions" style="margin-bottom:20px;">
       <button class="btn" id="compararBtn">Comparar cotação</button>
+      <button class="btn secondary" id="limparCotacaoBtn">🗑 Limpar / nova cotação</button>
     </div>
 
     <div class="card" id="resultadoCotacaoCard" style="display:none;">
@@ -2132,6 +2133,22 @@
     }
   });
 
+  function resetCotacao(){
+    ultimosEsperados = [];
+    ultimosRecebidos = [];
+    ultimosResultados = [];
+    $('arquivoExcel').value = '';
+    $('arquivoPdf').value = '';
+    $('previewExcel').innerHTML = '';
+    $('previewPdf').innerHTML = '';
+    $('resultadoCotacao').innerHTML = '';
+    $('resultadoCotacaoCard').style.display = 'none';
+    $('sugestoesCotacao').innerHTML = '';
+    $('sugestoesCard').style.display = 'none';
+    $('fornecedorCotacao').value = '';
+    $('cotacaoMsg').textContent = '';
+  }
+
   $('compararBtn').addEventListener('click', ()=>{
     if(!ultimosEsperados.length){ alert('Carregue a planilha de cotação primeiro.'); return; }
     if(!ultimosRecebidos.length){ alert('Carregue o PDF do fornecedor primeiro.'); return; }
@@ -2139,6 +2156,10 @@
     $('resultadoCotacaoCard').style.display = 'block';
     renderResultadoCotacao();
     renderSugestoesCotacao();
+  });
+
+  $('limparCotacaoBtn').addEventListener('click', ()=>{
+    resetCotacao();
   });
 
   $('salvarCotacaoBtn').addEventListener('click', async ()=>{
@@ -2163,7 +2184,8 @@
           flags: r.flags
         }))
       });
-      $('cotacaoMsg').textContent = '✓ Cotação salva no histórico.';
+      alert('✓ Cotação salva no histórico.');
+      resetCotacao();
     }catch(e){
       console.error(e);
       $('cotacaoMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
