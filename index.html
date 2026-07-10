@@ -2615,7 +2615,6 @@
       }catch(e){
         console.error('Gemini falhou, caindo para o modo automático:', e);
         erroGemini = (e && e.message) ? e.message : String(e);
-        alert('IA (Gemini) falhou ao ler este PDF:\n\n' + erroGemini + '\n\nVou tentar o modo automático agora.');
         $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">IA falhou, tentando modo automático...</div>';
       }
     }
