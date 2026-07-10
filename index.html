@@ -1766,6 +1766,60 @@
   }
 
   // --- PDF do fornecedor ---
+  const METADADOS_KEYWORDS = ['cnpj','inscricao estadual','endereco','bairro','cep:','cidade:','estado:','telefone',
+    'e-mail','email:','representada','cliente:','nome fantasia','pedido n','vendedor','transportadora',
+    'condicao de pagamento','data de emissao','obs:','obs.'];
+  const FOOTER_KEYWORDS = ['valor total','subtotal geral','total geral'];
+
+  function classificarLinha(celulas){
+    const textoCompleto = normalizarTexto(celulas.join(' '));
+    if(METADADOS_KEYWORDS.some(k=>textoCompleto.includes(k))) return 'metadata';
+    if(FOOTER_KEYWORDS.some(k=>textoCompleto.includes(k))) return 'footer';
+    const colMap = detectarColunas(celulas);
+    const found = Object.values(colMap).filter(v=>v!==-1).length;
+    if(found >= 2) return 'header';
+    return null;
+  }
+
+  function extrairItemDeLinha(celulasOriginais){
+    let celulas = celulasOriginais.slice();
+    let codigo = '';
+    // remove prefixo de índice "#" quando veio GRUDADO no início da mesma célula (ex: "1 AAB1010012")
+    const prefixoNumerico = celulas[0].match(/^(\d{1,4})\s+(.+)$/);
+    if(prefixoNumerico){ celulas[0] = prefixoNumerico[2]; }
+    // remove célula de índice "#" quando veio separada (célula própria, só dígitos)
+    if(celulas.length > 2 && /^\d{1,4}$/.test(celulas[0].trim())){
+      celulas = celulas.slice(1);
+    }
+    // detecta código de produto (alfanumérico com letras E dígitos) logo no início
+    if(celulas.length > 1 && /^[A-Z0-9\-]{4,}$/i.test(celulas[0].trim()) && /[A-Za-z]/.test(celulas[0]) && /\d/.test(celulas[0])){
+      codigo = celulas[0].trim();
+      celulas = celulas.slice(1);
+    }
+
+    let idxQtd = -1;
+    for(let i=0;i<celulas.length;i++){
+      if(/^\d{1,6}$/.test(celulas[i].trim())){ idxQtd = i; break; }
+    }
+    if(idxQtd === -1) return null;
+
+    let idxPreco = -1;
+    for(let i=idxQtd+1;i<celulas.length;i++){
+      const c = celulas[i].trim();
+      if(/%/.test(c)) continue; // pula colunas de alíquota (ex: Alíq. IPI)
+      if(/R\$/i.test(c) || /,\d{2}$/.test(c)){ idxPreco = i; break; }
+    }
+    if(idxPreco === -1) return null;
+
+    const produtoParcial = celulas.slice(0, idxQtd).join(' ').trim();
+    return {
+      codigo,
+      produtoParcial,
+      quantidade: parseNumeroBR(celulas[idxQtd]),
+      valor: parseNumeroBR(celulas[idxPreco])
+    };
+  }
+
   async function parsePdfFornecedor(file){
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({data: buf}).promise;
@@ -1796,55 +1850,60 @@
     }
 
     // Converte cada linha (itens posicionados) em células de texto, quebrando por espaçamento horizontal
-    const linhasTexto = linhasPos.map(linha=>{
+    const linhas = linhasPos.map(linha=>{
       linha.sort((a,b)=>a.x-b.x);
       const celulas = [];
       let atual = linha[0].texto;
       let fimAnterior = linha[0].x + (linha[0].texto.length * 4);
       for(let i=1;i<linha.length;i++){
         const gap = linha[i].x - fimAnterior;
-        if(gap > 12){
-          celulas.push(atual.trim());
-          atual = linha[i].texto;
-        } else {
-          atual += ' ' + linha[i].texto;
-        }
+        if(gap > 12){ celulas.push(atual.trim()); atual = linha[i].texto; }
+        else { atual += ' ' + linha[i].texto; }
         fimAnterior = linha[i].x + (linha[i].texto.length * 4);
       }
       celulas.push(atual.trim());
-      return celulas.filter(c=>c!=='');
-    }).filter(l=>l.length>0);
+      return { celulas: celulas.filter(c=>c!==''), y: linha[0].y };
+    }).filter(l=>l.celulas.length>0);
 
-    // Monta os itens: identifica células numéricas em cada linha e usa as duas últimas
-    // como Quantidade e Valor; o texto antes delas é o nome do produto.
-    const itens = [];
-    linhasTexto.forEach(linha=>{
-      if(linha.length < 2) return;
-      const textoCompleto = normalizarTexto(linha.join(' '));
-      const pareceCabecalho = ['produto','quantidade','valor','preco','descricao'].some(k=>textoCompleto.includes(k))
-                                && linha.every(c => parseNumeroBR(c) === null);
-      if(pareceCabecalho) return;
-
-      const numericos = [];
-      linha.forEach((c, idx)=>{
-        const n = parseNumeroBR(c);
-        if(n !== null) numericos.push({idx, valor:n});
-      });
-      if(numericos.length === 0) return;
-
-      let quantidade = null, valor = null, corteIdx;
-      if(numericos.length >= 2){
-        quantidade = numericos[numericos.length-2].valor;
-        valor = numericos[numericos.length-1].valor;
-        corteIdx = numericos[numericos.length-2].idx;
-      } else {
-        valor = numericos[0].valor;
-        corteIdx = numericos[0].idx;
+    // 1ª passada: classifica cabeçalho/metadados/rodapé; expande cabeçalho pra linhas vizinhas
+    // (rótulos de coluna que quebram em 2 linhas, tipo "Subtotal (sem" + "IPI/ST)")
+    const tipos = linhas.map(l=>classificarLinha(l.celulas));
+    for(let i=0;i<linhas.length;i++){
+      if(tipos[i] === 'header'){
+        for(let j=i-1;j>=0 && Math.abs(linhas[j].y - linhas[i].y) <= 8; j--){ if(tipos[j]===null) tipos[j]='header'; }
+        for(let j=i+1;j<linhas.length && Math.abs(linhas[j].y - linhas[i].y) <= 8; j++){ if(tipos[j]===null) tipos[j]='header'; }
       }
-      const produto = linha.slice(0, corteIdx).join(' ').trim();
-      if(!produto) return;
-      itens.push({produto, quantidade, valor});
+    }
+
+    // 2ª passada: nas linhas ainda não classificadas, tenta extrair quantidade+preço
+    const itensClassificados = linhas.map((l,i)=>{
+      if(tipos[i] !== null) return { tipo: tipos[i], celulas: l.celulas };
+      const dado = extrairItemDeLinha(l.celulas);
+      if(dado) return { tipo: 'data', celulas: l.celulas, dado };
+      return { tipo: 'orphan', celulas: l.celulas };
     });
+
+    // 3ª passada: monta os produtos, juntando texto órfão antes/depois de cada linha de dado
+    // (nomes de produto que quebram em várias linhas na descrição ficam "grudados" de novo aqui)
+    const itens = [];
+    let buffer = [];
+    let pendente = null;
+    function flush(){
+      if(pendente){
+        const nome = (buffer.join(' ') + ' ' + pendente.dado.produtoParcial).replace(/\s+/g,' ').trim();
+        if(nome){
+          itens.push({ produto: nome, codigo: pendente.dado.codigo, quantidade: pendente.dado.quantidade, valor: pendente.dado.valor });
+        }
+      }
+      buffer = [];
+      pendente = null;
+    }
+    itensClassificados.forEach(item=>{
+      if(item.tipo === 'metadata' || item.tipo === 'footer' || item.tipo === 'header'){ flush(); return; }
+      if(item.tipo === 'data'){ if(pendente) flush(); pendente = item; return; }
+      buffer.push(item.celulas.join(' '));
+    });
+    flush();
 
     if(itens.length === 0){
       throw new Error('Não consegui identificar itens no PDF. Confira se ele tem uma tabela com Produto, Quantidade e Valor, e se o texto é selecionável (não é imagem/foto).');
@@ -1904,11 +1963,25 @@
     const usados = new Set();
     return esperados.map(exp=>{
       let melhorIdx=-1, melhorScore=0;
-      recebidos.forEach((rec, idx)=>{
-        if(usados.has(idx)) return;
-        const score = similaridadeTexto(exp.produto, rec.produto);
-        if(score > melhorScore){ melhorScore = score; melhorIdx = idx; }
-      });
+
+      // 1) tenta casar por código exato primeiro, se ambos tiverem código
+      if(exp.codigo){
+        recebidos.forEach((rec, idx)=>{
+          if(usados.has(idx) || melhorIdx!==-1) return;
+          if(rec.codigo && normalizarTexto(rec.codigo) === normalizarTexto(exp.codigo)){
+            melhorIdx = idx; melhorScore = 1;
+          }
+        });
+      }
+      // 2) senão, casa por similaridade de nome
+      if(melhorIdx === -1){
+        recebidos.forEach((rec, idx)=>{
+          if(usados.has(idx)) return;
+          const score = similaridadeTexto(exp.produto, rec.produto);
+          if(score > melhorScore){ melhorScore = score; melhorIdx = idx; }
+        });
+      }
+
       const encontrado = melhorIdx !== -1 && melhorScore >= 0.25;
       if(encontrado) usados.add(melhorIdx);
       return construirResultado(exp, encontrado ? recebidos[melhorIdx] : null, encontrado ? melhorIdx : -1);
@@ -1965,9 +2038,9 @@
 
   function renderPreviewPdf(itens){
     const el = $('previewPdf');
-    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>';
     itens.forEach(i=>{
-      html += '<tr><td>'+escapeHtml(i.produto)+'</td><td>'+(i.quantidade!=null?i.quantidade:'-')+'</td><td>'+(i.valor!=null?brl(i.valor):'-')+'</td></tr>';
+      html += '<tr><td>'+escapeHtml(i.codigo||'-')+'</td><td>'+escapeHtml(i.produto)+'</td><td>'+(i.quantidade!=null?i.quantidade:'-')+'</td><td>'+(i.valor!=null?brl(i.valor):'-')+'</td></tr>';
     });
     html += '</tbody></table><div class="empty-note" style="display:block; margin-top:6px;">'+itens.length+' item(ns) reconhecido(s). Confira se está certo antes de comparar.</div>';
     el.innerHTML = html;
