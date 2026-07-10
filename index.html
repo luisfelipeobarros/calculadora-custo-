@@ -1056,16 +1056,22 @@
       });
       const ai = getAI(app, { backend: new GoogleAIBackend() });
 
-      const schema = Schema.array({
-        items: Schema.object({
-          properties: {
-            codigo: Schema.string(),
-            produto: Schema.string(),
-            quantidade: Schema.number(),
-            valor: Schema.number()
-          },
-          optionalProperties: ['codigo']
-        })
+      // Esquema envolto num objeto (em vez de um array solto) — é o formato que a
+      // própria documentação do Google usa como exemplo confirmado de funcionar.
+      const schema = Schema.object({
+        properties: {
+          itens: Schema.array({
+            items: Schema.object({
+              properties: {
+                codigo: Schema.string(),
+                produto: Schema.string(),
+                quantidade: Schema.number(),
+                valor: Schema.number()
+              },
+              optionalProperties: ['codigo']
+            })
+          })
+        }
       });
 
       geminiModel = getGenerativeModel(ai, {
@@ -1088,9 +1094,13 @@
   };
 
   function arrayBufferParaBase64(buf){
-    let binario = '';
     const bytes = new Uint8Array(buf);
-    for (let i = 0; i < bytes.byteLength; i++) binario += String.fromCharCode(bytes[i]);
+    const tamanhoBloco = 0x8000; // processa em blocos pra não travar/estourar em PDFs maiores
+    let binario = '';
+    for (let i = 0; i < bytes.length; i += tamanhoBloco) {
+      const bloco = bytes.subarray(i, i + tamanhoBloco);
+      binario += String.fromCharCode.apply(null, bloco);
+    }
     return btoa(binario);
   }
 
@@ -1098,19 +1108,36 @@
     if(!geminiModel) throw new Error('Gemini não está conectado.');
     const buf = await file.arrayBuffer();
     const base64 = arrayBufferParaBase64(buf);
-    const prompt = 'Extraia todos os itens de produto desta cotação/pedido em PDF. Para cada item, ' +
-      'retorne: codigo (código do produto, se houver — deixe vazio se não tiver), produto (nome completo do ' +
-      'produto, juntando o texto mesmo se a descrição estiver quebrada em várias linhas no documento), ' +
-      'quantidade (número), e valor (preço LÍQUIDO POR UNIDADE — nunca o subtotal da linha nem o valor total). ' +
-      'Ignore CNPJ, endereço, telefone, cabeçalhos e linhas de totais gerais. Responda só com os itens de produto de verdade.';
+    const prompt = 'Extraia todos os itens de produto desta cotação/pedido em PDF, mesmo que a tabela tenha ' +
+      'várias colunas de valores (ex: preço sem impostos, preço com impostos, %ST, %IPI, %ICMS, valor total da linha). ' +
+      'Para cada item, retorne: codigo (código do produto, se houver — deixe vazio se não tiver), produto (nome ' +
+      'completo do produto, juntando descrição principal e complementar se houver, mesmo se quebrado em várias ' +
+      'linhas no documento), quantidade (número), e valor (o preço unitário LÍQUIDO/SEM IMPOSTOS de cada unidade — ' +
+      'nunca o preço com impostos, nunca o subtotal da linha, nunca o valor total). ' +
+      'Ignore CNPJ, endereço, telefone, cabeçalhos e linhas de totais gerais. Responda só com os itens de produto de verdade, ' +
+      'dentro do campo "itens".';
 
-    const result = await geminiModel.generateContent([
-      { inlineData: { mimeType: 'application/pdf', data: base64 } },
-      { text: prompt }
-    ]);
+    let result;
+    try{
+      result = await geminiModel.generateContent([
+        { inlineData: { mimeType: 'application/pdf', data: base64 } },
+        { text: prompt }
+      ]);
+    }catch(e){
+      console.error('Erro na chamada ao Gemini:', e);
+      throw new Error('Falha na chamada à API: ' + (e && e.message ? e.message : String(e)));
+    }
+
     const texto = result.response.text();
-    const itens = JSON.parse(texto);
-    if(!Array.isArray(itens) || itens.length === 0){
+    let json;
+    try{
+      json = JSON.parse(texto);
+    }catch(e){
+      console.error('Resposta do Gemini não é JSON válido:', texto);
+      throw new Error('O Gemini respondeu num formato inesperado.');
+    }
+    const itens = Array.isArray(json) ? json : (json && Array.isArray(json.itens) ? json.itens : null);
+    if(!itens || itens.length === 0){
       throw new Error('O Gemini não encontrou itens neste PDF.');
     }
     return itens.map(it => ({
@@ -2480,11 +2507,16 @@
     el.innerHTML = html;
   }
 
-  function renderPreviewPdf(itens, viaGemini){
+  function renderPreviewPdf(itens, viaGemini, erroGemini){
     const el = $('previewPdf');
-    const selo = viaGemini
-      ? '<span class="status-badge down">✨ lido por IA (Gemini)</span>'
-      : '<span class="status-badge neutral">modo automático</span>';
+    let selo;
+    if(viaGemini){
+      selo = '<span class="status-badge down">✨ lido por IA (Gemini)</span>';
+    } else if(erroGemini){
+      selo = '<div class="empty-note" style="display:block; color:var(--loss); margin-bottom:6px;">IA (Gemini) falhou: '+escapeHtml(erroGemini)+' — usando modo automático.</div><span class="status-badge neutral">modo automático</span>';
+    } else {
+      selo = '<span class="status-badge neutral">modo automático</span>';
+    }
     let html = '<div style="margin-bottom:8px;">'+selo+'</div>';
     html += '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Valor</th></tr></thead><tbody>';
     itens.forEach(i=>{
@@ -2573,6 +2605,7 @@
     const file = ev.target.files[0];
     if(!file) return;
 
+    let erroGemini = null;
     if(window.__geminiPronto){
       $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">Lendo PDF com IA (Gemini)...</div>';
       try{
@@ -2581,17 +2614,19 @@
         return;
       }catch(e){
         console.error('Gemini falhou, caindo para o modo automático:', e);
-        $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">IA falhou (' + escapeHtml(e.message || '') + '), tentando modo automático...</div>';
+        erroGemini = (e && e.message) ? e.message : String(e);
+        $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">IA falhou, tentando modo automático...</div>';
       }
     }
 
     try{
       ultimosRecebidos = await parsePdfFornecedor(file);
-      renderPreviewPdf(ultimosRecebidos, false);
+      renderPreviewPdf(ultimosRecebidos, false, erroGemini);
     }catch(e){
       console.error(e);
       ultimosRecebidos = [];
-      $('previewPdf').innerHTML = '<div class="empty-note" style="display:block; color:var(--loss);">'+escapeHtml(e.message)+'</div>';
+      const prefixoIA = erroGemini ? ('IA (Gemini) falhou: ' + escapeHtml(erroGemini) + '<br>Modo automático também falhou: ') : '';
+      $('previewPdf').innerHTML = '<div class="empty-note" style="display:block; color:var(--loss);">'+prefixoIA+escapeHtml(e.message)+'</div>';
     }
   });
 
