@@ -1041,9 +1041,9 @@
 
   window.geminiConectar = async function(firebaseConfig, recaptchaSiteKey){
     try{
-      const { initializeApp, deleteApp, getApps } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/app/+esm');
-      const { initializeAppCheck, ReCaptchaV3Provider } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/app-check/+esm');
-      const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('https://cdn.jsdelivr.net/npm/firebase@11.4.0/ai/+esm');
+      const { initializeApp, deleteApp, getApps } = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app.js');
+      const { initializeAppCheck, ReCaptchaV3Provider } = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app-check.js');
+      const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-ai.js');
 
       // reinicializa do zero a cada conexão, pra aceitar troca de config/chave sem recarregar a página
       const existente = getApps().find(a => a.name === 'geminiApp');
