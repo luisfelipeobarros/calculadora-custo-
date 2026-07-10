@@ -360,6 +360,31 @@
   .suggestion-item .sg-title{ font-weight:700; margin-bottom:3px; }
   .suggestion-item .sg-detail{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
 
+  .historico-item{ margin-bottom:12px; }
+  .historico-item:last-child{ margin-bottom:0; }
+  .historico-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    cursor:pointer;
+    user-select:none;
+    flex-wrap:wrap;
+  }
+  .historico-header:hover{ background:var(--stripe); }
+  .historico-header .h-fornecedor{ font-weight:700; font-size:13.5px; }
+  .historico-header .h-data{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
+  .historico-header .h-count{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
+  .historico-header .h-total{ margin-left:auto; }
+  .historico-body{
+    padding:10px 4px 4px 14px;
+    border-left:2px solid var(--line);
+    margin-top:6px;
+  }
+
   /* Saved products */
   .saved-list{
     display:flex;
@@ -558,6 +583,7 @@
       <button class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
       <button class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
       <button class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
+      <button class="btn secondary" id="verHistoricoBtn">🕘 Histórico</button>
       <button class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
       <div class="stamp">Uso interno</div>
     </div>
@@ -626,6 +652,170 @@
         <button class="btn secondary" id="salvarCotacaoBtn">Salvar cotação no histórico</button>
       </div>
       <div class="empty-note" id="cotacaoMsg" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card" id="addProdutosCard" style="display:none;">
+      <h2>3. Adicionar produtos à Calculadora de Custo</h2>
+      <div class="toggle" style="margin-bottom:16px;">
+        <button type="button" id="modoLoteBtn" class="active">Modo em lote</button>
+        <button type="button" id="modoIndividualBtn">Modo individual</button>
+      </div>
+
+      <!-- MODO LOTE -->
+      <div id="modoLote">
+        <p class="empty-note" style="display:block; margin-bottom:12px;">Esses valores se aplicam a TODOS os produtos abaixo — só o preço de venda muda de um pra outro.</p>
+        <div class="row2">
+          <div class="field">
+            <label for="loteFrete">Frete</label>
+            <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="loteFrete" placeholder="0"></div>
+          </div>
+          <div class="field">
+            <label for="loteIpi">IPI <span class="hint">% sobre o custo NF-e</span></label>
+            <div class="input-row"><input type="number" step="0.01" id="loteIpi" value="0.65"><span class="prefix">%</span></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="loteCredIcmsFrete">Credita ICMS sobre o frete?</label>
+          <div class="input-row">
+            <select id="loteCredIcmsFrete" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+              <option value="0" selected>Não</option><option value="1">Sim</option>
+            </select>
+          </div>
+          <div class="sub-field" id="lotePctCredFreteSub" style="display:none;">
+            <label for="lotePctCredFrete">% do crédito sobre o frete</label>
+            <div class="input-row"><input type="number" step="0.01" id="lotePctCredFrete" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+        </div>
+        <div class="field">
+          <label for="loteComST">Produto com ST?</label>
+          <div class="input-row">
+            <select id="loteComST" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+              <option value="1" selected>Sim</option><option value="0">Não</option>
+            </select>
+          </div>
+          <div class="sub-field" id="loteStSub">
+            <label for="loteValorST">Valor ST</label>
+            <div class="input-row"><input type="number" step="0.01" id="loteValorST" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+          <div class="sub-field" id="loteIcmsCreditoSub" style="display:none;">
+            <label for="loteIcmsCredito">ICMS Crédito</label>
+            <div class="input-row"><input type="number" step="0.01" id="loteIcmsCredito" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="loteCustoFinanceiroPct">Custo financeiro</label>
+            <div class="input-row"><input type="number" step="0.01" id="loteCustoFinanceiroPct" placeholder="0"><span class="prefix">%</span></div>
+          </div>
+          <div class="field">
+            <label for="loteAvariasPct">Avarias</label>
+            <div class="input-row"><input type="number" step="0.01" id="loteAvariasPct" value="1.5"><span class="prefix">%</span></div>
+          </div>
+        </div>
+
+        <div id="loteListaProdutos" style="margin-top:16px;"></div>
+
+        <div class="actions" style="margin-top:14px;">
+          <button class="btn" id="salvarLoteBtn">Salvar todos os produtos</button>
+        </div>
+        <div class="empty-note" id="loteMsg" style="margin-top:8px;"></div>
+      </div>
+
+      <!-- MODO INDIVIDUAL -->
+      <div id="modoIndividual" style="display:none;">
+        <div class="field">
+          <label for="individualSelect">Escolha o produto</label>
+          <div class="input-row">
+            <select id="individualSelect" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+              <option value="">— Selecione um produto —</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="individualForm" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
+          <div class="field">
+            <span style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">Produto</span>
+            <div id="indNomeProduto" style="font-weight:700;"></div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <span style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">Custo NF-e (da cotação)</span>
+              <div id="indCustoNFe" style="font-family:var(--font-mono); font-weight:700;"></div>
+            </div>
+            <div class="field">
+              <label for="indFrete">Frete</label>
+              <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="indFrete" placeholder="0"></div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="indCredIcmsFrete">Credita ICMS sobre o frete?</label>
+            <div class="input-row">
+              <select id="indCredIcmsFrete" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+                <option value="0" selected>Não</option><option value="1">Sim</option>
+              </select>
+            </div>
+            <div class="sub-field" id="indPctCredFreteSub" style="display:none;">
+              <label for="indPctCredFrete">% do crédito sobre o frete</label>
+              <div class="input-row"><input type="number" step="0.01" id="indPctCredFrete" placeholder="0"><span class="prefix">%</span></div>
+            </div>
+          </div>
+          <div class="field">
+            <label for="indComST">Produto com ST?</label>
+            <div class="input-row">
+              <select id="indComST" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+                <option value="1" selected>Sim</option><option value="0">Não</option>
+              </select>
+            </div>
+            <div class="sub-field" id="indStSub">
+              <label for="indValorST">Valor ST</label>
+              <div class="input-row"><input type="number" step="0.01" id="indValorST" placeholder="0"><span class="prefix">%</span></div>
+            </div>
+            <div class="sub-field" id="indIcmsCreditoSub" style="display:none;">
+              <label for="indIcmsCredito">ICMS Crédito</label>
+              <div class="input-row"><input type="number" step="0.01" id="indIcmsCredito" placeholder="0"><span class="prefix">%</span></div>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="indIpi">IPI</label>
+              <div class="input-row"><input type="number" step="0.01" id="indIpi" value="0.65"><span class="prefix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="indCustoFinanceiroPct">Custo financeiro</label>
+              <div class="input-row"><input type="number" step="0.01" id="indCustoFinanceiroPct" placeholder="0"><span class="prefix">%</span></div>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label for="indAvariasPct">Avarias</label>
+              <div class="input-row"><input type="number" step="0.01" id="indAvariasPct" value="1.5"><span class="prefix">%</span></div>
+            </div>
+            <div class="field">
+              <label for="indVenda">Venda</label>
+              <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="indVenda" placeholder="0"></div>
+            </div>
+          </div>
+          <div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:6px;">
+            <div class="hero-row">
+              <span class="hero-label">Margem estimada</span>
+              <span class="hero-value" id="indMargemPreview">--</span>
+            </div>
+          </div>
+          <div class="actions" style="margin-top:14px;">
+            <button class="btn" id="salvarIndividualBtn">Salvar este produto</button>
+          </div>
+        </div>
+        <div class="empty-note" id="individualMsg" style="margin-top:8px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewHistorico" style="display:none;">
+    <button class="btn secondary" id="voltarCalculadoraBtn5" style="margin-bottom:16px;">← Voltar à calculadora</button>
+    <div class="card">
+      <h2>Histórico de cotações</h2>
+      <div id="historicoLista"></div>
+      <div class="empty-note" id="historicoMsg" style="display:block;">Carregando...</div>
     </div>
   </div>
 
@@ -1647,6 +1837,7 @@
     $('viewFrete').style.display = 'none';
     $('viewSync').style.display = 'none';
     $('viewCotacao').style.display = 'none';
+    $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
     atualizarListaSalvos();
   }
@@ -1655,6 +1846,7 @@
     $('viewProdutos').style.display = 'none';
     $('viewSync').style.display = 'none';
     $('viewCotacao').style.display = 'none';
+    $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewSync(){
@@ -1662,6 +1854,7 @@
     $('viewProdutos').style.display = 'none';
     $('viewFrete').style.display = 'none';
     $('viewCotacao').style.display = 'none';
+    $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewCotacao(){
@@ -1669,13 +1862,24 @@
     $('viewProdutos').style.display = 'none';
     $('viewFrete').style.display = 'none';
     $('viewSync').style.display = 'none';
+    $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
+  }
+  function mostrarViewHistorico(){
+    $('viewHistorico').style.display = 'block';
+    $('viewProdutos').style.display = 'none';
+    $('viewFrete').style.display = 'none';
+    $('viewSync').style.display = 'none';
+    $('viewCotacao').style.display = 'none';
+    $('viewCalculadora').style.display = 'none';
+    carregarHistorico();
   }
   function mostrarViewCalculadora(){
     $('viewProdutos').style.display = 'none';
     $('viewFrete').style.display = 'none';
     $('viewSync').style.display = 'none';
     $('viewCotacao').style.display = 'none';
+    $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'block';
   }
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
@@ -1689,6 +1893,92 @@
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
   $('voltarCalculadoraBtn4').addEventListener('click', mostrarViewCalculadora);
+  $('verHistoricoBtn').addEventListener('click', mostrarViewHistorico);
+  $('voltarCalculadoraBtn5').addEventListener('click', mostrarViewCalculadora);
+
+  // ==================== HISTÓRICO DE COTAÇÕES ====================
+  let historicoColapsados = new Set(); // ids abertos por padrão; guarda os FECHADOS manualmente
+
+  function formatarDataFirestore(ts){
+    try{
+      const d = ts && ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    }catch(e){ return '-'; }
+  }
+
+  async function carregarHistorico(){
+    const lista = $('historicoLista');
+    const msg = $('historicoMsg');
+    if(!firestoreDb){
+      lista.innerHTML = '';
+      msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver o histórico.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.textContent = 'Carregando...';
+    msg.style.display = 'block';
+    try{
+      const snap = await firestoreDb.collection('cotacoes').orderBy('data','desc').limit(50).get();
+      if(snap.empty){
+        lista.innerHTML = '';
+        msg.textContent = 'Nenhuma cotação salva ainda.';
+        return;
+      }
+      msg.style.display = 'none';
+      lista.innerHTML = '';
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const itens = d.itens || [];
+        let totalImpacto = 0;
+        itens.forEach(it=>{
+          if(it.precoRecebido!=null && it.precoEsperado!=null){
+            const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
+            if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
+          }
+        });
+
+        const aberto = historicoColapsados.has(doc.id); // presença = está ABERTO (clicado)
+
+        const item = document.createElement('div');
+        item.className = 'historico-item';
+
+        const header = document.createElement('div');
+        header.className = 'historico-header';
+        header.innerHTML =
+          '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+          '<span class="h-fornecedor">'+escapeHtml(d.fornecedor||'Fornecedor não informado')+'</span>'+
+          '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+          '<span class="h-count">'+itens.length+' item(ns)</span>'+
+          '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
+        header.addEventListener('click', ()=>{
+          if(historicoColapsados.has(doc.id)) historicoColapsados.delete(doc.id);
+          else historicoColapsados.add(doc.id);
+          carregarHistorico();
+        });
+        item.appendChild(header);
+
+        if(aberto){
+          const body = document.createElement('div');
+          body.className = 'historico-body';
+          let tabela = '<table class="quote-table"><thead><tr><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th></tr></thead><tbody>';
+          itens.forEach(it=>{
+            tabela += '<tr><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
+              '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td></tr>';
+          });
+          tabela += '</tbody></table>';
+          body.innerHTML = tabela;
+          item.appendChild(body);
+        }
+
+        lista.appendChild(item);
+      });
+    }catch(e){
+      console.error(e);
+      lista.innerHTML = '';
+      msg.textContent = 'Erro ao carregar histórico: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "cotacoes" está liberada nas regras do Firestore.';
+      msg.style.display = 'block';
+    }
+  }
 
   // ==================== COTAÇÃO: comparação de preços ====================
 
@@ -1940,7 +2230,8 @@
       precoRecebido: rec ? rec.valor : null,
       flags: [],
       diffPct: null,
-      diffAbs: null
+      diffAbs: null,
+      diffTotal: null
     };
     if(!rec){
       r.flags.push('missing');
@@ -1950,6 +2241,8 @@
       const diffPct = (rec.valor - exp.precoEsperado) / exp.precoEsperado;
       r.diffPct = diffPct;
       r.diffAbs = rec.valor - exp.precoEsperado;
+      const qtdParaTotal = rec.quantidade != null ? rec.quantidade : exp.quantidade;
+      if(qtdParaTotal != null) r.diffTotal = r.diffAbs * qtdParaTotal;
       if(diffPct > 0.05) r.flags.push('up');
       else if(diffPct < -0.03) r.flags.push('down');
     }
@@ -2052,30 +2345,33 @@
     return flags.map(f=>'<span class="status-badge '+f+'">'+nomes[f]+'</span>').join(' ');
   }
 
-  function renderDetalheLinha(r){
-    if(r.flags.includes('missing')) return '-';
-    const partes = [];
-    if(r.precoRecebido!=null) partes.push('Recebido: '+brl(r.precoRecebido));
-    if(r.diffPct!=null) partes.push((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%');
-    if(r.flags.includes('qty')) partes.push('Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida);
-    return partes.join(' · ') || '-';
-  }
-
   function renderResultadoCotacao(){
     const el = $('resultadoCotacao');
-    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Situação</th><th>Detalhe</th><th>Corresponde a</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Corresponde a</th></tr></thead><tbody>';
+    let totalImpacto = 0;
+    let temTotal = false;
     ultimosResultados.forEach((r, idx)=>{
       html += '<tr>';
-      html += '<td>'+escapeHtml(r.produtoEsperado)+'</td>';
+      html += '<td>'+escapeHtml(r.produtoEsperado)+(r.flags.includes('qty')?'<br><span class="empty-note" style="display:inline;">Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida+'</span>':'')+'</td>';
+      html += '<td>'+(r.precoEsperado!=null?brl(r.precoEsperado):'-')+'</td>';
+      html += '<td>'+(r.precoRecebido!=null?brl(r.precoRecebido):'-')+'</td>';
+      html += '<td>'+(r.diffPct!=null?((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%'):'-')+'</td>';
+      html += '<td>'+(r.diffAbs!=null?((r.diffAbs>=0?'+':'-')+brl(Math.abs(r.diffAbs))):'-')+'</td>';
       html += '<td>'+renderBadges(r.flags)+'</td>';
-      html += '<td>'+renderDetalheLinha(r)+'</td>';
       html += '<td><select class="match-select" data-idx="'+idx+'"><option value="-1"'+(r.recIdx===-1?' selected':'')+'>— Faltando —</option>';
       ultimosRecebidos.forEach((rec, ridx)=>{
         html += '<option value="'+ridx+'"'+(r.recIdx===ridx?' selected':'')+'>'+escapeHtml(rec.produto)+'</option>';
       });
       html += '</select></td></tr>';
+      if(r.diffTotal != null){ totalImpacto += r.diffTotal; temTotal = true; }
     });
     html += '</tbody></table>';
+    if(temTotal){
+      const economizou = totalImpacto < 0;
+      html += '<div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:14px;">'
+        + '<div class="hero-row"><span class="hero-label">'+(economizou?'Economia total do pedido':'Valor a mais no pedido')+'</span>'
+        + '<span class="hero-value '+(economizou?'profit':'loss')+'">'+brl(Math.abs(totalImpacto))+'</span></div></div>';
+    }
     el.innerHTML = html;
 
     el.querySelectorAll('.match-select').forEach(sel=>{
@@ -2133,10 +2429,17 @@
     }
   });
 
+  let produtosCotacaoSalvos = new Set(); // nomes já enviados a Produtos Salvos nesta cotação
+
+  function itensValidosParaSalvar(){
+    return ultimosResultados.filter(r=>!r.flags.includes('missing') && r.precoRecebido!=null);
+  }
+
   function resetCotacao(){
     ultimosEsperados = [];
     ultimosRecebidos = [];
     ultimosResultados = [];
+    produtosCotacaoSalvos = new Set();
     $('arquivoExcel').value = '';
     $('arquivoPdf').value = '';
     $('previewExcel').innerHTML = '';
@@ -2145,17 +2448,35 @@
     $('resultadoCotacaoCard').style.display = 'none';
     $('sugestoesCotacao').innerHTML = '';
     $('sugestoesCard').style.display = 'none';
+    $('addProdutosCard').style.display = 'none';
     $('fornecedorCotacao').value = '';
     $('cotacaoMsg').textContent = '';
+    ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteCustoFinanceiroPct'].forEach(id=>{ $(id).value=''; });
+    $('loteIpi').value = '0.65';
+    $('loteAvariasPct').value = '1.5';
+    $('loteCredIcmsFrete').value = '0';
+    $('loteComST').value = '1';
+    $('lotePctCredFreteSub').style.display = 'none';
+    $('loteStSub').style.display = 'block';
+    $('loteIcmsCreditoSub').style.display = 'none';
+    $('loteListaProdutos').innerHTML = '';
+    $('loteMsg').textContent = '';
+    $('individualSelect').innerHTML = '<option value="">— Selecione um produto —</option>';
+    $('individualForm').style.display = 'none';
+    $('individualMsg').textContent = '';
   }
 
   $('compararBtn').addEventListener('click', ()=>{
     if(!ultimosEsperados.length){ alert('Carregue a planilha de cotação primeiro.'); return; }
     if(!ultimosRecebidos.length){ alert('Carregue o PDF do fornecedor primeiro.'); return; }
     ultimosResultados = compararCotacao(ultimosEsperados, ultimosRecebidos);
+    produtosCotacaoSalvos = new Set();
     $('resultadoCotacaoCard').style.display = 'block';
     renderResultadoCotacao();
     renderSugestoesCotacao();
+    $('addProdutosCard').style.display = 'block';
+    renderListaLote();
+    popularSelectIndividual();
   });
 
   $('limparCotacaoBtn').addEventListener('click', ()=>{
@@ -2189,6 +2510,222 @@
     }catch(e){
       console.error(e);
       $('cotacaoMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
+    }
+  });
+
+  // ---- Modo em lote / individual: alternância visual ----
+  $('modoLoteBtn').addEventListener('click', ()=>{
+    $('modoLoteBtn').classList.add('active');
+    $('modoIndividualBtn').classList.remove('active');
+    $('modoLote').style.display = 'block';
+    $('modoIndividual').style.display = 'none';
+  });
+  $('modoIndividualBtn').addEventListener('click', ()=>{
+    $('modoIndividualBtn').classList.add('active');
+    $('modoLoteBtn').classList.remove('active');
+    $('modoIndividual').style.display = 'block';
+    $('modoLote').style.display = 'none';
+    popularSelectIndividual();
+  });
+
+  // ---- Modo em lote ----
+  function coletarConfigLote(){
+    return {
+      frete: $('loteFrete').value || '0',
+      pctCredFrete: $('lotePctCredFrete').value || '0',
+      valorST: $('loteValorST').value || '0',
+      icmsCredito: $('loteIcmsCredito').value || '0',
+      ipi: $('loteIpi').value || '0',
+      custoFinanceiroPct: $('loteCustoFinanceiroPct').value || '0',
+      avariasPct: $('loteAvariasPct').value || '0',
+      comST: parseInt($('loteComST').value,10),
+      credIcmsFrete: parseInt($('loteCredIcmsFrete').value,10)
+    };
+  }
+
+  function renderListaLote(){
+    const container = $('loteListaProdutos');
+    const itens = itensValidosParaSalvar();
+    if(itens.length === 0){
+      container.innerHTML = '<div class="empty-note" style="display:block;">Nenhum produto com preço reconhecido pra adicionar.</div>';
+      return;
+    }
+    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Custo NF-e</th><th>Venda</th><th>Margem</th></tr></thead><tbody>';
+    itens.forEach(r=>{
+      const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
+      html += '<tr>'
+        + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+'</td>'
+        + '<td>'+brl(r.precoRecebido)+'</td>'
+        + '<td><div class="input-row" style="max-width:130px;"><span class="prefix">R$</span><input type="number" step="0.01" class="lote-venda-input" data-produto="'+escapeHtml(r.produtoEsperado)+'" placeholder="0"></div></td>'
+        + '<td class="lote-margem-preview" data-produto="'+escapeHtml(r.produtoEsperado)+'">--</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+    container.querySelectorAll('.lote-venda-input').forEach(inp=>{
+      inp.addEventListener('input', ()=>atualizarMargemLote(inp.dataset.produto));
+    });
+  }
+
+  function atualizarMargemLote(produtoNome){
+    const cfg = coletarConfigLote();
+    const r = ultimosResultados.find(x=>x.produtoEsperado===produtoNome);
+    const previewEl = $('loteListaProdutos').querySelector('.lote-margem-preview[data-produto="'+CSS.escape(produtoNome)+'"]');
+    const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(produtoNome)+'"]');
+    if(!r || !previewEl || !vendaInput) return;
+    const venda = toNum(vendaInput.value);
+    if(venda <= 0){ previewEl.textContent = '--'; previewEl.style.color=''; return; }
+    const calc = computeCalc({
+      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
+      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
+      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
+      venda, comST: cfg.comST, prejuizoContabil: 0
+    });
+    previewEl.textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
+    previewEl.style.color = calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)';
+    previewEl.style.fontWeight = '700';
+  }
+
+  function atualizarTodasMargensLote(){
+    document.querySelectorAll('.lote-venda-input').forEach(inp=>atualizarMargemLote(inp.dataset.produto));
+  }
+  ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteIpi','loteCustoFinanceiroPct','loteAvariasPct'].forEach(id=>{
+    $(id).addEventListener('input', atualizarTodasMargensLote);
+  });
+  $('loteCredIcmsFrete').addEventListener('change', ()=>{
+    $('lotePctCredFreteSub').style.display = $('loteCredIcmsFrete').value === '1' ? 'block' : 'none';
+    atualizarTodasMargensLote();
+  });
+  $('loteComST').addEventListener('change', ()=>{
+    const v = $('loteComST').value === '1';
+    $('loteStSub').style.display = v ? 'block' : 'none';
+    $('loteIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    atualizarTodasMargensLote();
+  });
+
+  $('salvarLoteBtn').addEventListener('click', async ()=>{
+    const cfg = coletarConfigLote();
+    const fornecedor = $('fornecedorCotacao').value.trim();
+    const itens = itensValidosParaSalvar();
+    let salvos = 0;
+    for(const r of itens){
+      const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(r.produtoEsperado)+'"]');
+      const venda = vendaInput ? vendaInput.value : '';
+      if(!venda || toNum(venda) <= 0) continue;
+      const dados = {
+        produto: r.produtoEsperado,
+        fornecedor: fornecedor,
+        custoNFe: String(r.precoRecebido),
+        frete: cfg.frete, pctCredFrete: cfg.pctCredFrete, valorST: cfg.valorST, icmsCredito: cfg.icmsCredito,
+        ipi: cfg.ipi, custoFinanceiroPct: cfg.custoFinanceiroPct, avariasPct: cfg.avariasPct, venda: venda,
+        toggles: { credIcmsFrete: cfg.credIcmsFrete, comST: cfg.comST, prejuizoContabil: 0 }
+      };
+      try{
+        await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
+        produtosCotacaoSalvos.add(r.produtoEsperado);
+        salvos++;
+      }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
+    }
+    renderListaLote();
+    popularSelectIndividual();
+    $('loteMsg').textContent = salvos > 0
+      ? ('✓ ' + salvos + ' produto(s) salvo(s) em Produtos Salvos.')
+      : 'Nenhum produto salvo — preencha o preço de venda de pelo menos um produto.';
+  });
+
+  // ---- Modo individual ----
+  function popularSelectIndividual(){
+    const sel = $('individualSelect');
+    const itens = itensValidosParaSalvar();
+    sel.innerHTML = '<option value="">— Selecione um produto —</option>';
+    itens.forEach((r, idx)=>{
+      const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
+      const opt = document.createElement('option');
+      opt.value = String(idx);
+      opt.textContent = (jaSalvo ? '✓ ' : '') + r.produtoEsperado + ' — ' + brl(r.precoRecebido);
+      sel.appendChild(opt);
+    });
+  }
+
+  function atualizarMargemIndividual(){
+    const idx = $('individualSelect').value;
+    if(idx === '') return;
+    const r = itensValidosParaSalvar()[parseInt(idx,10)];
+    if(!r) return;
+    const venda = toNum($('indVenda').value);
+    if(venda <= 0){ $('indMargemPreview').textContent = '--'; $('indMargemPreview').className='hero-value'; return; }
+    const calc = computeCalc({
+      custoNFe: r.precoRecebido, frete: toNum($('indFrete').value), pctCredFrete: toNum($('indPctCredFrete').value),
+      valorST: toNum($('indValorST').value), icmsCredito: toNum($('indIcmsCredito').value), ipi: toNum($('indIpi').value),
+      custoFinanceiroPct: toNum($('indCustoFinanceiroPct').value), avariasPct: toNum($('indAvariasPct').value),
+      venda, comST: parseInt($('indComST').value,10), prejuizoContabil: 0
+    });
+    $('indMargemPreview').textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
+    $('indMargemPreview').className = 'hero-value ' + (calc.lucro >= 0 ? 'profit' : 'loss');
+  }
+
+  $('individualSelect').addEventListener('change', ()=>{
+    const idx = $('individualSelect').value;
+    if(idx === ''){ $('individualForm').style.display = 'none'; return; }
+    const r = itensValidosParaSalvar()[parseInt(idx,10)];
+    if(!r) return;
+    $('individualForm').style.display = 'block';
+    $('indNomeProduto').textContent = r.produtoEsperado;
+    $('indCustoNFe').textContent = brl(r.precoRecebido);
+    $('indFrete').value=''; $('indPctCredFrete').value=''; $('indValorST').value=''; $('indIcmsCredito').value='';
+    $('indIpi').value='0.65'; $('indCustoFinanceiroPct').value=''; $('indAvariasPct').value='1.5'; $('indVenda').value='';
+    $('indCredIcmsFrete').value='0'; $('indComST').value='1';
+    $('indPctCredFreteSub').style.display='none';
+    $('indStSub').style.display='block';
+    $('indIcmsCreditoSub').style.display='none';
+    atualizarMargemIndividual();
+  });
+  ['indFrete','indPctCredFrete','indValorST','indIcmsCredito','indIpi','indCustoFinanceiroPct','indAvariasPct','indVenda'].forEach(id=>{
+    $(id).addEventListener('input', atualizarMargemIndividual);
+  });
+  $('indCredIcmsFrete').addEventListener('change', ()=>{
+    $('indPctCredFreteSub').style.display = $('indCredIcmsFrete').value === '1' ? 'block' : 'none';
+    atualizarMargemIndividual();
+  });
+  $('indComST').addEventListener('change', ()=>{
+    const v = $('indComST').value === '1';
+    $('indStSub').style.display = v ? 'block' : 'none';
+    $('indIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    atualizarMargemIndividual();
+  });
+
+  $('salvarIndividualBtn').addEventListener('click', async ()=>{
+    const idx = $('individualSelect').value;
+    if(idx === ''){ alert('Escolha um produto primeiro.'); return; }
+    const r = itensValidosParaSalvar()[parseInt(idx,10)];
+    if(!r) return;
+    const venda = $('indVenda').value;
+    if(!venda || toNum(venda) <= 0){ alert('Preencha o preço de venda.'); return; }
+    const fornecedor = $('fornecedorCotacao').value.trim();
+    const dados = {
+      produto: r.produtoEsperado,
+      fornecedor,
+      custoNFe: String(r.precoRecebido),
+      frete: $('indFrete').value || '0',
+      pctCredFrete: $('indPctCredFrete').value || '0',
+      valorST: $('indValorST').value || '0',
+      icmsCredito: $('indIcmsCredito').value || '0',
+      ipi: $('indIpi').value || '0',
+      custoFinanceiroPct: $('indCustoFinanceiroPct').value || '0',
+      avariasPct: $('indAvariasPct').value || '0',
+      venda,
+      toggles: { credIcmsFrete: parseInt($('indCredIcmsFrete').value,10), comST: parseInt($('indComST').value,10), prejuizoContabil: 0 }
+    };
+    try{
+      await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
+      produtosCotacaoSalvos.add(r.produtoEsperado);
+      $('individualMsg').textContent = '✓ ' + r.produtoEsperado + ' salvo com sucesso.';
+      popularSelectIndividual();
+      $('individualSelect').value = '';
+      $('individualForm').style.display = 'none';
+    }catch(e){
+      console.error(e);
+      $('individualMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
     }
   });
 
