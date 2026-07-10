@@ -12,6 +12,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -639,6 +647,9 @@
     <div class="card" id="resultadoCotacaoCard" style="display:none;">
       <h2>Resultado da comparação</h2>
       <div id="resultadoCotacao"></div>
+      <div class="actions" style="margin-top:14px;">
+        <button class="btn secondary" id="exportarExcelBtn">⭳ Exportar Excel</button>
+      </div>
     </div>
 
     <div class="card" id="sugestoesCard" style="display:none;">
@@ -814,6 +825,15 @@
     <button class="btn secondary" id="voltarCalculadoraBtn5" style="margin-bottom:16px;">← Voltar à calculadora</button>
     <div class="card">
       <h2>Histórico de cotações</h2>
+      <div class="field" style="max-width:260px; margin-bottom:14px;">
+        <label for="filtroMesHistorico">Filtrar por mês</label>
+        <div class="input-row">
+          <select id="filtroMesHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
+            <option value="">Todos os meses</option>
+          </select>
+        </div>
+      </div>
+      <div id="historicoTotalPeriodo" style="display:none; margin-bottom:14px;"></div>
       <div id="historicoLista"></div>
       <div class="empty-note" id="historicoMsg" style="display:block;">Carregando...</div>
     </div>
@@ -1198,8 +1218,14 @@
   }
 
   const RECAPTCHA_KEY = 'calculadora_custo_recaptcha_key';
+  const RECAPTCHA_SITE_KEY_PADRAO = '6LeLvkwtAAAAANmT4M_iWcyiRU51XG-mIxm8hU9u';
   function getRecaptchaSiteKeySalva(){
-    try{ return localStorage.getItem(RECAPTCHA_KEY) || ''; }catch(e){ return ''; }
+    try{
+      const v = localStorage.getItem(RECAPTCHA_KEY);
+      // null = nunca configurado neste navegador -> usa a chave padrão embutida.
+      // string vazia = usuário clicou em "Desconectar" explicitamente -> respeita a escolha.
+      return v !== null ? v : RECAPTCHA_SITE_KEY_PADRAO;
+    }catch(e){ return RECAPTCHA_SITE_KEY_PADRAO; }
   }
   function setRecaptchaSiteKeySalva(v){
     try{ localStorage.setItem(RECAPTCHA_KEY, v || ''); }catch(e){}
@@ -2074,7 +2100,8 @@
   $('voltarCalculadoraBtn5').addEventListener('click', mostrarViewCalculadora);
 
   // ==================== HISTÓRICO DE COTAÇÕES ====================
-  let historicoColapsados = new Set(); // ids abertos por padrão; guarda os FECHADOS manualmente
+  let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
+  let historicoDocsCache = [];
 
   function formatarDataFirestore(ts){
     try{
@@ -2083,11 +2110,31 @@
     }catch(e){ return '-'; }
   }
 
+  function gerarNomeCotacao(fornecedor, dataObj){
+    const dd = String(dataObj.getDate()).padStart(2,'0');
+    const mm = String(dataObj.getMonth()+1).padStart(2,'0');
+    const yyyy = dataObj.getFullYear();
+    return (fornecedor || 'Fornecedor') + ' ' + dd + '.' + mm + '.' + yyyy;
+  }
+
+  function chaveMesAno(dataObj){
+    return String(dataObj.getFullYear()) + '-' + String(dataObj.getMonth()+1).padStart(2,'0');
+  }
+  function labelMesAno(chave){
+    const partes = chave.split('-');
+    const nomes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    return nomes[parseInt(partes[1],10)-1] + '/' + partes[0];
+  }
+  function dataDoDoc(d){
+    return d.data && d.data.toDate ? d.data.toDate() : (d.data ? new Date(d.data) : null);
+  }
+
   async function carregarHistorico(){
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
     if(!firestoreDb){
       lista.innerHTML = '';
+      $('historicoTotalPeriodo').style.display = 'none';
       msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver o histórico.';
       msg.style.display = 'block';
       return;
@@ -2095,65 +2142,195 @@
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
     try{
-      const snap = await firestoreDb.collection('cotacoes').orderBy('data','desc').limit(50).get();
-      if(snap.empty){
-        lista.innerHTML = '';
-        msg.textContent = 'Nenhuma cotação salva ainda.';
-        return;
-      }
-      msg.style.display = 'none';
-      lista.innerHTML = '';
-      snap.forEach(doc=>{
-        const d = doc.data();
-        const itens = d.itens || [];
-        let totalImpacto = 0;
-        itens.forEach(it=>{
-          if(it.precoRecebido!=null && it.precoEsperado!=null){
-            const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
-            if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
-          }
-        });
-
-        const aberto = historicoColapsados.has(doc.id); // presença = está ABERTO (clicado)
-
-        const item = document.createElement('div');
-        item.className = 'historico-item';
-
-        const header = document.createElement('div');
-        header.className = 'historico-header';
-        header.innerHTML =
-          '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
-          '<span class="h-fornecedor">'+escapeHtml(d.fornecedor||'Fornecedor não informado')+'</span>'+
-          '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
-          '<span class="h-count">'+itens.length+' item(ns)</span>'+
-          '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
-        header.addEventListener('click', ()=>{
-          if(historicoColapsados.has(doc.id)) historicoColapsados.delete(doc.id);
-          else historicoColapsados.add(doc.id);
-          carregarHistorico();
-        });
-        item.appendChild(header);
-
-        if(aberto){
-          const body = document.createElement('div');
-          body.className = 'historico-body';
-          let tabela = '<table class="quote-table"><thead><tr><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th></tr></thead><tbody>';
-          itens.forEach(it=>{
-            tabela += '<tr><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
-              '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td></tr>';
-          });
-          tabela += '</tbody></table>';
-          body.innerHTML = tabela;
-          item.appendChild(body);
-        }
-
-        lista.appendChild(item);
-      });
+      const snap = await firestoreDb.collection('cotacoes').orderBy('data','desc').limit(200).get();
+      historicoDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      atualizarFiltroMesHistorico();
+      renderHistorico();
     }catch(e){
       console.error(e);
       lista.innerHTML = '';
+      $('historicoTotalPeriodo').style.display = 'none';
       msg.textContent = 'Erro ao carregar histórico: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "cotacoes" está liberada nas regras do Firestore.';
       msg.style.display = 'block';
+    }
+  }
+
+  function atualizarFiltroMesHistorico(){
+    const sel = $('filtroMesHistorico');
+    if(!sel) return;
+    const atual = sel.value;
+    const chaves = new Set();
+    historicoDocsCache.forEach(d=>{
+      const dt = dataDoDoc(d);
+      if(dt) chaves.add(chaveMesAno(dt));
+    });
+    const ordenadas = Array.from(chaves).sort().reverse();
+    sel.innerHTML = '<option value="">Todos os meses</option>';
+    ordenadas.forEach(chave=>{
+      const opt = document.createElement('option');
+      opt.value = chave;
+      opt.textContent = labelMesAno(chave);
+      sel.appendChild(opt);
+    });
+    if(ordenadas.includes(atual)) sel.value = atual;
+  }
+
+  function renderHistorico(){
+    const lista = $('historicoLista');
+    const msg = $('historicoMsg');
+    const totalEl = $('historicoTotalPeriodo');
+    const filtro = $('filtroMesHistorico') ? $('filtroMesHistorico').value : '';
+
+    if(historicoDocsCache.length === 0){
+      lista.innerHTML = '';
+      totalEl.style.display = 'none';
+      msg.textContent = 'Nenhuma cotação salva ainda.';
+      msg.style.display = 'block';
+      return;
+    }
+
+    let docs = historicoDocsCache;
+    if(filtro){
+      docs = docs.filter(d=>{
+        const dt = dataDoDoc(d);
+        return dt && chaveMesAno(dt) === filtro;
+      });
+    }
+    if(docs.length === 0){
+      lista.innerHTML = '';
+      totalEl.style.display = 'none';
+      msg.textContent = 'Nenhuma cotação nesse período.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.style.display = 'none';
+    lista.innerHTML = '';
+
+    let totalPeriodo = 0;
+    docs.forEach(d=>{
+      const itens = d.itens || [];
+      let totalImpacto = 0;
+      itens.forEach(it=>{
+        if(it.precoRecebido!=null && it.precoEsperado!=null){
+          const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
+          if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
+        }
+      });
+      totalPeriodo += totalImpacto;
+
+      const aberto = historicoColapsados.has(d.id);
+      const nomeExibicao = d.nomeCotacao || (d.fornecedor || 'Fornecedor não informado');
+
+      const item = document.createElement('div');
+      item.className = 'historico-item';
+
+      const header = document.createElement('div');
+      header.className = 'historico-header';
+      header.innerHTML =
+        '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+        '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
+        '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+        '<span class="h-count">'+itens.length+' item(ns)</span>'+
+        '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
+      header.addEventListener('click', ()=>{
+        if(historicoColapsados.has(d.id)) historicoColapsados.delete(d.id);
+        else historicoColapsados.add(d.id);
+        renderHistorico();
+      });
+      item.appendChild(header);
+
+      if(aberto){
+        const body = document.createElement('div');
+        body.className = 'historico-body';
+        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th></tr></thead><tbody>';
+        itens.forEach(it=>{
+          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
+            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td></tr>';
+        });
+        tabela += '</tbody></table>';
+        body.innerHTML = tabela;
+
+        const acoes = document.createElement('div');
+        acoes.className = 'actions-mini';
+        acoes.style.marginTop = '10px';
+        const editarBtn = document.createElement('button');
+        editarBtn.type = 'button';
+        editarBtn.textContent = '✏️ Editar / continuar negociação';
+        editarBtn.addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
+        const excluirBtn = document.createElement('button');
+        excluirBtn.type = 'button';
+        excluirBtn.className = 'del';
+        excluirBtn.textContent = 'Excluir';
+        excluirBtn.addEventListener('click', ()=>excluirCotacaoHistorico(d.id));
+        acoes.appendChild(editarBtn);
+        acoes.appendChild(excluirBtn);
+        body.appendChild(acoes);
+
+        item.appendChild(body);
+      }
+
+      lista.appendChild(item);
+    });
+
+    const economizou = totalPeriodo < 0;
+    totalEl.style.display = 'block';
+    totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
+      + '<div class="hero-row"><span class="hero-label">'+(filtro ? ('Total em '+labelMesAno(filtro)) : 'Total geral (últimas 200)')+'</span>'
+      + '<span class="hero-value '+(totalPeriodo===0?'':(economizou?'profit':'loss'))+'">'+(totalPeriodo===0?'sem diferença':(brl(Math.abs(totalPeriodo))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
+  }
+
+  $('filtroMesHistorico').addEventListener('change', renderHistorico);
+
+  async function excluirCotacaoHistorico(docId){
+    if(!firestoreDb) return;
+    if(!confirm('Excluir esta cotação do histórico? Essa ação não pode ser desfeita.')) return;
+    try{
+      await firestoreDb.collection('cotacoes').doc(docId).delete();
+      await carregarHistorico();
+    }catch(e){
+      console.error(e);
+      alert('Erro ao excluir: ' + (e && e.message ? e.message : 'erro desconhecido'));
+    }
+  }
+
+  async function carregarCotacaoParaEdicao(docId){
+    if(!firestoreDb) return;
+    try{
+      const doc = await firestoreDb.collection('cotacoes').doc(docId).get();
+      if(!doc.exists){ alert('Essa cotação não existe mais (pode já ter sido excluída).'); return; }
+      const d = doc.data();
+      resetCotacao();
+      cotacaoEditandoId = docId;
+      $('fornecedorCotacao').value = d.fornecedor || '';
+      ultimosEsperados = [];
+      ultimosRecebidos = [];
+      ultimosResultados = (d.itens || []).map(it=>{
+        const r = {
+          codigo: it.codigo || '',
+          produtoEsperado: it.produto || '',
+          quantidadeEsperada: it.quantidadeEsperada != null ? it.quantidadeEsperada : null,
+          precoEsperado: it.precoEsperado != null ? it.precoEsperado : null,
+          recIdx: -1,
+          produtoRecebido: it.produtoRecebido || null,
+          quantidadeRecebida: it.quantidadeRecebida != null ? it.quantidadeRecebida : null,
+          precoRecebido: it.precoRecebido != null ? it.precoRecebido : null,
+          flags: [], diffPct: null, diffAbs: null, diffTotal: null
+        };
+        recalcularFlags(r);
+        return r;
+      });
+      produtosCotacaoSalvos = new Set();
+      $('resultadoCotacaoCard').style.display = 'block';
+      renderResultadoCotacao();
+      renderSugestoesCotacao();
+      $('addProdutosCard').style.display = 'block';
+      renderListaLote();
+      popularSelectIndividual();
+      $('cotacaoMsg').textContent = 'Editando: ' + (d.nomeCotacao || d.fornecedor || '') + '. Ajuste os preços e clique em "Salvar cotação" pra atualizar (não cria duplicata).';
+      mostrarViewCotacao();
+    }catch(e){
+      console.error(e);
+      alert('Erro ao carregar cotação para edição: ' + (e && e.message ? e.message : 'erro desconhecido'));
     }
   }
 
@@ -2395,6 +2572,30 @@
     return score;
   }
 
+  function recalcularFlags(r){
+    r.flags = [];
+    r.diffPct = null;
+    r.diffAbs = null;
+    r.diffTotal = null;
+    if(r.precoRecebido == null){
+      r.flags.push('missing');
+      return;
+    }
+    if(r.precoEsperado != null && r.precoEsperado > 0){
+      const diffPct = (r.precoRecebido - r.precoEsperado) / r.precoEsperado;
+      r.diffPct = diffPct;
+      r.diffAbs = r.precoRecebido - r.precoEsperado;
+      const qtdParaTotal = r.quantidadeRecebida != null ? r.quantidadeRecebida : r.quantidadeEsperada;
+      if(qtdParaTotal != null) r.diffTotal = r.diffAbs * qtdParaTotal;
+      if(diffPct > 0.05) r.flags.push('up');
+      else if(diffPct < -0.03) r.flags.push('down');
+    }
+    if(r.quantidadeEsperada != null && r.quantidadeRecebida != null && r.quantidadeEsperada !== r.quantidadeRecebida){
+      r.flags.push('qty');
+    }
+    if(r.flags.length === 0) r.flags.push('neutral');
+  }
+
   function construirResultado(exp, rec, recIdx){
     const r = {
       codigo: exp.codigo,
@@ -2410,23 +2611,7 @@
       diffAbs: null,
       diffTotal: null
     };
-    if(!rec){
-      r.flags.push('missing');
-      return r;
-    }
-    if(exp.precoEsperado != null && rec.valor != null && exp.precoEsperado > 0){
-      const diffPct = (rec.valor - exp.precoEsperado) / exp.precoEsperado;
-      r.diffPct = diffPct;
-      r.diffAbs = rec.valor - exp.precoEsperado;
-      const qtdParaTotal = rec.quantidade != null ? rec.quantidade : exp.quantidade;
-      if(qtdParaTotal != null) r.diffTotal = r.diffAbs * qtdParaTotal;
-      if(diffPct > 0.05) r.flags.push('up');
-      else if(diffPct < -0.03) r.flags.push('down');
-    }
-    if(exp.quantidade != null && rec.quantidade != null && exp.quantidade !== rec.quantidade){
-      r.flags.push('qty');
-    }
-    if(r.flags.length === 0) r.flags.push('neutral');
+    recalcularFlags(r);
     return r;
   }
 
@@ -2533,22 +2718,28 @@
 
   function renderResultadoCotacao(){
     const el = $('resultadoCotacao');
-    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Corresponde a</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Corresponde a</th></tr></thead><tbody>';
     let totalImpacto = 0;
     let temTotal = false;
     ultimosResultados.forEach((r, idx)=>{
       html += '<tr>';
+      html += '<td>'+escapeHtml(r.codigo||'-')+'</td>';
       html += '<td>'+escapeHtml(r.produtoEsperado)+(r.flags.includes('qty')?'<br><span class="empty-note" style="display:inline;">Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida+'</span>':'')+'</td>';
       html += '<td>'+(r.precoEsperado!=null?brl(r.precoEsperado):'-')+'</td>';
-      html += '<td>'+(r.precoRecebido!=null?brl(r.precoRecebido):'-')+'</td>';
+      html += '<td><div class="input-row" style="max-width:120px;"><span class="prefix">R$</span><input type="number" step="0.01" class="preco-atual-input" data-idx="'+idx+'" value="'+(r.precoRecebido!=null?r.precoRecebido:'')+'" placeholder="0"></div></td>';
       html += '<td>'+(r.diffPct!=null?((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%'):'-')+'</td>';
       html += '<td>'+(r.diffAbs!=null?((r.diffAbs>=0?'+':'-')+brl(Math.abs(r.diffAbs))):'-')+'</td>';
       html += '<td>'+renderBadges(r.flags)+'</td>';
-      html += '<td><select class="match-select" data-idx="'+idx+'"><option value="-1"'+(r.recIdx===-1?' selected':'')+'>— Faltando —</option>';
-      ultimosRecebidos.forEach((rec, ridx)=>{
-        html += '<option value="'+ridx+'"'+(r.recIdx===ridx?' selected':'')+'>'+escapeHtml(rec.produto)+'</option>';
-      });
-      html += '</select></td></tr>';
+      if(ultimosRecebidos.length > 0){
+        html += '<td><select class="match-select" data-idx="'+idx+'"><option value="-1"'+(r.recIdx===-1?' selected':'')+'>— Faltando —</option>';
+        ultimosRecebidos.forEach((rec, ridx)=>{
+          html += '<option value="'+ridx+'"'+(r.recIdx===ridx?' selected':'')+'>'+escapeHtml(rec.produto)+'</option>';
+        });
+        html += '</select></td>';
+      } else {
+        html += '<td>'+escapeHtml(r.produtoRecebido||'-')+'</td>';
+      }
+      html += '</tr>';
       if(r.diffTotal != null){ totalImpacto += r.diffTotal; temTotal = true; }
     });
     html += '</tbody></table>';
@@ -2567,6 +2758,19 @@
         const exp = ultimosEsperados[idx];
         const rec = novoRecIdx === -1 ? null : ultimosRecebidos[novoRecIdx];
         ultimosResultados[idx] = construirResultado(exp, rec, novoRecIdx);
+        renderResultadoCotacao();
+        renderSugestoesCotacao();
+      });
+    });
+
+    el.querySelectorAll('.preco-atual-input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const idx = parseInt(inp.dataset.idx,10);
+        const r = ultimosResultados[idx];
+        if(!r) return;
+        const novoValor = toNum(inp.value);
+        r.precoRecebido = novoValor > 0 ? novoValor : null;
+        recalcularFlags(r);
         renderResultadoCotacao();
         renderSugestoesCotacao();
       });
@@ -2631,6 +2835,7 @@
   });
 
   let produtosCotacaoSalvos = new Set(); // nomes já enviados a Produtos Salvos nesta cotação
+  let cotacaoEditandoId = null; // se preenchido, "Salvar" atualiza essa cotação em vez de criar uma nova
 
   function itensValidosParaSalvar(){
     return ultimosResultados.filter(r=>!r.flags.includes('missing') && r.precoRecebido!=null);
@@ -2641,6 +2846,7 @@
     ultimosRecebidos = [];
     ultimosResultados = [];
     produtosCotacaoSalvos = new Set();
+    cotacaoEditandoId = null;
     $('arquivoExcel').value = '';
     $('arquivoPdf').value = '';
     $('previewExcel').innerHTML = '';
@@ -2667,11 +2873,49 @@
     $('individualMsg').textContent = '';
   }
 
+  function nomesFlags(flags){
+    const nomes = { up:'Preço subiu', down:'Economia', qty:'Qtd diferente', missing:'Faltando', neutral:'Sem alteração' };
+    return (flags||[]).map(f=>nomes[f]||f).join(', ');
+  }
+
+  $('exportarExcelBtn').addEventListener('click', ()=>{
+    if(!ultimosResultados.length){ alert('Nada para exportar ainda — compare uma cotação primeiro.'); return; }
+    const linhas = ultimosResultados.map(r=>({
+      'Código': r.codigo || '',
+      'Produto': r.produtoEsperado,
+      'Qtd Esperada': r.quantidadeEsperada,
+      'Preço Esperado': r.precoEsperado,
+      'Qtd Recebida': r.quantidadeRecebida,
+      'Preço Atual': r.precoRecebido,
+      'Diferença %': r.diffPct != null ? Number((r.diffPct*100).toFixed(2)) : '',
+      'Diferença R$': r.diffAbs != null ? Number(r.diffAbs.toFixed(2)) : '',
+      'Situação': nomesFlags(r.flags)
+    }));
+    const sugestoes = gerarSugestoes(ultimosResultados).map(s=>({
+      'Sugestão': s.titulo,
+      'Detalhe': s.detalhe
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const wsComparacao = XLSX.utils.json_to_sheet(linhas);
+    XLSX.utils.book_append_sheet(wb, wsComparacao, 'Comparação');
+    if(sugestoes.length){
+      const wsSugestoes = XLSX.utils.json_to_sheet(sugestoes);
+      XLSX.utils.book_append_sheet(wb, wsSugestoes, 'Sugestões');
+    }
+
+    const fornecedor = $('fornecedorCotacao').value.trim();
+    const dataStr = new Date().toISOString().slice(0,10);
+    const nomeArquivo = (fornecedor ? (fornecedor + ' ') : '') + 'cotacao ' + dataStr + '.xlsx';
+    XLSX.writeFile(wb, nomeArquivo);
+  });
+
   $('compararBtn').addEventListener('click', ()=>{
     if(!ultimosEsperados.length){ alert('Carregue a planilha de cotação primeiro.'); return; }
     if(!ultimosRecebidos.length){ alert('Carregue o PDF do fornecedor primeiro.'); return; }
     ultimosResultados = compararCotacao(ultimosEsperados, ultimosRecebidos);
     produtosCotacaoSalvos = new Set();
+    cotacaoEditandoId = null;
     $('resultadoCotacaoCard').style.display = 'block';
     renderResultadoCotacao();
     renderSugestoesCotacao();
@@ -2691,22 +2935,32 @@
     }
     const fornecedor = $('fornecedorCotacao').value.trim();
     if(!fornecedor){ alert('Informe o fornecedor desta cotação antes de salvar.'); return; }
+    const itens = ultimosResultados.map(r=>({
+      codigo: r.codigo || '',
+      produto: r.produtoEsperado,
+      quantidadeEsperada: r.quantidadeEsperada,
+      precoEsperado: r.precoEsperado,
+      produtoRecebido: r.produtoRecebido,
+      quantidadeRecebida: r.quantidadeRecebida,
+      precoRecebido: r.precoRecebido,
+      flags: r.flags
+    }));
     try{
-      await firestoreDb.collection('cotacoes').add({
-        fornecedor,
-        data: firebase.firestore.FieldValue.serverTimestamp(),
-        itens: ultimosResultados.map(r=>({
-          codigo: r.codigo || '',
-          produto: r.produtoEsperado,
-          quantidadeEsperada: r.quantidadeEsperada,
-          precoEsperado: r.precoEsperado,
-          produtoRecebido: r.produtoRecebido,
-          quantidadeRecebida: r.quantidadeRecebida,
-          precoRecebido: r.precoRecebido,
-          flags: r.flags
-        }))
-      });
-      alert('✓ Cotação salva no histórico.');
+      if(cotacaoEditandoId){
+        // Atualiza a cotação existente (mantém nome/data originais) — não cria duplicata
+        await firestoreDb.collection('cotacoes').doc(cotacaoEditandoId).set({ fornecedor, itens }, { merge: true });
+        alert('✓ Cotação atualizada no histórico.');
+      } else {
+        const agora = new Date();
+        const docRef = await firestoreDb.collection('cotacoes').add({
+          fornecedor,
+          nomeCotacao: gerarNomeCotacao(fornecedor, agora),
+          data: firebase.firestore.FieldValue.serverTimestamp(),
+          itens
+        });
+        cotacaoEditandoId = docRef.id; // se clicar em salvar de novo agora, atualiza em vez de duplicar
+        alert('✓ Cotação salva no histórico.');
+      }
       resetCotacao();
     }catch(e){
       console.error(e);
