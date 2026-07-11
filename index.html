@@ -60,6 +60,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2278,31 +2286,92 @@
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
     const totalEl = $('historicoTotalPeriodo');
-    totalEl.style.display = 'none';
 
-    const linhas = [];
-    docs.forEach(d=>{
-      const nomeCotacao = d.nomeCotacao || d.fornecedor || 'Cotação';
-      (d.itens || []).forEach(it=>{
-        const itStatus = it.status || 'negociacao';
-        if(itStatus === statusFiltro) linhas.push(Object.assign({ nomeCotacao }, it));
-      });
-    });
+    const grupos = docs.map(d=>{
+      const itensFiltrados = (d.itens || []).filter(it => (it.status || 'negociacao') === statusFiltro);
+      return { doc: d, itensFiltrados };
+    }).filter(g => g.itensFiltrados.length > 0);
 
-    if(linhas.length === 0){
+    if(grupos.length === 0){
       lista.innerHTML = '';
+      totalEl.style.display = 'none';
       msg.textContent = 'Nenhum produto com esse status.';
       msg.style.display = 'block';
       return;
     }
     msg.style.display = 'none';
+    lista.innerHTML = '';
 
-    let html = '<table class="quote-table"><thead><tr><th>Cotação</th><th>Código</th><th>Produto</th><th>Preço</th><th>Status</th></tr></thead><tbody>';
-    linhas.forEach(it=>{
-      html += '<tr><td>'+escapeHtml(it.nomeCotacao)+'</td><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+    let totalFiltrado = 0;
+    grupos.forEach(({doc: d, itensFiltrados})=>{
+      let totalImpacto = 0;
+      itensFiltrados.forEach(it=>{
+        if(it.precoRecebido!=null && it.precoEsperado!=null){
+          const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
+          if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
+        }
+      });
+      totalFiltrado += totalImpacto;
+
+      const aberto = historicoColapsados.has(d.id);
+      const nomeExibicao = d.nomeCotacao || (d.fornecedor || 'Fornecedor não informado');
+
+      const item = document.createElement('div');
+      item.className = 'historico-item';
+
+      const header = document.createElement('div');
+      header.className = 'historico-header';
+      header.innerHTML =
+        '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+        '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
+        '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+        '<span class="h-count">'+itensFiltrados.length+' de '+(d.itens||[]).length+' item(ns)</span>'+
+        '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
+      header.addEventListener('click', ()=>{
+        if(historicoColapsados.has(d.id)) historicoColapsados.delete(d.id);
+        else historicoColapsados.add(d.id);
+        renderHistorico();
+      });
+      item.appendChild(header);
+
+      if(aberto){
+        const body = document.createElement('div');
+        body.className = 'historico-body';
+        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
+        itensFiltrados.forEach(it=>{
+          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
+            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+        });
+        tabela += '</tbody></table>';
+        body.innerHTML = tabela;
+
+        const acoes = document.createElement('div');
+        acoes.className = 'actions-mini';
+        acoes.style.marginTop = '10px';
+        const editarBtn = document.createElement('button');
+        editarBtn.type = 'button';
+        editarBtn.textContent = '✏️ Editar / continuar negociação';
+        editarBtn.addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
+        const excluirBtn = document.createElement('button');
+        excluirBtn.type = 'button';
+        excluirBtn.className = 'del';
+        excluirBtn.textContent = 'Excluir';
+        excluirBtn.addEventListener('click', ()=>excluirCotacaoHistorico(d.id));
+        acoes.appendChild(editarBtn);
+        acoes.appendChild(excluirBtn);
+        body.appendChild(acoes);
+
+        item.appendChild(body);
+      }
+
+      lista.appendChild(item);
     });
-    html += '</tbody></table>';
-    lista.innerHTML = html;
+
+    const economizou = totalFiltrado < 0;
+    totalEl.style.display = 'block';
+    totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
+      + '<div class="hero-row"><span class="hero-label">Total nos itens "'+(STATUS_LABELS[statusFiltro]||statusFiltro)+'"</span>'
+      + '<span class="hero-value '+(totalFiltrado===0?'':(economizou?'profit':'loss'))+'">'+(totalFiltrado===0?'sem diferença':(brl(Math.abs(totalFiltrado))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
   }
 
   function renderHistorico(){
@@ -2870,11 +2939,22 @@
 
   function renderResultadoCotacao(){
     const el = $('resultadoCotacao');
-    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
+    let html = '';
+    if(ultimosResultados.length > 0){
+      html += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">'
+        + '<select id="statusEmMassa" style="font-family:var(--font-body); font-size:12px; padding:6px 8px; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--ink);">'
+        + Object.keys(STATUS_LABELS).map(s=>'<option value="'+s+'">'+STATUS_LABELS[s]+'</option>').join('')
+        + '</select>'
+        + '<button class="btn secondary" id="aplicarStatusEmMassaBtn" style="padding:6px 14px; font-size:12px;">Aplicar status aos selecionados</button>'
+        + '<span class="empty-note" id="statusEmMassaMsg" style="margin:0;"></span>'
+        + '</div>';
+    }
+    html += '<table class="quote-table"><thead><tr><th><input type="checkbox" id="selecionarTodosStatus"></th><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
     let totalImpacto = 0;
     let temTotal = false;
     ultimosResultados.forEach((r, idx)=>{
       html += '<tr>';
+      html += '<td><input type="checkbox" class="linha-select" data-idx="'+idx+'"></td>';
       html += '<td>'+escapeHtml(r.codigo||'-')+'</td>';
       html += '<td>'+escapeHtml(r.produtoEsperado)+(r.flags.includes('qty')?'<br><span class="empty-note" style="display:inline;">Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida+'</span>':'')+'</td>';
       html += '<td>'+(r.precoEsperado!=null?brl(r.precoEsperado):'-')+'</td>';
@@ -2905,6 +2985,29 @@
         + '<span class="hero-value '+(economizou?'profit':'loss')+'">'+brl(Math.abs(totalImpacto))+'</span></div></div>';
     }
     el.innerHTML = html;
+
+    if($('selecionarTodosStatus')){
+      $('selecionarTodosStatus').addEventListener('change', (ev)=>{
+        el.querySelectorAll('.linha-select').forEach(cb=>{ cb.checked = ev.target.checked; });
+      });
+    }
+    if($('aplicarStatusEmMassaBtn')){
+      $('aplicarStatusEmMassaBtn').addEventListener('click', ()=>{
+        const novoStatus = $('statusEmMassa').value;
+        const selecionadas = el.querySelectorAll('.linha-select:checked');
+        if(selecionadas.length === 0){
+          $('statusEmMassaMsg').textContent = 'Marque pelo menos um produto primeiro.';
+          return;
+        }
+        selecionadas.forEach(cb=>{
+          const idx = parseInt(cb.dataset.idx,10);
+          if(ultimosResultados[idx]) ultimosResultados[idx].status = novoStatus;
+        });
+        const qtd = selecionadas.length;
+        renderResultadoCotacao();
+        $('statusEmMassaMsg').textContent = '✓ Status atualizado em ' + qtd + ' produto(s).';
+      });
+    }
 
     el.querySelectorAll('.match-select').forEach(sel=>{
       sel.addEventListener('change', (ev)=>{
