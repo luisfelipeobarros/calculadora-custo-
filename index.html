@@ -36,6 +36,30 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -66,9 +90,27 @@
     -webkit-font-smoothing:antialiased;
   }
   .wrap{
-    max-width:1180px;
-    margin:0 auto;
     padding:28px 20px 60px;
+  }
+  header.top{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #viewCalculadora, #viewFrete, #viewSync{
+    max-width:1440px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #viewCotacao, #viewHistorico, #viewProdutos{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  footer.note{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
   }
   header.top{
     display:flex;
@@ -373,6 +415,10 @@
   .status-badge.qty{ background:#FCEFD6; color:#8A6414; }
   .status-badge.missing{ background:#e5e5e5; color:#222; }
   .status-badge.neutral{ background:var(--stripe2); color:var(--ink-soft); }
+  .status-badge.status-negociacao{ background:var(--stripe2); color:var(--ink-soft); }
+  .status-badge.status-pedido{ background:#FCEFD6; color:#8A6414; }
+  .status-badge.status-transito{ background:rgba(59,111,166,0.14); color:#2C5A8C; }
+  .status-badge.status-recebido{ background:rgba(46,107,69,0.12); color:var(--profit); }
 
   .suggestion-item{
     padding:12px 14px;
@@ -851,12 +897,26 @@
     <button class="btn secondary" id="voltarCalculadoraBtn5" style="margin-bottom:16px;">← Voltar à calculadora</button>
     <div class="card">
       <h2>Histórico de cotações</h2>
-      <div class="field" style="max-width:260px; margin-bottom:14px;">
-        <label for="filtroMesHistorico">Filtrar por mês</label>
-        <div class="input-row">
-          <select id="filtroMesHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
-            <option value="">Todos os meses</option>
-          </select>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div class="field" style="max-width:260px; margin-bottom:14px; flex:1; min-width:200px;">
+          <label for="filtroMesHistorico">Filtrar por mês</label>
+          <div class="input-row">
+            <select id="filtroMesHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
+              <option value="">Todos os meses</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="max-width:260px; margin-bottom:14px; flex:1; min-width:200px;">
+          <label for="filtroStatusHistorico">Filtrar por status</label>
+          <div class="input-row">
+            <select id="filtroStatusHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
+              <option value="">Todos os status</option>
+              <option value="negociacao">Em negociação</option>
+              <option value="pedido">Em carteira (pedido)</option>
+              <option value="transito">Em trânsito (faturado)</option>
+              <option value="recebido">Recebido</option>
+            </select>
+          </div>
         </div>
       </div>
       <div id="historicoTotalPeriodo" style="display:none; margin-bottom:14px;"></div>
@@ -2055,10 +2115,23 @@
     $('geminiMsg').textContent = 'Desconectado. A leitura de PDF volta a usar o modo automático (sem IA).';
   });
 
+  function aguardarGeminiBridge(timeoutMs){
+    return new Promise((resolve, reject)=>{
+      const inicio = Date.now();
+      (function checar(){
+        if(typeof window.geminiConectar === 'function'){ resolve(); return; }
+        if(Date.now() - inicio > timeoutMs){ reject(new Error('O SDK do Gemini não terminou de carregar a tempo. Tente clicar em Conectar manualmente.')); return; }
+        setTimeout(checar, 100);
+      })();
+    });
+  }
+
   const recaptchaSiteKeySalva = getRecaptchaSiteKeySalva();
   if(recaptchaSiteKeySalva){
     $('recaptchaSiteKey').value = recaptchaSiteKeySalva;
-    conectarGemini(recaptchaSiteKeySalva, true);
+    aguardarGeminiBridge(8000)
+      .then(()=> conectarGemini(recaptchaSiteKeySalva, true))
+      .catch(e=>{ $('geminiMsg').textContent = e.message; });
   }
 
   function mostrarViewProdutos(){
@@ -2201,11 +2274,43 @@
     if(ordenadas.includes(atual)) sel.value = atual;
   }
 
+  function renderHistoricoListaPlana(docs, statusFiltro){
+    const lista = $('historicoLista');
+    const msg = $('historicoMsg');
+    const totalEl = $('historicoTotalPeriodo');
+    totalEl.style.display = 'none';
+
+    const linhas = [];
+    docs.forEach(d=>{
+      const nomeCotacao = d.nomeCotacao || d.fornecedor || 'Cotação';
+      (d.itens || []).forEach(it=>{
+        const itStatus = it.status || 'negociacao';
+        if(itStatus === statusFiltro) linhas.push(Object.assign({ nomeCotacao }, it));
+      });
+    });
+
+    if(linhas.length === 0){
+      lista.innerHTML = '';
+      msg.textContent = 'Nenhum produto com esse status.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.style.display = 'none';
+
+    let html = '<table class="quote-table"><thead><tr><th>Cotação</th><th>Código</th><th>Produto</th><th>Preço</th><th>Status</th></tr></thead><tbody>';
+    linhas.forEach(it=>{
+      html += '<tr><td>'+escapeHtml(it.nomeCotacao)+'</td><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+    });
+    html += '</tbody></table>';
+    lista.innerHTML = html;
+  }
+
   function renderHistorico(){
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
     const totalEl = $('historicoTotalPeriodo');
-    const filtro = $('filtroMesHistorico') ? $('filtroMesHistorico').value : '';
+    const filtroMes = $('filtroMesHistorico') ? $('filtroMesHistorico').value : '';
+    const filtroStatus = $('filtroStatusHistorico') ? $('filtroStatusHistorico').value : '';
 
     if(historicoDocsCache.length === 0){
       lista.innerHTML = '';
@@ -2216,10 +2321,10 @@
     }
 
     let docs = historicoDocsCache;
-    if(filtro){
+    if(filtroMes){
       docs = docs.filter(d=>{
         const dt = dataDoDoc(d);
-        return dt && chaveMesAno(dt) === filtro;
+        return dt && chaveMesAno(dt) === filtroMes;
       });
     }
     if(docs.length === 0){
@@ -2229,6 +2334,12 @@
       msg.style.display = 'block';
       return;
     }
+
+    if(filtroStatus){
+      renderHistoricoListaPlana(docs, filtroStatus);
+      return;
+    }
+
     msg.style.display = 'none';
     lista.innerHTML = '';
 
@@ -2268,10 +2379,10 @@
       if(aberto){
         const body = document.createElement('div');
         body.className = 'historico-body';
-        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th></tr></thead><tbody>';
+        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
         itens.forEach(it=>{
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
-            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td></tr>';
+            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
         tabela += '</tbody></table>';
         body.innerHTML = tabela;
@@ -2301,11 +2412,12 @@
     const economizou = totalPeriodo < 0;
     totalEl.style.display = 'block';
     totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
-      + '<div class="hero-row"><span class="hero-label">'+(filtro ? ('Total em '+labelMesAno(filtro)) : 'Total geral (últimas 200)')+'</span>'
+      + '<div class="hero-row"><span class="hero-label">'+(filtroMes ? ('Total em '+labelMesAno(filtroMes)) : 'Total geral (últimas 200)')+'</span>'
       + '<span class="hero-value '+(totalPeriodo===0?'':(economizou?'profit':'loss'))+'">'+(totalPeriodo===0?'sem diferença':(brl(Math.abs(totalPeriodo))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
   }
 
   $('filtroMesHistorico').addEventListener('change', renderHistorico);
+  $('filtroStatusHistorico').addEventListener('change', renderHistorico);
 
   async function excluirCotacaoHistorico(docId){
     if(!firestoreDb) return;
@@ -2341,6 +2453,7 @@
           produtoRecebido: it.produtoRecebido || null,
           quantidadeRecebida: it.quantidadeRecebida != null ? it.quantidadeRecebida : null,
           precoRecebido: it.precoRecebido != null ? it.precoRecebido : null,
+          status: it.status || 'negociacao',
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
         recalcularFlags(r);
@@ -2623,6 +2736,17 @@
     if(r.flags.length === 0) r.flags.push('neutral');
   }
 
+  const STATUS_LABELS = {
+    negociacao: 'Em negociação',
+    pedido: 'Em carteira (pedido)',
+    transito: 'Em trânsito (faturado)',
+    recebido: 'Recebido'
+  };
+  function renderStatusBadge(status){
+    const s = status || 'negociacao';
+    return '<span class="status-badge status-'+s+'">'+(STATUS_LABELS[s]||s)+'</span>';
+  }
+
   function construirResultado(exp, rec, recIdx){
     const r = {
       codigo: exp.codigo,
@@ -2633,6 +2757,7 @@
       produtoRecebido: rec ? rec.produto : null,
       quantidadeRecebida: rec ? rec.quantidade : null,
       precoRecebido: rec ? rec.valor : null,
+      status: 'negociacao',
       flags: [],
       diffPct: null,
       diffAbs: null,
@@ -2745,7 +2870,7 @@
 
   function renderResultadoCotacao(){
     const el = $('resultadoCotacao');
-    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Corresponde a</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
     let totalImpacto = 0;
     let temTotal = false;
     ultimosResultados.forEach((r, idx)=>{
@@ -2757,6 +2882,9 @@
       html += '<td>'+(r.diffPct!=null?((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%'):'-')+'</td>';
       html += '<td>'+(r.diffAbs!=null?((r.diffAbs>=0?'+':'-')+brl(Math.abs(r.diffAbs))):'-')+'</td>';
       html += '<td>'+renderBadges(r.flags)+'</td>';
+      html += '<td><select class="status-select" data-idx="'+idx+'" style="font-family:var(--font-body); font-size:12px; padding:5px 6px; border:1px solid var(--line); border-radius:4px; background:#fff; color:var(--ink);">'
+        + Object.keys(STATUS_LABELS).map(s=>'<option value="'+s+'"'+((r.status||'negociacao')===s?' selected':'')+'>'+STATUS_LABELS[s]+'</option>').join('')
+        + '</select></td>';
       if(ultimosRecebidos.length > 0){
         html += '<td><select class="match-select" data-idx="'+idx+'"><option value="-1"'+(r.recIdx===-1?' selected':'')+'>— Faltando —</option>';
         ultimosRecebidos.forEach((rec, ridx)=>{
@@ -2784,9 +2912,18 @@
         const novoRecIdx = parseInt(ev.target.value,10);
         const exp = ultimosEsperados[idx];
         const rec = novoRecIdx === -1 ? null : ultimosRecebidos[novoRecIdx];
+        const statusAnterior = ultimosResultados[idx] ? ultimosResultados[idx].status : 'negociacao';
         ultimosResultados[idx] = construirResultado(exp, rec, novoRecIdx);
+        ultimosResultados[idx].status = statusAnterior || 'negociacao';
         renderResultadoCotacao();
         renderSugestoesCotacao();
+      });
+    });
+
+    el.querySelectorAll('.status-select').forEach(sel=>{
+      sel.addEventListener('change', (ev)=>{
+        const idx = parseInt(ev.target.dataset.idx,10);
+        if(ultimosResultados[idx]) ultimosResultados[idx].status = ev.target.value;
       });
     });
 
@@ -2972,7 +3109,8 @@
       produtoRecebido: r.produtoRecebido,
       quantidadeRecebida: r.quantidadeRecebida,
       precoRecebido: r.precoRecebido,
-      flags: r.flags
+      flags: r.flags,
+      status: r.status || 'negociacao'
     }));
     try{
       if(cotacaoEditandoId){
