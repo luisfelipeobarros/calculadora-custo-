@@ -76,6 +76,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -933,6 +941,14 @@
               <option value="recebido">Recebido</option>
             </select>
           </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div class="field" style="margin-bottom:14px; flex:1; min-width:200px;">
+          <div class="input-row"><input type="text" id="buscaProdutoHistorico" placeholder="Buscar produto pelo nome..."></div>
+        </div>
+        <div class="field" style="margin-bottom:14px; flex:1; min-width:200px;">
+          <div class="input-row"><input type="text" id="buscaFornecedorHistorico" placeholder="Buscar fornecedor..."></div>
         </div>
       </div>
       <div id="historicoTotalPeriodo" style="display:none; margin-bottom:14px;"></div>
@@ -2290,28 +2306,65 @@
     if(ordenadas.includes(atual)) sel.value = atual;
   }
 
-  function renderHistoricoListaPlana(docs, statusFiltro){
+  function renderHistorico(){
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
     const totalEl = $('historicoTotalPeriodo');
+    const filtroMes = $('filtroMesHistorico') ? $('filtroMesHistorico').value : '';
+    const filtroStatus = $('filtroStatusHistorico') ? $('filtroStatusHistorico').value : '';
+    const filtroProduto = normalizarTexto($('buscaProdutoHistorico') ? $('buscaProdutoHistorico').value : '');
+    const filtroFornecedor = normalizarTexto($('buscaFornecedorHistorico') ? $('buscaFornecedorHistorico').value : '');
 
-    const grupos = docs.map(d=>{
-      const itensFiltrados = (d.itens || []).filter(it => (it.status || 'negociacao') === statusFiltro);
-      return { doc: d, itensFiltrados };
-    }).filter(g => g.itensFiltrados.length > 0);
-
-    if(grupos.length === 0){
+    if(historicoDocsCache.length === 0){
       lista.innerHTML = '';
       totalEl.style.display = 'none';
-      msg.textContent = 'Nenhum produto com esse status.';
+      msg.textContent = 'Nenhuma cotação salva ainda.';
+      msg.style.display = 'block';
+      return;
+    }
+
+    let docs = historicoDocsCache;
+    if(filtroMes){
+      docs = docs.filter(d=>{
+        const dt = dataDoDoc(d);
+        return dt && chaveMesAno(dt) === filtroMes;
+      });
+    }
+    if(filtroFornecedor){
+      docs = docs.filter(d=>{
+        const nome = d.nomeCotacao || d.fornecedor || '';
+        return normalizarTexto(nome).includes(filtroFornecedor) || normalizarTexto(d.fornecedor||'').includes(filtroFornecedor);
+      });
+    }
+    if(docs.length === 0){
+      lista.innerHTML = '';
+      totalEl.style.display = 'none';
+      msg.textContent = 'Nenhuma cotação encontrada com esses filtros.';
+      msg.style.display = 'block';
+      return;
+    }
+
+    const temFiltroItem = !!filtroStatus || !!filtroProduto;
+    const grupos = docs.map(d=>{
+      let itensFiltrados = d.itens || [];
+      if(filtroStatus) itensFiltrados = itensFiltrados.filter(it => (it.status||'negociacao') === filtroStatus);
+      if(filtroProduto) itensFiltrados = itensFiltrados.filter(it => normalizarTexto(it.produto||'').includes(filtroProduto));
+      return { doc: d, itensFiltrados, totalOriginal: (d.itens||[]).length };
+    });
+    const gruposVisiveis = temFiltroItem ? grupos.filter(g => g.itensFiltrados.length > 0) : grupos;
+
+    if(gruposVisiveis.length === 0){
+      lista.innerHTML = '';
+      totalEl.style.display = 'none';
+      msg.textContent = 'Nenhum produto encontrado com esses filtros.';
       msg.style.display = 'block';
       return;
     }
     msg.style.display = 'none';
     lista.innerHTML = '';
 
-    let totalFiltrado = 0;
-    grupos.forEach(({doc: d, itensFiltrados})=>{
+    let totalGeral = 0;
+    gruposVisiveis.forEach(({doc: d, itensFiltrados, totalOriginal})=>{
       let totalImpacto = 0;
       itensFiltrados.forEach(it=>{
         if(it.precoRecebido!=null && it.precoEsperado!=null){
@@ -2319,7 +2372,7 @@
           if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
         }
       });
-      totalFiltrado += totalImpacto;
+      totalGeral += totalImpacto;
 
       const aberto = historicoColapsados.has(d.id);
       const nomeExibicao = d.nomeCotacao || (d.fornecedor || 'Fornecedor não informado');
@@ -2329,11 +2382,12 @@
 
       const header = document.createElement('div');
       header.className = 'historico-header';
+      const contagem = temFiltroItem ? (itensFiltrados.length+' de '+totalOriginal+' item(ns)') : (totalOriginal+' item(ns)');
       header.innerHTML =
         '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
         '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
         '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
-        '<span class="h-count">'+itensFiltrados.length+' de '+(d.itens||[]).length+' item(ns)</span>'+
+        '<span class="h-count">'+contagem+'</span>'+
         '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
       header.addEventListener('click', ()=>{
         if(historicoColapsados.has(d.id)) historicoColapsados.delete(d.id);
@@ -2375,126 +2429,19 @@
       lista.appendChild(item);
     });
 
-    const economizou = totalFiltrado < 0;
+    const economizou = totalGeral < 0;
     totalEl.style.display = 'block';
+    let labelTotal = filtroMes ? ('Total em '+labelMesAno(filtroMes)) : 'Total geral (últimas 200)';
+    if(filtroStatus) labelTotal = 'Total nos itens "'+(STATUS_LABELS[filtroStatus]||filtroStatus)+'"' + (filtroMes ? (' em '+labelMesAno(filtroMes)) : '');
     totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
-      + '<div class="hero-row"><span class="hero-label">Total nos itens "'+(STATUS_LABELS[statusFiltro]||statusFiltro)+'"</span>'
-      + '<span class="hero-value '+(totalFiltrado===0?'':(economizou?'profit':'loss'))+'">'+(totalFiltrado===0?'sem diferença':(brl(Math.abs(totalFiltrado))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
-  }
-
-  function renderHistorico(){
-    const lista = $('historicoLista');
-    const msg = $('historicoMsg');
-    const totalEl = $('historicoTotalPeriodo');
-    const filtroMes = $('filtroMesHistorico') ? $('filtroMesHistorico').value : '';
-    const filtroStatus = $('filtroStatusHistorico') ? $('filtroStatusHistorico').value : '';
-
-    if(historicoDocsCache.length === 0){
-      lista.innerHTML = '';
-      totalEl.style.display = 'none';
-      msg.textContent = 'Nenhuma cotação salva ainda.';
-      msg.style.display = 'block';
-      return;
-    }
-
-    let docs = historicoDocsCache;
-    if(filtroMes){
-      docs = docs.filter(d=>{
-        const dt = dataDoDoc(d);
-        return dt && chaveMesAno(dt) === filtroMes;
-      });
-    }
-    if(docs.length === 0){
-      lista.innerHTML = '';
-      totalEl.style.display = 'none';
-      msg.textContent = 'Nenhuma cotação nesse período.';
-      msg.style.display = 'block';
-      return;
-    }
-
-    if(filtroStatus){
-      renderHistoricoListaPlana(docs, filtroStatus);
-      return;
-    }
-
-    msg.style.display = 'none';
-    lista.innerHTML = '';
-
-    let totalPeriodo = 0;
-    docs.forEach(d=>{
-      const itens = d.itens || [];
-      let totalImpacto = 0;
-      itens.forEach(it=>{
-        if(it.precoRecebido!=null && it.precoEsperado!=null){
-          const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
-          if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
-        }
-      });
-      totalPeriodo += totalImpacto;
-
-      const aberto = historicoColapsados.has(d.id);
-      const nomeExibicao = d.nomeCotacao || (d.fornecedor || 'Fornecedor não informado');
-
-      const item = document.createElement('div');
-      item.className = 'historico-item';
-
-      const header = document.createElement('div');
-      header.className = 'historico-header';
-      header.innerHTML =
-        '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
-        '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
-        '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
-        '<span class="h-count">'+itens.length+' item(ns)</span>'+
-        '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
-      header.addEventListener('click', ()=>{
-        if(historicoColapsados.has(d.id)) historicoColapsados.delete(d.id);
-        else historicoColapsados.add(d.id);
-        renderHistorico();
-      });
-      item.appendChild(header);
-
-      if(aberto){
-        const body = document.createElement('div');
-        body.className = 'historico-body';
-        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Quantidade</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
-        itens.forEach(it=>{
-          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
-            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
-        });
-        tabela += '</tbody></table>';
-        body.innerHTML = tabela;
-
-        const acoes = document.createElement('div');
-        acoes.className = 'actions-mini';
-        acoes.style.marginTop = '10px';
-        const editarBtn = document.createElement('button');
-        editarBtn.type = 'button';
-        editarBtn.textContent = '✏️ Editar / continuar negociação';
-        editarBtn.addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
-        const excluirBtn = document.createElement('button');
-        excluirBtn.type = 'button';
-        excluirBtn.className = 'del';
-        excluirBtn.textContent = 'Excluir';
-        excluirBtn.addEventListener('click', ()=>excluirCotacaoHistorico(d.id));
-        acoes.appendChild(editarBtn);
-        acoes.appendChild(excluirBtn);
-        body.appendChild(acoes);
-
-        item.appendChild(body);
-      }
-
-      lista.appendChild(item);
-    });
-
-    const economizou = totalPeriodo < 0;
-    totalEl.style.display = 'block';
-    totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
-      + '<div class="hero-row"><span class="hero-label">'+(filtroMes ? ('Total em '+labelMesAno(filtroMes)) : 'Total geral (últimas 200)')+'</span>'
-      + '<span class="hero-value '+(totalPeriodo===0?'':(economizou?'profit':'loss'))+'">'+(totalPeriodo===0?'sem diferença':(brl(Math.abs(totalPeriodo))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
+      + '<div class="hero-row"><span class="hero-label">'+labelTotal+'</span>'
+      + '<span class="hero-value '+(totalGeral===0?'':(economizou?'profit':'loss'))+'">'+(totalGeral===0?'sem diferença':(brl(Math.abs(totalGeral))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
   }
 
   $('filtroMesHistorico').addEventListener('change', renderHistorico);
   $('filtroStatusHistorico').addEventListener('change', renderHistorico);
+  $('buscaProdutoHistorico').addEventListener('input', renderHistorico);
+  $('buscaFornecedorHistorico').addEventListener('input', renderHistorico);
 
   async function excluirCotacaoHistorico(docId){
     if(!firestoreDb) return;
