@@ -28,6 +28,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2050,7 +2058,7 @@
   const recaptchaSiteKeySalva = getRecaptchaSiteKeySalva();
   if(recaptchaSiteKeySalva){
     $('recaptchaSiteKey').value = recaptchaSiteKeySalva;
-    conectarGemini(recaptchaSiteKeySalva, false);
+    conectarGemini(recaptchaSiteKeySalva, true);
   }
 
   function mostrarViewProdutos(){
@@ -2124,7 +2132,7 @@
   function formatarDataFirestore(ts){
     try{
       const d = ts && ts.toDate ? ts.toDate() : new Date(ts);
-      return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+      return d.toLocaleDateString('pt-BR');
     }catch(e){ return '-'; }
   }
 
