@@ -20,6 +20,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -175,6 +183,12 @@
   }
   input[type=number]::-webkit-outer-spin-button,
   input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
+  .no-spin::-webkit-outer-spin-button,
+  .no-spin::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  .no-spin{-moz-appearance:textfield;}
 
   .toggle{
     display:inline-flex;
@@ -670,6 +684,10 @@
       <div class="toggle" style="margin-bottom:16px;">
         <button type="button" id="modoLoteBtn" class="active">Modo em lote</button>
         <button type="button" id="modoIndividualBtn">Modo individual</button>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label for="fornecedorProdutos">Fornecedor</label>
+        <div class="input-row"><input type="text" id="fornecedorProdutos" placeholder="Ex: Fortlev con."></div>
       </div>
 
       <!-- MODO LOTE -->
@@ -2302,6 +2320,7 @@
       resetCotacao();
       cotacaoEditandoId = docId;
       $('fornecedorCotacao').value = d.fornecedor || '';
+      $('fornecedorProdutos').value = d.fornecedor || '';
       ultimosEsperados = [];
       ultimosRecebidos = [];
       ultimosResultados = (d.itens || []).map(it=>{
@@ -2726,7 +2745,7 @@
       html += '<td>'+escapeHtml(r.codigo||'-')+'</td>';
       html += '<td>'+escapeHtml(r.produtoEsperado)+(r.flags.includes('qty')?'<br><span class="empty-note" style="display:inline;">Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida+'</span>':'')+'</td>';
       html += '<td>'+(r.precoEsperado!=null?brl(r.precoEsperado):'-')+'</td>';
-      html += '<td><div class="input-row" style="max-width:120px;"><span class="prefix">R$</span><input type="number" step="0.01" class="preco-atual-input" data-idx="'+idx+'" value="'+(r.precoRecebido!=null?r.precoRecebido:'')+'" placeholder="0"></div></td>';
+      html += '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span><input type="number" step="0.01" class="preco-atual-input no-spin" data-idx="'+idx+'" value="'+(r.precoRecebido!=null?r.precoRecebido:'')+'" placeholder="0"></div></td>';
       html += '<td>'+(r.diffPct!=null?((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%'):'-')+'</td>';
       html += '<td>'+(r.diffAbs!=null?((r.diffAbs>=0?'+':'-')+brl(Math.abs(r.diffAbs))):'-')+'</td>';
       html += '<td>'+renderBadges(r.flags)+'</td>';
@@ -2857,6 +2876,7 @@
     $('sugestoesCard').style.display = 'none';
     $('addProdutosCard').style.display = 'none';
     $('fornecedorCotacao').value = '';
+    $('fornecedorProdutos').value = '';
     $('cotacaoMsg').textContent = '';
     ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteCustoFinanceiroPct'].forEach(id=>{ $(id).value=''; });
     $('loteIpi').value = '0.65';
@@ -2920,6 +2940,7 @@
     renderResultadoCotacao();
     renderSugestoesCotacao();
     $('addProdutosCard').style.display = 'block';
+    if(!$('fornecedorProdutos').value.trim()) $('fornecedorProdutos').value = $('fornecedorCotacao').value.trim();
     renderListaLote();
     popularSelectIndividual();
   });
@@ -3011,7 +3032,7 @@
       html += '<tr>'
         + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+'</td>'
         + '<td>'+brl(r.precoRecebido)+'</td>'
-        + '<td><div class="input-row" style="max-width:130px;"><span class="prefix">R$</span><input type="number" step="0.01" class="lote-venda-input" data-produto="'+escapeHtml(r.produtoEsperado)+'" placeholder="0"></div></td>'
+        + '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span><input type="number" step="0.01" class="lote-venda-input no-spin" data-produto="'+escapeHtml(r.produtoEsperado)+'" placeholder="0"></div></td>'
         + '<td class="lote-margem-preview" data-produto="'+escapeHtml(r.produtoEsperado)+'">--</td>'
         + '</tr>';
     });
@@ -3060,7 +3081,7 @@
 
   $('salvarLoteBtn').addEventListener('click', async ()=>{
     const cfg = coletarConfigLote();
-    const fornecedor = $('fornecedorCotacao').value.trim();
+    const fornecedor = $('fornecedorProdutos').value.trim();
     const itens = itensValidosParaSalvar();
     let salvos = 0;
     for(const r of itens){
@@ -3156,7 +3177,7 @@
     if(!r) return;
     const venda = $('indVenda').value;
     if(!venda || toNum(venda) <= 0){ alert('Preencha o preço de venda.'); return; }
-    const fornecedor = $('fornecedorCotacao').value.trim();
+    const fornecedor = $('fornecedorProdutos').value.trim();
     const dados = {
       produto: r.produtoEsperado,
       fornecedor,
