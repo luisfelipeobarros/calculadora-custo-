@@ -68,6 +68,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2337,9 +2345,9 @@
       if(aberto){
         const body = document.createElement('div');
         body.className = 'historico-body';
-        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
+        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Quantidade</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
         itensFiltrados.forEach(it=>{
-          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
+          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
             '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
         tabela += '</tbody></table>';
@@ -2448,9 +2456,9 @@
       if(aberto){
         const body = document.createElement('div');
         body.className = 'historico-body';
-        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
+        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Quantidade</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
         itens.forEach(it=>{
-          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
+          tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
             '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
         tabela += '</tbody></table>';
@@ -2816,6 +2824,14 @@
     return '<span class="status-badge status-'+s+'">'+(STATUS_LABELS[s]||s)+'</span>';
   }
 
+  function formatarQtdColuna(esperada, recebida){
+    if(esperada == null && recebida == null) return '-';
+    if(esperada != null && recebida != null && esperada !== recebida){
+      return '<span style="color:#8A6414; font-weight:600;">'+esperada+' → '+recebida+'</span>';
+    }
+    return String(recebida != null ? recebida : esperada);
+  }
+
   function construirResultado(exp, rec, recIdx){
     const r = {
       codigo: exp.codigo,
@@ -2949,14 +2965,15 @@
         + '<span class="empty-note" id="statusEmMassaMsg" style="margin:0;"></span>'
         + '</div>';
     }
-    html += '<table class="quote-table"><thead><tr><th><input type="checkbox" id="selecionarTodosStatus"></th><th>Código</th><th>Produto</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
+    html += '<table class="quote-table"><thead><tr><th><input type="checkbox" id="selecionarTodosStatus"></th><th>Código</th><th>Produto</th><th>Quantidade</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
     let totalImpacto = 0;
     let temTotal = false;
     ultimosResultados.forEach((r, idx)=>{
       html += '<tr>';
       html += '<td><input type="checkbox" class="linha-select" data-idx="'+idx+'"></td>';
       html += '<td>'+escapeHtml(r.codigo||'-')+'</td>';
-      html += '<td>'+escapeHtml(r.produtoEsperado)+(r.flags.includes('qty')?'<br><span class="empty-note" style="display:inline;">Qtd '+r.quantidadeEsperada+' → '+r.quantidadeRecebida+'</span>':'')+'</td>';
+      html += '<td>'+escapeHtml(r.produtoEsperado)+'</td>';
+      html += '<td>'+formatarQtdColuna(r.quantidadeEsperada, r.quantidadeRecebida)+'</td>';
       html += '<td>'+(r.precoEsperado!=null?brl(r.precoEsperado):'-')+'</td>';
       html += '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span><input type="number" step="0.01" class="preco-atual-input no-spin" data-idx="'+idx+'" value="'+(r.precoRecebido!=null?r.precoRecebido:'')+'" placeholder="0"></div></td>';
       html += '<td>'+(r.diffPct!=null?((r.diffPct>=0?'+':'')+(r.diffPct*100).toFixed(2).replace('.',',')+'%'):'-')+'</td>';
