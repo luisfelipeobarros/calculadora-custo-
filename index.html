@@ -100,6 +100,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2642,7 +2650,7 @@
         let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Quantidade</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
         itensFiltrados.forEach(it=>{
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
-            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(it.flags||['neutral'])+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
         tabela += '</tbody></table>';
         body.innerHTML = tabela;
@@ -2999,6 +3007,21 @@
       r.flags.push('qty');
     }
     if(r.flags.length === 0) r.flags.push('neutral');
+  }
+
+  // Recalcula a situação (flags) de um item salvo no histórico usando as regras ATUAIS,
+  // em vez de confiar no rótulo gravado na época em que a cotação foi salva — assim,
+  // se os limites de alerta mudarem no futuro, o histórico antigo já mostra certo sozinho.
+  function flagsAtuais(it){
+    const r = {
+      precoEsperado: it.precoEsperado,
+      precoRecebido: it.precoRecebido,
+      quantidadeEsperada: it.quantidadeEsperada,
+      quantidadeRecebida: it.quantidadeRecebida,
+      flags: [], diffPct: null, diffAbs: null, diffTotal: null
+    };
+    recalcularFlags(r);
+    return r.flags;
   }
 
   const STATUS_LABELS = {
