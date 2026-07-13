@@ -108,6 +108,22 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -988,7 +1004,6 @@
 
     <div class="card" style="max-width:720px;">
       <h2>Comparação com Concorrentes</h2>
-      <p class="empty-note" style="display:block; margin-bottom:12px;">Usa o Gemini pra visitar cada link e trazer produto, marca e preço. Alguns sites bloqueiam acesso automatizado — nesses casos, dá pra digitar o preço na mão depois.</p>
       <div class="field">
         <label for="produtoConcorrente">Nome do produto (referência)</label>
         <div class="input-row"><input type="text" id="produtoConcorrente" placeholder="Ex: Piso 46x46 Stela Branco Neve"></div>
@@ -997,10 +1012,23 @@
         <label for="meuPrecoConcorrente">Seu preço de venda <span class="hint">opcional, pra comparar</span></label>
         <div class="input-row"><span class="prefix">R$</span><input type="number" step="0.01" id="meuPrecoConcorrente" class="no-spin" placeholder="0"></div>
       </div>
+
+      <p class="empty-note" style="display:block; margin-bottom:12px;">Usa o Gemini pra pesquisar no Google, dentro de cada loja listada, pelo produto descrito — sem precisar do link exato.</p>
       <div class="field">
-        <label for="urlsConcorrentes">Links dos produtos concorrentes <span class="hint">um por linha</span></label>
-        <textarea id="urlsConcorrentes" rows="6" style="width:100%; font-family:var(--font-mono); font-size:12px; padding:10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink);" placeholder="https://loja1.com.br/produto...&#10;https://loja2.com.br/produto..."></textarea>
+        <label for="descricaoProdutoBusca">Descrição do produto buscado</label>
+        <div class="input-row"><input type="text" id="descricaoProdutoBusca" placeholder="Ex: piso cerâmico 46x46 tipo A"></div>
       </div>
+      <div class="field">
+        <label for="lojasBusca">Lojas onde pesquisar <span class="hint">uma por linha — nome ou site</span></label>
+        <textarea id="lojasBusca" rows="8" style="width:100%; font-family:var(--font-mono); font-size:12px; padding:10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink);">Ferreira Costa
+Canal da Construção
+Lojas 2001
+Armazém Coral
+Armazém Jenipapo
+Comercial Batista
+Tupan</textarea>
+      </div>
+
       <div class="actions">
         <button class="btn" id="compararConcorrentesBtn">Comparar preços</button>
         <button class="btn secondary" id="limparConcorrentesBtn">🗑 Limpar</button>
@@ -1011,6 +1039,7 @@
     <div class="card" id="resultadoConcorrentesCard" style="display:none; max-width:1000px;">
       <h2>Resultado</h2>
       <div id="resultadoConcorrentes"></div>
+      <div id="buscaGoogleWidget" style="margin-top:12px;"></div>
       <div class="actions" style="margin-top:14px;">
         <button class="btn secondary" id="salvarConcorrentesBtn">Salvar esta comparação</button>
       </div>
@@ -1236,7 +1265,7 @@
      do resto do app (que usa o SDK "compat"). Expõe funções em window.* pro script principal usar. -->
 <script type="module">
   let geminiModel = null;
-  let geminiModelConcorrentes = null;
+  let geminiModelBusca = null;
   window.__geminiPronto = false;
 
   window.geminiConectar = async function(firebaseConfig, recaptchaSiteKey){
@@ -1279,11 +1308,11 @@
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
       });
 
-      // Modelo separado com a ferramenta "urlContext" ativada — deixa o Gemini buscar
-      // o conteúdo de páginas de produto direto nos servidores do Google (sem CORS).
-      geminiModelConcorrentes = getGenerativeModel(ai, {
+      // Modelo com urlContext + googleSearch — permite buscar por descrição do produto
+      // em vez de precisar de um link exato (o Gemini pesquisa e acha sozinho).
+      geminiModelBusca = getGenerativeModel(ai, {
         model: 'gemini-3.1-flash-lite',
-        tools: [{ urlContext: {} }],
+        tools: [{ urlContext: {} }, { googleSearch: {} }],
         generationConfig: { responseMimeType: 'application/json' }
       });
 
@@ -1298,7 +1327,7 @@
 
   window.geminiDesconectar = function(){
     geminiModel = null;
-    geminiModelConcorrentes = null;
+    geminiModelBusca = null;
     window.__geminiPronto = false;
   };
 
@@ -1357,25 +1386,26 @@
     })).filter(it => it.produto);
   };
 
-  window.geminiCompararPrecos = async function(urls){
-    if(!geminiModelConcorrentes) throw new Error('Gemini não está conectado.');
-    const listaUrls = urls.map((u,i)=>(i+1)+'. '+u).join('\n');
-    const prompt = 'Acesse cada uma das URLs de páginas de produto abaixo (são lojas de material de construção) e extraia, ' +
-      'para cada uma: o nome do produto exibido na página, a marca/fabricante (se aparecer), e o preço de venda em reais ' +
-      '(o valor à vista/normal exibido — se houver preço "de" e "por", use o "por"; se o produto for vendido por m², use ' +
-      'o preço por m²). Se não conseguir acessar alguma URL ou não achar as informações, marque "erro": true e explique ' +
-      'brevemente o motivo em "mensagemErro" (ex: site bloqueou acesso, página não encontrada, etc).\n\n' +
-      'URLs:\n' + listaUrls + '\n\n' +
-      'Responda SOMENTE com um JSON válido neste formato exato, mantendo a mesma ordem das URLs acima: ' +
-      '{"resultados": [{"url": "...", "loja": "nome da loja, ex: Tupan", "produto": "...", "marca": "...", ' +
-      '"preco": 00.00, "erro": false, "mensagemErro": ""}]}. ' +
-      'O campo preco deve ser só o número, com ponto decimal, sem R$ e sem separador de milhar.';
+  window.geminiBuscarPrecos = async function(descricaoProduto, lojas){
+    if(!geminiModelBusca) throw new Error('Gemini não está conectado.');
+    const listaLojas = lojas.map((l,i)=>(i+1)+'. '+l).join('\n');
+    const prompt = 'Pesquise no Google pelo produto descrito abaixo, especificamente nos sites das lojas listadas ' +
+      '(são lojas de material de construção). Para cada loja, encontre o produto pedido ou o mais equivalente/similar ' +
+      'disponível, com o menor preço. Retorne para cada loja: o nome da loja, o nome do produto encontrado, a ' +
+      'marca/fabricante (se souber), o preço de venda em reais (use o preço por m² se for esse tipo de produto), e ' +
+      'o link da página do produto se você tiver. Se não encontrar nada equivalente numa loja, marque "erro": true ' +
+      'e explique brevemente em "mensagemErro".\n\n' +
+      'Produto buscado: ' + descricaoProduto + '\n\n' +
+      'Lojas:\n' + listaLojas + '\n\n' +
+      'Responda SOMENTE com um JSON válido neste formato exato, mantendo a mesma ordem das lojas acima: ' +
+      '{"resultados": [{"loja": "...", "produto": "...", "marca": "...", "preco": 00.00, "url": "...", ' +
+      '"erro": false, "mensagemErro": ""}]}. O campo preco deve ser só o número, com ponto decimal, sem R$.';
 
     let result;
     try{
-      result = await geminiModelConcorrentes.generateContent(prompt);
+      result = await geminiModelBusca.generateContent(prompt);
     }catch(e){
-      console.error('Erro na chamada ao Gemini (concorrentes):', e);
+      console.error('Erro na chamada ao Gemini (busca por descrição):', e);
       throw new Error('Falha na chamada à API: ' + (e && e.message ? e.message : String(e)));
     }
 
@@ -1385,14 +1415,22 @@
     try{
       json = JSON.parse(texto);
     }catch(e){
-      console.error('Resposta do Gemini (concorrentes) não é JSON válido:', texto);
+      console.error('Resposta do Gemini (busca por descrição) não é JSON válido:', texto);
       throw new Error('O Gemini respondeu num formato inesperado.');
     }
     const resultados = Array.isArray(json.resultados) ? json.resultados : (Array.isArray(json) ? json : null);
     if(!resultados){
       throw new Error('Resposta sem resultados.');
     }
-    return resultados;
+
+    // O Google exige mostrar essa "sugestão de pesquisa" quando o resultado usa Google Search —
+    // fica disponível em groundingMetadata quando o Gemini realmente pesquisou.
+    let buscaHtml = null;
+    try{
+      buscaHtml = result.response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent || null;
+    }catch(e){ /* ignora se não vier */ }
+
+    return { resultados, buscaHtml };
   };
 </script>
 
@@ -2359,10 +2397,6 @@
   // ==================== COMPARAÇÃO COM CONCORRENTES ====================
   let ultimosConcorrentes = [];
 
-  function extrairDominio(url){
-    try{ return new URL(url).hostname.replace(/^www\./,''); }catch(e){ return url; }
-  }
-
   function renderResultadoConcorrentes(){
     const el = $('resultadoConcorrentes');
     const meuPreco = toNum($('meuPrecoConcorrente').value);
@@ -2374,7 +2408,7 @@
     let html = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th>'+(meuPreco>0?'<th>Dif. vs seu preço</th>':'')+'</tr></thead><tbody>';
     ultimosConcorrentes.forEach((c, idx)=>{
       html += '<tr>';
-      html += '<td><a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(c.loja)+'</a></td>';
+      html += '<td>'+(c.url ? ('<a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(c.loja)+'</a>') : escapeHtml(c.loja))+'</td>';
       html += '<td>'+escapeHtml(c.produto||'-')+'</td>';
       html += '<td>'+escapeHtml(c.marca||'-')+'</td>';
       if(c.erro || c.preco == null){
@@ -2411,33 +2445,40 @@
     });
   }
 
+  const LOJAS_PADRAO = 'Ferreira Costa\nCanal da Construção\nLojas 2001\nArmazém Coral\nArmazém Jenipapo\nComercial Batista\nTupan';
+
   $('compararConcorrentesBtn').addEventListener('click', async ()=>{
-    const urlsTexto = $('urlsConcorrentes').value.trim();
-    if(!urlsTexto){ alert('Cole pelo menos um link de produto concorrente.'); return; }
     if(!window.__geminiPronto){
       $('concorrentesMsg').textContent = 'Conecte o Gemini primeiro (aba Sincronização) — essa função depende dele.';
       return;
     }
-    const urls = urlsTexto.split('\n').map(u=>u.trim()).filter(u=>u);
-    $('concorrentesMsg').textContent = 'Buscando preços em ' + urls.length + ' site(s)... pode levar alguns segundos.';
+    $('buscaGoogleWidget').innerHTML = '';
+
+    const descricao = $('descricaoProdutoBusca').value.trim();
+    const lojasTexto = $('lojasBusca').value.trim();
+    if(!descricao){ alert('Descreva o produto que quer buscar.'); return; }
+    if(!lojasTexto){ alert('Liste pelo menos uma loja pra pesquisar.'); return; }
+    const lojas = lojasTexto.split('\n').map(l=>l.trim()).filter(l=>l);
+    $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s)... pode levar alguns segundos.';
     $('compararConcorrentesBtn').disabled = true;
     try{
-      const resultados = await window.geminiCompararPrecos(urls);
-      ultimosConcorrentes = urls.map((url, i)=>{
+      const { resultados, buscaHtml } = await window.geminiBuscarPrecos(descricao, lojas);
+      ultimosConcorrentes = lojas.map((loja, i)=>{
         const r = resultados[i] || {};
         return {
-          url,
-          loja: r.loja || extrairDominio(url),
+          url: r.url || '',
+          loja: r.loja || loja,
           produto: r.produto || '',
           marca: r.marca || '',
           preco: (r.preco != null && !isNaN(r.preco)) ? Number(r.preco) : null,
           erro: !!r.erro || r.preco == null,
-          mensagemErro: r.mensagemErro || (r.erro ? 'Não foi possível ler esse site.' : '')
+          mensagemErro: r.mensagemErro || (r.erro ? 'Não encontrei esse produto nessa loja.' : '')
         };
       });
       $('concorrentesMsg').textContent = '';
       $('resultadoConcorrentesCard').style.display = 'block';
       renderResultadoConcorrentes();
+      if(buscaHtml){ $('buscaGoogleWidget').innerHTML = buscaHtml; }
     }catch(e){
       console.error(e);
       $('concorrentesMsg').textContent = 'Erro: ' + (e && e.message ? e.message : 'erro desconhecido');
@@ -2449,10 +2490,12 @@
   $('limparConcorrentesBtn').addEventListener('click', ()=>{
     $('produtoConcorrente').value = '';
     $('meuPrecoConcorrente').value = '';
-    $('urlsConcorrentes').value = '';
+    $('descricaoProdutoBusca').value = '';
+    $('lojasBusca').value = LOJAS_PADRAO;
     ultimosConcorrentes = [];
     $('resultadoConcorrentesCard').style.display = 'none';
     $('resultadoConcorrentes').innerHTML = '';
+    $('buscaGoogleWidget').innerHTML = '';
     $('concorrentesMsg').textContent = '';
     $('salvarConcorrentesMsg').textContent = '';
   });
