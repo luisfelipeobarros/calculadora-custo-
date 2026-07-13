@@ -124,6 +124,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2581,11 +2589,14 @@ Tupan</textarea>
     const sel = $('filtroMesHistorico');
     if(!sel) return;
     const atual = sel.value;
+    const jaInicializado = sel.dataset.jaInicializado === '1';
     const chaves = new Set();
     historicoDocsCache.forEach(d=>{
       const dt = dataDoDoc(d);
       if(dt) chaves.add(chaveMesAno(dt));
     });
+    const chaveMesAtual = chaveMesAno(new Date());
+    chaves.add(chaveMesAtual); // garante que o mês atual sempre apareça, mesmo sem cotação salva ainda
     const ordenadas = Array.from(chaves).sort().reverse();
     sel.innerHTML = '<option value="">Todos os meses</option>';
     ordenadas.forEach(chave=>{
@@ -2594,7 +2605,14 @@ Tupan</textarea>
       opt.textContent = labelMesAno(chave);
       sel.appendChild(opt);
     });
-    if(ordenadas.includes(atual)) sel.value = atual;
+    if(jaInicializado){
+      // já foi aberto antes nesta sessão — respeita a escolha do usuário (inclusive "Todos os meses")
+      if(ordenadas.includes(atual) || atual === '') sel.value = atual;
+    } else {
+      // primeira vez abrindo o histórico nesta sessão — parte do mês atual por padrão
+      sel.value = chaveMesAtual;
+      sel.dataset.jaInicializado = '1';
+    }
   }
 
   function renderHistorico(){
@@ -3219,9 +3237,10 @@ Tupan</textarea>
         + '<span class="empty-note" id="statusEmMassaMsg" style="margin:0;"></span>'
         + '</div>';
     }
-    html += '<table class="quote-table"><thead><tr><th><input type="checkbox" id="selecionarTodosStatus"></th><th>Código</th><th>Produto</th><th>Quantidade</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th></tr></thead><tbody>';
+    html += '<table class="quote-table"><thead><tr><th><input type="checkbox" id="selecionarTodosStatus"></th><th>Código</th><th>Produto</th><th>Quantidade</th><th>Preço Esperado</th><th>Preço Atual</th><th>Dif. %</th><th>Dif. R$</th><th>Situação</th><th>Status</th><th>Corresponde a</th><th></th></tr></thead><tbody>';
     let totalImpacto = 0;
     let temTotal = false;
+    let totalComprado = 0;
     ultimosResultados.forEach((r, idx)=>{
       html += '<tr>';
       html += '<td><input type="checkbox" class="linha-select" data-idx="'+idx+'"></td>';
@@ -3245,15 +3264,26 @@ Tupan</textarea>
       } else {
         html += '<td>'+escapeHtml(r.produtoRecebido||'-')+'</td>';
       }
+      html += '<td><button type="button" class="remover-item-btn" data-idx="'+idx+'" title="Remover este item" style="border:1px solid var(--line); background:#fff; color:var(--loss); cursor:pointer; font-size:13px; padding:5px 9px; border-radius:4px;">🗑</button></td>';
       html += '</tr>';
       if(r.diffTotal != null){ totalImpacto += r.diffTotal; temTotal = true; }
+      if(r.precoRecebido != null){
+        const qtdCompra = r.quantidadeRecebida != null ? r.quantidadeRecebida : r.quantidadeEsperada;
+        if(qtdCompra != null) totalComprado += r.precoRecebido * qtdCompra;
+      }
     });
     html += '</tbody></table>';
-    if(temTotal){
+    if(temTotal || totalComprado > 0){
       const economizou = totalImpacto < 0;
-      html += '<div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:14px;">'
-        + '<div class="hero-row"><span class="hero-label">'+(economizou?'Economia total do pedido':'Valor a mais no pedido')+'</span>'
-        + '<span class="hero-value '+(economizou?'profit':'loss')+'">'+brl(Math.abs(totalImpacto))+'</span></div></div>';
+      html += '<div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:14px;">';
+      if(totalComprado > 0){
+        html += '<div class="hero-row"><span class="hero-label">Total comprado</span><span class="hero-value">'+brl(totalComprado)+'</span></div>';
+      }
+      if(temTotal){
+        html += '<div class="hero-row"><span class="hero-label">'+(economizou?'Economia total do pedido':'Valor a mais no pedido')+'</span>'
+          + '<span class="hero-value '+(economizou?'profit':'loss')+'">'+brl(Math.abs(totalImpacto))+'</span></div>';
+      }
+      html += '</div>';
     }
     el.innerHTML = html;
 
@@ -3279,6 +3309,18 @@ Tupan</textarea>
         $('statusEmMassaMsg').textContent = '✓ Status atualizado em ' + qtd + ' produto(s).';
       });
     }
+
+    el.querySelectorAll('.remover-item-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = parseInt(btn.dataset.idx,10);
+        const nome = ultimosResultados[idx] ? ultimosResultados[idx].produtoEsperado : 'este item';
+        if(!confirm('Remover "'+nome+'" desta cotação? Ele não vai entrar nas sugestões nem no total.')) return;
+        ultimosResultados.splice(idx, 1);
+        if(ultimosEsperados[idx] !== undefined) ultimosEsperados.splice(idx, 1);
+        renderResultadoCotacao();
+        renderSugestoesCotacao();
+      });
+    });
 
     el.querySelectorAll('.match-select').forEach(sel=>{
       sel.addEventListener('change', (ev)=>{
