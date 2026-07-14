@@ -132,6 +132,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -2673,12 +2681,17 @@ Tupan</textarea>
     lista.innerHTML = '';
 
     let totalGeral = 0;
+    let totalCompradoGeral = 0;
     gruposVisiveis.forEach(({doc: d, itensFiltrados, totalOriginal})=>{
       let totalImpacto = 0;
       itensFiltrados.forEach(it=>{
         if(it.precoRecebido!=null && it.precoEsperado!=null){
           const qtd = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
           if(qtd!=null) totalImpacto += (it.precoRecebido - it.precoEsperado) * qtd;
+        }
+        if(it.precoRecebido!=null){
+          const qtdCompra = it.quantidadeRecebida!=null ? it.quantidadeRecebida : it.quantidadeEsperada;
+          if(qtdCompra!=null) totalCompradoGeral += it.precoRecebido * qtdCompra;
         }
       });
       totalGeral += totalImpacto;
@@ -2742,9 +2755,13 @@ Tupan</textarea>
     totalEl.style.display = 'block';
     let labelTotal = filtroMes ? ('Total em '+labelMesAno(filtroMes)) : 'Total geral (últimas 200)';
     if(filtroStatus) labelTotal = 'Total nos itens "'+(STATUS_LABELS[filtroStatus]||filtroStatus)+'"' + (filtroMes ? (' em '+labelMesAno(filtroMes)) : '');
-    totalEl.innerHTML = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">'
-      + '<div class="hero-row"><span class="hero-label">'+labelTotal+'</span>'
+    let heroHtml = '<div class="hero" style="border:1px solid var(--line); border-radius:6px;">';
+    if(totalCompradoGeral > 0){
+      heroHtml += '<div class="hero-row"><span class="hero-label">Total comprado'+(filtroMes?(' em '+labelMesAno(filtroMes)):'')+'</span><span class="hero-value">'+brl(totalCompradoGeral)+'</span></div>';
+    }
+    heroHtml += '<div class="hero-row"><span class="hero-label">'+labelTotal+'</span>'
       + '<span class="hero-value '+(totalGeral===0?'':(economizou?'profit':'loss'))+'">'+(totalGeral===0?'sem diferença':(brl(Math.abs(totalGeral))+(economizou?' (economia)':' (a mais)')))+'</span></div></div>';
+    totalEl.innerHTML = heroHtml;
   }
 
   $('filtroMesHistorico').addEventListener('change', renderHistorico);
