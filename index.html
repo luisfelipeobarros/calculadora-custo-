@@ -172,6 +172,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1092,6 +1100,12 @@ Tupan</textarea>
         <button class="btn secondary" id="salvarConcorrentesBtn">Salvar esta comparação</button>
       </div>
       <div class="empty-note" id="salvarConcorrentesMsg" style="margin-top:8px;"></div>
+    </div>
+
+    <div class="card" style="max-width:1000px;">
+      <h2>Comparações salvas</h2>
+      <div id="concorrentesHistLista"></div>
+      <div class="empty-note" id="concorrentesHistMsg" style="display:block;">Carregando...</div>
     </div>
   </div>
 
@@ -2455,6 +2469,7 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
+    carregarHistoricoConcorrentes();
   }
   function mostrarViewCalculadora(){
     $('viewProdutos').style.display = 'none';
@@ -2602,11 +2617,108 @@ Tupan</textarea>
         resultados: ultimosConcorrentes
       });
       $('salvarConcorrentesMsg').textContent = '✓ Comparação salva.';
+      carregarHistoricoConcorrentes();
     }catch(e){
       console.error(e);
       $('salvarConcorrentesMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
     }
   });
+
+  // ==================== HISTÓRICO DE COMPARAÇÕES COM CONCORRENTES ====================
+  let concorrentesHistColapsados = new Set();
+
+  async function carregarHistoricoConcorrentes(){
+    const lista = $('concorrentesHistLista');
+    const msg = $('concorrentesHistMsg');
+    if(!firestoreDb){
+      lista.innerHTML = '';
+      msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver comparações salvas.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.textContent = 'Carregando...';
+    msg.style.display = 'block';
+    try{
+      const snap = await firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get();
+      if(snap.empty){
+        lista.innerHTML = '';
+        msg.textContent = 'Nenhuma comparação salva ainda.';
+        return;
+      }
+      msg.style.display = 'none';
+      lista.innerHTML = '';
+      snap.forEach(doc=>{
+        const d = doc.data();
+        const resultados = d.resultados || [];
+        let menorPreco = null;
+        resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
+
+        const aberto = concorrentesHistColapsados.has(doc.id);
+        const item = document.createElement('div');
+        item.className = 'historico-item';
+
+        const header = document.createElement('div');
+        header.className = 'historico-header';
+        header.innerHTML =
+          '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+          '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
+          '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+          '<span class="h-count">'+resultados.length+' loja(s)</span>'+
+          (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
+        header.addEventListener('click', ()=>{
+          if(concorrentesHistColapsados.has(doc.id)) concorrentesHistColapsados.delete(doc.id);
+          else concorrentesHistColapsados.add(doc.id);
+          carregarHistoricoConcorrentes();
+        });
+        item.appendChild(header);
+
+        if(aberto){
+          const body = document.createElement('div');
+          body.className = 'historico-body';
+          let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
+          resultados.forEach(r=>{
+            tabela += '<tr><td>'+(r.url?('<a href="'+escapeHtml(r.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
+              + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
+              + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
+          });
+          tabela += '</tbody></table>';
+          if(d.meuPreco != null){
+            tabela += '<div class="empty-note" style="display:block; margin-top:8px;">Seu preço na época: <strong>'+brl(d.meuPreco)+'</strong></div>';
+          }
+          body.innerHTML = tabela;
+
+          const acoes = document.createElement('div');
+          acoes.className = 'actions-mini';
+          acoes.style.marginTop = '10px';
+          const excluirBtn = document.createElement('button');
+          excluirBtn.type = 'button';
+          excluirBtn.className = 'del';
+          excluirBtn.textContent = 'Excluir';
+          excluirBtn.addEventListener('click', async ()=>{
+            if(!confirm('Excluir esta comparação do histórico? Essa ação não pode ser desfeita.')) return;
+            try{
+              await firestoreDb.collection('concorrentes').doc(doc.id).delete();
+              carregarHistoricoConcorrentes();
+            }catch(e){
+              console.error(e);
+              alert('Erro ao excluir: ' + (e && e.message ? e.message : 'erro desconhecido'));
+            }
+          });
+          acoes.appendChild(excluirBtn);
+          body.appendChild(acoes);
+
+          item.appendChild(body);
+        }
+
+        lista.appendChild(item);
+      });
+    }catch(e){
+      console.error(e);
+      lista.innerHTML = '';
+      msg.textContent = 'Erro ao carregar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
+      msg.style.display = 'block';
+    }
+  }
 
   // ==================== HISTÓRICO DE COTAÇÕES ====================
   let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
