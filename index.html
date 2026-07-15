@@ -140,6 +140,38 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#A8462B">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -1281,7 +1313,8 @@ Tupan</textarea>
      do resto do app (que usa o SDK "compat"). Expõe funções em window.* pro script principal usar. -->
 <script type="module">
   let geminiModel = null;
-  let geminiModelBusca = null;
+  let geminiModelPesquisa = null;
+  let geminiModelFormatador = null;
   window.__geminiPronto = false;
 
   window.geminiConectar = async function(firebaseConfig, recaptchaSiteKey){
@@ -1299,6 +1332,8 @@ Tupan</textarea>
         provider: new ReCaptchaV3Provider(recaptchaSiteKey),
         isTokenAutoRefreshEnabled: true
       });
+      // Gemini Developer API — usa a carteira de pré-pagamento do AI Studio.
+      // (Trocar para VertexAIBackend() quando esse saldo acabar, pra usar o Cloud geral.)
       const ai = getAI(app, { backend: new GoogleAIBackend() });
 
       // Esquema envolto num objeto (em vez de um array solto) — é o formato que a
@@ -1324,11 +1359,20 @@ Tupan</textarea>
         generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
       });
 
-      // Modelo com urlContext + googleSearch — permite buscar por descrição do produto
-      // em vez de precisar de um link exato (o Gemini pesquisa e acha sozinho).
-      geminiModelBusca = getGenerativeModel(ai, {
+      // Modelo de PESQUISA: Gemini 3.5 Flash + urlContext/googleSearch, SEM forçar JSON.
+      // Escolhido em vez do 3.1 Pro porque é mais forte especificamente em busca/ferramentas,
+      // já é estável (não é "preview"), e mais rápido. Forçar JSON na mesma chamada que
+      // pesquisa prejudica a qualidade da busca — por isso aqui ele só pesquisa e escreve
+      // o que achou em texto livre.
+      geminiModelPesquisa = getGenerativeModel(ai, {
+        model: 'gemini-3.5-flash',
+        tools: [{ urlContext: {} }, { googleSearch: {} }]
+      });
+
+      // Modelo de FORMATAÇÃO: barato (Flash-Lite), sem ferramentas, só converte o texto
+      // que a pesquisa já trouxe para o JSON estruturado que o app precisa.
+      geminiModelFormatador = getGenerativeModel(ai, {
         model: 'gemini-3.1-flash-lite',
-        tools: [{ urlContext: {} }, { googleSearch: {} }],
         generationConfig: { responseMimeType: 'application/json' }
       });
 
@@ -1343,7 +1387,8 @@ Tupan</textarea>
 
   window.geminiDesconectar = function(){
     geminiModel = null;
-    geminiModelBusca = null;
+    geminiModelPesquisa = null;
+    geminiModelFormatador = null;
     window.__geminiPronto = false;
   };
 
@@ -1402,36 +1447,65 @@ Tupan</textarea>
     })).filter(it => it.produto);
   };
 
-  window.geminiBuscarPrecos = async function(descricaoProduto, lojas){
-    if(!geminiModelBusca) throw new Error('Gemini não está conectado.');
-    const listaLojas = lojas.map((l,i)=>(i+1)+'. '+l).join('\n');
-    const prompt = 'Pesquise no Google pelo produto descrito abaixo, especificamente nos sites das lojas listadas ' +
-      '(são lojas de material de construção). Para cada loja, encontre o produto pedido ou o mais equivalente/similar ' +
-      'disponível, com o menor preço. Retorne para cada loja: o nome da loja, o nome do produto encontrado, a ' +
-      'marca/fabricante (se souber), o preço de venda em reais (use o preço por m² se for esse tipo de produto), e ' +
-      'o link da página do produto se você tiver. Se não encontrar nada equivalente numa loja, marque "erro": true ' +
-      'e explique brevemente em "mensagemErro".\n\n' +
+  async function pesquisarUmaLoja(descricaoProduto, loja){
+    const prompt = 'Você é um assistente especialista em cotação de materiais de construção no Brasil. ' +
+      'Pesquise no Google, especificamente no site/portal de e-commerce da loja "' + loja + '", pelo produto ' +
+      'descrito abaixo. Essa loja opera fortemente na região de Pernambuco/Nordeste — priorize preços praticados ' +
+      'nessa região quando o site permitir escolher. Encontre o produto exato ou o equivalente/similar mais ' +
+      'próximo disponível, sempre buscando o menor preço disponível.\n\n' +
       'Produto buscado: ' + descricaoProduto + '\n\n' +
-      'Lojas:\n' + listaLojas + '\n\n' +
-      'Responda SOMENTE com um JSON válido neste formato exato, mantendo a mesma ordem das lojas acima: ' +
-      '{"resultados": [{"loja": "...", "produto": "...", "marca": "...", "preco": 00.00, "url": "...", ' +
-      '"erro": false, "mensagemErro": ""}]}. O campo preco deve ser só o número, com ponto decimal, sem R$.';
-
-    let result;
+      'Escreva livremente (não precisa ser JSON) o que você encontrou: nome exato do produto, marca/fabricante, ' +
+      'preço de venda em reais (priorize o preço por m² se for piso/revestimento e isso estiver claro no site), ' +
+      'e o link exato da página do produto — link obtido diretamente da sua pesquisa, nunca inventado. Se não ' +
+      'encontrar nada equivalente nessa loja, diga claramente que não encontrou e explique o motivo.';
     try{
-      result = await geminiModelBusca.generateContent(prompt);
+      const result = await geminiModelPesquisa.generateContent(prompt);
+      const texto = result.response.text();
+      const grounding = result.response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent || null;
+      return { loja, texto, grounding, erro: false };
     }catch(e){
-      console.error('Erro na chamada ao Gemini (busca por descrição):', e);
-      throw new Error('Falha na chamada à API: ' + (e && e.message ? e.message : String(e)));
+      console.error('Erro ao pesquisar em "'+loja+'":', e);
+      return { loja, texto: 'Erro ao pesquisar: ' + (e && e.message ? e.message : String(e)), grounding: null, erro: true };
     }
+  }
 
-    let texto = result.response.text();
-    texto = texto.replace(/^```json\s*/i,'').replace(/```\s*$/,'').trim();
+  window.geminiBuscarPrecos = async function(descricaoProduto, lojas){
+    if(!geminiModelPesquisa || !geminiModelFormatador) throw new Error('Gemini não está conectado.');
+
+    // Etapa 1: uma pesquisa por loja, em paralelo (com um pequeno intervalo entre o início de
+    // cada uma, pra não disparar tudo no mesmo instante e esbarrar em limite de requisições).
+    const achados = await Promise.all(lojas.map((loja, i) =>
+      new Promise(resolve => setTimeout(() => resolve(pesquisarUmaLoja(descricaoProduto, loja)), i * 300))
+    ));
+
+    // Etapa 2: uma chamada só, barata e sem busca, pra converter tudo em JSON estruturado.
+    const textoConsolidado = achados.map((a, i) => '### Loja ' + (i+1) + ': ' + a.loja + '\n' + a.texto).join('\n\n');
+    const promptFormatacao = 'Abaixo estão anotações de pesquisa (texto livre) sobre o mesmo produto em várias ' +
+      'lojas de material de construção. Converta essas anotações no JSON estruturado pedido.\n\n' +
+      textoConsolidado + '\n\n' +
+      'Regras estritas:\n' +
+      '1. Retorne um item no array "resultados" para CADA UMA das ' + lojas.length + ' lojas, na mesma ordem em ' +
+      'que aparecem acima ("Loja 1", "Loja 2"...) — mesmo que a pesquisa não tenha encontrado nada.\n' +
+      '2. Em "preco", coloque só o número em reais (ponto decimal, sem R$). Se não foi encontrado, use null.\n' +
+      '3. Em "url", use apenas links que realmente aparecem no texto acima. Nunca invente ou complete um link.\n' +
+      '4. Se a pesquisa não encontrou o produto, marque "erro": true e resuma o motivo em "mensagemErro".\n\n' +
+      'Responda SOMENTE com JSON válido neste formato exato: {"resultados": [{"loja": "...", "produto": "...", ' +
+      '"marca": "...", "preco": 00.00, "url": "...", "erro": false, "mensagemErro": ""}]}.';
+
+    let textoJson;
+    try{
+      const resultFormatado = await geminiModelFormatador.generateContent(promptFormatacao);
+      textoJson = resultFormatado.response.text();
+    }catch(e){
+      console.error('Erro ao formatar resultados em JSON:', e);
+      throw new Error('Falha ao estruturar os resultados: ' + (e && e.message ? e.message : String(e)));
+    }
+    textoJson = textoJson.replace(/^```json\s*/i,'').replace(/```\s*$/,'').trim();
     let json;
     try{
-      json = JSON.parse(texto);
+      json = JSON.parse(textoJson);
     }catch(e){
-      console.error('Resposta do Gemini (busca por descrição) não é JSON válido:', texto);
+      console.error('Resposta do Gemini (formatação) não é JSON válido:', textoJson);
       throw new Error('O Gemini respondeu num formato inesperado.');
     }
     const resultados = Array.isArray(json.resultados) ? json.resultados : (Array.isArray(json) ? json : null);
@@ -1440,11 +1514,8 @@ Tupan</textarea>
     }
 
     // O Google exige mostrar essa "sugestão de pesquisa" quando o resultado usa Google Search —
-    // fica disponível em groundingMetadata quando o Gemini realmente pesquisou.
-    let buscaHtml = null;
-    try{
-      buscaHtml = result.response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent || null;
-    }catch(e){ /* ignora se não vier */ }
+    // usa a primeira que tiver vindo de alguma das pesquisas por loja.
+    const buscaHtml = achados.map(a => a.grounding).find(g => g) || null;
 
     return { resultados, buscaHtml };
   };
@@ -2475,7 +2546,7 @@ Tupan</textarea>
     if(!descricao){ alert('Descreva o produto que quer buscar.'); return; }
     if(!lojasTexto){ alert('Liste pelo menos uma loja pra pesquisar.'); return; }
     const lojas = lojasTexto.split('\n').map(l=>l.trim()).filter(l=>l);
-    $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s)... pode levar alguns segundos.';
+    $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s), uma por vez... pode levar de 15 a 30 segundos.';
     $('compararConcorrentesBtn').disabled = true;
     try{
       const { resultados, buscaHtml } = await window.geminiBuscarPrecos(descricao, lojas);
