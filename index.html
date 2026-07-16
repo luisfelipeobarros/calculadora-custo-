@@ -228,9 +228,11 @@
   }
 
   /* Results ledger */
-  .ledger{
+  .resultado-wrap{
     position:sticky;
     top:20px;
+  }
+  .ledger{
     background:repeating-linear-gradient(
       var(--card) 0px, var(--card) 34px,
       var(--stripe) 34px, var(--stripe) 68px
@@ -1122,10 +1124,12 @@ Tupan</textarea>
           <button class="btn" id="salvarBtn">Salvar este produto</button>
           <button class="btn secondary" id="novoBtn">Novo cálculo</button>
         </div>
+        <div class="empty-note" id="salvarProdutoMsg" style="margin-top:8px;"></div>
       </div>
     </div>
 
     <!-- RIGHT: RESULTS -->
+    <div class="resultado-wrap">
     <div class="ledger">
       <div class="ledger-head">Resultado</div>
       <div class="hero">
@@ -1164,6 +1168,7 @@ Tupan</textarea>
         <span class="ptlabel">Ideal<span class="pthint">margem de 13%</span></span>
         <span class="ptvalue" id="precoIdeal">--</span>
       </div>
+    </div>
     </div>
   </div>
   </div>
@@ -1849,6 +1854,7 @@ Tupan</textarea>
     fields.forEach(id=>{ $(id).value = ''; });
     $('ipi').value = 0.65;
     $('avariasPct').value = 1.5;
+    $('salvarProdutoMsg').textContent = '';
     document.querySelectorAll('[data-toggle]').forEach(group=>{
       const key = group.dataset.toggle;
       const def = toggleDefaults[key];
@@ -2081,6 +2087,7 @@ Tupan</textarea>
     });
   }
 
+  let timeoutMsgSalvar = null;
   async function salvarProduto(){
     const nome = $('produto').value.trim();
     if(!nome){
@@ -2092,6 +2099,11 @@ Tupan</textarea>
     try{
       await storageSet(key, payload);
       await atualizarListaSalvos();
+      const msgEl = $('salvarProdutoMsg');
+      msgEl.textContent = '✓ "' + nome + '" salvo com sucesso.';
+      msgEl.style.color = 'var(--profit)';
+      if(timeoutMsgSalvar) clearTimeout(timeoutMsgSalvar);
+      timeoutMsgSalvar = setTimeout(()=>{ msgEl.textContent = ''; }, 5000);
     }catch(e){
       console.error('Erro ao salvar produto:', e);
       alert('Não foi possível salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente novamente.');
