@@ -33,6 +33,8 @@
     --font-mono:'IBM Plex Mono', monospace;
   }
   *{box-sizing:border-box;}
+  @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
+  tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
   body{
     margin:0;
     padding:0;
@@ -1349,53 +1351,72 @@ Tupan</textarea>
     }
   }
 
-  window.geminiBuscarPrecos = async function(descricaoProduto, lojas){
+  // Converte o texto livre da pesquisa de UMA loja em JSON. Rodar por loja (em vez de uma
+  // chamada consolidada no fim) permite que a formatação das lojas rápidas aconteça enquanto
+  // as lentas ainda pesquisam — o custo de tempo extra fica próximo de zero.
+  async function formatarUmaLoja(loja, textoPesquisa){
+    const prompt = 'Abaixo está uma anotação de pesquisa (texto livre) sobre um produto na loja "' + loja + '". ' +
+      'Converta essa anotação no JSON estruturado pedido.\n\n' +
+      textoPesquisa + '\n\n' +
+      'Regras estritas:\n' +
+      '1. Em "preco", coloque só o número em reais (ponto decimal, sem R$). Se não foi encontrado, use null.\n' +
+      '2. Em "url", use apenas um link que realmente aparece no texto acima. Nunca invente ou complete um link.\n' +
+      '3. Se a pesquisa não encontrou o produto, marque "erro": true e resuma o motivo em "mensagemErro".\n\n' +
+      'Responda SOMENTE com JSON válido neste formato exato: {"loja": "' + loja + '", "produto": "...", ' +
+      '"marca": "...", "preco": 00.00, "url": "...", "erro": false, "mensagemErro": ""}.';
+    const result = await geminiModelFormatador.generateContent(prompt);
+    let textoJson = result.response.text().replace(/^```json\s*/i,'').replace(/```\s*$/,'').trim();
+    return JSON.parse(textoJson);
+  }
+
+  // Pipeline completo de uma loja: pesquisa (3.5 Flash + busca) → formatação (Flash-Lite).
+  // Sempre resolve com um objeto estruturado, mesmo em caso de erro.
+  async function pesquisarEFormatarUmaLoja(descricaoProduto, loja){
+    const busca = await pesquisarUmaLoja(descricaoProduto, loja);
+    if(busca.erro){
+      return { loja, produto: '', marca: '', preco: null, url: '', erro: true,
+        mensagemErro: busca.texto, grounding: null };
+    }
+    try{
+      const json = await formatarUmaLoja(loja, busca.texto) || {};
+      const preco = (json.preco != null && !isNaN(json.preco)) ? Number(json.preco) : null;
+      return {
+        loja: json.loja || loja,
+        produto: (json.produto || '').toString(),
+        marca: (json.marca || '').toString(),
+        preco,
+        url: (json.url || '').toString(),
+        erro: !!json.erro || preco == null,
+        mensagemErro: json.mensagemErro || (json.erro || preco == null ? 'Não encontrei esse produto nessa loja.' : ''),
+        grounding: busca.grounding
+      };
+    }catch(e){
+      console.error('Erro ao estruturar o resultado de "'+loja+'":', e);
+      return { loja, produto: '', marca: '', preco: null, url: '', erro: true,
+        mensagemErro: 'A pesquisa achou algo, mas não consegui estruturar. Resumo: ' + busca.texto.slice(0, 220),
+        grounding: busca.grounding };
+    }
+  }
+
+  // Pesquisa em todas as lojas em paralelo (intervalo curto entre os inícios pra não esbarrar
+  // em limite de requisições). Se "onResultado" for passado, é chamado com (indice, resultado)
+  // assim que CADA loja termina — permitindo mostrar a tabela progressivamente.
+  window.geminiBuscarPrecos = async function(descricaoProduto, lojas, onResultado){
     if(!geminiModelPesquisa || !geminiModelFormatador) throw new Error('Gemini não está conectado.');
 
-    // Etapa 1: uma pesquisa por loja, em paralelo (com um pequeno intervalo entre o início de
-    // cada uma, pra não disparar tudo no mesmo instante e esbarrar em limite de requisições).
-    const achados = await Promise.all(lojas.map((loja, i) =>
-      new Promise(resolve => setTimeout(() => resolve(pesquisarUmaLoja(descricaoProduto, loja)), i * 300))
+    const resultados = await Promise.all(lojas.map((loja, i) =>
+      new Promise(resolve => setTimeout(async () => {
+        const r = await pesquisarEFormatarUmaLoja(descricaoProduto, loja);
+        if(typeof onResultado === 'function'){
+          try{ onResultado(i, r); }catch(e){ console.error('Erro no callback de resultado:', e); }
+        }
+        resolve(r);
+      }, i * 100))
     ));
-
-    // Etapa 2: uma chamada só, barata e sem busca, pra converter tudo em JSON estruturado.
-    const textoConsolidado = achados.map((a, i) => '### Loja ' + (i+1) + ': ' + a.loja + '\n' + a.texto).join('\n\n');
-    const promptFormatacao = 'Abaixo estão anotações de pesquisa (texto livre) sobre o mesmo produto em várias ' +
-      'lojas de material de construção. Converta essas anotações no JSON estruturado pedido.\n\n' +
-      textoConsolidado + '\n\n' +
-      'Regras estritas:\n' +
-      '1. Retorne um item no array "resultados" para CADA UMA das ' + lojas.length + ' lojas, na mesma ordem em ' +
-      'que aparecem acima ("Loja 1", "Loja 2"...) — mesmo que a pesquisa não tenha encontrado nada.\n' +
-      '2. Em "preco", coloque só o número em reais (ponto decimal, sem R$). Se não foi encontrado, use null.\n' +
-      '3. Em "url", use apenas links que realmente aparecem no texto acima. Nunca invente ou complete um link.\n' +
-      '4. Se a pesquisa não encontrou o produto, marque "erro": true e resuma o motivo em "mensagemErro".\n\n' +
-      'Responda SOMENTE com JSON válido neste formato exato: {"resultados": [{"loja": "...", "produto": "...", ' +
-      '"marca": "...", "preco": 00.00, "url": "...", "erro": false, "mensagemErro": ""}]}.';
-
-    let textoJson;
-    try{
-      const resultFormatado = await geminiModelFormatador.generateContent(promptFormatacao);
-      textoJson = resultFormatado.response.text();
-    }catch(e){
-      console.error('Erro ao formatar resultados em JSON:', e);
-      throw new Error('Falha ao estruturar os resultados: ' + (e && e.message ? e.message : String(e)));
-    }
-    textoJson = textoJson.replace(/^```json\s*/i,'').replace(/```\s*$/,'').trim();
-    let json;
-    try{
-      json = JSON.parse(textoJson);
-    }catch(e){
-      console.error('Resposta do Gemini (formatação) não é JSON válido:', textoJson);
-      throw new Error('O Gemini respondeu num formato inesperado.');
-    }
-    const resultados = Array.isArray(json.resultados) ? json.resultados : (Array.isArray(json) ? json : null);
-    if(!resultados){
-      throw new Error('Resposta sem resultados.');
-    }
 
     // O Google exige mostrar essa "sugestão de pesquisa" quando o resultado usa Google Search —
     // usa a primeira que tiver vindo de alguma das pesquisas por loja.
-    const buscaHtml = achados.map(a => a.grounding).find(g => g) || null;
+    const buscaHtml = resultados.map(r => r.grounding).find(g => g) || null;
 
     return { resultados, buscaHtml };
   };
@@ -2388,6 +2409,12 @@ Tupan</textarea>
 
   function renderResultadoConcorrentes(){
     const el = $('resultadoConcorrentes');
+    // Preserva o que o usuário estiver digitando nos campos manuais — a tabela re-renderiza
+    // a cada loja que termina, e sem isso o texto digitado seria apagado no meio.
+    const valoresDigitados = {};
+    el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
+      if(inp.value !== '') valoresDigitados[inp.dataset.idx] = inp.value;
+    });
     const meuPreco = toNum($('meuPrecoConcorrente').value);
     let menorPreco = null;
     ultimosConcorrentes.forEach(c=>{
@@ -2396,6 +2423,13 @@ Tupan</textarea>
 
     let html = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th>'+(meuPreco>0?'<th>Dif. vs seu preço</th>':'')+'</tr></thead><tbody>';
     ultimosConcorrentes.forEach((c, idx)=>{
+      if(c.pendente){
+        html += '<tr class="pesq-pendente">';
+        html += '<td>'+escapeHtml(c.loja)+'</td>';
+        html += '<td colspan="'+(meuPreco>0?'4':'3')+'" style="color:var(--ink-soft); font-family:var(--font-mono); font-size:12px;">pesquisando…</td>';
+        html += '</tr>';
+        return;
+      }
       html += '<tr>';
       html += '<td>'+(c.url ? ('<a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(c.loja)+'</a>') : escapeHtml(c.loja))+'</td>';
       html += '<td>'+escapeHtml(c.produto||'-')+'</td>';
@@ -2422,6 +2456,7 @@ Tupan</textarea>
     el.innerHTML = html;
 
     el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
+      if(valoresDigitados[inp.dataset.idx] != null) inp.value = valoresDigitados[inp.dataset.idx];
       inp.addEventListener('change', ()=>{
         const idx = parseInt(inp.dataset.idx,10);
         const v = toNum(inp.value);
@@ -2448,25 +2483,32 @@ Tupan</textarea>
     if(!descricao){ alert('Descreva o produto que quer buscar.'); return; }
     if(!lojasTexto){ alert('Liste pelo menos uma loja pra pesquisar.'); return; }
     const lojas = lojasTexto.split('\n').map(l=>l.trim()).filter(l=>l);
-    $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s), uma por vez... pode levar de 15 a 30 segundos.';
+    $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s) ao mesmo tempo — cada linha aparece assim que a loja responde.';
     $('compararConcorrentesBtn').disabled = true;
+
+    // Mostra a tabela já, com todas as lojas em estado "pesquisando…", e vai
+    // preenchendo cada linha conforme o resultado dela chega.
+    ultimosConcorrentes = lojas.map(loja => ({
+      url: '', loja, produto: '', marca: '', preco: null, erro: false, mensagemErro: '', pendente: true
+    }));
+    $('resultadoConcorrentesCard').style.display = 'block';
+    renderResultadoConcorrentes();
+
     try{
-      const { resultados, buscaHtml } = await window.geminiBuscarPrecos(descricao, lojas);
-      ultimosConcorrentes = lojas.map((loja, i)=>{
-        const r = resultados[i] || {};
-        return {
+      const { buscaHtml } = await window.geminiBuscarPrecos(descricao, lojas, (i, r)=>{
+        ultimosConcorrentes[i] = {
           url: r.url || '',
-          loja: r.loja || loja,
+          loja: r.loja || lojas[i],
           produto: r.produto || '',
           marca: r.marca || '',
           preco: (r.preco != null && !isNaN(r.preco)) ? Number(r.preco) : null,
           erro: !!r.erro || r.preco == null,
-          mensagemErro: r.mensagemErro || (r.erro ? 'Não encontrei esse produto nessa loja.' : '')
+          mensagemErro: r.mensagemErro || (r.erro ? 'Não encontrei esse produto nessa loja.' : ''),
+          pendente: false
         };
+        renderResultadoConcorrentes();
       });
       $('concorrentesMsg').textContent = '';
-      $('resultadoConcorrentesCard').style.display = 'block';
-      renderResultadoConcorrentes();
       if(buscaHtml){ $('buscaGoogleWidget').innerHTML = buscaHtml; }
     }catch(e){
       console.error(e);
