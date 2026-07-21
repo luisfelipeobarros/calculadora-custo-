@@ -618,6 +618,7 @@
       <button class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
       <button class="btn secondary" id="verHistoricoBtn">🕘 Histórico</button>
       <button class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
+      <button class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
       <button class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
       <div class="stamp">Uso interno</div>
     </div>
@@ -908,6 +909,23 @@
       <div id="historicoTotalPeriodo" style="display:none; margin-bottom:14px;"></div>
       <div id="historicoLista"></div>
       <div class="empty-note" id="historicoMsg" style="display:block;">Carregando...</div>
+    </div>
+  </div>
+
+  <div id="viewNotas" style="display:none;">
+    <button class="btn secondary" id="voltarCalculadoraBtn7" style="margin-bottom:16px;">← Voltar à calculadora</button>
+
+    <div class="card">
+      <h2>NF-e Emitidas — últimos 60 dias</h2>
+      <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
+        Notas emitidas contra a empresa (pasta de XML), com os produtos, CFOP e impostos de cada uma. Clique numa nota para abrir os itens.
+      </p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <input type="search" id="buscaNotas" placeholder="Buscar por emitente, nº da nota ou produto..." style="flex:1; min-width:200px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px;">
+        <button class="btn secondary" id="recarregarNotasBtn">⟳ Recarregar</button>
+      </div>
+      <div id="notasMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
+      <div id="listaNotasEmitidas"></div>
     </div>
   </div>
 
@@ -2372,6 +2390,7 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
     atualizarListaSalvos();
   }
@@ -2382,6 +2401,7 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewSync(){
@@ -2391,6 +2411,7 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewCotacao(){
@@ -2400,6 +2421,7 @@ Tupan</textarea>
     $('viewSync').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewHistorico(){
@@ -2409,11 +2431,13 @@ Tupan</textarea>
     $('viewSync').style.display = 'none';
     $('viewCotacao').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
     carregarHistorico();
   }
   function mostrarViewConcorrentes(){
     $('viewConcorrentes').style.display = 'block';
+    $('viewNotas').style.display = 'none';
     $('viewProdutos').style.display = 'none';
     $('viewFrete').style.display = 'none';
     $('viewSync').style.display = 'none';
@@ -2429,13 +2453,117 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
+    $('viewNotas').style.display = 'none';
     $('viewCalculadora').style.display = 'block';
+  }
+  function mostrarViewNotas(){
+    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora'].forEach(v=>$(v).style.display='none');
+    $('viewNotas').style.display = 'block';
+    carregarNotasEmitidas(false);
   }
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
   $('buscaProduto').addEventListener('input', renderListaSalvos);
   $('buscaFornecedor').addEventListener('input', renderListaSalvos);
   $('voltarCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
+  $('verNotasBtn').addEventListener('click', mostrarViewNotas);
+  $('voltarCalculadoraBtn7').addEventListener('click', mostrarViewCalculadora);
+  $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
+  $('buscaNotas').addEventListener('input', renderNotasEmitidas);
+
+  // ─── NF-e Emitidas (últimos 60 dias, coleção itensNotas) ───
+  let notasEmitidasCache = null;
+  const notasAbertas = {};
+
+  async function carregarNotasEmitidas(forcar){
+    if(!firestoreDb){
+      $('notasMsg').textContent = 'Firebase não conectado — configure na tela de Sincronização.';
+      return;
+    }
+    if(notasEmitidasCache && !forcar){ renderNotasEmitidas(); return; }
+    $('notasMsg').textContent = 'Carregando notas dos últimos 60 dias...';
+    try{
+      const corte = new Date(Date.now() - 60*86400000);
+      const corteISO = corte.getFullYear() + '-' + String(corte.getMonth()+1).padStart(2,'0') + '-' + String(corte.getDate()).padStart(2,'0');
+      const snap = await firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get();
+      notasEmitidasCache = [];
+      snap.forEach(doc => notasEmitidasCache.push({ chave: doc.id, ...doc.data() }));
+      notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
+      $('notasMsg').textContent = '';
+      renderNotasEmitidas();
+    }catch(e){
+      console.error(e);
+      $('notasMsg').textContent = 'Erro ao carregar: ' + (e.message||e) +
+        ' — confira as regras da coleção "itensNotas" e se a carga inicial do Apps Script já rodou.';
+    }
+  }
+
+  function fmtDataNota(iso){
+    const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3]+'/'+m[2]+'/'+m[1]) : '--';
+  }
+
+  function renderNotasEmitidas(){
+    if(!notasEmitidasCache) return;
+    const termo = ($('buscaNotas').value||'').toLowerCase();
+    let lista = notasEmitidasCache;
+    if(termo){
+      lista = lista.filter(n =>
+        String(n.nomeEmitente||'').toLowerCase().includes(termo) ||
+        String(n.numero||'').toLowerCase().includes(termo) ||
+        (n.itens||[]).some(it => String(it.descricao||'').toLowerCase().includes(termo) || String(it.codigo||'').toLowerCase().includes(termo))
+      );
+    }
+    if(!lista.length){
+      $('listaNotasEmitidas').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
+        (termo ? 'Nada encontrado com esse filtro.' : 'Nenhuma nota nos últimos 60 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+      return;
+    }
+    let html = '';
+    lista.forEach(n=>{
+      const aberta = !!notasAbertas[n.chave];
+      const qtdItens = (n.itens||[]).length;
+      html += '<div style="margin-bottom:8px;">';
+      html += '<div class="historico-header" data-nota="'+escapeHtml(n.chave)+'">' +
+        '<span style="font-family:var(--font-mono); font-size:12px;">'+(aberta?'▼':'▶')+'</span>' +
+        '<span class="h-data">'+fmtDataNota(n.dataEmissao)+'</span>' +
+        '<span class="h-fornecedor">'+escapeHtml(n.nomeEmitente||'-')+'</span>' +
+        '<span class="h-count">NF '+escapeHtml(n.numero||'-')+' · '+qtdItens+' item(ns)</span>' +
+        '<span class="h-total" style="font-family:var(--font-mono); font-weight:700;">'+brl(n.valorTotal||0)+'</span>' +
+        '</div>';
+      if(aberta){
+        html += '<div style="border:1px solid var(--line); border-top:none; border-radius:0 0 5px 5px; padding:10px; background:var(--card); overflow-x:auto;">';
+        html += '<table class="quote-table" style="min-width:900px;"><thead><tr>' +
+          '<th>Cód · Produto</th><th>NCM · CFOP</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th>' +
+          '<th>ICMS</th><th>IPI</th><th>PIS+COFINS</th></tr></thead><tbody>';
+        (n.itens||[]).slice().sort((a,b)=>(a.n||0)-(b.n||0)).forEach(it=>{
+          const icms = it.icmsValor ? ('CST '+escapeHtml(it.icmsCst||'-')+' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.icmsValor)) : ('CST '+escapeHtml(it.icmsCst||'-'));
+          const ipi = it.ipiValor ? ((it.ipiAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.ipiValor)) : '—';
+          const piscof = (it.pisValor||it.cofinsValor) ? (((it.pisAliq||0)+(it.cofinsAliq||0)).toLocaleString('pt-BR')+'% · '+brl((it.pisValor||0)+(it.cofinsValor||0))) : '—';
+          html += '<tr>' +
+            '<td><span style="font-family:var(--font-mono); font-size:11px; color:var(--ink-soft);">'+escapeHtml(it.codigo||'-')+'</span><br>'+escapeHtml(it.descricao||'-')+'</td>' +
+            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(it.ncm||'-')+'<br>CFOP '+escapeHtml(it.cfop||'-')+'</td>' +
+            '<td style="font-family:var(--font-mono);">'+(it.qtd||0).toLocaleString('pt-BR')+' '+escapeHtml(it.un||'')+'</td>' +
+            '<td style="font-family:var(--font-mono);">'+brl(it.vUnit||0)+'</td>' +
+            '<td style="font-family:var(--font-mono);">'+brl(it.vTotal||0)+'</td>' +
+            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+icms+'</td>' +
+            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+ipi+'</td>' +
+            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+piscof+'</td>' +
+            '</tr>';
+        });
+        html += '</tbody></table>';
+        if(n.linkXml) html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="'+escapeHtml(n.linkXml)+'" target="_blank" rel="noopener">⬇ Baixar XML</a></div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+    $('listaNotasEmitidas').innerHTML = html;
+    $('listaNotasEmitidas').querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
+      notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
+      renderNotasEmitidas();
+    }));
+  }
+
   $('voltarCalculadoraBtn2').addEventListener('click', mostrarViewCalculadora);
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
   $('voltarCalculadoraBtn3').addEventListener('click', mostrarViewCalculadora);
