@@ -1266,10 +1266,25 @@ Tupan</textarea>
       // Modelo de FORMATAÇÃO: barato (Flash-Lite), sem ferramentas, só converte o texto
       // que a pesquisa já trouxe para o JSON estruturado que o app precisa.
       // "minimal": conversão texto→JSON não exige raciocínio nenhum.
+      // O schema forçado garante JSON válido direto, sem Markdown pra limpar.
+      const schemaFormatador = Schema.object({
+        properties: {
+          loja: Schema.string(),
+          produto: Schema.string(),
+          marca: Schema.string(),
+          preco: Schema.number({ nullable: true }),
+          url: Schema.string(),
+          erro: Schema.boolean(),
+          mensagemErro: Schema.string()
+        },
+        required: ['loja', 'produto', 'preco', 'erro'],
+        optionalProperties: ['marca', 'url', 'mensagemErro']
+      });
       geminiModelFormatador = getGenerativeModel(ai, {
         model: 'gemini-3.1-flash-lite',
         generationConfig: {
           responseMimeType: 'application/json',
+          responseSchema: schemaFormatador,
           thinkingConfig: { thinkingLevel: 'minimal' }
         }
       });
@@ -1346,16 +1361,28 @@ Tupan</textarea>
   };
 
   async function pesquisarUmaLoja(descricaoProduto, loja){
-    const prompt = 'Você é um assistente especialista em cotação de materiais de construção no Brasil. ' +
-      'Pesquise no Google, especificamente no site/portal de e-commerce da loja "' + loja + '", pelo produto ' +
-      'descrito abaixo. Essa loja opera fortemente na região de Pernambuco/Nordeste — priorize preços praticados ' +
-      'nessa região quando o site permitir escolher. Encontre o produto exato ou o equivalente/similar mais ' +
-      'próximo disponível, sempre buscando o menor preço disponível.\n\n' +
-      'Produto buscado: ' + descricaoProduto + '\n\n' +
-      'Escreva livremente (não precisa ser JSON) o que você encontrou: nome exato do produto, marca/fabricante, ' +
-      'preço de venda em reais (priorize o preço por m² se for piso/revestimento e isso estiver claro no site), ' +
-      'e o link exato da página do produto — link obtido diretamente da sua pesquisa, nunca inventado. Se não ' +
-      'encontrar nada equivalente nessa loja, diga claramente que não encontrou e explique o motivo.';
+    const prompt = 'Você é um analista de pricing especializado no varejo de materiais de construção ' +
+      '(Pernambuco/Nordeste). Sua missão é usar a pesquisa do Google para encontrar o preço atual do ' +
+      'produto abaixo no e-commerce ou catálogo online da loja: "' + loja + '".\n\n' +
+      'PRODUTO BUSCADO: "' + descricaoProduto + '"\n\n' +
+      'INSTRUÇÕES DE BUSCA E ANÁLISE:\n' +
+      '1. FOCO NO SITE DA LOJA: Tente encontrar a página do produto no próprio domínio da loja "' + loja + '". ' +
+      'Ignore marketplaces generalistas (Mercado Livre, Magalu, Shopee) e agregadores de preço (Zoom, Buscapé), ' +
+      'a menos que seja a loja oficial da "' + loja + '" dentro deles.\n' +
+      '2. UNIDADE DE MEDIDA (MUITO IMPORTANTE): Em pisos, revestimentos e porcelanatos, verifique se o preço ' +
+      'exibido é por METRO QUADRADO (m²) ou por CAIXA/UNIDADE. Se houver os dois, priorize o valor por m² ' +
+      'e deixe explícito na resposta a qual unidade o preço se refere.\n' +
+      '3. PREÇO ÚNICO: Reporte UM único preço: o menor preço à vista (Pix/boleto) disponível. Não liste ' +
+      'preço parcelado/a prazo como valor principal.\n' +
+      '4. PRODUTO SIMILAR: Se não encontrar a referência exata, procure o equivalente mais próximo (mesmo ' +
+      'tamanho, acabamento e padrão de qualidade) e avise que é similar.\n' +
+      '5. VERACIDADE: Nunca invente preços ou links. Se o site estiver indisponível, exigir login/CEP para ' +
+      'cotar, ou não tiver o produto, declare claramente: "Produto não encontrado nesta loja".\n\n' +
+      'ESCREVA SEU RELATÓRIO EM TEXTO LIVRE COM:\n' +
+      '- Status: (Encontrado / Similar Encontrado / Não Encontrado)\n' +
+      '- Nome exato e marca do produto localizado\n' +
+      '- Preço à vista em R$, especificando se é por m², por caixa ou por unidade\n' +
+      '- URL direta do produto na loja';
     try{
       const result = await geminiModelPesquisa.generateContent(prompt);
       const texto = result.response.text();
@@ -1371,18 +1398,18 @@ Tupan</textarea>
   // chamada consolidada no fim) permite que a formatação das lojas rápidas aconteça enquanto
   // as lentas ainda pesquisam — o custo de tempo extra fica próximo de zero.
   async function formatarUmaLoja(loja, textoPesquisa){
-    const prompt = 'Abaixo está uma anotação de pesquisa (texto livre) sobre um produto na loja "' + loja + '". ' +
-      'Converta essa anotação no JSON estruturado pedido.\n\n' +
-      textoPesquisa + '\n\n' +
-      'Regras estritas:\n' +
-      '1. Em "preco", coloque só o número em reais (ponto decimal, sem R$). Se não foi encontrado, use null.\n' +
-      '2. Em "url", use apenas um link que realmente aparece no texto acima. Nunca invente ou complete um link.\n' +
-      '3. Se a pesquisa não encontrou o produto, marque "erro": true e resuma o motivo em "mensagemErro".\n\n' +
-      'Responda SOMENTE com JSON válido neste formato exato: {"loja": "' + loja + '", "produto": "...", ' +
-      '"marca": "...", "preco": 00.00, "url": "...", "erro": false, "mensagemErro": ""}.';
+    const prompt = 'Analise as anotações de pesquisa abaixo sobre a loja "' + loja + '" e extraia os dados ' +
+      'para o JSON.\n' +
+      'Em "preco", use o preço à vista reportado (só o número, ponto decimal, sem R$). Se a anotação indicar ' +
+      'a unidade do preço (por m², por caixa, por unidade), inclua essa informação no fim do campo "produto", ' +
+      'entre parênteses — ex: "Porcelanato X 62x62 (preço por m²)".\n' +
+      'Em "url", use apenas um link que realmente aparece nas anotações. Nunca invente ou complete um link.\n' +
+      'Se o produto não foi encontrado ou o preço não estiver claro, marque "erro": true, "preco": null, e ' +
+      'explique brevemente em "mensagemErro".\n\n' +
+      'Anotações:\n' + textoPesquisa;
     const result = await geminiModelFormatador.generateContent(prompt);
-    let textoJson = result.response.text().replace(/^```json\s*/i,'').replace(/```\s*$/,'').trim();
-    return JSON.parse(textoJson);
+    // Com responseSchema forçado, a resposta já vem como JSON puro — sem Markdown pra limpar.
+    return JSON.parse(result.response.text());
   }
 
   // Pipeline completo de uma loja: pesquisa (3.5 Flash + busca) → formatação (Flash-Lite).
