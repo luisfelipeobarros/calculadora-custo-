@@ -1238,7 +1238,14 @@ Tupan</textarea>
 
       geminiModel = getGenerativeModel(ai, {
         model: 'gemini-3.1-flash-lite',
-        generationConfig: { responseMimeType: 'application/json', responseSchema: schema }
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          // "medium" de propósito: os PDFs de cotação não seguem padrão (cada fornecedor
+          // monta de um jeito, com várias colunas de preço) — o raciocínio extra ajuda a
+          // escolher a coluna certa do preço líquido e a juntar descrições quebradas.
+          thinkingConfig: { thinkingLevel: 'medium' }
+        }
       });
 
       // Modelo de PESQUISA: Gemini 3.5 Flash + urlContext/googleSearch, SEM forçar JSON.
@@ -1248,14 +1255,23 @@ Tupan</textarea>
       // o que achou em texto livre.
       geminiModelPesquisa = getGenerativeModel(ai, {
         model: 'gemini-3.5-flash',
-        tools: [{ urlContext: {} }, { googleSearch: {} }]
+        tools: [{ urlContext: {} }, { googleSearch: {} }],
+        // "low" em vez do padrão "medium": a pesquisa de preço é uma tarefa agêntica de
+        // poucos passos (buscar → ler → reportar), e o low do 3.5 Flash foi otimizado
+        // exatamente pra isso — bem mais rápido e barato, com qualidade quase igual.
+        // Se notar queda na precisão dos resultados, suba pra 'medium' aqui.
+        generationConfig: { thinkingConfig: { thinkingLevel: 'low' } }
       });
 
       // Modelo de FORMATAÇÃO: barato (Flash-Lite), sem ferramentas, só converte o texto
       // que a pesquisa já trouxe para o JSON estruturado que o app precisa.
+      // "minimal": conversão texto→JSON não exige raciocínio nenhum.
       geminiModelFormatador = getGenerativeModel(ai, {
         model: 'gemini-3.1-flash-lite',
-        generationConfig: { responseMimeType: 'application/json' }
+        generationConfig: {
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingLevel: 'minimal' }
+        }
       });
 
       window.__geminiPronto = true;
