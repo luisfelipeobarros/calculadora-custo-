@@ -661,23 +661,23 @@
       </div>
       <div class="kpi alerta" id="kpiAtrasadas">
         <div class="k-label">Duplicatas atrasadas</div>
-        <div class="k-num" id="kAtrasadasQtd">--</div>
-        <div class="k-sub" id="kAtrasadasValor"></div>
+        <div class="k-num" id="kAtrasadasValor" style="font-size:22px;">--</div>
+        <div class="k-sub" id="kAtrasadasQtd"></div>
       </div>
       <div class="kpi alerta" id="kpiHoje">
         <div class="k-label">Vencendo hoje</div>
-        <div class="k-num" id="kHojeQtd">--</div>
-        <div class="k-sub" id="kHojeValor"></div>
+        <div class="k-num" id="kHojeValor" style="font-size:22px;">--</div>
+        <div class="k-sub" id="kHojeQtd"></div>
       </div>
       <div class="kpi" id="kpiSemana">
         <div class="k-label">Vencendo em 7 dias</div>
-        <div class="k-num" id="kSemanaQtd">--</div>
-        <div class="k-sub" id="kSemanaValor"></div>
+        <div class="k-num" id="kSemanaValor" style="font-size:22px;">--</div>
+        <div class="k-sub" id="kSemanaQtd"></div>
       </div>
       <div class="kpi" id="kpiFimMes">
         <div class="k-label">Vencendo até o fim do mês</div>
-        <div class="k-num" id="kFimMesQtd">--</div>
-        <div class="k-sub" id="kFimMesValor"></div>
+        <div class="k-num" id="kFimMesValor" style="font-size:22px;">--</div>
+        <div class="k-sub" id="kFimMesQtd"></div>
       </div>
       <div class="kpi" id="kpiReceber">
         <div class="k-label">NF-e a receber</div>
@@ -720,6 +720,7 @@
         <button class="chip-filtro" data-f="7dias">Próx. 7 dias</button>
         <button class="chip-filtro" data-f="pagas">Pagas</button>
         <button class="chip-filtro" data-f="todas">Todas</button>
+        <button class="btn" id="pagarLoteBtn" style="display:none; margin-left:auto;">✓ Pagar filtradas em lote</button>
       </div>
       <div id="tabelaPag"></div>
       <div class="rodape-total" id="totalPag"></div>
@@ -788,14 +789,27 @@
   const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = s => String(s ?? '').toLowerCase();
 
+  // Notas emitidas antes desta data não contam como pendentes de importação:
+  // os anos anteriores já foram informados à fazenda e não devem ser mexidos.
+  const DATA_CORTE_IMPORTACAO = '2026-01-01';
+
+  // "Janela de hoje": numa segunda-feira, os vencimentos de sábado e domingo
+  // são considerados de hoje (pagam-se na segunda). A data de vencimento em si
+  // não muda — só a classificação. Nos demais dias, a janela é só o próprio dia.
+  const inicioJanelaHoje = () => {
+    const h = hojeISO();
+    return (new Date().getDay() === 1) ? somarDias(h, -2) : h;
+  };
+
   const notaAtiva = n => (n.status || 'ativa') !== 'cancelada';
-  const notaAImportar = n => n.emitida === true && n.noSistema !== true && notaAtiva(n);
+  const notaAImportar = n => n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
+    (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
   const dupDaNotaCancelada = d => { const n = notasPorChave[d.chaveAcesso]; return n ? !notaAtiva(n) : false; };
   const dupRecebida = d => { const n = notasPorChave[d.chaveAcesso]; return n ? n.noSistema === true : false; };
   const situacaoDup = d => {
     if(d.pago === true) return 'PAGO';
     if(dupDaNotaCancelada(d)) return 'CANCELADA';
-    return (d.vencimento && d.vencimento < hojeISO()) ? 'ATRASADO' : 'A VENCER';
+    return (d.vencimento && d.vencimento < inicioJanelaHoje()) ? 'ATRASADO' : 'A VENCER';
   };
 
   // ─── Firebase ───
@@ -876,20 +890,21 @@
     $('kImportarValor').textContent = fmtBRL(aImportar.reduce((s,n)=>s+(n.valorTotal||0),0));
     $('countImportar').textContent = aImportar.length ? '('+aImportar.length+')' : '';
 
+    const inicioHoje = inicioJanelaHoje();
     const pendentes = duplicatas.filter(d => d.pago !== true && !dupDaNotaCancelada(d));
-    const atrasadas = pendentes.filter(d => d.vencimento && d.vencimento < hoje);
-    const vHoje = pendentes.filter(d => d.vencimento === hoje);
+    const atrasadas = pendentes.filter(d => d.vencimento && d.vencimento < inicioHoje);
+    const vHoje = pendentes.filter(d => d.vencimento >= inicioHoje && d.vencimento <= hoje);
     const em7  = pendentes.filter(d => d.vencimento > hoje && d.vencimento <= somarDias(hoje,7));
     const fimMes = hoje.substring(0,8) + String(new Date(Number(hoje.substring(0,4)), Number(hoje.substring(5,7)), 0).getDate()).padStart(2,'0');
-    const ateFimMes = pendentes.filter(d => d.vencimento >= hoje && d.vencimento <= fimMes);
-    $('kAtrasadasQtd').textContent = atrasadas.length;
+    const ateFimMes = pendentes.filter(d => d.vencimento >= inicioHoje && d.vencimento <= fimMes);
+    $('kAtrasadasQtd').textContent = atrasadas.length + ' duplicata(s)';
     $('kAtrasadasValor').textContent = fmtBRL(atrasadas.reduce((s,d)=>s+(d.valor||0),0));
     $('countAtrasadas').textContent = atrasadas.length ? '('+atrasadas.length+')' : '';
-    $('kHojeQtd').textContent = vHoje.length;
+    $('kHojeQtd').textContent = vHoje.length + ' duplicata(s)';
     $('kHojeValor').textContent = fmtBRL(vHoje.reduce((s,d)=>s+(d.valor||0),0));
-    $('kSemanaQtd').textContent = em7.length;
+    $('kSemanaQtd').textContent = em7.length + ' duplicata(s)';
     $('kSemanaValor').textContent = fmtBRL(em7.reduce((s,d)=>s+(d.valor||0),0));
-    $('kFimMesQtd').textContent = ateFimMes.length;
+    $('kFimMesQtd').textContent = ateFimMes.length + ' duplicata(s)';
     $('kFimMesValor').textContent = fmtBRL(ateFimMes.reduce((s,d)=>s+(d.valor||0),0));
 
     // NF-e a receber: emitidas contra a empresa e ainda sem entrada no ERP
@@ -979,6 +994,41 @@
   // ─── Pagamentos ───
   let filtroPag = 'pendentes';
   let limitePag = 200;
+  let ultimaListaPag = [];
+
+  // Pagamento em lote: marca como pagas TODAS as duplicatas do filtro atual
+  // (não só as visíveis na tela), em batches de até 450 gravações.
+  $('pagarLoteBtn').addEventListener('click', async ()=>{
+    const alvo = ultimaListaPag.filter(d => d.pago !== true);
+    if(!alvo.length) return;
+    const total = alvo.reduce((s,d)=>s+(d.valor||0),0);
+    if(!confirm('Marcar ' + alvo.length + ' duplicata(s) como PAGAS?\n\nTotal: ' + fmtBRL(total) +
+      '\nFiltro atual: ' + filtroPag + ($('buscaPag').value ? ' + busca "' + $('buscaPag').value + '"' : '') +
+      '\n\nVale para TODAS as duplicatas do filtro, não só as visíveis na tela.')) return;
+
+    const btn = $('pagarLoteBtn');
+    btn.disabled = true;
+    const dataPgto = hojeISO();
+    try{
+      for(let i = 0; i < alvo.length; i += 450){
+        const pedaco = alvo.slice(i, i + 450);
+        const batch = db.batch();
+        pedaco.forEach(d => batch.set(db.collection('duplicatas').doc(d.id),
+          { pago:true, dataPagamento: dataPgto, pagoEmLote: true }, { merge:true }));
+        btn.textContent = 'Gravando... ' + Math.min(i + 450, alvo.length) + '/' + alvo.length;
+        await batch.commit();
+        pedaco.forEach(d => { d.pago = true; d.dataPagamento = dataPgto; });
+      }
+      renderPainel();
+      renderPagamentos();
+    }catch(e){
+      alert('Erro no pagamento em lote (parte pode ter sido gravada): ' + (e.message||e) +
+        '\nClique em Atualizar para ver o estado real e repita se necessário.');
+    }finally{
+      btn.disabled = false;
+      btn.textContent = '✓ Pagar filtradas em lote';
+    }
+  });
   function setFiltroPag(f){
     filtroPag = f;
     limitePag = 200;
@@ -994,18 +1044,21 @@
 
   function renderPagamentos(){
     const hoje = hojeISO();
+    const inicioHoje = inicioJanelaHoje();
     const termo = norm($('buscaPag').value);
     let lista = duplicatas.filter(d => !dupDaNotaCancelada(d));
 
     if(filtroPag === 'pendentes') lista = lista.filter(d => d.pago !== true);
-    else if(filtroPag === 'atrasadas') lista = lista.filter(d => d.pago !== true && d.vencimento && d.vencimento < hoje);
-    else if(filtroPag === 'hoje') lista = lista.filter(d => d.pago !== true && d.vencimento === hoje);
+    else if(filtroPag === 'atrasadas') lista = lista.filter(d => d.pago !== true && d.vencimento && d.vencimento < inicioHoje);
+    else if(filtroPag === 'hoje') lista = lista.filter(d => d.pago !== true && d.vencimento >= inicioHoje && d.vencimento <= hoje);
     else if(filtroPag === '7dias') lista = lista.filter(d => d.pago !== true && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7));
     else if(filtroPag === 'pagas') lista = lista.filter(d => d.pago === true);
 
     if(termo) lista = lista.filter(d => norm(d.nomeEmitente).includes(termo) || norm(d.numeroNota).includes(termo));
 
     lista.sort((a,b)=>(a.vencimento||'9999').localeCompare(b.vencimento||'9999'));
+    ultimaListaPag = lista;
+    $('pagarLoteBtn').style.display = (filtroPag !== 'pagas' && lista.length > 0) ? 'inline-block' : 'none';
 
     const totalFiltrado = lista.length;
     const somaFiltrada = lista.reduce((s,d)=>s+(d.valor||0),0);
