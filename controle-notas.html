@@ -1034,7 +1034,7 @@
         inner += '<div style="margin-top:6px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">ST total da nota: '+fmtBRL(d.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'% sobre os produtos</div>';
       }
     }
-    return '<tr><td colspan="7" style="background:var(--stripe2); padding:10px;">'+inner+'</td></tr>';
+    return '<tr><td colspan="8" style="background:var(--stripe2); padding:10px;">'+inner+'</td></tr>';
   }
 
   let ordAntigasPrimeiro = true;
@@ -1071,7 +1071,7 @@
       return;
     }
 
-    let html = '<table class="quote-table"><thead><tr><th></th><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th></th><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th><th>Previsão de entrega</th></tr></thead><tbody>';
     lista.forEach(n=>{
       const aberta = !!itensAbertosImportar[n.id];
       html += '<tr>' +
@@ -1084,7 +1084,9 @@
         '<td style="white-space:nowrap;">' +
           '<button class="acao-mini" data-lancar="'+escapeHtml(n.id)+'">✓ Já lançada</button> ' +
           '<button class="acao-mini perigo" data-cancelar="'+escapeHtml(n.id)+'">🚫 Cancelada</button>' +
-        '</td></tr>';
+        '</td>' +
+        '<td><input type="date" class="previsao-input" data-previsao="'+escapeHtml(n.id)+'" value="'+escapeHtml(n.previsaoEntrega||'')+'" style="padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></td>' +
+        '</tr>';
       if(aberta) html += htmlItensImportar(n.id);
     });
     $('tabelaImportar').innerHTML = html + '</tbody></table>';
@@ -1105,6 +1107,14 @@
       b.disabled = true;
       try{ await atualizarNota(chave, { noSistema:true, noSistemaManual:true }); }
       catch(e){ alert('Erro ao gravar: ' + (e.message||e)); b.disabled = false; }
+    }));
+    $('tabelaImportar').querySelectorAll('[data-previsao]').forEach(inp=>inp.addEventListener('change', async ()=>{
+      const chave = inp.dataset.previsao;
+      const valorAnterior = notasPorChave[chave]?.previsaoEntrega || '';
+      inp.disabled = true;
+      try{ await atualizarNota(chave, { previsaoEntrega: inp.value || null }); }
+      catch(e){ alert('Erro ao gravar a previsão: ' + (e.message||e)); inp.value = valorAnterior; }
+      finally{ inp.disabled = false; }
     }));
   }
 
