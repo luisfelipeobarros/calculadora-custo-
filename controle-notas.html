@@ -701,6 +701,9 @@
       </p>
       <div class="filtros">
         <input type="search" id="buscaImportar" placeholder="Buscar por emitente, número ou chave...">
+        <button class="chip-filtro ativo" data-tipo="todas">Todas</button>
+        <button class="chip-filtro" data-tipo="nfe">Só NF-e</button>
+        <button class="chip-filtro" data-tipo="nfse">Só NFS-e</button>
         <button class="chip-filtro" data-ord="data" id="ordDataBtn">Mais antigas primeiro</button>
       </div>
       <div id="tabelaImportar"></div>
@@ -801,6 +804,7 @@
     return (new Date().getDay() === 1) ? somarDias(h, -2) : h;
   };
 
+  const ehNfse = n => n.tipo === 'nfse'; // sem campo tipo = NF-e (documentos antigos)
   const notaAtiva = n => (n.status || 'ativa') !== 'cancelada';
   const notaAImportar = n => n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
     (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
@@ -907,10 +911,11 @@
     $('kFimMesQtd').textContent = ateFimMes.length + ' duplicata(s)';
     $('kFimMesValor').textContent = fmtBRL(ateFimMes.reduce((s,d)=>s+(d.valor||0),0));
 
-    // NF-e a receber: emitidas contra a empresa e ainda sem entrada no ERP
-    // (mesma base da tela "A importar" — aqui com o VALOR em destaque)
-    $('kReceberValor').textContent = fmtBRL(aImportar.reduce((s,n)=>s+(n.valorTotal||0),0));
-    $('kReceberQtd').textContent = aImportar.length + ' nota(s)';
+    // NF-e a receber: SÓ NF-e de mercadoria (sem NFS-e), ainda sem entrada no ERP.
+    // Difere de "Notas a importar", que inclui também as notas de serviço.
+    const nfeAReceber = aImportar.filter(n => !ehNfse(n));
+    $('kReceberValor').textContent = fmtBRL(nfeAReceber.reduce((s,n)=>s+(n.valorTotal||0),0));
+    $('kReceberQtd').textContent = nfeAReceber.length + ' nota(s)';
 
     // Próximos vencimentos: atrasadas primeiro, depois por data — top 12
     const proximos = pendentes.slice().sort((a,b)=>(a.vencimento||'9999').localeCompare(b.vencimento||'9999')).slice(0,12);
@@ -934,6 +939,13 @@
 
   // ─── A importar ───
   let ordAntigasPrimeiro = true;
+  let filtroTipoImportar = 'todas';
+  document.querySelectorAll('#viewImportar .chip-filtro[data-tipo]').forEach(c=>c.addEventListener('click', ()=>{
+    document.querySelectorAll('#viewImportar .chip-filtro[data-tipo]').forEach(x=>x.classList.remove('ativo'));
+    c.classList.add('ativo');
+    filtroTipoImportar = c.dataset.tipo;
+    renderImportar();
+  }));
   $('ordDataBtn').addEventListener('click', ()=>{
     ordAntigasPrimeiro = !ordAntigasPrimeiro;
     $('ordDataBtn').textContent = ordAntigasPrimeiro ? 'Mais antigas primeiro' : 'Mais recentes primeiro';
@@ -944,6 +956,8 @@
   function renderImportar(){
     const termo = norm($('buscaImportar').value);
     let lista = notas.filter(notaAImportar);
+    if(filtroTipoImportar === 'nfe') lista = lista.filter(n => !ehNfse(n));
+    else if(filtroTipoImportar === 'nfse') lista = lista.filter(n => ehNfse(n));
     if(termo) lista = lista.filter(n =>
       norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo));
     lista.sort((a,b)=>{
@@ -963,7 +977,7 @@
       html += '<tr>' +
         '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
-        '<td>'+escapeHtml(n.nomeEmitente||'-')+'<div style="font-family:var(--font-mono); font-size:10px; color:var(--ink-soft);">'+escapeHtml(n.id)+'</div></td>' +
+        '<td>'+escapeHtml(n.nomeEmitente||'-')+(ehNfse(n)?' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>':'')+'<div style="font-family:var(--font-mono); font-size:10px; color:var(--ink-soft);">'+escapeHtml(n.id)+'</div></td>' +
         '<td style="font-family:var(--font-mono);">'+fmtBRL(n.valorTotal)+'</td>' +
         '<td>'+(n.linkXml ? '<a class="acao-mini" href="'+escapeHtml(n.linkXml)+'" target="_blank" rel="noopener">⬇ Baixar</a>' : '-')+'</td>' +
         '<td style="white-space:nowrap;">' +
