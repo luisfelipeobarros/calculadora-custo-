@@ -34,6 +34,13 @@
   *{box-sizing:border-box;}
   @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
   tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
+  .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px; }
+  @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
+  .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .top-forn-row:last-child{ border-bottom:none; }
+  .top-forn-nome{ font-size:13px; }
+  .top-forn-qtd{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); }
+  .top-forn-valor{ font-family:var(--font-mono); font-size:13px; font-weight:700; white-space:nowrap; }
   body{
     margin:0;
     padding:0;
@@ -689,8 +696,17 @@
     </div>
 
     <div class="card" style="margin-top:18px;">
-      <h2>Próximos vencimentos (não pagos)</h2>
-      <div id="painelProximos"></div>
+      <h2 id="painelTopTitulo">Top fornecedores — vencendo hoje / atrasados</h2>
+      <div class="top-forn-grid" id="painelTopGrid">
+        <div>
+          <div style="font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;" id="painelTopHojeLabel">Vencendo hoje</div>
+          <div id="painelTopHoje"></div>
+        </div>
+        <div id="painelTopAtrasadasCol">
+          <div style="font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;">Atrasados</div>
+          <div id="painelTopAtrasadas"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -919,23 +935,40 @@
     $('kReceberValor').textContent = fmtBRL(nfeAReceber.reduce((s,n)=>s+(n.valorTotal||0),0));
     $('kReceberQtd').textContent = nfeAReceber.length + ' nota(s)';
 
-    // Próximos vencimentos: atrasadas primeiro, depois por data — top 12
-    const proximos = pendentes.slice().sort((a,b)=>(a.vencimento||'9999').localeCompare(b.vencimento||'9999')).slice(0,12);
-    if(!proximos.length){
-      $('painelProximos').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Nenhuma duplicata pendente. 🎉</p>';
-    }else{
-      let html = '<table class="quote-table"><thead><tr><th>Venc.</th><th>Emitente</th><th>Nota</th><th>Parc.</th><th>Valor</th><th>Situação</th></tr></thead><tbody>';
-      proximos.forEach(d=>{
-        const sit = situacaoDup(d);
-        html += '<tr'+(sit==='ATRASADO'?' class="linha-atrasada"':'')+'>' +
-          '<td style="font-family:var(--font-mono);">'+fmtData(d.vencimento)+'</td>' +
-          '<td>'+escapeHtml(d.nomeEmitente||'-')+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+escapeHtml(d.numeroNota||'-')+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+escapeHtml(d.parcela||'-')+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+fmtBRL(d.valor)+'</td>' +
-          '<td><span class="badge '+(sit==='ATRASADO'?'atrasado':'avencer')+'">'+sit+'</span></td></tr>';
+    // Top fornecedores: agrupa duplicatas por emitente e soma o valor.
+    // Se não houver nada atrasado, a coluna da direita vira o top 10 completo
+    // de "vencendo hoje" em vez de ficar vazia (pedido do usuário).
+    function agruparPorFornecedor(lista){
+      const porNome = {};
+      lista.forEach(d=>{
+        const nome = d.nomeEmitente || 'Sem nome';
+        if(!porNome[nome]) porNome[nome] = { nome, total:0, qtd:0 };
+        porNome[nome].total += (d.valor||0);
+        porNome[nome].qtd++;
       });
-      $('painelProximos').innerHTML = html + '</tbody></table>';
+      return Object.values(porNome).sort((a,b)=>b.total-a.total);
+    }
+    function htmlTopFornecedores(grupos){
+      if(!grupos.length) return '<p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Nada aqui. 🎉</p>';
+      return grupos.map(g=>
+        '<div class="top-forn-row"><div><div class="top-forn-nome">'+escapeHtml(g.nome)+'</div>' +
+        '<div class="top-forn-qtd">'+g.qtd+' duplicata(s)</div></div>' +
+        '<div class="top-forn-valor">'+fmtBRL(g.total)+'</div></div>'
+      ).join('');
+    }
+    const topHojeTodos = agruparPorFornecedor(vHoje);
+    const topAtrasadasTodos = agruparPorFornecedor(atrasadas);
+    if(topAtrasadasTodos.length){
+      $('painelTopTitulo').textContent = 'Top fornecedores — vencendo hoje / atrasados';
+      $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
+      $('painelTopAtrasadasCol').style.display = '';
+      $('painelTopHoje').innerHTML = htmlTopFornecedores(topHojeTodos.slice(0,5));
+      $('painelTopAtrasadas').innerHTML = htmlTopFornecedores(topAtrasadasTodos.slice(0,5));
+    } else {
+      $('painelTopTitulo').textContent = 'Top 10 fornecedores — vencendo hoje';
+      $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 10)';
+      $('painelTopAtrasadasCol').style.display = 'none';
+      $('painelTopHoje').innerHTML = htmlTopFornecedores(topHojeTodos.slice(0,10));
     }
   }
 
