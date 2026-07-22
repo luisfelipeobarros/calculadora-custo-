@@ -1223,6 +1223,13 @@ Tupan</textarea>
       const { initializeAppCheck, ReCaptchaV3Provider } = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-app-check.js');
       const { getAI, getGenerativeModel, GoogleAIBackend, Schema } = await import('https://www.gstatic.com/firebasejs/12.15.0/firebase-ai.js');
 
+      // ─── Modelos Gemini (troque aqui pra atualizar ou reverter) ───
+      // Se algum modelo novo ainda não estiver disponível no Firebase AI Logic
+      // (erro "model not found"), volte pro anterior indicado no comentário.
+      const MODELO_EXTRATOR   = 'gemini-3.5-flash-lite'; // anterior: 'gemini-3.1-flash-lite'
+      const MODELO_PESQUISA   = 'gemini-3.6-flash';      // anterior: 'gemini-3.5-flash'
+      const MODELO_FORMATADOR = 'gemini-3.5-flash-lite'; // anterior: 'gemini-3.1-flash-lite'
+
       // reinicializa do zero a cada conexão, pra aceitar troca de config/chave sem recarregar a página
       const existente = getApps().find(a => a.name === 'geminiApp');
       if(existente) await deleteApp(existente);
@@ -1255,7 +1262,7 @@ Tupan</textarea>
       });
 
       geminiModel = getGenerativeModel(ai, {
-        model: 'gemini-3.1-flash-lite',
+        model: MODELO_EXTRATOR,
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: schema,
@@ -1272,7 +1279,7 @@ Tupan</textarea>
       // pesquisa prejudica a qualidade da busca — por isso aqui ele só pesquisa e escreve
       // o que achou em texto livre.
       geminiModelPesquisa = getGenerativeModel(ai, {
-        model: 'gemini-3.5-flash',
+        model: MODELO_PESQUISA,
         tools: [{ urlContext: {} }, { googleSearch: {} }],
         // "low" em vez do padrão "medium": a pesquisa de preço é uma tarefa agêntica de
         // poucos passos (buscar → ler → reportar), e o low do 3.5 Flash foi otimizado
@@ -1299,7 +1306,7 @@ Tupan</textarea>
         optionalProperties: ['marca', 'url', 'mensagemErro']
       });
       geminiModelFormatador = getGenerativeModel(ai, {
-        model: 'gemini-3.1-flash-lite',
+        model: MODELO_FORMATADOR,
         generationConfig: {
           responseMimeType: 'application/json',
           responseSchema: schemaFormatador,
@@ -2537,7 +2544,11 @@ Tupan</textarea>
           '<th>Cód · Produto</th><th>NCM · CFOP</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th>' +
           '<th>ICMS</th><th>IPI</th><th>PIS+COFINS</th></tr></thead><tbody>';
         (n.itens||[]).slice().sort((a,b)=>(a.n||0)-(b.n||0)).forEach(it=>{
-          const icms = it.icmsValor ? ('CST '+escapeHtml(it.icmsCst||'-')+' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.icmsValor)) : ('CST '+escapeHtml(it.icmsCst||'-'));
+          let icms = it.icmsValor ? ('CST '+escapeHtml(it.icmsCst||'-')+' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.icmsValor)) : ('CST '+escapeHtml(it.icmsCst||'-'));
+          if(it.icmsStValor > 0){
+            const pctSt = (it.vTotal > 0) ? (it.icmsStValor / it.vTotal * 100) : 0;
+            icms += '<br><span style="color:var(--brick); font-weight:600;">ST: '+brl(it.icmsStValor)+' · '+pctSt.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'%</span>';
+          }
           const ipi = it.ipiValor ? ((it.ipiAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.ipiValor)) : '—';
           const piscof = (it.pisValor||it.cofinsValor) ? (((it.pisAliq||0)+(it.cofinsAliq||0)).toLocaleString('pt-BR')+'% · '+brl((it.pisValor||0)+(it.cofinsValor||0))) : '—';
           html += '<tr>' +
@@ -2552,6 +2563,11 @@ Tupan</textarea>
             '</tr>';
         });
         html += '</tbody></table>';
+        if((n.stTotal||0) > 0){
+          const baseProd = n.valorProdutos || (n.itens||[]).reduce((s,it)=>s+(it.vTotal||0),0);
+          const pctStNota = baseProd > 0 ? (n.stTotal / baseProd * 100) : 0;
+          html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12.5px; color:var(--brick); font-weight:600;">ST total da nota: '+brl(n.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'% sobre o valor dos produtos ('+brl(baseProd)+')</div>';
+        }
         if(n.linkXml) html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="'+escapeHtml(n.linkXml)+'" target="_blank" rel="noopener">⬇ Baixar XML</a></div>';
         html += '</div>';
       }
