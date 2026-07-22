@@ -35,6 +35,9 @@
   *{box-sizing:border-box;}
   @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
   tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
+  .cmp-grid{ display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
+  @media(min-width:1500px){ .cmp-grid{ grid-template-columns:minmax(0,5fr) minmax(0,7fr); } }
+  .cmp-grid .card{ overflow-x:auto; }
   body{
     margin:0;
     padding:0;
@@ -929,6 +932,27 @@
       </div>
       <div id="notasMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
       <div id="listaNotasEmitidas"></div>
+    </div>
+  </div>
+
+  <div id="viewComparar" style="display:none;">
+    <button class="btn secondary" id="voltarHistoricoCmpBtn" style="margin-bottom:16px;">← Voltar ao histórico</button>
+    <div class="cmp-grid">
+      <div class="card">
+        <h2 id="cmpPedidoTitulo">Pedido</h2>
+        <div id="cmpPedido"></div>
+      </div>
+      <div class="card">
+        <h2>NF-e Emitidas — últimos 60 dias</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+          <input type="search" id="buscaNotasCmp" placeholder="Buscar por emitente, nº ou produto..." style="flex:1; min-width:170px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px;">
+          <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">De <input type="date" id="notasDataDeCmp" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
+          <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">Até <input type="date" id="notasDataAteCmp" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
+          <button class="btn secondary" id="limparDatasNotasBtnCmp" style="display:none;">✕ Limpar</button>
+        </div>
+        <div id="notasMsgCmp" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
+        <div id="listaNotasEmitidasCmp"></div>
+      </div>
     </div>
   </div>
 
@@ -2401,6 +2425,7 @@ Tupan</textarea>
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
     atualizarListaSalvos();
   }
@@ -2412,6 +2437,7 @@ Tupan</textarea>
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewSync(){
@@ -2422,6 +2448,7 @@ Tupan</textarea>
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewCotacao(){
@@ -2432,6 +2459,7 @@ Tupan</textarea>
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
   }
   function mostrarViewHistorico(){
@@ -2442,12 +2470,14 @@ Tupan</textarea>
     $('viewCotacao').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'none';
     carregarHistorico();
   }
   function mostrarViewConcorrentes(){
     $('viewConcorrentes').style.display = 'block';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewProdutos').style.display = 'none';
     $('viewFrete').style.display = 'none';
     $('viewSync').style.display = 'none';
@@ -2464,10 +2494,11 @@ Tupan</textarea>
     $('viewHistorico').style.display = 'none';
     $('viewConcorrentes').style.display = 'none';
     $('viewNotas').style.display = 'none';
+    $('viewComparar').style.display = 'none';
     $('viewCalculadora').style.display = 'block';
   }
   function mostrarViewNotas(){
-    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora'].forEach(v=>$(v).style.display='none');
+    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora','viewComparar'].forEach(v=>$(v).style.display='none');
     $('viewNotas').style.display = 'block';
     carregarNotasEmitidas(false);
   }
@@ -2480,6 +2511,66 @@ Tupan</textarea>
   $('voltarCalculadoraBtn7').addEventListener('click', mostrarViewCalculadora);
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
   $('buscaNotas').addEventListener('input', renderNotasEmitidas);
+  $('buscaNotasCmp').addEventListener('input', renderListaNotasCmp);
+  $('notasDataDeCmp').addEventListener('change', renderListaNotasCmp);
+  $('notasDataAteCmp').addEventListener('change', renderListaNotasCmp);
+  $('limparDatasNotasBtnCmp').addEventListener('click', ()=>{
+    $('notasDataDeCmp').value = '';
+    $('notasDataAteCmp').value = '';
+    renderListaNotasCmp();
+  });
+  $('voltarHistoricoCmpBtn').addEventListener('click', mostrarViewHistorico);
+
+  // ─── Comparação pedido × NF-e emitidas (tela dividida) ───
+  function abrirComparacao(docId){
+    const d = historicoDocsCache.find(x => x.id === docId);
+    if(!d) return;
+
+    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora','viewNotas'].forEach(v=>$(v).style.display='none');
+    $('viewComparar').style.display = 'block';
+    window.scrollTo(0,0);
+
+    // Painel esquerdo: o pedido, somente leitura
+    const nome = d.nomeCotacao || d.fornecedor || 'Pedido';
+    const dt = dataDoDoc(d);
+    $('cmpPedidoTitulo').textContent = 'Pedido — ' + nome;
+    let html = '<p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">' +
+      (d.fornecedor ? escapeHtml(d.fornecedor)+' · ' : '') + (dt ? formatarDataFirestore(d.data) : '') + '</p>';
+    html += '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Preço</th><th>Total</th><th>Status</th></tr></thead><tbody>';
+    let totalPedido = 0;
+    (d.itens||[]).forEach(it=>{
+      const qtd = it.quantidadeRecebida != null ? it.quantidadeRecebida : it.quantidadeEsperada;
+      const preco = it.precoRecebido != null ? it.precoRecebido : it.precoEsperado;
+      const tot = (qtd != null && preco != null) ? qtd * preco : null;
+      if(tot != null) totalPedido += tot;
+      html += '<tr>' +
+        '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(it.codigo||'-')+'</td>' +
+        '<td>'+escapeHtml(it.produto||'-')+'</td>' +
+        '<td style="font-family:var(--font-mono);">'+(qtd != null ? qtd.toLocaleString('pt-BR') : '-')+'</td>' +
+        '<td style="font-family:var(--font-mono);">'+(preco != null ? brl(preco) : '-')+'</td>' +
+        '<td style="font-family:var(--font-mono);">'+(tot != null ? brl(tot) : '-')+'</td>' +
+        '<td>'+renderStatusBadge(it.status)+'</td></tr>';
+    });
+    html += '</tbody></table>';
+    html += '<div style="margin-top:10px; text-align:right; font-family:var(--font-mono); font-size:13px; font-weight:700;">Total do pedido: '+brl(totalPedido)+'</div>';
+    html += '<div style="margin-top:10px;"><button class="btn secondary" id="cmpEditarPedidoBtn">✏️ Editar este pedido</button></div>';
+    $('cmpPedido').innerHTML = html;
+    $('cmpEditarPedidoBtn').addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
+
+    // Painel direito: pré-filtra as NF-e pelo fornecedor e pela data do pedido
+    const palavras = String(d.fornecedor || d.nomeCotacao || '').split(/\s+/).filter(w => w.length >= 4);
+    $('buscaNotasCmp').value = palavras.length ? palavras[0] : '';
+    if(dt){
+      $('notasDataDeCmp').value = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+    } else {
+      $('notasDataDeCmp').value = '';
+    }
+    $('notasDataAteCmp').value = '';
+
+    if(notasEmitidasCache) renderListaNotasCmp();
+    else carregarNotasEmitidas(false);
+  }
+
   $('notasDataDe').addEventListener('change', renderNotasEmitidas);
   $('notasDataAte').addEventListener('change', renderNotasEmitidas);
   $('limparDatasNotasBtn').addEventListener('click', ()=>{
@@ -2492,13 +2583,18 @@ Tupan</textarea>
   let notasEmitidasCache = null;
   const notasAbertas = {};
 
+  function setNotasMsg(txt){
+    if($('notasMsg')) $('notasMsg').textContent = txt;
+    if($('notasMsgCmp')) $('notasMsgCmp').textContent = txt;
+  }
+
   async function carregarNotasEmitidas(forcar){
     if(!firestoreDb){
-      $('notasMsg').textContent = 'Firebase não conectado — configure na tela de Sincronização.';
+      setNotasMsg('Firebase não conectado — configure na tela de Sincronização.');
       return;
     }
     if(notasEmitidasCache && !forcar){ renderNotasEmitidas(); return; }
-    $('notasMsg').textContent = 'Carregando notas dos últimos 60 dias...';
+    setNotasMsg('Carregando notas dos últimos 60 dias...');
     try{
       const corte = new Date(Date.now() - 60*86400000);
       const corteISO = corte.getFullYear() + '-' + String(corte.getMonth()+1).padStart(2,'0') + '-' + String(corte.getDate()).padStart(2,'0');
@@ -2506,12 +2602,12 @@ Tupan</textarea>
       notasEmitidasCache = [];
       snap.forEach(doc => notasEmitidasCache.push({ chave: doc.id, ...doc.data() }));
       notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
-      $('notasMsg').textContent = '';
+      setNotasMsg('');
       renderNotasEmitidas();
+      renderListaNotasCmp();
     }catch(e){
       console.error(e);
-      $('notasMsg').textContent = 'Erro ao carregar: ' + (e.message||e) +
-        ' — confira as regras da coleção "itensNotas" e se a carga inicial do Apps Script já rodou.';
+      setNotasMsg('Erro ao carregar: ' + (e.message||e) + ' — confira as regras da coleção "itensNotas" e se a carga inicial do Apps Script já rodou.');
     }
   }
 
@@ -2520,12 +2616,15 @@ Tupan</textarea>
     return m ? (m[3]+'/'+m[2]+'/'+m[1]) : '--';
   }
 
-  function renderNotasEmitidas(){
+  function renderNotasEmitidas(){ renderListaNotas(''); }
+  function renderListaNotasCmp(){ renderListaNotas('Cmp'); }
+  function renderListaNotas(suf){
     if(!notasEmitidasCache) return;
-    const termo = ($('buscaNotas').value||'').toLowerCase();
-    const dataDe = $('notasDataDe').value;   // formato aaaa-mm-dd, igual ao dataEmissao
-    const dataAte = $('notasDataAte').value;
-    $('limparDatasNotasBtn').style.display = (dataDe || dataAte) ? 'inline-block' : 'none';
+    if(!$('listaNotasEmitidas'+suf)) return;
+    const termo = ($('buscaNotas'+suf).value||'').toLowerCase();
+    const dataDe = $('notasDataDe'+suf).value;   // formato aaaa-mm-dd, igual ao dataEmissao
+    const dataAte = $('notasDataAte'+suf).value;
+    $('limparDatasNotasBtn'+suf).style.display = (dataDe || dataAte) ? 'inline-block' : 'none';
     let lista = notasEmitidasCache;
     if(dataDe)  lista = lista.filter(n => (n.dataEmissao||'') >= dataDe);
     if(dataAte) lista = lista.filter(n => (n.dataEmissao||'') <= dataAte);
@@ -2537,8 +2636,8 @@ Tupan</textarea>
       );
     }
     if(!lista.length){
-      $('listaNotasEmitidas').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
-        ((termo || $('notasDataDe').value || $('notasDataAte').value) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 60 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+      $('listaNotasEmitidas'+suf).innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
+        ((termo || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 60 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
       return;
     }
     let html = '';
@@ -2588,10 +2687,10 @@ Tupan</textarea>
       }
       html += '</div>';
     });
-    $('listaNotasEmitidas').innerHTML = html;
-    $('listaNotasEmitidas').querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
+    $('listaNotasEmitidas'+suf).innerHTML = html;
+    $('listaNotasEmitidas'+suf).querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
-      renderNotasEmitidas();
+      renderListaNotas(suf);
     }));
   }
 
@@ -3050,12 +3149,17 @@ Tupan</textarea>
         editarBtn.type = 'button';
         editarBtn.textContent = '✏️ Editar / continuar negociação';
         editarBtn.addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
+        const compararBtn = document.createElement('button');
+        compararBtn.type = 'button';
+        compararBtn.textContent = '⚖️ Comparar com NF-e';
+        compararBtn.addEventListener('click', ()=>abrirComparacao(d.id));
         const excluirBtn = document.createElement('button');
         excluirBtn.type = 'button';
         excluirBtn.className = 'del';
         excluirBtn.textContent = 'Excluir';
         excluirBtn.addEventListener('click', ()=>excluirCotacaoHistorico(d.id));
         acoes.appendChild(editarBtn);
+        acoes.appendChild(compararBtn);
         acoes.appendChild(excluirBtn);
         body.appendChild(acoes);
 
