@@ -938,6 +938,70 @@
   }
 
   // ─── A importar ───
+  // Itens (produtos) das notas: carregados sob demanda da coleção itensNotas,
+  // uma nota por clique — a carga da tela continua leve.
+  const itensCacheImportar = {};
+  const itensAbertosImportar = {};
+
+  async function alternarItensImportar(chave){
+    if(itensAbertosImportar[chave]){
+      itensAbertosImportar[chave] = false;
+      renderImportar();
+      return;
+    }
+    itensAbertosImportar[chave] = true;
+    if(!itensCacheImportar[chave]){
+      itensCacheImportar[chave] = { carregando: true };
+      renderImportar();
+      try{
+        const doc = await db.collection('itensNotas').doc(chave).get();
+        itensCacheImportar[chave] = doc.exists ? doc.data() : { semItens: true };
+      }catch(e){
+        itensCacheImportar[chave] = { erro: (e.message||String(e)) };
+      }
+    }
+    renderImportar();
+  }
+
+  function htmlItensImportar(chave){
+    const d = itensCacheImportar[chave];
+    let inner;
+    if(!d || d.carregando){
+      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Carregando itens...</span>';
+    } else if(d.erro){
+      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--loss);">Erro ao carregar itens: '+escapeHtml(d.erro)+'</span>';
+    } else if(d.semItens || !(d.itens||[]).length){
+      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Itens não disponíveis para esta nota (o detalhamento cobre as notas dos últimos 60 dias).</span>';
+    } else {
+      inner = '<div style="overflow-x:auto;"><table class="quote-table" style="min-width:760px;"><thead><tr>' +
+        '<th>Cód · Produto</th><th>NCM · CFOP</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th><th>ICMS</th><th>IPI</th></tr></thead><tbody>';
+      d.itens.slice().sort((a,b)=>(a.n||0)-(b.n||0)).forEach(it=>{
+        let icms = 'CST '+escapeHtml(it.icmsCst||'-') + (it.icmsValor ? ' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+fmtBRL(it.icmsValor) : '');
+        if(it.icmsStValor > 0){
+          const pctSt = it.vTotal > 0 ? (it.icmsStValor/it.vTotal*100) : 0;
+          icms += '<br><span style="color:var(--brick); font-weight:600;">ST: '+fmtBRL(it.icmsStValor)+' · '+pctSt.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%</span>';
+        }
+        const ipi = it.ipiValor ? ((it.ipiAliq||0).toLocaleString('pt-BR')+'% · '+fmtBRL(it.ipiValor)) : '—';
+        inner += '<tr>' +
+          '<td><span style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft);">'+escapeHtml(it.codigo||'-')+'</span><br>'+escapeHtml(it.descricao||'-')+'</td>' +
+          '<td style="font-family:var(--font-mono); font-size:11px;">'+escapeHtml(it.ncm||'-')+'<br>CFOP '+escapeHtml(it.cfop||'-')+'</td>' +
+          '<td style="font-family:var(--font-mono);">'+(it.qtd||0).toLocaleString('pt-BR')+' '+escapeHtml(it.un||'')+'</td>' +
+          '<td style="font-family:var(--font-mono);">'+fmtBRL(it.vUnit||0)+'</td>' +
+          '<td style="font-family:var(--font-mono);">'+fmtBRL(it.vTotal||0)+'</td>' +
+          '<td style="font-family:var(--font-mono); font-size:11px;">'+icms+'</td>' +
+          '<td style="font-family:var(--font-mono); font-size:11px;">'+ipi+'</td>' +
+          '</tr>';
+      });
+      inner += '</tbody></table></div>';
+      if((d.stTotal||0) > 0){
+        const baseProd = d.valorProdutos || d.itens.reduce((s,it)=>s+(it.vTotal||0),0);
+        const pctStNota = baseProd > 0 ? (d.stTotal/baseProd*100) : 0;
+        inner += '<div style="margin-top:6px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">ST total da nota: '+fmtBRL(d.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'% sobre os produtos</div>';
+      }
+    }
+    return '<tr><td colspan="7" style="background:var(--stripe2); padding:10px;">'+inner+'</td></tr>';
+  }
+
   let ordAntigasPrimeiro = true;
   let filtroTipoImportar = 'todas';
   document.querySelectorAll('#viewImportar .chip-filtro[data-tipo]').forEach(c=>c.addEventListener('click', ()=>{
@@ -972,9 +1036,11 @@
       return;
     }
 
-    let html = '<table class="quote-table"><thead><tr><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th></tr></thead><tbody>';
+    let html = '<table class="quote-table"><thead><tr><th></th><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th></tr></thead><tbody>';
     lista.forEach(n=>{
+      const aberta = !!itensAbertosImportar[n.id];
       html += '<tr>' +
+        '<td>'+(ehNfse(n) ? '' : '<button class="acao-mini" data-itens="'+escapeHtml(n.id)+'" title="Ver produtos da nota">'+(aberta?'▼':'▶')+'</button>')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
         '<td>'+escapeHtml(n.nomeEmitente||'-')+(ehNfse(n)?' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>':'')+'<div style="font-family:var(--font-mono); font-size:10px; color:var(--ink-soft);">'+escapeHtml(n.id)+'</div></td>' +
@@ -984,10 +1050,12 @@
           '<button class="acao-mini" data-lancar="'+escapeHtml(n.id)+'">✓ Já lançada</button> ' +
           '<button class="acao-mini perigo" data-cancelar="'+escapeHtml(n.id)+'">🚫 Cancelada</button>' +
         '</td></tr>';
+      if(aberta) html += htmlItensImportar(n.id);
     });
     $('tabelaImportar').innerHTML = html + '</tbody></table>';
     $('totalImportar').textContent = lista.length + ' nota(s) · total ' + fmtBRL(lista.reduce((s,n)=>s+(n.valorTotal||0),0));
 
+    $('tabelaImportar').querySelectorAll('[data-itens]').forEach(b=>b.addEventListener('click', ()=>alternarItensImportar(b.dataset.itens)));
     $('tabelaImportar').querySelectorAll('[data-cancelar]').forEach(b=>b.addEventListener('click', async ()=>{
       const chave = b.dataset.cancelar;
       const n = notasPorChave[chave];
@@ -1137,7 +1205,9 @@
     }
     let html = '<table class="quote-table"><thead><tr><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>Cancelada em</th><th></th></tr></thead><tbody>';
     lista.forEach(n=>{
+      const aberta = !!itensAbertosImportar[n.id];
       html += '<tr>' +
+        '<td>'+(ehNfse(n) ? '' : '<button class="acao-mini" data-itens="'+escapeHtml(n.id)+'" title="Ver produtos da nota">'+(aberta?'▼':'▶')+'</button>')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
         '<td>'+escapeHtml(n.nomeEmitente||'-')+'</td>' +
