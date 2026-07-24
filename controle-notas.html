@@ -724,6 +724,13 @@
         <button class="chip-filtro" data-tipo="nfse">Só NFS-e</button>
         <button class="chip-filtro" data-ord="data" id="ordDataBtn">Mais antigas primeiro</button>
       </div>
+      <div class="filtros" style="margin-top:-4px;">
+        <input type="search" id="buscaProdutoImportar" placeholder="Filtrar por produto (código ou descrição)..." style="flex:1; min-width:220px;">
+        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" id="excluirProdutoImportar" style="width:15px; height:15px; cursor:pointer;">
+          mostrar as que NÃO têm esse produto
+        </label>
+      </div>
       <div id="tabelaImportar"></div>
       <div class="rodape-total" id="totalImportar"></div>
     </div>
@@ -1051,14 +1058,24 @@
     renderImportar();
   });
   $('buscaImportar').addEventListener('input', renderImportar);
+  $('buscaProdutoImportar').addEventListener('input', renderImportar);
+  $('excluirProdutoImportar').addEventListener('change', renderImportar);
 
   function renderImportar(){
     const termo = norm($('buscaImportar').value);
+    const termoProduto = norm($('buscaProdutoImportar').value);
+    const excluirProduto = $('excluirProdutoImportar').checked;
     let lista = notas.filter(notaAImportar);
     if(filtroTipoImportar === 'nfe') lista = lista.filter(n => !ehNfse(n));
     else if(filtroTipoImportar === 'nfse') lista = lista.filter(n => ehNfse(n));
     if(termo) lista = lista.filter(n =>
       norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo));
+    if(termoProduto){
+      lista = lista.filter(n => {
+        const contemProduto = (n.produtosResumo||[]).some(p => norm(p).includes(termoProduto));
+        return excluirProduto ? !contemProduto : contemProduto;
+      });
+    }
     lista.sort((a,b)=>{
       const cmp = (a.dataEmissao||'').localeCompare(b.dataEmissao||'');
       return ordAntigasPrimeiro ? cmp : -cmp;
@@ -1066,7 +1083,7 @@
 
     if(!lista.length){
       $('tabelaImportar').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
-        (termo ? 'Nada encontrado com esse filtro.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
+        ((termo || termoProduto) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
       $('totalImportar').textContent = '';
       return;
     }
