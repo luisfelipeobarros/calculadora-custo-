@@ -976,8 +976,10 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
         <button class="btn" id="iniciarLoteBtn">🏪 Iniciar pesquisa</button>
         <button class="btn secondary" id="pararLoteBtn" style="display:none;">⏸ Parar</button>
+        <button class="btn secondary" id="salvarLoteBtn" style="display:none;">💾 Salvar estas pesquisas</button>
         <span id="loteMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);"></span>
       </div>
+      <div class="empty-note" id="salvarLoteMsg" style="margin-bottom:8px;"></div>
       <div style="overflow-x:auto;">
         <div id="loteTabela"></div>
       </div>
@@ -2641,6 +2643,7 @@ Tupan</textarea>
   let loteRodando = false;
   let loteParar = false;
   let loteDocId = null;
+  let loteNomePedido = '';
 
   function abrirPesquisaLote(docId){
     const d = historicoDocsCache.find(x => x.id === docId);
@@ -2655,11 +2658,15 @@ Tupan</textarea>
     loteParar = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').disabled = false;
+    $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
     $('pararLoteBtn').style.display = 'none';
+    $('salvarLoteBtn').style.display = 'none';
     $('loteMsg').textContent = '';
+    $('salvarLoteMsg').textContent = '';
     $('buscaGoogleWidgetLote').innerHTML = '';
 
     const nome = d.nomeCotacao || d.fornecedor || 'Pedido';
+    loteNomePedido = nome;
     $('loteTitulo').textContent = 'Pesquisar concorrentes — ' + nome;
 
     loteItens = (d.itens||[]).map(it => ({
@@ -2766,12 +2773,51 @@ Tupan</textarea>
     $('loteMsg').textContent = loteParar
       ? 'Pesquisa interrompida.'
       : 'Pesquisa concluída — ' + loteItens.length + ' produto(s) · ' + new Date().toLocaleTimeString('pt-BR');
+    const temAlgoPesquisado = loteItens.some(it => Object.values(it.porLoja).some(r => r && !r.pendente));
+    $('salvarLoteBtn').style.display = temAlgoPesquisado ? 'inline-block' : 'none';
     renderLoteTabela();
   });
 
   $('pararLoteBtn').addEventListener('click', ()=>{
     loteParar = true;
     $('loteMsg').textContent = 'Parando após o produto atual...';
+  });
+
+  // Salva cada produto pesquisado como um documento na MESMA coleção "concorrentes"
+  // usada pela busca individual — assim aparecem juntas em "Comparações salvas",
+  // com uma tag indicando que vieram de um pedido do Histórico.
+  $('salvarLoteBtn').addEventListener('click', async ()=>{
+    if(!firestoreDb){
+      $('salvarLoteMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar.';
+      return;
+    }
+    const itensParaSalvar = loteItens.filter(it =>
+      Object.values(it.porLoja).some(r => r && !r.pendente));
+    if(!itensParaSalvar.length){
+      $('salvarLoteMsg').textContent = 'Nenhum produto com pesquisa concluída ainda.';
+      return;
+    }
+    $('salvarLoteBtn').disabled = true;
+    $('salvarLoteMsg').textContent = 'Salvando ' + itensParaSalvar.length + ' produto(s)...';
+    try{
+      await Promise.all(itensParaSalvar.map(it => {
+        const resultados = Object.values(it.porLoja).filter(r => r && !r.pendente);
+        return firestoreDb.collection('concorrentes').add({
+          produto: it.produto,
+          meuPreco: (it.nossoPreco != null && it.nossoPreco > 0) ? it.nossoPreco : null,
+          data: firebase.firestore.FieldValue.serverTimestamp(),
+          resultados: resultados,
+          origemPedido: loteNomePedido || null
+        });
+      }));
+      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem na aba Concorrentes, em "Comparações salvas".';
+      carregarHistoricoConcorrentes();
+    }catch(e){
+      console.error(e);
+      $('salvarLoteMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
+    }finally{
+      $('salvarLoteBtn').disabled = false;
+    }
   });
 
   $('voltarHistoricoLoteBtn').addEventListener('click', ()=>{
@@ -3102,6 +3148,7 @@ Tupan</textarea>
           '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
           '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
           '<span class="h-count">'+resultados.length+' loja(s)</span>'+
+          (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
           (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
         header.addEventListener('click', ()=>{
           if(concorrentesHistColapsados.has(doc.id)) concorrentesHistColapsados.delete(doc.id);
