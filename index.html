@@ -976,8 +976,8 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
         <button class="btn" id="iniciarLoteBtn">🏪 Iniciar pesquisa</button>
         <button class="btn secondary" id="pararLoteBtn" style="display:none;">⏸ Parar</button>
-        <button class="btn secondary" id="salvarLoteBtn" style="display:none;">💾 Salvar estas pesquisas</button>
-        <span id="loteMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);"></span>
+        <button class="btn secondary" id="salvarPesqLoteBtn" style="display:none;">💾 Salvar estas pesquisas</button>
+        <span id="pesqLoteMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);"></span>
       </div>
       <div class="empty-note" id="salvarLoteMsg" style="margin-bottom:8px;"></div>
       <div style="overflow-x:auto;">
@@ -2660,8 +2660,8 @@ Tupan</textarea>
     $('iniciarLoteBtn').disabled = false;
     $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
     $('pararLoteBtn').style.display = 'none';
-    $('salvarLoteBtn').style.display = 'none';
-    $('loteMsg').textContent = '';
+    $('salvarPesqLoteBtn').style.display = 'none';
+    $('pesqLoteMsg').textContent = '';
     $('salvarLoteMsg').textContent = '';
     $('buscaGoogleWidgetLote').innerHTML = '';
 
@@ -2745,7 +2745,7 @@ Tupan</textarea>
       loteIdxAtual = idx;
       const item = loteItens[idx];
       loteLojas.forEach((_, lojaIdx) => { item.porLoja[lojaIdx] = { pendente: true }; });
-      $('loteMsg').textContent = 'Pesquisando produto ' + (idx+1) + ' de ' + loteItens.length + ': ' + item.produto;
+      $('pesqLoteMsg').textContent = 'Pesquisando produto ' + (idx+1) + ' de ' + loteItens.length + ': ' + item.produto;
       renderLoteTabela();
 
       try{
@@ -2770,23 +2770,23 @@ Tupan</textarea>
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').textContent = '🔁 Pesquisar novamente';
     $('pararLoteBtn').style.display = 'none';
-    $('loteMsg').textContent = loteParar
+    $('pesqLoteMsg').textContent = loteParar
       ? 'Pesquisa interrompida.'
       : 'Pesquisa concluída — ' + loteItens.length + ' produto(s) · ' + new Date().toLocaleTimeString('pt-BR');
     const temAlgoPesquisado = loteItens.some(it => Object.values(it.porLoja).some(r => r && !r.pendente));
-    $('salvarLoteBtn').style.display = temAlgoPesquisado ? 'inline-block' : 'none';
+    $('salvarPesqLoteBtn').style.display = temAlgoPesquisado ? 'inline-block' : 'none';
     renderLoteTabela();
   });
 
   $('pararLoteBtn').addEventListener('click', ()=>{
     loteParar = true;
-    $('loteMsg').textContent = 'Parando após o produto atual...';
+    $('pesqLoteMsg').textContent = 'Parando após o produto atual...';
   });
 
   // Salva cada produto pesquisado como um documento na MESMA coleção "concorrentes"
   // usada pela busca individual — assim aparecem juntas em "Comparações salvas",
   // com uma tag indicando que vieram de um pedido do Histórico.
-  $('salvarLoteBtn').addEventListener('click', async ()=>{
+  $('salvarPesqLoteBtn').addEventListener('click', async ()=>{
     if(!firestoreDb){
       $('salvarLoteMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar.';
       return;
@@ -2797,7 +2797,7 @@ Tupan</textarea>
       $('salvarLoteMsg').textContent = 'Nenhum produto com pesquisa concluída ainda.';
       return;
     }
-    $('salvarLoteBtn').disabled = true;
+    $('salvarPesqLoteBtn').disabled = true;
     $('salvarLoteMsg').textContent = 'Salvando ' + itensParaSalvar.length + ' produto(s)...';
     try{
       await Promise.all(itensParaSalvar.map(it => {
@@ -2816,7 +2816,7 @@ Tupan</textarea>
       console.error(e);
       $('salvarLoteMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
     }finally{
-      $('salvarLoteBtn').disabled = false;
+      $('salvarPesqLoteBtn').disabled = false;
     }
   });
 
