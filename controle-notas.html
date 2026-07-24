@@ -817,6 +817,17 @@
   const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const norm = s => String(s ?? '').toLowerCase();
 
+  // Agrupa disparos rápidos (digitação) numa única execução. Sem isto, cada tecla
+  // re-filtra milhares de notas/duplicatas e reconstrói a tabela inteira.
+  function debounce(fn, ms){
+    let t = null;
+    return function(...args){
+      clearTimeout(t);
+      t = setTimeout(()=>fn.apply(this, args), ms);
+    };
+  }
+  const DEBOUNCE_BUSCA = 250;
+
   // Notas emitidas antes desta data não contam como pendentes de importação:
   // os anos anteriores já foram informados à fazenda e não devem ser mexidos.
   const DATA_CORTE_IMPORTACAO = '2026-01-01';
@@ -861,6 +872,9 @@
         db.collection('duplicatas').get()
       ]);
       notas = [];
+      // Zera o índice antes de repovoar: sem isto, notas removidas do Firestore
+      // continuariam no cache e seguiriam influenciando os cálculos.
+      Object.keys(notasPorChave).forEach(k => delete notasPorChave[k]);
       snapNotas.forEach(doc => { const n = { id: doc.id, ...doc.data() }; notas.push(n); notasPorChave[doc.id] = n; });
       duplicatas = [];
       snapDup.forEach(doc => duplicatas.push({ id: doc.id, ...doc.data() }));
@@ -873,10 +887,12 @@
     }
   }
 
-  async function atualizarNota(chave, campos){
+  // "redesenhar" evita re-render desnecessário: com milhares de notas e duplicatas,
+  // redesenhar as quatro telas a cada tecla (ex: previsão de entrega) trava a interface.
+  async function atualizarNota(chave, campos, redesenhar){
     await db.collection('notas').doc(chave).set(campos, { merge: true });
     Object.assign(notasPorChave[chave] || {}, campos);
-    renderTudo();
+    if(redesenhar !== false) renderTudo();
   }
 
   async function atualizarDuplicata(id, campos){
@@ -1057,8 +1073,8 @@
     $('ordDataBtn').textContent = ordAntigasPrimeiro ? 'Mais antigas primeiro' : 'Mais recentes primeiro';
     renderImportar();
   });
-  $('buscaImportar').addEventListener('input', renderImportar);
-  $('buscaProdutoImportar').addEventListener('input', renderImportar);
+  $('buscaImportar').addEventListener('input', debounce(renderImportar, DEBOUNCE_BUSCA));
+  $('buscaProdutoImportar').addEventListener('input', debounce(renderImportar, DEBOUNCE_BUSCA));
   $('excluirProdutoImportar').addEventListener('change', renderImportar);
 
   function renderImportar(){
@@ -1129,7 +1145,9 @@
       const chave = inp.dataset.previsao;
       const valorAnterior = notasPorChave[chave]?.previsaoEntrega || '';
       inp.disabled = true;
-      try{ await atualizarNota(chave, { previsaoEntrega: inp.value || null }); }
+      // redesenhar=false: o campo já mostra o valor escolhido e o cache foi atualizado;
+      // reconstruir a tabela aqui só causaria perda de foco e travada.
+      try{ await atualizarNota(chave, { previsaoEntrega: inp.value || null }, false); }
       catch(e){ alert('Erro ao gravar a previsão: ' + (e.message||e)); inp.value = valorAnterior; }
       finally{ inp.disabled = false; }
     }));
@@ -1183,7 +1201,7 @@
   document.querySelectorAll('#viewPagamentos .chip-filtro').forEach(c=>c.addEventListener('click', ()=>{
     setFiltroPag(c.dataset.f);
   }));
-  $('buscaPag').addEventListener('input', ()=>{ limitePag = 200; renderPagamentos(); });
+  $('buscaPag').addEventListener('input', debounce(()=>{ limitePag = 200; renderPagamentos(); }, DEBOUNCE_BUSCA));
   $('maisPagBtn').addEventListener('click', ()=>{ limitePag += 300; renderPagamentos(); });
 
   function renderPagamentos(){
@@ -1253,7 +1271,7 @@
   }
 
   // ─── Canceladas ───
-  $('buscaCanc').addEventListener('input', renderCanceladas);
+  $('buscaCanc').addEventListener('input', debounce(renderCanceladas, DEBOUNCE_BUSCA));
   function renderCanceladas(){
     const termo = norm($('buscaCanc').value);
     let lista = notas.filter(n => !notaAtiva(n));

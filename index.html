@@ -1831,6 +1831,18 @@ Tupan</textarea>
   function brl(v){
     return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
   }
+
+  // Agrupa disparos rápidos (digitação) numa única execução. Sem isto, cada tecla
+  // re-filtra as listas e reconstrói a tabela inteira — pesado nas buscas que
+  // varrem os itens de cada nota/cotação.
+  function debounce(fn, ms){
+    let t = null;
+    return function(...args){
+      clearTimeout(t);
+      t = setTimeout(()=>fn.apply(this, args), ms);
+    };
+  }
+  const DEBOUNCE_BUSCA = 250;
   function pct(v){
     return (v*100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '%';
   }
@@ -2541,15 +2553,15 @@ Tupan</textarea>
     carregarNotasEmitidas(false);
   }
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
-  $('buscaProduto').addEventListener('input', renderListaSalvos);
-  $('buscaFornecedor').addEventListener('input', renderListaSalvos);
+  $('buscaProduto').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
+  $('buscaFornecedor').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
   $('voltarCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
   $('voltarCalculadoraBtn7').addEventListener('click', mostrarViewCalculadora);
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
-  $('buscaNotas').addEventListener('input', renderNotasEmitidas);
-  $('buscaNotasCmp').addEventListener('input', renderListaNotasCmp);
+  $('buscaNotas').addEventListener('input', debounce(renderNotasEmitidas, DEBOUNCE_BUSCA));
+  $('buscaNotasCmp').addEventListener('input', debounce(renderListaNotasCmp, DEBOUNCE_BUSCA));
   $('notasDataDeCmp').addEventListener('change', renderListaNotasCmp);
   $('notasDataAteCmp').addEventListener('change', renderListaNotasCmp);
   $('limparDatasNotasBtnCmp').addEventListener('click', ()=>{
@@ -2644,6 +2656,7 @@ Tupan</textarea>
   let loteParar = false;
   let loteDocId = null;
   let loteNomePedido = '';
+  let loteExecToken = 0;   // invalida o loop anterior quando outro pedido é aberto
 
   function abrirPesquisaLote(docId){
     const d = historicoDocsCache.find(x => x.id === docId);
@@ -2654,6 +2667,7 @@ Tupan</textarea>
     window.scrollTo(0,0);
 
     loteDocId = docId;
+    loteExecToken++;      // qualquer pesquisa ainda rodando deixa de valer
     loteRodando = false;
     loteParar = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
@@ -2685,6 +2699,17 @@ Tupan</textarea>
       $('loteTabela').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Este pedido não tem itens.</p>';
       return;
     }
+    // A tabela é reconstruída a cada loja que responde (dezenas de vezes numa pesquisa).
+    // Sem isto, o que o usuário estivesse digitando em "Nosso preço" seria apagado no meio,
+    // e o campo em foco perderia o cursor.
+    const digitando = document.activeElement;
+    const idxFocado = (digitando && digitando.dataset && digitando.dataset.nosso != null)
+      ? digitando.dataset.nosso : null;
+    const valoresDigitados = {};
+    $('loteTabela').querySelectorAll('[data-nosso]').forEach(inp=>{
+      valoresDigitados[inp.dataset.nosso] = inp.value;
+    });
+
     const lojas = loteLojas.length ? loteLojas : ($('lojasBusca').value||'').split('\n').map(l=>l.trim()).filter(l=>l);
     let html = '<table class="lote-table"><thead><tr><th>Código</th><th>Produto</th><th>Nosso preço</th>';
     lojas.forEach(loja => html += '<th>'+escapeHtml(loja)+'</th>');
@@ -2721,27 +2746,43 @@ Tupan</textarea>
     html += '</tbody></table>';
     $('loteTabela').innerHTML = html;
 
-    $('loteTabela').querySelectorAll('[data-nosso]').forEach(inp=>inp.addEventListener('change', ()=>{
-      const idx = Number(inp.dataset.nosso);
-      loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
-      renderLoteTabela();
-    }));
+    $('loteTabela').querySelectorAll('[data-nosso]').forEach(inp=>{
+      if(valoresDigitados[inp.dataset.nosso] != null) inp.value = valoresDigitados[inp.dataset.nosso];
+      inp.addEventListener('change', ()=>{
+        const idx = Number(inp.dataset.nosso);
+        loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
+        renderLoteTabela();
+      });
+    });
+    if(idxFocado != null){
+      const volta = $('loteTabela').querySelector('[data-nosso="'+idxFocado+'"]');
+      if(volta) volta.focus();
+    }
   }
 
   let loteIdxAtual = -1;
 
   $('iniciarLoteBtn').addEventListener('click', async ()=>{
     if(!loteItens.length) return;
+    // Sem esta checagem, cada produto falharia em sequência e a tabela ficaria
+    // toda vermelha de erro, escondendo a causa real.
+    if(!window.__geminiPronto){
+      alert('O Gemini não está conectado. Abra a aba Sincronização e conecte antes de pesquisar.');
+      return;
+    }
     loteLojas = ($('lojasBusca').value||'').split('\n').map(l=>l.trim()).filter(l=>l);
     if(!loteLojas.length){ alert('Preencha as lojas na aba Concorrentes antes de pesquisar em lote.'); return; }
 
+    // Token de execução: se o usuário sair da tela e abrir outro pedido, o loop antigo
+    // percebe que não é mais o corrente e para de mexer na tela do pedido novo.
+    const meuToken = ++loteExecToken;
     loteRodando = true;
     loteParar = false;
     $('iniciarLoteBtn').style.display = 'none';
     $('pararLoteBtn').style.display = 'inline-block';
 
     for(let idx = 0; idx < loteItens.length; idx++){
-      if(loteParar) break;
+      if(loteParar || meuToken !== loteExecToken) break;
       loteIdxAtual = idx;
       const item = loteItens[idx];
       loteLojas.forEach((_, lojaIdx) => { item.porLoja[lojaIdx] = { pendente: true }; });
@@ -2751,9 +2792,9 @@ Tupan</textarea>
       try{
         const { buscaHtml } = await window.geminiBuscarPrecos(item.produto, loteLojas, (lojaIdx, r) => {
           item.porLoja[lojaIdx] = r;
-          renderLoteTabela();
+          if(meuToken === loteExecToken) renderLoteTabela();
         });
-        if(buscaHtml) $('buscaGoogleWidgetLote').innerHTML = buscaHtml;
+        if(buscaHtml && meuToken === loteExecToken) $('buscaGoogleWidgetLote').innerHTML = buscaHtml;
       }catch(e){
         console.error('Erro pesquisando "'+item.produto+'":', e);
         loteLojas.forEach((_, lojaIdx) => {
@@ -2761,9 +2802,11 @@ Tupan</textarea>
             item.porLoja[lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
           }
         });
-        renderLoteTabela();
+        if(meuToken === loteExecToken) renderLoteTabela();
       }
     }
+
+    if(meuToken !== loteExecToken) return; // outro pedido assumiu a tela; não mexe mais nela
 
     loteIdxAtual = -1;
     loteRodando = false;
@@ -3444,8 +3487,8 @@ Tupan</textarea>
 
   $('filtroMesHistorico').addEventListener('change', renderHistorico);
   $('filtroStatusHistorico').addEventListener('change', renderHistorico);
-  $('buscaProdutoHistorico').addEventListener('input', renderHistorico);
-  $('buscaFornecedorHistorico').addEventListener('input', renderHistorico);
+  $('buscaProdutoHistorico').addEventListener('input', debounce(renderHistorico, DEBOUNCE_BUSCA));
+  $('buscaFornecedorHistorico').addEventListener('input', debounce(renderHistorico, DEBOUNCE_BUSCA));
 
   async function excluirCotacaoHistorico(docId){
     if(!firestoreDb) return;
