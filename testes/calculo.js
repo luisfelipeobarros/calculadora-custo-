@@ -76,7 +76,8 @@ const App = { centavos: v => (v == null || !isFinite(v)) ? v : Math.round((v + N
 const codigo = html.slice(html.indexOf('const TRIBUTOS'), html.indexOf('TRIBUTOS.fatorLucro') ) +
   'TRIBUTOS.fatorLucro = 1 - TRIBUTOS.irpj - TRIBUTOS.csll;\n' +
   extrair('computeCoeficientes') + '\n' + extrair('computeCalc') + '\n' + extrair('precoParaMargem') + '\n' +
-  'return { computeCalc, computeCoeficientes, precoParaMargem };';
+  extrair('arredondarNovanta') + '\n' +
+  'return { computeCalc, computeCoeficientes, precoParaMargem, arredondarNovanta };';
 const novo = new Function('App', codigo)(App);
 
 // ---------- Comparacao ----------
@@ -159,4 +160,65 @@ for(let i = 0; i < 20000; i++){
   });
 }
 console.log('preco sugerido atinge a margem pedida, pior erro:', piorAlvo.toExponential(3));
-process.exitCode = falhas ? 1 : 0;
+
+// ---------- precoSugerido: a coluna "Sugerido (8%)" da cotacao ----------
+// Precisa dar exatamente o mesmo numero que a calculadora mostra em
+// "Aceitavel". Se divergir, o comprador ve um preco na cotacao e outro
+// na calculadora para o mesmo produto — e nao sabe em qual acreditar.
+const toNumTeste = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum',
+  html.slice(html.indexOf('const MARGEM_SUGERIDA'), html.indexOf('function renderListaLote')) +
+  '\nreturn { precoSugerido, MARGEM_SUGERIDA };'
+)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste);
+
+let divSug = 0, comparados = 0, semSugestao = 0;
+for (let i = 0; i < 20000; i++) {
+  const cfg = {
+    frete: String(Math.round(rnd(0, 500) * 100) / 100),
+    pctCredFrete: '0',
+    valorST: String(Math.round(rnd(0, 35) * 100) / 100),
+    icmsCredito: String(Math.round(rnd(0, 20) * 100) / 100),
+    ipi: String(Math.round(rnd(0, 12) * 100) / 100),
+    custoFinanceiroPct: String(Math.round(rnd(0, 6) * 100) / 100),
+    avariasPct: String(Math.round(rnd(0, 4) * 100) / 100),
+    bonificacao: String(Math.round(rnd(0, 30) * 100) / 100),
+    tipoBonificacao: Math.random() < 0.5 ? 0 : 1,
+    comST: Math.random() < 0.5 ? 0 : 1
+  };
+  const custo = Math.round(rnd(1, 3000) * 100) / 100;
+
+  const obtido = extra.precoSugerido(custo, cfg);
+  const esperado = novo.arredondarNovanta(novo.precoParaMargem({
+    custoNFe: custo, frete: Number(cfg.frete), pctCredFrete: 0,
+    valorST: Number(cfg.valorST), icmsCredito: Number(cfg.icmsCredito),
+    ipi: Number(cfg.ipi), custoFinanceiroPct: Number(cfg.custoFinanceiroPct),
+    avariasPct: Number(cfg.avariasPct), bonificacao: Number(cfg.bonificacao),
+    tipoBonificacao: cfg.tipoBonificacao, venda: 0, comST: cfg.comST, prejuizoContabil: 0
+  }, 0.08));
+
+  if (esperado == null) {
+    semSugestao++;
+    if (obtido != null) { divSug++; console.log('SUGERIDO deveria ser nulo:', obtido); }
+    continue;
+  }
+  comparados++;
+  if (obtido == null || Math.abs(obtido - esperado) > 1e-9) {
+    divSug++;
+    if (divSug < 3) console.log('SUGERIDO diverge', obtido, esperado, JSON.stringify(cfg));
+  } else if (Math.abs(((obtido * 100) % 100) - 90) > 1e-6) {
+    // Todo preco sugerido termina em ,90, igual ao da calculadora.
+    divSug++;
+    if (divSug < 5) console.log('SUGERIDO nao termina em ,90:', obtido);
+  }
+}
+const cfgZero = { frete:'0', pctCredFrete:'0', valorST:'0', icmsCredito:'0', ipi:'0',
+                  custoFinanceiroPct:'0', avariasPct:'0', bonificacao:'0', tipoBonificacao:0, comST:1 };
+if (extra.precoSugerido(0, cfgZero) !== null) { divSug++; console.log('custo zero deveria nao sugerir nada'); }
+if (extra.precoSugerido(null, cfgZero) !== null) { divSug++; console.log('custo nulo deveria nao sugerir nada'); }
+if (extra.MARGEM_SUGERIDA !== 0.08) { divSug++; console.log('MARGEM_SUGERIDA nao e 8%:', extra.MARGEM_SUGERIDA); }
+
+console.log('precoSugerido: ' + comparados + ' comparados, ' + semSugestao + ' sem sugestao possivel');
+console.log(divSug === 0 ? '>>> precoSugerido bate com a calculadora'
+                         : '>>> ' + divSug + ' DIVERGENCIA(S) no precoSugerido');
+
+process.exitCode = (falhas || divSug) ? 1 : 0;

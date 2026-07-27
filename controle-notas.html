@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=3">
+<link rel="stylesheet" href="app-shared.css?v=4">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -168,9 +168,9 @@
           <div class="top-forn-titulo" id="painelTopHojeLabel">Vencendo hoje</div>
           <div id="painelTopHoje"></div>
         </div>
-        <div id="painelTopAtrasadasCol">
-          <div class="top-forn-titulo">Atrasados</div>
-          <div id="painelTopAtrasadas"></div>
+        <div id="painelTopDireitaCol">
+          <div class="top-forn-titulo" id="painelTopDireitaLabel">Atrasados</div>
+          <div id="painelTopDireita"></div>
         </div>
       </div>
     </div>
@@ -250,7 +250,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=3"></script>
+<script src="app-shared.js?v=4"></script>
 <script>
 (function(){
   'use strict';
@@ -641,18 +641,34 @@
 
     var topHoje = agrupar(vHoje);
     var topAtrasadas = agrupar(atrasadas);
+
     if(topAtrasadas.length){
       $('painelTopTitulo').textContent = 'Top fornecedores — vencendo hoje / atrasados';
       $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
-      $('painelTopAtrasadasCol').style.display = '';
+      $('painelTopDireitaLabel').textContent = 'Atrasados (top 5)';
       $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,5));
-      $('painelTopAtrasadas').innerHTML = htmlTop(topAtrasadas.slice(0,5));
+      $('painelTopDireita').innerHTML = htmlTop(topAtrasadas.slice(0,5));
     } else {
-      $('painelTopTitulo').textContent = 'Top 10 fornecedores — vencendo hoje';
+      // Sem nada atrasado, a coluna da direita ficava vazia. Ela passa a
+      // mostrar o mes inteiro — o que a equipe olha para se organizar
+      // quando o dia esta' em ordem.
+      var inicioMes = hoje.substring(0,8) + '01';
+      var doMes = pendentes.filter(function(d){
+        return d.vencimento >= inicioMes && d.vencimento <= fimMes;
+      });
+      $('painelTopTitulo').textContent = 'Top 10 fornecedores — vencendo hoje / no mês';
       $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 10)';
-      $('painelTopAtrasadasCol').style.display = 'none';
+      $('painelTopDireitaLabel').textContent = 'No mês de ' + nomeDoMes(hoje) + ' (top 10)';
       $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,10));
+      $('painelTopDireita').innerHTML = htmlTop(agrupar(doMes).slice(0,10));
     }
+    $('painelTopDireitaCol').style.display = '';
+  }
+
+  var NOMES_MES = ['janeiro','fevereiro','março','abril','maio','junho',
+                   'julho','agosto','setembro','outubro','novembro','dezembro'];
+  function nomeDoMes(iso){
+    return NOMES_MES[Number(iso.substring(5,7)) - 1] || '';
   }
 
   // ─── A importar ─────────────────────────────────────────────

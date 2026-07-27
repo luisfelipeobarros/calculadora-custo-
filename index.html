@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=3">
+<link rel="stylesheet" href="app-shared.css?v=4">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -319,11 +319,16 @@
           </div>
           <div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:6px;">
             <div class="hero-row">
+              <span class="hero-label">Preço sugerido <span class="hint">margem de 8%</span></span>
+              <span class="hero-value" id="indSugerido" style="color:var(--copper); font-size:20px;">--</span>
+            </div>
+            <div class="hero-row">
               <span class="hero-label">Margem estimada</span>
               <span class="hero-value" id="indMargemPreview">--</span>
             </div>
           </div>
           <div class="actions" style="margin-top:14px;">
+            <button type="button" class="btn secondary" id="usarSugeridoBtn" style="display:none;">Usar o preço sugerido</button>
             <button class="btn" id="salvarIndividualBtn">Salvar este produto</button>
           </div>
         </div>
@@ -418,7 +423,7 @@
     <div class="card">
       <h2 id="loteTitulo">Pesquisar concorrentes — Pedido</h2>
       <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
-        Pesquisa cada produto do pedido nas mesmas lojas da aba Concorrentes. "Nosso preço" vem pré-preenchido com o preço do pedido (editável) — as células ficam vermelhas quando o concorrente está mais barato que nós, e verdes quando estamos mais baratos ou iguais.
+        Pesquisa cada produto do pedido nas mesmas lojas da aba Concorrentes. "Nosso preço" vem pré-preenchido com o <strong>preço de venda</strong> definido na cotação (editável) — as células ficam vermelhas quando o concorrente está mais barato que nós, e verdes quando estamos mais baratos ou iguais. Produtos sem preço de venda definido ficam com o campo vazio: preencha antes de pesquisar, senão não há com o que comparar.
       </p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
         <button class="btn" id="iniciarLoteBtn">🏪 Iniciar pesquisa</button>
@@ -712,7 +717,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=3"></script>
+<script src="app-shared.js?v=4"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2267,8 +2272,12 @@ Tupan</textarea>
     loteItens = (d.itens||[]).map(it => ({
       codigo: it.codigo || '',
       produto: it.produto || '',
-      // pré-preenche com o que já temos negociado/recebido — editável antes de iniciar
-      nossoPreco: it.precoRecebido != null ? it.precoRecebido : (it.precoEsperado != null ? it.precoEsperado : null),
+      // PREÇO DE VENDA, não o de compra. As lojas pesquisadas anunciam
+      // preço de venda ao consumidor; comparar isso com o nosso custo
+      // faria parecer que estamos sempre mais baratos, e as cores da
+      // tabela apontariam o contrário do que de fato acontece.
+      // Sem venda definida o campo fica vazio, para ser preenchido à mão.
+      nossoPreco: it.precoVenda != null ? it.precoVenda : null,
       porLoja: {}
     })).filter(it => it.produto);
 
@@ -3174,12 +3183,35 @@ Tupan</textarea>
       if(aberto){
         const body = document.createElement('div');
         body.className = 'historico-body';
-        let tabela = '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Quantidade</th><th>Esperado</th><th>Recebido</th><th>Situação</th><th>Status</th></tr></thead><tbody>';
+        let tabela = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+          '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Quantidade</th>' +
+          '<th scope="col">Esperado</th><th scope="col">Recebido</th>' +
+          '<th scope="col">Venda</th><th scope="col">Margem</th>' +
+          '<th scope="col">Situação</th><th scope="col">Status</th></tr></thead><tbody>';
         itensFiltrados.forEach(it=>{
+          // Margem: recalculada com as regras de HOJE, a partir do custo e
+          // da venda gravados. Só o custo do produto entra aqui — frete e
+          // impostos ficaram na tela de cadastro, não na cotação.
+          let margemHtml = '-';
+          if(it.precoVenda != null && it.precoRecebido != null){
+            const calc = computeCalc({
+              custoNFe: it.precoRecebido, frete: 0, pctCredFrete: 0, valorST: 0,
+              icmsCredito: 0, ipi: 0, custoFinanceiroPct: 0, avariasPct: 0,
+              bonificacao: 0, tipoBonificacao: 0, venda: it.precoVenda,
+              comST: 1, prejuizoContabil: 0
+            });
+            if(isFinite(calc.margem)){
+              margemHtml = '<span style="color:' + (calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)') +
+                '; font-weight:700;">' + pct(calc.margem) + '</span>';
+            }
+          }
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
-            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+'</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+            '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+
+            '</td><td>'+(it.precoVenda!=null?('<strong>'+brl(it.precoVenda)+'</strong>'):'-')+
+            '</td><td>'+margemHtml+
+            '</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
-        tabela += '</tbody></table>';
+        tabela += '</tbody></table></div>';
         body.innerHTML = tabela;
 
         const acoes = document.createElement('div');
@@ -3274,6 +3306,7 @@ Tupan</textarea>
           produtoRecebido: it.produtoRecebido || null,
           quantidadeRecebida: it.quantidadeRecebida != null ? it.quantidadeRecebida : null,
           precoRecebido: it.precoRecebido != null ? it.precoRecebido : null,
+          precoVenda: it.precoVenda != null ? it.precoVenda : null,
           status: it.status || 'negociacao',
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
@@ -3999,6 +4032,10 @@ Tupan</textarea>
       produtoRecebido: r.produtoRecebido,
       quantidadeRecebida: r.quantidadeRecebida,
       precoRecebido: r.precoRecebido,
+      // Preço de venda definido no card "3. Adicionar produtos".
+      // Fica junto da cotação para aparecer no histórico e para servir
+      // de base na comparação com concorrentes.
+      precoVenda: r.precoVenda != null ? r.precoVenda : null,
       flags: r.flags,
       status: r.status || 'negociacao'
     }));
@@ -4057,6 +4094,24 @@ Tupan</textarea>
     };
   }
 
+  // Preço com a margem "Aceitável" (8%), arredondado para ,90 — o mesmo
+  // número que a calculadora sugere. Serve de referência para o
+  // comprador na hora de definir a venda.
+  const MARGEM_SUGERIDA = 0.08;
+
+  function precoSugerido(custoNFe, cfg){
+    if(!(custoNFe > 0)) return null;
+    return arredondarNovanta(precoParaMargem({
+      custoNFe,
+      frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
+      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito),
+      ipi: toNum(cfg.ipi), custoFinanceiroPct: toNum(cfg.custoFinanceiroPct),
+      avariasPct: toNum(cfg.avariasPct), bonificacao: toNum(cfg.bonificacao),
+      tipoBonificacao: cfg.tipoBonificacao, venda: 0,
+      comST: cfg.comST, prejuizoContabil: 0
+    }, MARGEM_SUGERIDA));
+  }
+
   function renderListaLote(){
     const container = $('loteListaProdutos');
     const itens = itensValidosParaSalvar();
@@ -4064,30 +4119,50 @@ Tupan</textarea>
       container.innerHTML = '<div class="empty-note" style="display:block;">Nenhum produto com preço reconhecido pra adicionar.</div>';
       return;
     }
-    let html = '<table class="quote-table"><thead><tr><th>Produto</th><th>Custo NF-e</th><th>Venda</th><th>Margem</th></tr></thead><tbody>';
+    let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>'
+      + '<th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
+      + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(8%)</span></th>'
+      + '<th scope="col">Venda</th><th scope="col">Margem</th></tr></thead><tbody>';
     itens.forEach(r=>{
       const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
+      const chave = escapeHtml(r.produtoEsperado);
       html += '<tr>'
         + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+'</td>'
         + '<td>'+brl(r.precoRecebido)+'</td>'
-        + '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span><input type="number" step="0.01" class="lote-venda-input no-spin" data-produto="'+escapeHtml(r.produtoEsperado)+'" placeholder="0"></div></td>'
-        + '<td class="lote-margem-preview" data-produto="'+escapeHtml(r.produtoEsperado)+'">--</td>'
+        + '<td class="lote-sugerido" data-produto="'+chave+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
+        + 'title="Clique para usar este preço">--</td>'
+        + '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span>'
+        + '<input type="number" step="0.01" class="lote-venda-input no-spin" data-produto="'+chave+'" '
+        + 'value="'+(r.precoVenda != null ? r.precoVenda : '')+'" placeholder="0"></div></td>'
+        + '<td class="lote-margem-preview" data-produto="'+chave+'">--</td>'
         + '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
     container.innerHTML = html;
-    container.querySelectorAll('.lote-venda-input').forEach(inp=>{
-      inp.addEventListener('input', ()=>atualizarMargemLote(inp.dataset.produto));
-    });
+    atualizarTodasMargensLote();
   }
 
   function atualizarMargemLote(produtoNome){
     const cfg = coletarConfigLote();
     const r = ultimosResultados.find(x=>x.produtoEsperado===produtoNome);
-    const previewEl = $('loteListaProdutos').querySelector('.lote-margem-preview[data-produto="'+CSS.escape(produtoNome)+'"]');
-    const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(produtoNome)+'"]');
+    const seletor = '[data-produto="'+CSS.escape(produtoNome)+'"]';
+    const previewEl = $('loteListaProdutos').querySelector('.lote-margem-preview'+seletor);
+    const sugeridoEl = $('loteListaProdutos').querySelector('.lote-sugerido'+seletor);
+    const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input'+seletor);
     if(!r || !previewEl || !vendaInput) return;
+
+    // Sugestão de preço: mesma conta da calculadora, com a margem de 8%.
+    if(sugeridoEl){
+      const sug = precoSugerido(r.precoRecebido, cfg);
+      sugeridoEl.textContent = sug != null ? brl(sug) : '--';
+      sugeridoEl.dataset.valor = sug != null ? sug : '';
+    }
+
+    // Guarda no resultado para o preço acompanhar a cotação no histórico
+    // e virar a base da comparação com concorrentes.
     const venda = toNum(vendaInput.value);
+    r.precoVenda = venda > 0 ? venda : null;
+
     if(venda <= 0){ previewEl.textContent = '--'; previewEl.style.color=''; return; }
     const calc = computeCalc({
       custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
@@ -4103,6 +4178,23 @@ Tupan</textarea>
   function atualizarTodasMargensLote(){
     document.querySelectorAll('.lote-venda-input').forEach(inp=>atualizarMargemLote(inp.dataset.produto));
   }
+
+  // Delegação registrada uma vez (a tabela é reconstruída a cada render).
+  App.delegar($('loteListaProdutos'), 'input', '.lote-venda-input', (inp)=>{
+    atualizarMargemLote(inp.dataset.produto);
+  });
+
+  // Clicar no preço sugerido joga ele para o campo de venda — poupa o
+  // comprador de digitar o número que o próprio app acabou de calcular.
+  App.delegar($('loteListaProdutos'), 'click', '.lote-sugerido', (celula)=>{
+    const valor = celula.dataset.valor;
+    if(!valor) return;
+    const inp = $('loteListaProdutos')
+      .querySelector('.lote-venda-input[data-produto="'+CSS.escape(celula.dataset.produto)+'"]');
+    if(!inp) return;
+    inp.value = valor;
+    atualizarMargemLote(celula.dataset.produto);
+  });
   ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteIpi','loteCustoFinanceiroPct','loteAvariasPct','loteBonificacao'].forEach(id=>{
     $(id).addEventListener('input', atualizarTodasMargensLote);
   });
@@ -4165,22 +4257,51 @@ Tupan</textarea>
     });
   }
 
+  function configIndividual(){
+    return {
+      frete: $('indFrete').value, pctCredFrete: $('indPctCredFrete').value,
+      valorST: $('indValorST').value, icmsCredito: $('indIcmsCredito').value,
+      ipi: $('indIpi').value, custoFinanceiroPct: $('indCustoFinanceiroPct').value,
+      avariasPct: $('indAvariasPct').value, bonificacao: $('indBonificacao').value,
+      tipoBonificacao: parseInt($('indTipoBonificacao').value,10),
+      comST: parseInt($('indComST').value,10)
+    };
+  }
+
   function atualizarMargemIndividual(){
     const idx = $('individualSelect').value;
     if(idx === '') return;
     const r = itensValidosParaSalvar()[parseInt(idx,10)];
     if(!r) return;
+    const cfg = configIndividual();
+
+    // Mesma referência do modo em lote: o preço com 8% de margem.
+    const sug = precoSugerido(r.precoRecebido, cfg);
+    $('indSugerido').textContent = sug != null ? brl(sug) : '--';
+    $('usarSugeridoBtn').style.display = sug != null ? 'inline-block' : 'none';
+    $('usarSugeridoBtn').dataset.valor = sug != null ? sug : '';
+
     const venda = toNum($('indVenda').value);
+    r.precoVenda = venda > 0 ? venda : null;
+
     if(venda <= 0){ $('indMargemPreview').textContent = '--'; $('indMargemPreview').className='hero-value'; return; }
     const calc = computeCalc({
-      custoNFe: r.precoRecebido, frete: toNum($('indFrete').value), pctCredFrete: toNum($('indPctCredFrete').value),
-      valorST: toNum($('indValorST').value), icmsCredito: toNum($('indIcmsCredito').value), ipi: toNum($('indIpi').value),
-      custoFinanceiroPct: toNum($('indCustoFinanceiroPct').value), avariasPct: toNum($('indAvariasPct').value),
-      bonificacao: toNum($('indBonificacao').value), tipoBonificacao: parseInt($('indTipoBonificacao').value,10), venda, comST: parseInt($('indComST').value,10), prejuizoContabil: 0
+      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
+      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
+      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
+      bonificacao: toNum(cfg.bonificacao), tipoBonificacao: cfg.tipoBonificacao, venda,
+      comST: cfg.comST, prejuizoContabil: 0
     });
     $('indMargemPreview').textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
     $('indMargemPreview').className = 'hero-value ' + (calc.lucro >= 0 ? 'profit' : 'loss');
   }
+
+  $('usarSugeridoBtn').addEventListener('click', ()=>{
+    const v = $('usarSugeridoBtn').dataset.valor;
+    if(!v) return;
+    $('indVenda').value = v;
+    atualizarMargemIndividual();
+  });
 
   $('individualSelect').addEventListener('change', ()=>{
     const idx = $('individualSelect').value;
