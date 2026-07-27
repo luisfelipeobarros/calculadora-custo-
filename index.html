@@ -1114,6 +1114,12 @@ Tupan</textarea>
     const r = await App.iniciarFirebase('calculadoraCusto', config);
     firestoreDb = r.db;
     App.montarBarraConta($('contaBarra'));
+    // Porta de entrada: com o Firebase ligado, nada aparece antes de
+    // alguem entrar. Quem marcou "manter conectado" passa direto.
+    // (Sem Firebase o app cai para o armazenamento local do navegador,
+    // que e' pessoal e nao expoe dado nenhum da empresa — ai' nao ha'
+    // o que proteger com senha.)
+    await App.exigirLogin();
     return firestoreDb;
   }
 

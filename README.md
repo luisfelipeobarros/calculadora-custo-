@@ -28,19 +28,49 @@ atuais estão abertas.
 Faça isto no [Firebase Console](https://console.firebase.google.com/):
 
 1. **Authentication → Sign-in method →** ative **E-mail/senha**.
-2. **Authentication → Users → Add user:** crie uma conta para cada pessoa
-   que usa os aplicativos.
+2. **Authentication → Users → Add user:** crie um usuário para cada
+   função (veja a tabela abaixo).
 3. **Firestore Database → Rules:** cole o conteúdo de `firestore.rules` e
    clique em **Publicar**.
 
-**Você pode publicar as regras sem parar o trabalho de ninguém.** Os apps
-tentam funcionar normalmente; na primeira operação que o Firestore
-recusar, eles abrem a caixa de login sozinhos e refazem a operação depois
-que você entra. Não tem como ficar trancado para fora no meio da
-migração.
+### Usuários: cadastre com domínio, entre sem ele
 
-Depois de entrar, o botão **Sair** fica no canto superior direito, ao
-lado dos botões de tela.
+O Firebase exige formato de e-mail, mas **ninguém precisa digitar
+domínio**. Cadastre assim no Console:
+
+| No Console, cadastre | Na tela de login, digite |
+|---|---|
+| `administrativo@calculadora.local` | `Administrativo` |
+| `compras@calculadora.local` | `Compras` |
+| `financeiro@calculadora.local` | `Financeiro` |
+
+O app completa o `@calculadora.local` sozinho, e não faz diferença
+maiúscula ou minúscula. Não precisa ser e-mail de verdade — o Firebase
+não envia nada nem confirma nada. A senha tem mínimo de 6 caracteres.
+
+Para usar o domínio real da empresa, troque `DOMINIO_LOGIN` no começo de
+`app-shared.js` — e cadastre os usuários com esse mesmo domínio.
+
+Crie **um usuário por função ou pessoa**, nunca um compartilhado: assim
+você desativa o acesso de quem sai sem trocar a senha de todo mundo.
+
+### Como fica no dia a dia
+
+O login é **obrigatório na entrada**: sem entrar, os aplicativos não
+mostram nenhum dado. A caixa não fecha com Esc nem clicando fora.
+
+A opção **"Manter conectado neste computador"** vem marcada. Com ela, as
+máquinas do escritório entram uma vez e continuam entrando sozinhas, para
+sempre, até alguém clicar em **Sair**. Desmarque em computador
+compartilhado ou emprestado: aí a sessão morre ao fechar o navegador.
+
+O botão **Sair** fica no canto superior direito, ao lado dos botões de
+tela, junto do nome de quem está conectado.
+
+**Você pode publicar as regras sem parar o trabalho de ninguém.** Quem
+já estiver com a sessão salva nem percebe; quem não estiver vê a caixa de
+login. Se a sessão expirar no meio do uso, o app reabre o login e refaz
+sozinho a operação que falhou.
 
 ### O que as regras permitem
 
@@ -106,13 +136,26 @@ dentro de `calcular()`.
 
 ```js
 var DATA_CORTE_IMPORTACAO = '2026-01-01'; // o que conta como "a importar"
-var DATA_CORTE_CARGA      = '2024-01-01'; // até onde o app baixa notas
+var MESES_HISTORICO       = 12;           // janela padrão de carga
+var MESES_FOLGA_NOTAS     = 6;            // notas vêm com folga extra
 ```
 
-`DATA_CORTE_CARGA` é bem mais antigo de propósito: as duplicatas em
-aberto precisam achar a nota de origem. Quando uma duplicata aponta para
-uma nota anterior a esse corte, a coluna "Recebido" mostra `—` em vez de
-afirmar "NÃO" sem ter como saber.
+O app baixa as duplicatas que vencem nos últimos 12 meses, e as notas
+dos últimos 18. A folga existe porque a nota é emitida **antes** de a
+parcela vencer: sem ela, o app não saberia dizer se a duplicata foi
+recebida ou se a nota foi cancelada. Quando mesmo assim a nota de origem
+está fora da janela, a coluna "Recebido" mostra `—` em vez de afirmar
+"NÃO" sem ter como saber.
+
+Duas coisas nunca são cortadas pela janela, porque some justamente o que
+importa:
+
+- **Notas canceladas** de qualquer época (consulta própria).
+- **Duplicatas sem data de vencimento** — as que ninguém acha depois.
+
+O selo **"últimos 12 meses"** aparece na barra de cima, ao lado do
+contador, junto com o botão **"carregar histórico completo"**, que refaz
+a carga sem corte nenhum quando você precisar consultar algo antigo.
 
 **Lojas pesquisadas** — textarea na aba Concorrentes; o padrão está na
 constante `LOJAS_PADRAO`.

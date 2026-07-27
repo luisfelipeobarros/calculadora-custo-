@@ -118,6 +118,7 @@
 
   <div class="barra-status">
     <span id="statusConexao" role="status" aria-live="polite">Conectando ao Firebase...</span>
+    <span id="avisoJanela"></span>
   </div>
 
   <main id="conteudo">
@@ -263,19 +264,32 @@
   var duplicatas = [];   // [{id, ...campos}]
   var notasPorChave = Object.create(null);
   var carregouNotas = false, carregouDuplicatas = false;
+  var assinaturas = []; // funcoes de cancelamento dos onSnapshot ativos
 
   // ─── Cortes de carga ────────────────────────────────────────
   // Notas emitidas antes desta data nao contam como pendentes de
   // importacao: os anos anteriores ja' foram informados a' fazenda.
   var DATA_CORTE_IMPORTACAO = '2026-01-01';
 
-  // Ate' onde o app baixa notas do Firestore. Antes ele trazia a colecao
-  // INTEIRA a cada F5 — voce paga por documento lido, inclusive por anos
-  // que a tela nem mostra. Este corte e' bem mais antigo que o de
-  // importacao de proposito: as duplicatas em aberto precisam achar a
-  // nota de origem aqui dentro. As canceladas vem por uma consulta
-  // separada, entao a tela de canceladas continua completa.
-  var DATA_CORTE_CARGA = '2024-01-01';
+  // Janela padrao de historico. O app baixa so' o que vence dentro
+  // dela — voce paga por documento lido, e o que tem 3 anos nao ajuda
+  // a decidir o pagamento de hoje. Para ver tudo, o botao "Carregar
+  // histórico completo" na barra de cima refaz a carga sem corte.
+  var MESES_HISTORICO = 12;
+
+  // As notas precisam de uma janela MAIOR que a das duplicatas: a nota
+  // e' emitida antes de a parcela vencer, e sem a nota de origem
+  // carregada o app nao sabe dizer se a duplicata foi recebida ou se a
+  // nota foi cancelada.
+  var MESES_FOLGA_NOTAS = 6;
+
+  function cortePorMeses(meses){
+    var d = new Date();
+    d.setMonth(d.getMonth() - meses);
+    return App.iso(d);
+  }
+
+  var carregarTudo = false; // ligado pelo botao de historico completo
 
   // ─── Regras de negocio ──────────────────────────────────────
 
@@ -384,42 +398,107 @@
       };
     }
 
-    // 1) Notas recentes — cobrem a lista de importacao e as duplicatas em aberto.
-    col.where('dataEmissao', '>=', DATA_CORTE_CARGA)
-       .onSnapshot(receberEm(mapaRecentes), aoFalhar('notas'));
+    // 1) Notas da janela — cobrem a lista de importacao e as duplicatas
+    //    carregadas. Com folga extra: a nota vem antes do vencimento.
+    var qNotas = carregarTudo ? col
+      : col.where('dataEmissao', '>=', cortePorMeses(MESES_HISTORICO + MESES_FOLGA_NOTAS));
+    assinaturas.push(qNotas.onSnapshot(receberEm(mapaRecentes), aoFalhar('notas')));
 
     // 2) Canceladas de qualquer epoca — a tela de canceladas nao pode
     //    ficar incompleta so' porque a nota e' antiga.
-    col.where('status', '==', 'cancelada')
-       .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas'));
+    assinaturas.push(
+      col.where('status', '==', 'cancelada')
+         .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas')));
 
-    db.collection('duplicatas').onSnapshot(function(snap){
+    // Duplicatas: mesma logica de mapa por consulta.
+    var colDup = db.collection('duplicatas');
+    var mapaDupJanela = Object.create(null);
+    var mapaDupSemData = Object.create(null);
+
+    function aplicarDuplicatas(){
       var porId = Object.create(null);
-      duplicatas.forEach(function(d){ porId[d.id] = d; });
-      snap.docChanges().forEach(function(ch){
-        var id = ch.doc.id;
-        if(ch.type === 'removed'){ delete porId[id]; return; }
-        var dados = ch.doc.data();
-        dados.id = id;
-        porId[id] = dados;
+      [mapaDupJanela, mapaDupSemData].forEach(function(mapa){
+        Object.keys(mapa).forEach(function(id){ porId[id] = mapa[id]; });
       });
       duplicatas = Object.keys(porId).map(function(k){ return porId[k]; });
       carregouDuplicatas = true;
       setStatus(resumoCarga());
+      atualizarAvisoJanela();
       renderAtual();
-    }, aoFalhar('duplicatas'));
+    }
+
+    function receberDupEm(mapa){
+      return function(snap){
+        snap.docChanges().forEach(function(ch){
+          var id = ch.doc.id;
+          if(ch.type === 'removed'){ delete mapa[id]; return; }
+          var dados = ch.doc.data();
+          dados.id = id;
+          mapa[id] = dados;
+        });
+        aplicarDuplicatas();
+      };
+    }
+
+    if(carregarTudo){
+      assinaturas.push(colDup.onSnapshot(receberDupEm(mapaDupJanela), aoFalhar('duplicatas')));
+    } else {
+      assinaturas.push(
+        colDup.where('vencimento', '>=', cortePorMeses(MESES_HISTORICO))
+              .onSnapshot(receberDupEm(mapaDupJanela), aoFalhar('duplicatas')));
+      // O Apps Script grava vencimento vazio como null quando a nota nao
+      // traz dVenc. Um filtro por data descartaria essas em silencio —
+      // justamente as que ninguem consegue achar depois. Entao elas vem
+      // sempre, independentemente da janela.
+      assinaturas.push(
+        colDup.where('vencimento', '==', null)
+              .onSnapshot(receberDupEm(mapaDupSemData), aoFalhar('duplicatas sem vencimento')));
+    }
   }
+
+  // Deixa explicito na tela que ha' um recorte, para ninguem achar que
+  // esta' vendo o total da empresa quando nao esta'.
+  function atualizarAvisoJanela(){
+    var el = $('avisoJanela');
+    if(!el) return;
+    if(carregarTudo){
+      el.innerHTML = '<span class="badge avencer">histórico completo</span>';
+      return;
+    }
+    el.innerHTML = '<span class="badge avencer">últimos ' + MESES_HISTORICO + ' meses</span> ' +
+      '<button type="button" class="acao-mini" id="btnHistoricoCompleto">carregar histórico completo</button>';
+  }
+
+  // Refaz a carga sem corte. Cancela as escutas anteriores primeiro,
+  // senao o app ficaria com duas assinaturas para a mesma colecao.
+  App.delegar($('avisoJanela'), 'click', '#btnHistoricoCompleto', function(){
+    carregarTudo = true;
+    assinaturas.forEach(function(cancelar){ try{ cancelar(); }catch(e){} });
+    assinaturas = [];
+    notas = []; duplicatas = [];
+    notasPorChave = Object.create(null);
+    carregouNotas = false; carregouDuplicatas = false;
+    setStatus('Carregando histórico completo...');
+    atualizarAvisoJanela();
+    escutarColecoes();
+  });
 
   function iniciar(){
     setStatus('Conectando ao Firebase...');
     App.iniciarFirebase('controleNotas').then(function(r){
       db = r.db;
       App.montarBarraConta($('contaBarra'));
+      // Porta de entrada: nada e' carregado antes de haver alguem logado.
+      // Se o computador ja' entrou antes e marcou "manter conectado",
+      // isto passa direto, sem pedir senha.
+      setStatus('Verificando acesso...');
+      return App.exigirLogin();
+    }).then(function(){
       setStatus('Carregando notas...');
       escutarColecoes();
     }).catch(function(e){
-      setStatus('Erro ao iniciar o Firebase: ' + App.erroDe(e));
-      App.toastErro('Erro ao iniciar o Firebase', e);
+      setStatus('Erro ao iniciar: ' + App.erroDe(e));
+      App.toastErro('Erro ao iniciar', e);
     });
   }
   window.__aoEntrar = function(){ if(db) renderAtual(); };
@@ -989,6 +1068,7 @@
   });
 
   // ─── Inicio ─────────────────────────────────────────────────
+  atualizarAvisoJanela();
   router.iniciar();
   iniciar();
 })();

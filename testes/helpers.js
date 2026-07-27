@@ -93,6 +93,26 @@ conferir('normalizarTexto nulo', App.normalizarTexto(null), '');
 conferir('normalizarTexto acha com acento no termo',
          App.normalizarTexto('CERÂMICA').includes(App.normalizarTexto('ceramica')), true);
 
+// --- usuario simples <-> e-mail que o Firebase exige ---
+conferir('usuario simples ganha dominio', App.usuarioParaEmail('Administrativo'),
+         'administrativo@' + App.DOMINIO_LOGIN);
+conferir('usuario com espacos', App.usuarioParaEmail('  Compras  '),
+         'compras@' + App.DOMINIO_LOGIN);
+conferir('maiusculas viram minusculas', App.usuarioParaEmail('COMPRAS'),
+         'compras@' + App.DOMINIO_LOGIN);
+conferir('espaco no meio some', App.usuarioParaEmail('conta bil'),
+         'contabil@' + App.DOMINIO_LOGIN);
+conferir('e-mail completo passa direto', App.usuarioParaEmail('chefe@empresa.com.br'),
+         'chefe@empresa.com.br');
+conferir('vazio continua vazio', App.usuarioParaEmail('   '), '');
+conferir('volta para exibicao', App.emailParaUsuario('administrativo@' + App.DOMINIO_LOGIN),
+         'administrativo');
+conferir('e-mail de fora e exibido inteiro', App.emailParaUsuario('chefe@empresa.com.br'),
+         'chefe@empresa.com.br');
+// Ida e volta tem que fechar, senao a barra de conta mostraria uma coisa
+// e o login esperaria outra.
+conferir('ida e volta', App.emailParaUsuario(App.usuarioParaEmail('Compras')), 'compras');
+
 // --- deteccao de permissao negada (dispara o login) ---
 conferir('permissao negada por code', App.ehPermissaoNegada({ code: 'permission-denied' }), true);
 conferir('permissao negada por mensagem',

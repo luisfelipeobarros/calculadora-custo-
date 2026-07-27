@@ -252,7 +252,10 @@
   }
 
   // Modal generico. Devolve uma Promise com o valor passado a resolver().
-  function abrirModal(construir) {
+  // opcoes.obrigatorio = true: nao fecha com Esc nem clicando no fundo
+  // (usado no login de entrada, que nao pode ser dispensado).
+  function abrirModal(construir, opcoes) {
+    var op = opcoes || {};
     return new Promise(function (resolve) {
       var focoAnterior = document.activeElement;
       var fundo = document.createElement('div');
@@ -274,7 +277,7 @@
       }
 
       function aoTeclar(ev) {
-        if (ev.key === 'Escape') { ev.preventDefault(); fechar(null); return; }
+        if (ev.key === 'Escape' && !op.obrigatorio) { ev.preventDefault(); fechar(null); return; }
         if (ev.key !== 'Tab') return;
         // Prende o Tab dentro do modal.
         var focaveis = caixa.querySelectorAll('button, input, select, textarea, a[href]');
@@ -284,7 +287,9 @@
         else if (!ev.shiftKey && document.activeElement === ultimo) { ev.preventDefault(); primeiro.focus(); }
       }
 
-      fundo.addEventListener('mousedown', function (ev) { if (ev.target === fundo) fechar(null); });
+      if (!op.obrigatorio) {
+        fundo.addEventListener('mousedown', function (ev) { if (ev.target === fundo) fechar(null); });
+      }
       document.addEventListener('keydown', aoTeclar, true);
 
       construir(caixa, fechar);
@@ -356,17 +361,50 @@
      6. Autenticacao
      ============================================================
 
-     Estrategia: o app tenta trabalhar normalmente. Se o Firestore
-     recusar por falta de permissao, ai' sim abre a tela de login e
-     repete a operacao. Assim o mesmo arquivo funciona antes e depois
-     de voce publicar as regras novas — nao ha' risco de ficar
-     trancado para fora enquanto a migracao nao termina.
+     Login obrigatorio na entrada: sem usuario e senha o app nao
+     mostra dado nenhum. Alem disso, toda operacao no Firestore passa
+     por comAuth(), que reabre o login se a sessao expirar no meio do
+     trabalho.
+
+     "Manter conectado" usa a persistencia LOCAL do Firebase: o
+     computador do escritorio entra uma vez e continua entrando
+     sozinho, ate' alguem clicar em Sair. Desmarcado, a sessao morre
+     ao fechar o navegador — util em maquina compartilhada.
   */
+
+  // O Firebase exige formato de e-mail, mas ninguem precisa digitar
+  // dominio: "administrativo" vira "administrativo@calculadora.local"
+  // aqui dentro. Para usar o dominio real da empresa, troque a
+  // constante — e cadastre os usuarios no Console com o mesmo dominio.
+  var DOMINIO_LOGIN = 'calculadora.local';
+  var CHAVE_MANTER = 'app_manter_conectado';
+
+  function usuarioParaEmail(entrada) {
+    var s = String(entrada == null ? '' : entrada).trim().toLowerCase().replace(/\s+/g, '');
+    if (!s) return '';
+    return s.indexOf('@') === -1 ? (s + '@' + DOMINIO_LOGIN) : s;
+  }
+
+  // Caminho inverso, para exibir "administrativo" e nao o e-mail inteiro.
+  function emailParaUsuario(email) {
+    var s = String(email == null ? '' : email);
+    var sufixo = '@' + DOMINIO_LOGIN;
+    return s.slice(-sufixo.length) === sufixo ? s.slice(0, -sufixo.length) : s;
+  }
+
+  function manterConectado() {
+    try { return localStorage.getItem(CHAVE_MANTER) !== '0'; } // padrao: sim
+    catch (e) { return true; }
+  }
+  function setManterConectado(v) {
+    try { localStorage.setItem(CHAVE_MANTER, v ? '1' : '0'); } catch (e) {}
+  }
 
   var _auth = null;
   var _usuario = null;
   var _loginEmAndamento = null;
   var _ouvintesUsuario = [];
+  var _authPronto = null;
 
   function ehPermissaoNegada(e) {
     if (!e) return false;
@@ -380,16 +418,44 @@
   function iniciarAuth(app) {
     if (!app || typeof app.auth !== 'function') return null; // SDK de auth nao carregado
     _auth = app.auth();
-    _auth.onAuthStateChanged(function (u) {
-      _usuario = u;
-      _ouvintesUsuario.forEach(function (fn) {
-        try { fn(u); } catch (e) { console.error('ouvinte de auth:', e); }
+
+    // Resolve na PRIMEIRA notificacao, que e' quando o Firebase termina
+    // de restaurar (ou nao) a sessao salva neste computador. Sem esperar
+    // por ela, o app acharia que ninguem esta' logado e pediria senha a
+    // cada F5, mesmo com "manter conectado" marcado.
+    _authPronto = new Promise(function (resolve) {
+      var primeira = true;
+      _auth.onAuthStateChanged(function (u) {
+        _usuario = u;
+        _ouvintesUsuario.forEach(function (fn) {
+          try { fn(u); } catch (e) { console.error('ouvinte de auth:', e); }
+        });
+        if (primeira) { primeira = false; resolve(u); }
       });
     });
     return _auth;
   }
 
   function usuario() { return _usuario; }
+
+  // Espera o Firebase decidir se ha' sessao salva.
+  function authPronto() {
+    return _authPronto || Promise.resolve(null);
+  }
+
+  // Porta de entrada: garante que ha' alguem logado antes de o app
+  // mostrar qualquer dado. Se ja' havia sessao salva, passa direto.
+  function exigirLogin(motivo) {
+    if (!_auth) {
+      return Promise.reject(new Error(
+        'Este app precisa de login, mas o SDK de autenticacao do Firebase nao carregou.'
+      ));
+    }
+    return authPronto().then(function (u) {
+      if (u) return u;
+      return pedirLogin(motivo || 'Entre com seu usuário para acessar o sistema.', true);
+    });
+  }
 
   function aoMudarUsuario(fn) {
     _ouvintesUsuario.push(fn);
@@ -399,7 +465,7 @@
   // Abre a caixa de login. Chamadas simultaneas compartilham a mesma
   // caixa, em vez de empilhar cinco modais quando cinco consultas
   // falham juntas.
-  function pedirLogin(motivo) {
+  function pedirLogin(motivo, obrigatorio) {
     if (_loginEmAndamento) return _loginEmAndamento;
     if (!_auth) {
       return Promise.reject(new Error(
@@ -413,17 +479,23 @@
       caixa.setAttribute('aria-label', 'Entrar');
 
       var p = document.createElement('p');
-      p.textContent = motivo || 'Entre com a conta autorizada para acessar os dados da empresa.';
+      p.textContent = motivo || 'Entre com seu usuário para acessar os dados da empresa.';
 
       var form = document.createElement('form');
       form.noValidate = true;
 
-      function campo(id, rotulo, tipo, autocomplete) {
+      function campo(id, rotulo, tipo, autocomplete, dica) {
         var wrap = document.createElement('div');
         wrap.className = 'field';
         var lab = document.createElement('label');
         lab.setAttribute('for', id);
         lab.textContent = rotulo;
+        if (dica) {
+          var span = document.createElement('span');
+          span.className = 'hint';
+          span.textContent = dica;
+          lab.appendChild(span);
+        }
         var linha = document.createElement('div');
         linha.className = 'input-row';
         var inp = document.createElement('input');
@@ -438,8 +510,23 @@
         return inp;
       }
 
-      var email = campo('authEmail', 'E-mail', 'email', 'username');
+      // type=text, e nao email: senao o navegador recusaria "administrativo"
+      // por nao ter arroba — e o dominio quem poe e' o app.
+      var user = campo('authUsuario', 'Usuário', 'text', 'username', 'ex: administrativo');
       var senha = campo('authSenha', 'Senha', 'password', 'current-password');
+
+      // Manter conectado
+      var wrapLembrar = document.createElement('label');
+      wrapLembrar.style.cssText =
+        'display:flex; align-items:center; gap:8px; font-size:13px; margin:2px 0 0; cursor:pointer;';
+      var lembrar = document.createElement('input');
+      lembrar.type = 'checkbox';
+      lembrar.id = 'authLembrar';
+      lembrar.checked = manterConectado();
+      lembrar.style.cssText = 'width:16px; height:16px; cursor:pointer; accent-color:var(--brick);';
+      wrapLembrar.appendChild(lembrar);
+      wrapLembrar.appendChild(document.createTextNode('Manter conectado neste computador'));
+      form.appendChild(wrapLembrar);
 
       var msg = document.createElement('div');
       msg.className = 'empty-note';
@@ -459,17 +546,31 @@
 
       form.addEventListener('submit', function (ev) {
         ev.preventDefault();
-        var e = email.value.trim(), s = senha.value;
-        if (!e || !s) { msg.textContent = 'Preencha e-mail e senha.'; msg.style.color = 'var(--loss)'; return; }
+        var email = usuarioParaEmail(user.value), s = senha.value;
+        if (!email || !s) {
+          msg.textContent = 'Preencha usuário e senha.';
+          msg.style.color = 'var(--loss)';
+          return;
+        }
         entrar.disabled = true;
         msg.style.color = 'var(--ink-soft)';
         msg.textContent = 'Entrando...';
-        _auth.signInWithEmailAndPassword(e, s)
+
+        setManterConectado(lembrar.checked);
+        // LOCAL sobrevive a fechar o navegador; SESSION morre junto com a aba.
+        var modo = lembrar.checked
+          ? global.firebase.auth.Auth.Persistence.LOCAL
+          : global.firebase.auth.Auth.Persistence.SESSION;
+
+        _auth.setPersistence(modo)
+          .then(function () { return _auth.signInWithEmailAndPassword(email, s); })
           .then(function (cred) { fechar(cred.user); })
           .catch(function (err) {
             entrar.disabled = false;
             msg.style.color = 'var(--loss)';
             msg.textContent = mensagemErroAuth(err);
+            senha.value = '';
+            senha.focus();
           });
       });
 
@@ -478,7 +579,7 @@
       caixa.appendChild(h);
       caixa.appendChild(p);
       caixa.appendChild(form);
-    }).then(function (u) {
+    }, { obrigatorio: !!obrigatorio }).then(function (u) {
       _loginEmAndamento = null;
       if (!u) throw new Error('Login cancelado.');
       _usuario = u;
@@ -493,14 +594,16 @@
 
   function mensagemErroAuth(err) {
     var c = (err && err.code) || '';
-    if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found') {
-      return 'E-mail ou senha incorretos.';
+    if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' ||
+        c === 'auth/user-not-found' || c === 'auth/invalid-email') {
+      return 'Usuário ou senha incorretos.';
     }
     if (c === 'auth/too-many-requests') return 'Muitas tentativas. Aguarde alguns minutos.';
-    if (c === 'auth/network-request-failed') return 'Sem conexao com a internet.';
-    if (c === 'auth/user-disabled') return 'Esta conta foi desativada.';
+    if (c === 'auth/network-request-failed') return 'Sem conexão com a internet.';
+    if (c === 'auth/user-disabled') return 'Este usuário foi desativado.';
     if (c === 'auth/operation-not-allowed') {
-      return 'Login por e-mail/senha ainda nao foi ativado no Firebase Console (Authentication > Sign-in method).';
+      return 'Login por e-mail/senha ainda não foi ativado no Firebase Console ' +
+             '(Authentication > Sign-in method).';
     }
     return erroDe(err);
   }
@@ -719,13 +822,23 @@
 
     function pintar(u) {
       if (u) {
-        email.textContent = u.email || 'conectado';
+        // Mostra "administrativo", nao "administrativo@calculadora.local".
+        email.textContent = emailParaUsuario(u.email) || 'conectado';
+        email.title = u.email || '';
         botao.textContent = 'Sair';
         botao.onclick = function () {
-          sair().then(function () { toast('Voce saiu da conta.', 'info'); });
+          confirmar({
+            titulo: 'Sair',
+            mensagem: 'Sair da conta neste computador? Será preciso entrar de novo com usuário e senha.',
+            confirmar: 'Sair'
+          }).then(function (ok) {
+            if (!ok) return;
+            sair().then(function () { global.location.reload(); });
+          });
         };
       } else {
         email.textContent = '';
+        email.title = '';
         botao.textContent = 'Entrar';
         botao.onclick = function () {
           pedirLogin().then(function () {
@@ -785,12 +898,17 @@
     iniciarFirebase: iniciarFirebase,
     iniciarAuth: iniciarAuth,
     pedirLogin: pedirLogin,
+    exigirLogin: exigirLogin,
+    authPronto: authPronto,
     comAuth: comAuth,
     sair: sair,
     usuario: usuario,
     aoMudarUsuario: aoMudarUsuario,
     ehPermissaoNegada: ehPermissaoNegada,
     montarBarraConta: montarBarraConta,
+    DOMINIO_LOGIN: DOMINIO_LOGIN,
+    usuarioParaEmail: usuarioParaEmail,
+    emailParaUsuario: emailParaUsuario,
 
     criarRouter: criarRouter,
     tabelaItensNota: tabelaItensNota,
