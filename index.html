@@ -13,28 +13,20 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Calc. Custo">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Design system comum aos dois apps. Ver app-shared.css -->
+<link rel="stylesheet" href="app-shared.css">
+
 <style>
-  :root{
-    --paper:#F6F3E7;
-    --stripe:#DCE8D2;
-    --stripe2:#EDF3E6;
-    --ink:#202B22;
-    --ink-soft:#5B6B5E;
-    --brick:#A8462B;
-    --brick-dark:#8A3821;
-    --copper:#B9773F;
-    --profit:#2E6B45;
-    --loss:#B23A2E;
-    --line:#C9C2A8;
-    --card:#FFFEF9;
-    --font-display:'Roboto Slab', serif;
-    --font-body:'IBM Plex Sans', sans-serif;
-    --font-mono:'IBM Plex Mono', monospace;
-  }
-  *{box-sizing:border-box;}
-  @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
-  tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
+  /* Somente o que e' exclusivo da Calculadora de Custo. */
+  .wrap{ padding:28px 20px 60px; }
+  header.top, footer.note{ max-width:1700px; margin-left:auto; margin-right:auto; }
+  #viewCalculadora, #viewFrete, #viewSync{ max-width:1440px; margin-left:auto; margin-right:auto; }
+  #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{ max-width:1700px; margin-left:auto; margin-right:auto; }
+
+  /* Pesquisa de concorrentes em lote */
   .lote-table{ border-collapse:collapse; font-size:12.5px; min-width:1400px; }
   .lote-table th, .lote-table td{ border:1px solid var(--line); padding:7px 9px; vertical-align:top; }
   .lote-table thead th{ background:var(--stripe); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; text-align:left; white-space:nowrap; }
@@ -46,580 +38,28 @@
   .lote-table td.lote-loja a{ color:inherit; text-decoration:underline dotted; }
   .lote-row-atual{ outline:2px solid var(--brick); outline-offset:-2px; }
   .lote-refazer{ border:none; background:transparent; cursor:pointer; font-size:11px; padding:0 2px; opacity:.35; }
-  .lote-refazer:hover{ opacity:1; }
+  .lote-refazer:hover, .lote-refazer:focus-visible{ opacity:1; }
+
+  /* Comparacao pedido x NF-e, lado a lado */
   .cmp-grid{ display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
   @media(min-width:1500px){ .cmp-grid{ grid-template-columns:minmax(0,5fr) minmax(0,7fr); } }
   .cmp-grid .card{ overflow-x:auto; }
-  body{
-    margin:0;
-    padding:0;
-    background:var(--paper);
-    color:var(--ink);
-    font-family:var(--font-body);
-    -webkit-font-smoothing:antialiased;
-  }
-  .wrap{
-    padding:28px 20px 60px;
-  }
-  header.top{
-    max-width:1700px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  #viewCalculadora, #viewFrete, #viewSync{
-    max-width:1440px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{
-    max-width:1700px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  footer.note{
-    max-width:1700px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  header.top{
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    flex-wrap:wrap;
-    gap:12px;
-    border-bottom:3px solid var(--ink);
-    padding-bottom:14px;
-    margin-bottom:22px;
-  }
-  .title-block h1{
-    font-family:var(--font-display);
-    font-weight:700;
-    font-size:clamp(24px,4vw,34px);
-    margin:0 0 4px;
-    letter-spacing:0.5px;
-  }
-  .title-block p{
-    margin:0;
-    color:var(--ink-soft);
-    font-size:13px;
-    font-family:var(--font-mono);
-    letter-spacing:0.5px;
-  }
-  .stamp{
-    font-family:var(--font-mono);
-    font-size:11px;
-    letter-spacing:1.5px;
-    color:var(--brick);
-    border:2px solid var(--brick);
-    padding:5px 10px;
-    border-radius:3px;
-    text-transform:uppercase;
-    transform:rotate(-2deg);
-    white-space:nowrap;
-  }
 
-  .grid{
-    display:grid;
-    grid-template-columns:1.15fr 1fr;
-    gap:22px;
-    align-items:start;
-  }
-  @media (max-width:880px){
-    .grid{grid-template-columns:1fr;}
-  }
+  /* O widget de sugestao de busca do Google vem como HTML de fora;
+     roda isolado num iframe com sandbox. */
+  .busca-google-frame{ width:100%; border:0; display:block; }
 
-  .card{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:18px 20px;
-    margin-bottom:18px;
-  }
-  .card h2{
-    font-family:var(--font-display);
-    font-size:15px;
-    font-weight:700;
-    margin:0 0 14px;
-    text-transform:uppercase;
-    letter-spacing:0.8px;
-    color:var(--brick-dark);
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .card h2::after{
-    content:'';
-    flex:1;
-    height:1px;
-    background:var(--line);
-  }
-
-  .field{margin-bottom:14px;}
-  .field:last-child{margin-bottom:0;}
-  .field label{
-    display:block;
-    font-size:12.5px;
-    font-weight:600;
-    margin-bottom:5px;
-    color:var(--ink);
-  }
-  .field .hint{
-    font-size:11px;
-    color:var(--ink-soft);
-    font-weight:400;
-    margin-left:4px;
-  }
-  .input-row{
-    display:flex;
-    align-items:center;
-    border:1.5px solid var(--line);
-    border-radius:4px;
-    background:#fff;
-    overflow:hidden;
-    transition:border-color .15s;
-  }
-  .input-row:focus-within{
-    border-color:var(--brick);
-  }
-  .input-row .prefix{
-    padding:9px 10px;
-    background:var(--stripe2);
-    font-family:var(--font-mono);
-    font-size:13px;
-    color:var(--ink-soft);
-    border-right:1.5px solid var(--line);
-  }
-  .input-row input[type=text],
-  .input-row input[type=number]{
-    border:0;
-    outline:0;
-    padding:9px 10px;
-    font-family:var(--font-mono);
-    font-size:14px;
-    width:100%;
-    background:transparent;
-    color:var(--ink);
-  }
-  input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
-  .no-spin::-webkit-outer-spin-button,
-  .no-spin::-webkit-inner-spin-button{
-    -webkit-appearance:none;
-    margin:0;
-  }
-  .no-spin{-moz-appearance:textfield;}
-
-  .toggle{
-    display:inline-flex;
-    border:1.5px solid var(--line);
-    border-radius:4px;
-    overflow:hidden;
-  }
-  .toggle button{
-    border:0;
-    background:#fff;
-    padding:8px 16px;
-    font-family:var(--font-body);
-    font-size:13px;
-    font-weight:600;
-    color:var(--ink-soft);
-    cursor:pointer;
-    transition:background .15s,color .15s;
-  }
-  .toggle button + button{border-left:1.5px solid var(--line);}
-  .toggle button.active{
-    background:var(--brick);
-    color:#fff;
-  }
-  .toggle button:focus-visible{outline:2px solid var(--copper); outline-offset:-2px;}
-
-  .sub-field{
-    margin-top:10px;
-    padding-top:10px;
-    border-top:1px dashed var(--line);
-  }
-  .row2{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:12px;
-  }
-
-  /* Results ledger */
-  .resultado-wrap{
-    position:sticky;
-    top:20px;
-  }
-  .ledger{
-    background:repeating-linear-gradient(
-      var(--card) 0px, var(--card) 34px,
-      var(--stripe) 34px, var(--stripe) 68px
-    );
-    border:1px solid var(--line);
-    border-radius:6px;
-    overflow:hidden;
-  }
-  .ledger-head{
-    background:var(--ink);
-    color:var(--paper);
-    padding:14px 20px;
-    font-family:var(--font-display);
-    font-size:14px;
-    font-weight:700;
-    text-transform:uppercase;
-    letter-spacing:1px;
-  }
-  .hero{
-    padding:20px 20px 16px;
-    background:var(--card);
-    border-bottom:2px solid var(--ink);
-  }
-  .hero-row{
-    display:flex;
-    justify-content:space-between;
-    align-items:baseline;
-    margin-bottom:10px;
-  }
-  .hero-row:last-child{margin-bottom:0;}
-  .hero-label{
-    font-size:12px;
-    font-weight:600;
-    color:var(--ink-soft);
-    text-transform:uppercase;
-    letter-spacing:0.5px;
-  }
-  .hero-value{
-    font-family:var(--font-mono);
-    font-size:26px;
-    font-weight:600;
-  }
-  .hero-value.profit{color:var(--profit);}
-  .hero-value.loss{color:var(--loss);}
-
-  .ledger-body{padding:6px 20px 4px;}
-  .lrow{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:8px 0;
-    font-size:13.5px;
-    line-height:34px;
-    height:34px;
-  }
-  .lrow .lname{color:var(--ink);}
-  .lrow .lval{
-    font-family:var(--font-mono);
-    font-weight:600;
-  }
-
-  .desc-box{
-    margin:14px 20px 18px;
-    padding:12px 14px;
-    background:#fff;
-    border:1px dashed var(--copper);
-    border-radius:4px;
-    font-family:var(--font-mono);
-    font-size:12px;
-    white-space:pre-line;
-    color:var(--ink-soft);
-  }
-
-  .price-tier{
-    display:flex;
-    justify-content:space-between;
-    align-items:baseline;
-    padding:11px 0;
-    border-bottom:1px dashed var(--line);
-  }
-  .price-tier:last-child{border-bottom:0;}
-  .price-tier .ptlabel{font-size:13px; font-weight:600; color:var(--ink);}
-  .price-tier .pthint{font-size:11px; color:var(--ink-soft); font-weight:400; margin-left:5px;}
-  .price-tier .ptvalue{font-family:var(--font-mono); font-size:18px; font-weight:700;}
-  .price-tier.minimo .ptvalue{color:var(--ink-soft);}
-  .price-tier.recomendado .ptvalue{color:var(--copper);}
-  .price-tier.ideal .ptvalue{color:var(--profit);}
-
-  /* Cotação */
-  .quote-table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:12.5px;
-  }
-  .quote-table th{
-    text-align:left;
-    font-family:var(--font-mono);
-    font-size:10.5px;
-    text-transform:uppercase;
-    letter-spacing:0.5px;
-    color:var(--ink-soft);
-    padding:6px 8px;
-    border-bottom:2px solid var(--ink);
-  }
-  .quote-table td{
-    padding:7px 8px;
-    border-bottom:1px solid var(--line);
-    font-family:var(--font-mono);
-  }
-  .quote-table tr:nth-child(even) td{ background:var(--stripe2); }
-  .quote-table select{
-    font-family:var(--font-body);
-    font-size:12px;
-    padding:4px 6px;
-    border:1px solid var(--line);
-    border-radius:4px;
-    background:#fff;
-    color:var(--ink);
-    max-width:220px;
-  }
-  .status-badge{
-    display:inline-flex;
-    align-items:center;
-    gap:5px;
-    font-family:var(--font-body);
-    font-size:12px;
-    font-weight:600;
-    padding:4px 10px;
-    border-radius:20px;
-    white-space:nowrap;
-  }
-  .status-badge.up{ background:rgba(178,58,46,0.12); color:var(--loss); }
-  .status-badge.down{ background:rgba(46,107,69,0.12); color:var(--profit); }
-  .status-badge.qty{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.variacao{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.missing{ background:#e5e5e5; color:#222; }
-  .status-badge.neutral{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-negociacao{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-pedido{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.status-transito{ background:rgba(59,111,166,0.14); color:#2C5A8C; }
-  .status-badge.status-recebido{ background:rgba(46,107,69,0.12); color:var(--profit); }
-
-  .suggestion-item{
-    padding:12px 14px;
-    border-left:4px solid var(--line);
-    background:var(--stripe2);
-    border-radius:0 5px 5px 0;
-    margin-bottom:10px;
-    font-size:13px;
-  }
-  .suggestion-item:last-child{ margin-bottom:0; }
-  .suggestion-item.up{ border-left-color:var(--loss); }
-  .suggestion-item.down{ border-left-color:var(--profit); }
-  .suggestion-item.qty{ border-left-color:#C9962E; }
-  .suggestion-item.missing{ border-left-color:#444; }
-  .suggestion-item .sg-title{ font-weight:700; margin-bottom:3px; }
-  .suggestion-item .sg-detail{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
-
-  .historico-item{ margin-bottom:12px; }
-  .historico-item:last-child{ margin-bottom:0; }
-  .historico-header{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:10px 12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    cursor:pointer;
-    user-select:none;
-    flex-wrap:wrap;
-  }
-  .historico-header:hover{ background:var(--stripe); }
-  .historico-header .h-fornecedor{ font-weight:700; font-size:13.5px; }
-  .historico-header .h-data{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
-  .historico-header .h-count{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
-  .historico-header .h-total{ margin-left:auto; }
-  .historico-body{
-    padding:10px 4px 4px 14px;
-    border-left:2px solid var(--line);
-    margin-top:6px;
-  }
-
-  /* Saved products */
-  .saved-list{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    margin-bottom:10px;
-  }
-  .saved-item{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    padding:10px 12px;
-    flex-wrap:wrap;
-  }
-  .saved-item .info{
-    display:flex;
-    flex-direction:column;
-    gap:2px;
-    min-width:200px;
-    flex:1;
-  }
-  .saved-item .nome{
-    font-weight:600;
-    font-size:13.5px;
-  }
-  .saved-item .desc{
-    font-family:var(--font-mono);
-    font-size:11px;
-    color:var(--ink-soft);
-    white-space:pre-line;
-  }
-  .saved-item .price-highlight{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:6px 12px;
-    background:#fff;
-    border:1px solid var(--line);
-    border-radius:6px;
-  }
-  .saved-item .ph-venda{
-    font-family:var(--font-mono);
-    font-weight:700;
-    font-size:15px;
-    color:var(--ink);
-    white-space:nowrap;
-  }
-  .saved-item .badge{
-    font-family:var(--font-mono);
-    font-size:12px;
-    font-weight:600;
-    padding:3px 8px;
-    border-radius:3px;
-    white-space:nowrap;
-  }
-  .saved-item .badge.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
-  .saved-item .badge.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
-  .saved-item .actions-mini{
-    display:flex;
-    gap:6px;
-  }
-  .saved-item .actions-mini button{
-    border:1px solid var(--line);
-    background:#fff;
-    cursor:pointer;
-    font-size:12px;
-    padding:5px 10px;
-    border-radius:4px;
-    color:var(--ink);
-    font-family:var(--font-body);
-    font-weight:600;
-  }
-  .saved-item .actions-mini button:hover{background:var(--stripe);}
-  .saved-item .actions-mini button.del{color:var(--loss); border-color:var(--loss);}
-  .supplier-group{ margin-bottom:14px; }
-  .supplier-group:last-child{ margin-bottom:0; }
-  .supplier-header{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:9px 12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    cursor:pointer;
-    user-select:none;
-  }
-  .supplier-header:hover{ background:var(--stripe); }
-  .supplier-arrow{
-    display:inline-block;
-    font-size:11px;
-    color:var(--brick);
-    transition:transform .15s;
-  }
-  .supplier-arrow.collapsed{ transform:rotate(-90deg); }
-  .supplier-name{
-    flex:1;
-    font-weight:600;
-    font-size:13px;
-  }
-  .supplier-count{
-    font-family:var(--font-mono);
-    font-size:11px;
-    color:var(--ink-soft);
-  }
-  .supplier-avg{
-    font-family:var(--font-mono);
-    font-size:11px;
-    font-weight:600;
-    padding:2px 8px;
-    border-radius:10px;
-    margin-left:auto;
-  }
-  .supplier-avg.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
-  .supplier-avg.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
-  .supplier-items{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    margin-top:8px;
-    padding-left:8px;
-    border-left:2px solid var(--line);
-  }
-
-  .empty-note{
-    font-size:12.5px;
-    color:var(--ink-soft);
-    font-style:italic;
-  }
-  .status-pill{
-    display:inline-block;
-    font-family:var(--font-mono);
-    font-size:11.5px;
-    padding:5px 12px;
-    border-radius:20px;
-    margin-bottom:12px;
-  }
-  .status-pill.claude, .status-pill.local, .status-pill.firebase{
-    background:rgba(46,107,69,0.12);
-    color:var(--profit);
-  }
-  .status-pill.memoria{
-    background:#FCEFD6;
-    border:1px solid var(--copper);
-    color:var(--ink);
-  }
-
-  .btn{
-    font-family:var(--font-body);
-    font-weight:600;
-    font-size:13px;
-    border:1.5px solid var(--ink);
-    background:var(--ink);
-    color:var(--paper);
-    padding:9px 16px;
-    border-radius:4px;
-    cursor:pointer;
-    transition:opacity .15s;
-  }
-  .btn:hover{opacity:0.85;}
-  .btn.secondary{
-    background:transparent;
-    color:var(--ink);
-  }
-  .btn:focus-visible, .chip button:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
-
-  .actions{
-    display:flex;
-    gap:10px;
-    margin-top:4px;
-    flex-wrap:wrap;
-  }
-
-  footer.note{
-    margin-top:24px;
-    font-size:11.5px;
-    color:var(--ink-soft);
-    font-family:var(--font-mono);
-    line-height:1.6;
-  }
+  nav.telas{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  nav.telas .btn[aria-current="page"]{ background:var(--ink); color:var(--paper); }
+  .campo-data{ padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
+  .campo-busca{ flex:1; min-width:200px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px; }
+  .rotulo-mono{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
+  .msg-mono{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
+  .select-embutido{ border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink); }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 <div class="wrap">
 
   <header class="top">
@@ -627,17 +67,20 @@
       <h1>Calculadora de Custo</h1>
       <p>CUSTO · IMPOSTOS · FRETE · MARGEM DE VENDA</p>
     </div>
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      <button class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
-      <button class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
-      <button class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
-      <button class="btn secondary" id="verHistoricoBtn">🕘 Histórico</button>
-      <button class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
-      <button class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
-      <button class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
+    <nav class="telas" aria-label="Telas do aplicativo">
+      <button type="button" class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
+      <button type="button" class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
+      <button type="button" class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
+      <button type="button" class="btn secondary" id="verHistoricoBtn">🕘 Histórico</button>
+      <button type="button" class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
+      <button type="button" class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
+      <button type="button" class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
+      <div id="contaBarra"></div>
       <div class="stamp">Uso interno</div>
-    </div>
+    </nav>
   </header>
+
+  <main id="conteudo">
 
   <div id="viewFrete" style="display:none;">
     <button class="btn secondary" id="voltarCalculadoraBtn2" style="margin-bottom:16px;">← Voltar à calculadora</button>
@@ -1254,6 +697,8 @@ Tupan</textarea>
   </div>
   </div>
 
+  </main>
+
   <footer class="note">
     PIS/COFINS 9,25%, IRPJ 25% e CSLL 9% sobre a base tributável.
   </footer>
@@ -1261,9 +706,11 @@ Tupan</textarea>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="app-shared.js"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1580,7 +1027,22 @@ Tupan</textarea>
 
 <script>
 (function(){
-  const $ = id => document.getElementById(id);
+  'use strict';
+
+  // Helpers comuns aos dois apps — ver app-shared.js
+  const $ = App.$;
+  const escapeHtml = App.escapeHtml;
+  const safeUrl = App.safeUrl;
+  const brl = App.brl;
+  const pct = App.pct;
+  const toNum = App.toNum;
+  const debounce = App.debounce;
+  const normalizarTexto = App.normalizarTexto;
+  const parseNumeroBR = App.parseNumeroBR;
+  const DEBOUNCE_BUSCA = App.DEBOUNCE_BUSCA;
+
+  App.instalarErroGlobal();
+
   const fields = ['produto','fornecedor','custoNFe','frete','pctCredFrete','valorST','icmsCredito','ipi','custoFinanceiroPct','avariasPct','bonificacao','venda'];
   const toggleDefaults = { credIcmsFrete:0, comST:1, prejuizoContabil:0, tipoBonificacao:0 };
   const toggles = { ...toggleDefaults };
@@ -1592,14 +1054,7 @@ Tupan</textarea>
   // 4) memória: último recurso, só dura enquanto a aba estiver aberta.
   const LS_KEY = 'calculadora_custo_produtos_v1';
   const FIREBASE_CONFIG_KEY = 'calculadora_custo_firebase_config';
-  const FIREBASE_CONFIG_PADRAO = {
-    apiKey: "AIzaSyCYZmYORbmVpgN0rNDsdCwN0Xm2Ce1SRyU",
-    authDomain: "bd-calculadora-d2ce0.firebaseapp.com",
-    projectId: "bd-calculadora-d2ce0",
-    storageBucket: "bd-calculadora-d2ce0.firebasestorage.app",
-    messagingSenderId: "543548220495",
-    appId: "1:543548220495:web:b3559aff504028b3ad363a"
-  };
+  const FIREBASE_CONFIG_PADRAO = App.FIREBASE_CONFIG; // definida uma vez em app-shared.js
   const memoryStore = {};
   let firestoreDb = null;
 
@@ -1652,19 +1107,26 @@ Tupan</textarea>
     return config;
   }
 
-  function inicializarFirebase(config){
-    if(typeof firebase === 'undefined') throw new Error('SDK do Firebase não carregou (sem internet?)');
-    try{
-      const nomeApp = 'calculadoraCusto';
-      const existente = firebase.apps.find(a => a.name === nomeApp);
-      if(existente) existente.delete();
-    }catch(e){ /* ignora */ }
-    const app = firebase.initializeApp(config, 'calculadoraCusto');
-    firestoreDb = app.firestore();
+  // Agora aguarda o delete do app anterior antes de recriar. Sem o
+  // await, o initializeApp seguinte podia esbarrar num app de mesmo
+  // nome ainda vivo — falhava de vez em quando ao trocar de config.
+  async function inicializarFirebase(config){
+    const r = await App.iniciarFirebase('calculadoraCusto', config);
+    firestoreDb = r.db;
+    App.montarBarraConta($('contaBarra'));
+    return firestoreDb;
+  }
+
+  // Sem esta guarda, quando o Firebase não conecta o app estoura um
+  // "Cannot read properties of null" no console — mensagem que não
+  // ajuda ninguém a entender que o problema é a conexão.
+  function exigirDb(){
+    if(!firestoreDb) throw new Error('Firebase não conectado (confira a configuração na aba Sincronização).');
+    return firestoreDb;
   }
 
   async function firebaseListar(){
-    const snap = await firestoreDb.collection('produtos').get();
+    const snap = await App.comAuth(() => exigirDb().collection('produtos').get());
     const produtos = {};
     snap.forEach(doc=>{
       const nome = decodeURIComponent(doc.id);
@@ -1674,17 +1136,20 @@ Tupan</textarea>
     return produtos;
   }
   async function firebaseObter(nome){
-    const doc = await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).get();
+    const doc = await App.comAuth(() =>
+      exigirDb().collection('produtos').doc(encodeURIComponent(nome)).get());
     if(!doc.exists) return null;
     return doc.data().dados;
   }
   async function firebaseSalvar(nome, dados){
-    await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).set({
-      nome, dados, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    await App.comAuth(() =>
+      exigirDb().collection('produtos').doc(encodeURIComponent(nome)).set({
+        nome, dados, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      }));
   }
   async function firebaseExcluir(nome){
-    await firestoreDb.collection('produtos').doc(encodeURIComponent(nome)).delete();
+    await App.comAuth(() =>
+      exigirDb().collection('produtos').doc(encodeURIComponent(nome)).delete());
   }
 
   function detectarBackendInicial(){
@@ -1828,6 +1293,40 @@ Tupan</textarea>
     return { keys: Object.keys(memoryStore).filter(k=>k.startsWith(prefix)), prefix, shared:false };
   }
 
+  // Le TUDO de uma vez: devolve [{key, value}].
+  //
+  // Antes a lista de produtos fazia storageList() — que ja' baixa a
+  // colecao inteira COM os dados — e depois um storageGet() por
+  // produto, relendo do servidor exatamente o que ja' tinha em maos.
+  // Com 200 produtos eram 400 leituras onde 200 bastavam (e voce paga
+  // por leitura).
+  async function storageLerTudo(prefix){
+    if(storageBackend === 'firebase'){
+      try{
+        const produtos = await firebaseListar();
+        return Object.keys(produtos)
+          .map(nome => ({ key: 'calc:' + encodeURIComponent(nome), value: JSON.stringify(produtos[nome]) }))
+          .filter(p => p.key.startsWith(prefix));
+      }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
+    }
+    if(storageBackend === 'claude'){
+      // window.storage nao tem leitura em lote; aqui o N+1 e' inevitavel.
+      try{
+        const res = await window.storage.list(prefix, false);
+        const keys = (res && res.keys) ? res.keys : [];
+        const itens = await Promise.all(keys.map(async key => {
+          const r = await window.storage.get(key, false);
+          return { key, value: (r && r.value) || null };
+        }));
+        return itens.filter(i => i.value != null);
+      }catch(e){ rebaixarBackend(); }
+    }
+    const fonte = (storageBackend === 'local') ? lsLerTudo() : memoryStore;
+    return Object.keys(fonte)
+      .filter(k => k.startsWith(prefix))
+      .map(k => ({ key: k, value: fonte[k] }));
+  }
+
   // Toggle wiring
   document.querySelectorAll('[data-toggle]').forEach(group=>{
     const key = group.dataset.toggle;
@@ -1853,70 +1352,27 @@ Tupan</textarea>
     $('prefixBonificacao').textContent = toggles.tipoBonificacao ? '%' : 'R$';
   }
 
-  function toNum(v){
-    const n = parseFloat(v);
-    return isNaN(n) ? 0 : n;
-  }
+  // ==================== NUCLEO DE CALCULO ====================
+  //
+  // ATENCAO: as aliquotas ficam SO' aqui. Antes elas estavam escritas
+  // na mao em dois lugares (computeCalc e computeCoeficientes). Se um
+  // dia o ICMS mudasse e alguem editasse so' um dos dois, a margem
+  // exibida e o preco sugerido passariam a discordar em silencio, sem
+  // erro nenhum — num sistema de precificacao, o pior tipo de bug.
+  const TRIBUTOS = {
+    pisCofins:  0.0925, // PIS+COFINS sobre a venda (e credito sobre custo+frete)
+    icmsDebito: 0.205,  // debito de ICMS na venda, quando o produto NAO tem ST
+    irpj:       0.25,
+    csll:       0.09
+  };
+  // Quanto do lucro antes de impostos sobra depois de IRPJ+CSLL.
+  TRIBUTOS.fatorLucro = 1 - TRIBUTOS.irpj - TRIBUTOS.csll; // 0,66
 
-  function brl(v){
-    return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-  }
-
-  // Agrupa disparos rápidos (digitação) numa única execução. Sem isto, cada tecla
-  // re-filtra as listas e reconstrói a tabela inteira — pesado nas buscas que
-  // varrem os itens de cada nota/cotação.
-  function debounce(fn, ms){
-    let t = null;
-    return function(...args){
-      clearTimeout(t);
-      t = setTimeout(()=>fn.apply(this, args), ms);
-    };
-  }
-  const DEBOUNCE_BUSCA = 250;
-  function pct(v){
-    return (v*100).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) + '%';
-  }
-
-  // Pure calculation core - shared by the live form and by the saved-products preview list
-  function computeCalc(v){
-    const custoNFe = v.custoNFe;
-    const frete = v.frete;
-    const pctCredFrete = v.pctCredFrete/100;
-    const valorST = v.valorST/100;
-    const icmsCredito = v.icmsCredito/100;
-    const ipi = v.ipi/100;
-    const custoFinanceiroPct = v.custoFinanceiroPct/100;
-    const avariasPct = v.avariasPct/100;
-    const bonificacaoRS = v.tipoBonificacao === 1 ? (custoNFe * (v.bonificacao||0)/100) : (v.bonificacao || 0);
-    const venda = v.venda;
-    const comST = !!v.comST;
-    const prejuizoContabil = !!v.prejuizoContabil;
-
-    const avariasRS = venda * avariasPct;
-    const parteST = comST ? (custoNFe * valorST) : (venda*0.205 - custoNFe*icmsCredito);
-    const creditoFrete = pctCredFrete !== 0 ? (pctCredFrete * frete) : 0;
-    const custo = parteST + custoNFe + frete + (ipi*custoNFe) + (venda*0.0925) - ((custoNFe+frete)*0.0925) - creditoFrete - bonificacaoRS;
-
-    const base = venda - custo - (venda*custoFinanceiroPct) - avariasRS;
-    const semTributo = (base < 0) || prejuizoContabil;
-    const irpj = semTributo ? 0 : base*0.25;
-    const csll = semTributo ? 0 : base*0.09;
-
-    const lucro = venda*(1-custoFinanceiroPct) - custo - irpj - csll - avariasRS;
-    const margem = venda !== 0 ? (lucro/venda) : NaN;
-    const custoFinanceiroRS = venda * custoFinanceiroPct;
-    const total = custo + custoFinanceiroRS + irpj + csll + avariasRS; // soma de todos os custos = venda - lucro
-
-    const vista = custoFinanceiroPct === 0 ? ' à vista' : ' cartão';
-    const descricao = 'Custo NF-e R$ ' + custoNFe.toFixed(2) + ' | Frete R$ ' + frete.toFixed(2) + ' |\n' +
-      'Venda R$ ' + venda.toFixed(2) + vista;
-
-    return {custo, irpj, csll, avariasRS, custoFinanceiroRS, total, lucro, margem, descricao, venda, custoNFe, frete, bonificacao: bonificacaoRS};
-  }
-
-  // Decompõe o custo em: custo = C0 + k*venda (k é a parte que varia com o preço:
-  // PIS/COFINS sobre a venda, e o débito de ICMS quando não há ST). Com isso dá pra
-  // resolver algebricamente qual "venda" produz uma margem-alvo específica.
+  // Decompoe o custo em: custo = C0 + k * venda.
+  // "k" e' a parte que varia com o preco (PIS/COFINS sobre a venda e,
+  // quando nao ha' ST, o debito de ICMS). "m" e' quanto de cada real
+  // vendido sobra antes dos impostos sobre o lucro.
+  // Esta e' a UNICA definicao da formula; computeCalc usa ela tambem.
   function computeCoeficientes(v){
     const custoNFe = v.custoNFe;
     const frete = v.frete;
@@ -1930,25 +1386,86 @@ Tupan</textarea>
     const comST = !!v.comST;
     const creditoFrete = pctCredFrete !== 0 ? (pctCredFrete * frete) : 0;
 
+    // Parte fixa, igual nos dois cenarios.
+    const base = custoNFe + frete + (ipi*custoNFe)
+               - ((custoNFe+frete) * TRIBUTOS.pisCofins)
+               - creditoFrete - bonificacaoRS;
+
     let k, C0;
     if(comST){
-      k = 0.0925;
-      C0 = custoNFe*valorST + custoNFe + frete + (ipi*custoNFe) - ((custoNFe+frete)*0.0925) - creditoFrete - bonificacaoRS;
+      k = TRIBUTOS.pisCofins;
+      C0 = (custoNFe * valorST) + base;
     } else {
-      k = 0.205 + 0.0925;
-      C0 = -(custoNFe*icmsCredito) + custoNFe + frete + (ipi*custoNFe) - ((custoNFe+frete)*0.0925) - creditoFrete - bonificacaoRS;
+      k = TRIBUTOS.icmsDebito + TRIBUTOS.pisCofins;
+      C0 = -(custoNFe * icmsCredito) + base;
     }
+
     const m = 1 - k - custoFinanceiroPct - avariasPct;
-    return { C0, m };
+    return { C0, k, m, bonificacaoRS, custoFinanceiroPct, avariasPct };
   }
 
-  // Resolve o preço de venda que resulta na margem-alvo informada (ex: 0.08 = 8%),
-  // considerando IRPJ 25% + CSLL 9% = 34% sobre a base tributável (lucro = 0.66 * base).
+  // Nucleo puro — usado pelo formulario ao vivo e pela previa da lista
+  // de produtos salvos.
+  function computeCalc(v){
+    const { C0, k, m, bonificacaoRS, custoFinanceiroPct, avariasPct } = computeCoeficientes(v);
+    const venda = v.venda;
+    const prejuizoContabil = !!v.prejuizoContabil;
+
+    const custo = C0 + k * venda;
+    const avariasRS = venda * avariasPct;
+    const custoFinanceiroRS = venda * custoFinanceiroPct;
+
+    // base = venda - custo - custo financeiro - avarias = m*venda - C0
+    const base = m * venda - C0;
+    const semTributo = (base < 0) || prejuizoContabil;
+    const irpj = semTributo ? 0 : base * TRIBUTOS.irpj;
+    const csll = semTributo ? 0 : base * TRIBUTOS.csll;
+
+    const lucro = base - irpj - csll;
+    const margem = venda !== 0 ? (lucro/venda) : NaN;
+
+    const vista = custoFinanceiroPct === 0 ? ' à vista' : ' cartão';
+    const descricao = 'Custo NF-e R$ ' + v.custoNFe.toFixed(2) + ' | Frete R$ ' + v.frete.toFixed(2) + ' |\n' +
+      'Venda R$ ' + venda.toFixed(2) + vista;
+
+    // Arredonda os valores em dinheiro no ponto em que viram resultado:
+    // sem isso o erro de fracao de centavo do float se acumula nos
+    // totais somados na tela do historico.
+    const rCusto = App.centavos(custo);
+    const rIrpj = App.centavos(irpj);
+    const rCsll = App.centavos(csll);
+    const rAvarias = App.centavos(avariasRS);
+    const rCustoFin = App.centavos(custoFinanceiroRS);
+
+    return {
+      custo: rCusto,
+      irpj: rIrpj,
+      csll: rCsll,
+      avariasRS: rAvarias,
+      custoFinanceiroRS: rCustoFin,
+      // Soma das parcelas JA' arredondadas: a coluna TOTAL do razao
+      // sempre fecha com as linhas exibidas acima dela.
+      total: App.centavos(rCusto + rCustoFin + rIrpj + rCsll + rAvarias),
+      lucro: App.centavos(lucro),
+      margem,
+      descricao,
+      venda,
+      custoNFe: v.custoNFe,
+      frete: v.frete,
+      bonificacao: App.centavos(bonificacaoRS)
+    };
+  }
+
+  // Resolve o preco de venda que resulta na margem-alvo informada
+  // (ex: 0.08 = 8%). Sai da mesma decomposicao acima:
+  //   margem = fatorLucro * (m*venda - C0) / venda = alvo
+  //   =>  venda = fatorLucro*C0 / (fatorLucro*m - alvo)
   function precoParaMargem(v, targetMargem){
     const { C0, m } = computeCoeficientes(v);
-    const denom = 0.66*m - targetMargem;
-    if(denom <= 0) return null; // custo alto demais para essa margem ser atingível
-    const preco = (0.66*C0) / denom;
+    const f = TRIBUTOS.fatorLucro;
+    const denom = f*m - targetMargem;
+    if(denom <= 0) return null; // custo alto demais para essa margem ser atingivel
+    const preco = (f*C0) / denom;
     if(!isFinite(preco) || preco <= 0) return null;
     return preco;
   }
@@ -2078,54 +1595,57 @@ Tupan</textarea>
   let produtosCache = []; // [{nome, fornecedor, r}] - populado por atualizarListaSalvos, filtrado por renderListaSalvos
   let gruposExpandidos = new Set(); // nomes de fornecedores abertos manualmente pelo usuário
 
-  function normalizarTexto(str){
-    return String(str || '')
-      .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, ''); // remove acentos p/ busca mais tolerante
+  // normalizarTexto, escapeHtml, parseNumeroBR e a formatacao de data
+  // agora vem de app-shared.js (aliases no topo deste arquivo).
+
+  // Converte o registro salvo (tudo string, como veio do formulario)
+  // nos numeros que o nucleo de calculo espera.
+  function dadosParaCalculo(data){
+    return {
+      custoNFe: toNum(data.custoNFe),
+      frete: toNum(data.frete),
+      pctCredFrete: toNum(data.pctCredFrete),
+      valorST: toNum(data.valorST),
+      icmsCredito: toNum(data.icmsCredito),
+      ipi: toNum(data.ipi),
+      custoFinanceiroPct: toNum(data.custoFinanceiroPct),
+      avariasPct: toNum(data.avariasPct),
+      bonificacao: toNum(data.bonificacao),
+      tipoBonificacao: data.toggles ? data.toggles.tipoBonificacao : 0,
+      venda: toNum(data.venda),
+      comST: data.toggles ? data.toggles.comST : 0,
+      prejuizoContabil: data.toggles ? data.toggles.prejuizoContabil : 0
+    };
   }
 
   async function atualizarListaSalvos(){
     const countEl = $('produtosCount');
     const emptyEl = $('emptyNote');
     try{
-      const res = await storageList('calc:');
-      const keys = (res && res.keys) ? res.keys : [];
-      if(countEl) countEl.textContent = keys.length > 0 ? '(' + keys.length + ')' : '';
+      // Uma leitura so' — sem o get() por produto que havia aqui.
+      const itens = await storageLerTudo('calc:');
+      if(countEl) countEl.textContent = itens.length > 0 ? '(' + itens.length + ')' : '';
 
-      produtosCache = await Promise.all(keys.map(async key=>{
+      produtosCache = itens.map(({ key, value })=>{
         const nome = decodeURIComponent(key.replace('calc:',''));
         let r = null;
         let fornecedor = '';
         try{
-          const res2 = await storageGet(key);
-          if(res2 && res2.value){
-            const data = JSON.parse(res2.value);
-            fornecedor = (data.fornecedor || '').toString().trim();
-            r = computeCalc({
-              custoNFe: toNum(data.custoNFe),
-              frete: toNum(data.frete),
-              pctCredFrete: toNum(data.pctCredFrete),
-              valorST: toNum(data.valorST),
-              icmsCredito: toNum(data.icmsCredito),
-              ipi: toNum(data.ipi),
-              custoFinanceiroPct: toNum(data.custoFinanceiroPct),
-              avariasPct: toNum(data.avariasPct),
-              bonificacao: toNum(data.bonificacao),
-              tipoBonificacao: data.toggles ? data.toggles.tipoBonificacao : 0,
-              venda: toNum(data.venda),
-              comST: data.toggles ? data.toggles.comST : 0,
-              prejuizoContabil: data.toggles ? data.toggles.prejuizoContabil : 0
-            });
-          }
-        }catch(e){ /* segue sem preview se der erro */ }
+          const data = JSON.parse(value);
+          fornecedor = (data.fornecedor || '').toString().trim();
+          r = computeCalc(dadosParaCalculo(data));
+        }catch(e){ /* segue sem previa se o registro estiver corrompido */ }
         return { nome, fornecedor: fornecedor || 'Sem fornecedor', r };
-      }));
+      });
       renderListaSalvos();
     }catch(e){
+      console.error('Erro ao listar produtos salvos:', e);
       produtosCache = [];
       $('savedList').innerHTML = '';
-      if(emptyEl) emptyEl.style.display = 'block';
+      if(emptyEl){
+        emptyEl.textContent = 'Não foi possível carregar a lista: ' + App.erroDe(e);
+        emptyEl.style.display = 'block';
+      }
     }
   }
 
@@ -2226,7 +1746,7 @@ Tupan</textarea>
       const grupoEl = document.createElement('div');
       grupoEl.className = 'supplier-group';
 
-      const headerEl = document.createElement('div');
+      const headerEl = document.createElement('button');
       headerEl.className = 'supplier-header';
 
       const seta = document.createElement('span');
@@ -2256,6 +1776,11 @@ Tupan</textarea>
         headerEl.appendChild(avgEl);
       }
 
+      // <button> de verdade em vez de <div> com cursor:pointer — assim
+      // recebe foco, abre no Enter/Espaco e o leitor de tela anuncia o
+      // estado aberto/fechado.
+      headerEl.type = 'button';
+      headerEl.setAttribute('aria-expanded', String(!colapsado));
       headerEl.addEventListener('click', ()=>{
         if(gruposExpandidos.has(nomeGrupo)) gruposExpandidos.delete(nomeGrupo);
         else gruposExpandidos.add(nomeGrupo);
@@ -2280,9 +1805,25 @@ Tupan</textarea>
   async function salvarProduto(){
     const nome = $('produto').value.trim();
     if(!nome){
-      alert('Digite o nome do produto antes de salvar.');
+      await App.avisar('Digite o nome do produto antes de salvar.');
+      $('produto').focus();
       return;
     }
+
+    // A chave e' o proprio nome do produto. Salvar duas vezes o mesmo
+    // nome substituia o registro anterior sem avisar — e o anterior
+    // podia ter outro fornecedor, outro frete, outro preco.
+    const jaExiste = produtosCache.some(p => p.nome === nome);
+    if(jaExiste){
+      const ok = await App.confirmar({
+        titulo: 'Já existe um produto com esse nome',
+        mensagem: '"' + nome + '" já está salvo. Salvar agora substitui os dados anteriores dele.',
+        confirmar: 'Substituir',
+        perigo: true
+      });
+      if(!ok) return;
+    }
+
     const key = 'calc:' + encodeURIComponent(nome);
     const payload = JSON.stringify(coletarInputs());
     try{
@@ -2293,9 +1834,9 @@ Tupan</textarea>
       msgEl.style.color = 'var(--profit)';
       if(timeoutMsgSalvar) clearTimeout(timeoutMsgSalvar);
       timeoutMsgSalvar = setTimeout(()=>{ msgEl.textContent = ''; }, 5000);
+      App.toast('"' + nome + '" salvo.', 'ok');
     }catch(e){
-      console.error('Erro ao salvar produto:', e);
-      alert('Não foi possível salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente novamente.');
+      App.toastErro('Não foi possível salvar "' + nome + '"', e);
     }
   }
 
@@ -2308,34 +1849,44 @@ Tupan</textarea>
         mostrarViewCalculadora();
       }
     }catch(e){
-      alert('Não foi possível carregar esse produto.');
+      App.toastErro('Não foi possível carregar "' + nome + '"', e);
     }
   }
 
+  // Antes esta funcao apagava sem perguntar e engolia o erro em
+  // silencio: se o Firestore recusasse, o item sumia da tela e voltava
+  // no proximo carregamento, sem explicacao nenhuma.
   async function excluirProduto(nome){
+    const ok = await App.confirmar({
+      titulo: 'Excluir produto',
+      mensagem: 'Excluir "' + nome + '" dos produtos salvos? Essa ação não pode ser desfeita.',
+      confirmar: 'Excluir',
+      perigo: true
+    });
+    if(!ok) return;
+
     const key = 'calc:' + encodeURIComponent(nome);
     try{
       await storageDelete(key);
       await atualizarListaSalvos();
+      App.toast('"' + nome + '" excluído.', 'ok');
     }catch(e){
-      // ignore
+      App.toastErro('Não foi possível excluir "' + nome + '"', e);
     }
   }
 
   async function baixarBackup(){
     try{
-      const res = await storageList('calc:');
-      const keys = (res && res.keys) ? res.keys : [];
+      // Leitura em lote — antes era um get() por produto.
+      const itens = await storageLerTudo('calc:');
       const produtos = {};
-      for(const key of keys){
+      itens.forEach(({ key, value })=>{
         const nome = decodeURIComponent(key.replace('calc:',''));
-        const r = await storageGet(key);
-        if(r && r.value){
-          produtos[nome] = JSON.parse(r.value);
-        }
-      }
+        try{ produtos[nome] = JSON.parse(value); }
+        catch(e){ console.warn('registro corrompido ignorado no backup:', nome); }
+      });
       if(Object.keys(produtos).length === 0){
-        alert('Não há produtos salvos para gerar backup ainda.');
+        await App.avisar('Não há produtos salvos para gerar backup ainda.');
         return;
       }
       const payload = JSON.stringify({ tipo:'calculadora-custo-backup', geradoEm: new Date().toISOString(), produtos }, null, 2);
@@ -2350,30 +1901,57 @@ Tupan</textarea>
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }catch(e){
-      console.error('Erro ao gerar backup:', e);
-      alert('Não foi possível gerar o backup: ' + (e && e.message ? e.message : 'erro desconhecido'));
+      App.toastErro('Não foi possível gerar o backup', e);
     }
   }
 
   async function importarBackup(file){
+    let produtos, nomes;
     try{
       const texto = await file.text();
       const json = JSON.parse(texto);
-      const produtos = json.produtos || json; // aceita tanto o formato do backup quanto um objeto simples {nome: dados}
-      const nomes = Object.keys(produtos);
-      if(nomes.length === 0){
-        alert('Esse arquivo não parece ter produtos salvos.');
-        return;
-      }
-      for(const nome of nomes){
-        const key = 'calc:' + encodeURIComponent(nome);
-        await storageSet(key, JSON.stringify(produtos[nome]));
-      }
-      await atualizarListaSalvos();
-      alert(nomes.length + ' produto(s) importado(s) com sucesso.');
+      produtos = json.produtos || json; // aceita o formato do backup ou {nome: dados}
+      nomes = Object.keys(produtos);
     }catch(e){
-      console.error('Erro ao importar backup:', e);
-      alert('Não foi possível importar esse arquivo. Confirme se é um backup gerado por este app.');
+      App.toastErro('Não foi possível ler esse arquivo. Confirme se é um backup gerado por este app', e);
+      return;
+    }
+    if(!nomes.length){
+      await App.avisar('Esse arquivo não parece ter produtos salvos.');
+      return;
+    }
+
+    // Importar sobrescreve produtos de mesmo nome — avisa quais antes.
+    const conflitos = nomes.filter(n => produtosCache.some(p => p.nome === n));
+    const ok = await App.confirmar({
+      titulo: 'Importar backup',
+      mensagem: 'Importar ' + nomes.length + ' produto(s)?' +
+        (conflitos.length
+          ? '\n\n' + conflitos.length + ' já existe(m) e será(ão) substituído(s):\n' +
+            conflitos.slice(0, 8).join(', ') + (conflitos.length > 8 ? ', ...' : '')
+          : ''),
+      confirmar: 'Importar',
+      perigo: conflitos.length > 0
+    });
+    if(!ok) return;
+
+    let importados = 0;
+    const falhas = [];
+    for(const nome of nomes){
+      try{
+        await storageSet('calc:' + encodeURIComponent(nome), JSON.stringify(produtos[nome]));
+        importados++;
+      }catch(e){
+        console.error('falha ao importar ' + nome, e);
+        falhas.push(nome);
+      }
+    }
+    await atualizarListaSalvos();
+    if(falhas.length){
+      App.toast(importados + ' produto(s) importado(s); ' + falhas.length + ' falharam: ' +
+        falhas.slice(0, 5).join(', '), 'erro');
+    } else {
+      App.toast(importados + ' produto(s) importado(s) com sucesso.', 'ok');
     }
   }
 
@@ -2403,7 +1981,7 @@ Tupan</textarea>
 
   $('firebaseSaveBtn').addEventListener('click', async ()=>{
     const texto = $('firebaseConfigInput').value.trim();
-    if(!texto){ alert('Cole o firebaseConfig primeiro.'); return; }
+    if(!texto){ App.toast('Cole o firebaseConfig primeiro.', 'info'); return; }
     const config = parseFirebaseConfig(texto);
     if(!config.apiKey || !config.projectId || !config.appId){
       $('firebaseMsg').textContent = 'Não consegui identificar apiKey/projectId/appId nesse texto. Confira se colou o bloco firebaseConfig completo.';
@@ -2411,7 +1989,7 @@ Tupan</textarea>
     }
     $('firebaseMsg').textContent = 'Conectando...';
     try{
-      inicializarFirebase(config);
+      await inicializarFirebase(config); // agora e' assincrona (aguarda o delete do app anterior)
       setFirebaseConfigSalva(config);
       storageBackend = 'firebase';
       await testarConexaoFirebase(true);
@@ -2434,9 +2012,16 @@ Tupan</textarea>
   });
 
   const firebaseConfigSalva = getFirebaseConfigSalva();
+  // A inicializacao virou assincrona; guardamos a promessa para que o
+  // bloco de arranque no fim do arquivo espere por ela antes de tentar
+  // qualquer leitura (senao firestoreDb ainda seria null).
+  let promessaFirebase = Promise.resolve();
   if(firebaseConfigSalva){
     $('firebaseConfigInput').value = JSON.stringify(firebaseConfigSalva, null, 2);
-    try{ inicializarFirebase(firebaseConfigSalva); }catch(e){ console.error(e); }
+    promessaFirebase = inicializarFirebase(firebaseConfigSalva).catch(e=>{
+      console.error('Falha ao iniciar o Firebase:', e);
+      rebaixarBackend();
+    });
   }
 
   async function conectarGemini(siteKey, mostrarMsg){
@@ -2458,7 +2043,7 @@ Tupan</textarea>
 
   $('geminiSaveBtn').addEventListener('click', async ()=>{
     const siteKey = $('recaptchaSiteKey').value.trim();
-    if(!siteKey){ alert('Cole a Site Key do reCAPTCHA primeiro.'); return; }
+    if(!siteKey){ App.toast('Cole a Site Key do reCAPTCHA primeiro.', 'info'); return; }
     $('geminiMsg').textContent = 'Conectando...';
     setRecaptchaSiteKeySalva(siteKey);
     await conectarGemini(siteKey, true);
@@ -2490,98 +2075,59 @@ Tupan</textarea>
       .catch(e=>{ $('geminiMsg').textContent = e.message; });
   }
 
-  function mostrarViewProdutos(){
-    $('viewProdutos').style.display = 'block';
-    $('viewFrete').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-    atualizarListaSalvos();
-  }
-  function mostrarViewFrete(){
-    $('viewFrete').style.display = 'block';
-    $('viewProdutos').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-  }
-  function mostrarViewSync(){
-    $('viewSync').style.display = 'block';
-    $('viewProdutos').style.display = 'none';
-    $('viewFrete').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-  }
-  function mostrarViewCotacao(){
-    $('viewCotacao').style.display = 'block';
-    $('viewProdutos').style.display = 'none';
-    $('viewFrete').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-  }
-  function mostrarViewHistorico(){
-    $('viewHistorico').style.display = 'block';
-    $('viewProdutos').style.display = 'none';
-    $('viewFrete').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-    carregarHistorico();
-  }
-  function mostrarViewConcorrentes(){
-    $('viewConcorrentes').style.display = 'block';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewProdutos').style.display = 'none';
-    $('viewFrete').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewCalculadora').style.display = 'none';
-    carregarHistoricoConcorrentes();
-  }
-  function mostrarViewCalculadora(){
-    $('viewProdutos').style.display = 'none';
-    $('viewFrete').style.display = 'none';
-    $('viewSync').style.display = 'none';
-    $('viewCotacao').style.display = 'none';
-    $('viewHistorico').style.display = 'none';
-    $('viewConcorrentes').style.display = 'none';
-    $('viewNotas').style.display = 'none';
-    $('viewComparar').style.display = 'none';
-    $('viewPesquisaLote').style.display = 'none';
-    $('viewCalculadora').style.display = 'block';
-  }
-  function mostrarViewNotas(){
-    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora','viewComparar','viewPesquisaLote'].forEach(v=>$(v).style.display='none');
-    $('viewNotas').style.display = 'block';
-    carregarNotasEmitidas(false);
-  }
+  // ─── Navegação ───────────────────────────────────────────────
+  // Antes eram oito funcoes, cada uma listando na mao as outras nove
+  // telas para esconder — 90 linhas onde um roteador resolve. Alem
+  // disso a tela ficava so' no display: nao dava para recarregar a
+  // pagina e continuar onde estava, nem mandar um link ja' aberto
+  // no Historico. Agora o endereco carrega a tela (#Historico).
+  const router = App.criarRouter({
+    views: {
+      Calculadora:  'viewCalculadora',
+      Frete:        'viewFrete',
+      Produtos:     'viewProdutos',
+      Cotacao:      'viewCotacao',
+      Historico:    'viewHistorico',
+      Concorrentes: 'viewConcorrentes',
+      Notas:        'viewNotas',
+      Sync:         'viewSync',
+      Comparar:     'viewComparar',
+      PesquisaLote: 'viewPesquisaLote'
+    },
+    padrao: 'Calculadora',
+    // Estas duas dependem de um pedido selecionado no Historico:
+    // restaurar direto de um link deixaria a tela vazia.
+    naoRestauraveis: ['Comparar', 'PesquisaLote'],
+    aoEntrar: {
+      Produtos:     () => atualizarListaSalvos(),
+      Historico:    () => carregarHistorico(),
+      Concorrentes: () => carregarHistoricoConcorrentes(),
+      Notas:        () => carregarNotasEmitidas(false)
+    },
+    aoTrocar: (nome) => {
+      const botoes = {
+        Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
+        Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
+        Notas:'verNotasBtn', Sync:'verSyncBtn'
+      };
+      Object.keys(botoes).forEach(v => {
+        const b = $(botoes[v]);
+        if(!b) return;
+        if(v === nome) b.setAttribute('aria-current', 'page');
+        else b.removeAttribute('aria-current');
+      });
+    }
+  });
+
+  const mostrarViewCalculadora  = () => router.ir('Calculadora');
+  const mostrarViewFrete        = () => router.ir('Frete');
+  const mostrarViewProdutos     = () => router.ir('Produtos');
+  const mostrarViewCotacao      = () => router.ir('Cotacao');
+  const mostrarViewHistorico    = () => router.ir('Historico');
+  const mostrarViewConcorrentes = () => router.ir('Concorrentes');
+  const mostrarViewNotas        = () => router.ir('Notas');
+  const mostrarViewSync         = () => router.ir('Sync');
+
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
   $('buscaProduto').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
   $('buscaFornecedor').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
@@ -2606,9 +2152,7 @@ Tupan</textarea>
     const d = historicoDocsCache.find(x => x.id === docId);
     if(!d) return;
 
-    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora','viewNotas','viewPesquisaLote'].forEach(v=>$(v).style.display='none');
-    $('viewComparar').style.display = 'block';
-    window.scrollTo(0,0);
+    router.ir('Comparar');
 
     // Painel esquerdo: o pedido, somente leitura
     const nome = d.nomeCotacao || d.fornecedor || 'Pedido';
@@ -2648,7 +2192,7 @@ Tupan</textarea>
     async function salvarStatusPedido(){
       $('cmpStatusMsg').textContent = 'Gravando status...';
       try{
-        await firestoreDb.collection('cotacoes').doc(d.id).update({ itens: d.itens });
+        await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(d.id).update({ itens: d.itens }));
         $('cmpStatusMsg').textContent = 'Status gravado ✓ ' + new Date().toLocaleTimeString('pt-BR');
         renderHistorico();
       }catch(e){
@@ -2692,9 +2236,7 @@ Tupan</textarea>
     const d = historicoDocsCache.find(x => x.id === docId);
     if(!d) return;
 
-    ['viewProdutos','viewFrete','viewSync','viewCotacao','viewHistorico','viewConcorrentes','viewCalculadora','viewNotas','viewComparar'].forEach(v=>$(v).style.display='none');
-    $('viewPesquisaLote').style.display = 'block';
-    window.scrollTo(0,0);
+    router.ir('PesquisaLote');
 
     loteDocId = docId;
     loteExecToken++;      // qualquer pesquisa ainda rodando deixa de valer
@@ -2708,7 +2250,7 @@ Tupan</textarea>
     $('refazerFalhasBtn').style.display = 'none';
     $('pesqLoteMsg').textContent = '';
     $('salvarLoteMsg').textContent = '';
-    $('buscaGoogleWidgetLote').innerHTML = '';
+    mostrarWidgetBusca('buscaGoogleWidgetLote', null);
 
     const nome = d.nomeCotacao || d.fornecedor || 'Pedido';
     loteNomePedido = nome;
@@ -2723,6 +2265,14 @@ Tupan</textarea>
     })).filter(it => it.produto);
 
     renderLoteTabela();
+  }
+
+  // Lojas listadas no textarea da aba Concorrentes, uma por linha.
+  function lojasDoCampo(){
+    return String($('lojasBusca').value || '')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l);
   }
 
   function renderLoteTabela(){
@@ -2741,7 +2291,7 @@ Tupan</textarea>
       valoresDigitados[inp.dataset.nosso] = inp.value;
     });
 
-    const lojas = loteLojas.length ? loteLojas : ($('lojasBusca').value||'').split('\n').map(l=>l.trim()).filter(l=>l);
+    const lojas = loteLojas.length ? loteLojas : lojasDoCampo();
     let html = '<table class="lote-table"><thead><tr><th>Código</th><th>Produto</th><th>Nosso preço</th>';
     lojas.forEach(loja => html += '<th>'+escapeHtml(loja)+'</th>');
     html += '</tr></thead><tbody>';
@@ -2770,7 +2320,7 @@ Tupan</textarea>
             cls += (r.preco < item.nossoPreco) ? ' barato' : ' caro';
           }
           const precoHtml = r.url
-            ? '<a href="'+escapeHtml(r.url)+'" target="_blank" rel="noopener noreferrer">'+brl(r.preco)+'</a>'
+            ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+brl(r.preco)+'</a>'
             : brl(r.preco);
           const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
           const rodape = r.marca
@@ -2784,41 +2334,51 @@ Tupan</textarea>
     html += '</tbody></table>';
     $('loteTabela').innerHTML = html;
 
+    // Repõe o que o usuário estava digitando (a tabela é reconstruída a
+    // cada loja que responde) e devolve o cursor ao campo em foco.
     $('loteTabela').querySelectorAll('[data-nosso]').forEach(inp=>{
       if(valoresDigitados[inp.dataset.nosso] != null) inp.value = valoresDigitados[inp.dataset.nosso];
-      inp.addEventListener('change', ()=>{
-        const idx = Number(inp.dataset.nosso);
-        loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
-        renderLoteTabela();
-      });
     });
     if(idxFocado != null){
       const volta = $('loteTabela').querySelector('[data-nosso="'+idxFocado+'"]');
       if(volta) volta.focus();
     }
-
-    $('loteTabela').querySelectorAll('[data-refazer]').forEach(btn=>btn.addEventListener('click', async ()=>{
-      if(loteRodando) return; // não atropela uma varredura em andamento
-      const [idx, lojaIdx] = btn.dataset.refazer.split('_').map(Number);
-      const item = loteItens[idx];
-      const loja = loteLojas[lojaIdx] || lojas[lojaIdx];
-      if(!item || !loja) return;
-      const meuToken = loteExecToken;
-      item.porLoja[lojaIdx] = { pendente: true };
-      renderLoteTabela();
-      try{
-        const r = await window.geminiRebuscarUmaLoja(item.produto, loja, 'maxima');
-        if(meuToken !== loteExecToken) return;
-        item.porLoja[lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
-      }catch(e){
-        console.error('Erro ao refazer:', e);
-        if(meuToken !== loteExecToken) return;
-        item.porLoja[lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
-      }
-      renderLoteTabela();
-      atualizarBotaoFalhas();
-    }));
   }
+
+  // Delegação: registrada UMA vez. Antes, cada render reanexava um
+  // listener por célula — numa pesquisa de 50 produtos x 7 lojas a
+  // tabela é reconstruída ~350 vezes, e a cada vez eram centenas de
+  // listeners novos.
+  App.delegar($('loteTabela'), 'change', '[data-nosso]', (inp)=>{
+    const idx = Number(inp.dataset.nosso);
+    if(!loteItens[idx]) return;
+    loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
+    renderLoteTabela();
+  });
+
+  App.delegar($('loteTabela'), 'click', '[data-refazer]', async (btn)=>{
+    if(loteRodando) return; // não atropela uma varredura em andamento
+    const [idx, lojaIdx] = btn.dataset.refazer.split('_').map(Number);
+    const item = loteItens[idx];
+    // loteLojas é preenchido ao iniciar a pesquisa; o fallback cobre o
+    // caso de o botão ser usado antes disso.
+    const loja = loteLojas[lojaIdx] || lojasDoCampo()[lojaIdx];
+    if(!item || !loja) return;
+    const meuToken = loteExecToken;
+    item.porLoja[lojaIdx] = { pendente: true };
+    renderLoteTabela();
+    try{
+      const r = await window.geminiRebuscarUmaLoja(item.produto, loja, 'maxima');
+      if(meuToken !== loteExecToken) return;
+      item.porLoja[lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
+    }catch(e){
+      console.error('Erro ao refazer:', e);
+      if(meuToken !== loteExecToken) return;
+      item.porLoja[lojaIdx] = { erro:true, mensagemErro: App.erroDe(e) };
+    }
+    renderLoteTabela();
+    atualizarBotaoFalhas();
+  });
 
   let loteIdxAtual = -1;
 
@@ -2827,11 +2387,11 @@ Tupan</textarea>
     // Sem esta checagem, cada produto falharia em sequência e a tabela ficaria
     // toda vermelha de erro, escondendo a causa real.
     if(!window.__geminiPronto){
-      alert('O Gemini não está conectado. Abra a aba Sincronização e conecte antes de pesquisar.');
+      App.toast('O Gemini não está conectado. Abra a aba Sincronização e conecte antes de pesquisar.', 'info');
       return;
     }
-    loteLojas = ($('lojasBusca').value||'').split('\n').map(l=>l.trim()).filter(l=>l);
-    if(!loteLojas.length){ alert('Preencha as lojas na aba Concorrentes antes de pesquisar em lote.'); return; }
+    loteLojas = lojasDoCampo();
+    if(!loteLojas.length){ App.toast('Preencha as lojas na aba Concorrentes antes de pesquisar em lote.', 'info'); return; }
 
     // Token de execução: se o usuário sair da tela e abrir outro pedido, o loop antigo
     // percebe que não é mais o corrente e para de mexer na tela do pedido novo.
@@ -2854,7 +2414,7 @@ Tupan</textarea>
           item.porLoja[lojaIdx] = r;
           if(meuToken === loteExecToken) renderLoteTabela();
         });
-        if(buscaHtml && meuToken === loteExecToken) $('buscaGoogleWidgetLote').innerHTML = buscaHtml;
+        if(buscaHtml && meuToken === loteExecToken) mostrarWidgetBusca('buscaGoogleWidgetLote', buscaHtml);
       }catch(e){
         console.error('Erro pesquisando "'+item.produto+'":', e);
         loteLojas.forEach((_, lojaIdx) => {
@@ -2974,13 +2534,13 @@ Tupan</textarea>
     try{
       await Promise.all(itensParaSalvar.map(it => {
         const resultados = Object.values(it.porLoja).filter(r => r && !r.pendente);
-        return firestoreDb.collection('concorrentes').add({
+        return App.comAuth(()=> firestoreDb.collection('concorrentes').add({
           produto: it.produto,
           meuPreco: (it.nossoPreco != null && it.nossoPreco > 0) ? it.nossoPreco : null,
           data: firebase.firestore.FieldValue.serverTimestamp(),
           resultados: resultados,
           origemPedido: loteNomePedido || null
-        });
+        }));
       }));
       $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem na aba Concorrentes, em "Comparações salvas".';
       carregarHistoricoConcorrentes();
@@ -3024,7 +2584,7 @@ Tupan</textarea>
     try{
       const corte = new Date(Date.now() - 60*86400000);
       const corteISO = corte.getFullYear() + '-' + String(corte.getMonth()+1).padStart(2,'0') + '-' + String(corte.getDate()).padStart(2,'0');
-      const snap = await firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get();
+      const snap = await App.comAuth(()=> firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get());
       notasEmitidasCache = [];
       snap.forEach(doc => notasEmitidasCache.push({ chave: doc.id, ...doc.data() }));
       notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
@@ -3037,10 +2597,7 @@ Tupan</textarea>
     }
   }
 
-  function fmtDataNota(iso){
-    const m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? (m[3]+'/'+m[2]+'/'+m[1]) : '--';
-  }
+  const fmtDataNota = App.fmtData; // aaaa-mm-dd -> dd/mm/aaaa (app-shared.js)
 
   function renderNotasEmitidas(){ renderListaNotas(''); }
   function renderListaNotasCmp(){ renderListaNotas('Cmp'); }
@@ -3108,7 +2665,7 @@ Tupan</textarea>
           const pctStNota = baseProd > 0 ? (n.stTotal / baseProd * 100) : 0;
           html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12.5px; color:var(--brick); font-weight:600;">ST total da nota: '+brl(n.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'% sobre o valor dos produtos ('+brl(baseProd)+')</div>';
         }
-        if(n.linkXml) html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="'+escapeHtml(n.linkXml)+'" target="_blank" rel="noopener">⬇ Baixar XML</a></div>';
+        if(safeUrl(n.linkXml)) html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="'+escapeHtml(safeUrl(n.linkXml))+'" target="_blank" rel="noopener noreferrer">⬇ Baixar XML</a></div>';
         html += '</div>';
       }
       html += '</div>';
@@ -3132,6 +2689,28 @@ Tupan</textarea>
   $('voltarCalculadoraBtn6').addEventListener('click', mostrarViewCalculadora);
 
   // ==================== COMPARAÇÃO COM CONCORRENTES ====================
+
+  // O Google exige exibir a "sugestao de pesquisa" quando o resultado
+  // usa o Google Search, e ela vem como HTML pronto de fora. Injetar
+  // isso direto na pagina daria a esse HTML o mesmo poder do nosso
+  // codigo; num iframe com sandbox ele fica isolado, sem acesso ao
+  // Firestore, ao localStorage nem ao resto do documento.
+  function mostrarWidgetBusca(idContainer, html){
+    const el = $(idContainer);
+    if(!el) return;
+    el.innerHTML = '';
+    if(!html) return;
+    const frame = document.createElement('iframe');
+    frame.className = 'busca-google-frame';
+    frame.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox');
+    frame.setAttribute('title', 'Sugestões de pesquisa do Google');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    frame.style.height = '80px';
+    frame.srcdoc = '<!doctype html><meta charset="utf-8">' +
+      '<base target="_blank"><body style="margin:0;font-family:sans-serif">' + html + '</body>';
+    el.appendChild(frame);
+  }
+
   let ultimosConcorrentes = [];
 
   function renderResultadoConcorrentes(){
@@ -3158,7 +2737,7 @@ Tupan</textarea>
         return;
       }
       html += '<tr>';
-      html += '<td>'+(c.url ? ('<a href="'+escapeHtml(c.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(c.loja)+'</a>') : escapeHtml(c.loja))
+      html += '<td>'+(safeUrl(c.url) ? ('<a href="'+escapeHtml(safeUrl(c.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(c.loja)+'</a>') : escapeHtml(c.loja))
         + ' <button class="lote-refazer" data-refazerconc="'+idx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>'
         + (c.nivel === 'maxima' ? '<span style="font-size:9.5px; color:var(--ink-soft);"> 🔍 máx.</span>' : '')+'</td>';
       html += '<td>'+escapeHtml(c.produto||'-')+'</td>';
@@ -3224,12 +2803,12 @@ Tupan</textarea>
       $('concorrentesMsg').textContent = 'Conecte o Gemini primeiro (aba Sincronização) — essa função depende dele.';
       return;
     }
-    $('buscaGoogleWidget').innerHTML = '';
+    mostrarWidgetBusca('buscaGoogleWidget', null);
 
     const descricao = $('descricaoProdutoBusca').value.trim();
     const lojasTexto = $('lojasBusca').value.trim();
-    if(!descricao){ alert('Descreva o produto que quer buscar.'); return; }
-    if(!lojasTexto){ alert('Liste pelo menos uma loja pra pesquisar.'); return; }
+    if(!descricao){ App.toast('Descreva o produto que quer buscar.', 'info'); $('descricaoProdutoBusca').focus(); return; }
+    if(!lojasTexto){ App.toast('Liste pelo menos uma loja pra pesquisar.', 'info'); $('lojasBusca').focus(); return; }
     const lojas = lojasTexto.split('\n').map(l=>l.trim()).filter(l=>l);
     $('concorrentesMsg').textContent = 'Pesquisando "' + descricao + '" em ' + lojas.length + ' loja(s) ao mesmo tempo — cada linha aparece assim que a loja responde.';
     $('compararConcorrentesBtn').disabled = true;
@@ -3257,7 +2836,7 @@ Tupan</textarea>
         renderResultadoConcorrentes();
       });
       $('concorrentesMsg').textContent = '';
-      if(buscaHtml){ $('buscaGoogleWidget').innerHTML = buscaHtml; }
+      if(buscaHtml){ mostrarWidgetBusca('buscaGoogleWidget', buscaHtml); }
     }catch(e){
       console.error(e);
       $('concorrentesMsg').textContent = 'Erro: ' + (e && e.message ? e.message : 'erro desconhecido');
@@ -3274,7 +2853,7 @@ Tupan</textarea>
     ultimosConcorrentes = [];
     $('resultadoConcorrentesCard').style.display = 'none';
     $('resultadoConcorrentes').innerHTML = '';
-    $('buscaGoogleWidget').innerHTML = '';
+    mostrarWidgetBusca('buscaGoogleWidget', null);
     $('concorrentesMsg').textContent = '';
     $('salvarConcorrentesMsg').textContent = '';
   });
@@ -3285,14 +2864,14 @@ Tupan</textarea>
       return;
     }
     const produtoRef = $('produtoConcorrente').value.trim();
-    if(!produtoRef){ alert('Preencha o nome do produto de referência antes de salvar.'); return; }
+    if(!produtoRef){ App.toast('Preencha o nome do produto de referência antes de salvar.', 'info'); $('produtoConcorrente').focus(); return; }
     try{
-      await firestoreDb.collection('concorrentes').add({
+      await App.comAuth(()=> firestoreDb.collection('concorrentes').add({
         produto: produtoRef,
         meuPreco: toNum($('meuPrecoConcorrente').value) || null,
         data: firebase.firestore.FieldValue.serverTimestamp(),
         resultados: ultimosConcorrentes
-      });
+      }));
       $('salvarConcorrentesMsg').textContent = '✓ Comparação salva.';
       carregarHistoricoConcorrentes();
     }catch(e){
@@ -3316,7 +2895,7 @@ Tupan</textarea>
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
     try{
-      const snap = await firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get();
+      const snap = await App.comAuth(()=> firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get());
       if(snap.empty){
         lista.innerHTML = '';
         msg.textContent = 'Nenhuma comparação salva ainda.';
@@ -3334,8 +2913,10 @@ Tupan</textarea>
         const item = document.createElement('div');
         item.className = 'historico-item';
 
-        const header = document.createElement('div');
+        const header = document.createElement('button');
+        header.type = 'button';
         header.className = 'historico-header';
+        header.setAttribute('aria-expanded', String(!!aberto));
         header.innerHTML =
           '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
           '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
@@ -3355,7 +2936,7 @@ Tupan</textarea>
           body.className = 'historico-body';
           let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
           resultados.forEach(r=>{
-            tabela += '<tr><td>'+(r.url?('<a href="'+escapeHtml(r.url)+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
+            tabela += '<tr><td>'+(safeUrl(r.url)?('<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
               + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
               + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
           });
@@ -3373,13 +2954,19 @@ Tupan</textarea>
           excluirBtn.className = 'del';
           excluirBtn.textContent = 'Excluir';
           excluirBtn.addEventListener('click', async ()=>{
-            if(!confirm('Excluir esta comparação do histórico? Essa ação não pode ser desfeita.')) return;
+            const ok = await App.confirmar({
+              titulo: 'Excluir comparação',
+              mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
+              confirmar: 'Excluir',
+              perigo: true
+            });
+            if(!ok) return;
             try{
-              await firestoreDb.collection('concorrentes').doc(doc.id).delete();
+              await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(doc.id).delete());
+              App.toast('Comparação excluída.', 'ok');
               carregarHistoricoConcorrentes();
             }catch(e){
-              console.error(e);
-              alert('Erro ao excluir: ' + (e && e.message ? e.message : 'erro desconhecido'));
+              App.toastErro('Erro ao excluir', e);
             }
           });
           acoes.appendChild(excluirBtn);
@@ -3402,12 +2989,7 @@ Tupan</textarea>
   let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
   let historicoDocsCache = [];
 
-  function formatarDataFirestore(ts){
-    try{
-      const d = ts && ts.toDate ? ts.toDate() : new Date(ts);
-      return d.toLocaleDateString('pt-BR');
-    }catch(e){ return '-'; }
-  }
+  const formatarDataFirestore = App.fmtDataFirestore; // app-shared.js
 
   function gerarNomeCotacao(fornecedor, dataObj){
     const dd = String(dataObj.getDate()).padStart(2,'0');
@@ -3441,7 +3023,7 @@ Tupan</textarea>
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
     try{
-      const snap = await firestoreDb.collection('cotacoes').orderBy('data','desc').limit(200).get();
+      const snap = await App.comAuth(()=> firestoreDb.collection('cotacoes').orderBy('data','desc').limit(200).get());
       historicoDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
       atualizarFiltroMesHistorico();
       renderHistorico();
@@ -3563,8 +3145,10 @@ Tupan</textarea>
       const item = document.createElement('div');
       item.className = 'historico-item';
 
-      const header = document.createElement('div');
+      const header = document.createElement('button');
+      header.type = 'button';
       header.className = 'historico-header';
+      header.setAttribute('aria-expanded', String(!!aberto));
       const contagem = temFiltroItem ? (itensFiltrados.length+' de '+totalOriginal+' item(ns)') : (totalOriginal+' item(ns)');
       header.innerHTML =
         '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
@@ -3642,21 +3226,29 @@ Tupan</textarea>
 
   async function excluirCotacaoHistorico(docId){
     if(!firestoreDb) return;
-    if(!confirm('Excluir esta cotação do histórico? Essa ação não pode ser desfeita.')) return;
+    const d = historicoDocsCache.find(x => x.id === docId);
+    const nome = d ? (d.nomeCotacao || d.fornecedor || 'esta cotação') : 'esta cotação';
+    const ok = await App.confirmar({
+      titulo: 'Excluir cotação',
+      mensagem: 'Excluir "' + nome + '" do histórico? Essa ação não pode ser desfeita.',
+      confirmar: 'Excluir',
+      perigo: true
+    });
+    if(!ok) return;
     try{
-      await firestoreDb.collection('cotacoes').doc(docId).delete();
+      await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(docId).delete());
+      App.toast('Cotação excluída.', 'ok');
       await carregarHistorico();
     }catch(e){
-      console.error(e);
-      alert('Erro ao excluir: ' + (e && e.message ? e.message : 'erro desconhecido'));
+      App.toastErro('Erro ao excluir', e);
     }
   }
 
   async function carregarCotacaoParaEdicao(docId){
     if(!firestoreDb) return;
     try{
-      const doc = await firestoreDb.collection('cotacoes').doc(docId).get();
-      if(!doc.exists){ alert('Essa cotação não existe mais (pode já ter sido excluída).'); return; }
+      const doc = await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(docId).get());
+      if(!doc.exists){ App.toast('Essa cotação não existe mais (pode já ter sido excluída).', 'info'); return; }
       const d = doc.data();
       resetCotacao();
       cotacaoEditandoId = docId;
@@ -3691,32 +3283,13 @@ Tupan</textarea>
       mostrarViewCotacao();
     }catch(e){
       console.error(e);
-      alert('Erro ao carregar cotação para edição: ' + (e && e.message ? e.message : 'erro desconhecido'));
+      App.toastErro('Erro ao carregar cotação para edição', e);
     }
   }
 
   // ==================== COTAÇÃO: comparação de preços ====================
 
-  function escapeHtml(s){
-    return String(s)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-  }
-
-  function parseNumeroBR(v){
-    if(v === '' || v == null) return null;
-    if(typeof v === 'number') return v;
-    let s = String(v).trim();
-    s = s.replace(/^R\$\s*/i,'').trim();
-    if(s === '') return null;
-    if(/,\d{1,2}$/.test(s)){
-      s = s.replace(/\./g,'').replace(',', '.');
-    } else {
-      s = s.replace(/,/g,'');
-    }
-    const n = parseFloat(s);
-    return isNaN(n) ? null : n;
-  }
+  // escapeHtml e parseNumeroBR vem de app-shared.js.
 
   function detectarColunas(headerRow){
     const campos = {
@@ -4174,74 +3747,76 @@ Tupan</textarea>
       html += '</div>';
     }
     el.innerHTML = html;
+  }
 
-    if($('selecionarTodosStatus')){
-      $('selecionarTodosStatus').addEventListener('change', (ev)=>{
-        el.querySelectorAll('.linha-select').forEach(cb=>{ cb.checked = ev.target.checked; });
-      });
-    }
-    if($('aplicarStatusEmMassaBtn')){
-      $('aplicarStatusEmMassaBtn').addEventListener('click', ()=>{
-        const novoStatus = $('statusEmMassa').value;
-        const selecionadas = el.querySelectorAll('.linha-select:checked');
-        if(selecionadas.length === 0){
-          $('statusEmMassaMsg').textContent = 'Marque pelo menos um produto primeiro.';
-          return;
-        }
-        selecionadas.forEach(cb=>{
-          const idx = parseInt(cb.dataset.idx,10);
-          if(ultimosResultados[idx]) ultimosResultados[idx].status = novoStatus;
-        });
-        const qtd = selecionadas.length;
-        renderResultadoCotacao();
-        $('statusEmMassaMsg').textContent = '✓ Status atualizado em ' + qtd + ' produto(s).';
-      });
-    }
+  // Delegação registrada UMA vez no container estável #resultadoCotacao.
+  // Antes cada render reanexava cinco listeners por linha — e esta
+  // tabela se redesenha a cada preço digitado.
+  {
+    const el = $('resultadoCotacao');
 
-    el.querySelectorAll('.remover-item-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const idx = parseInt(btn.dataset.idx,10);
-        const nome = ultimosResultados[idx] ? ultimosResultados[idx].produtoEsperado : 'este item';
-        if(!confirm('Remover "'+nome+'" desta cotação? Ele não vai entrar nas sugestões nem no total.')) return;
-        ultimosResultados.splice(idx, 1);
-        if(ultimosEsperados[idx] !== undefined) ultimosEsperados.splice(idx, 1);
-        renderResultadoCotacao();
-        renderSugestoesCotacao();
-      });
+    App.delegar(el, 'change', '#selecionarTodosStatus', (cb)=>{
+      el.querySelectorAll('.linha-select').forEach(x=>{ x.checked = cb.checked; });
     });
 
-    el.querySelectorAll('.match-select').forEach(sel=>{
-      sel.addEventListener('change', (ev)=>{
-        const idx = parseInt(ev.target.dataset.idx,10);
-        const novoRecIdx = parseInt(ev.target.value,10);
-        const exp = ultimosEsperados[idx];
-        const rec = novoRecIdx === -1 ? null : ultimosRecebidos[novoRecIdx];
-        const statusAnterior = ultimosResultados[idx] ? ultimosResultados[idx].status : 'negociacao';
-        ultimosResultados[idx] = construirResultado(exp, rec, novoRecIdx);
-        ultimosResultados[idx].status = statusAnterior || 'negociacao';
-        renderResultadoCotacao();
-        renderSugestoesCotacao();
+    App.delegar(el, 'click', '#aplicarStatusEmMassaBtn', ()=>{
+      const novoStatus = $('statusEmMassa').value;
+      const selecionadas = el.querySelectorAll('.linha-select:checked');
+      if(selecionadas.length === 0){
+        $('statusEmMassaMsg').textContent = 'Marque pelo menos um produto primeiro.';
+        return;
+      }
+      selecionadas.forEach(cb=>{
+        const idx = parseInt(cb.dataset.idx,10);
+        if(ultimosResultados[idx]) ultimosResultados[idx].status = novoStatus;
       });
+      const qtd = selecionadas.length;
+      renderResultadoCotacao();
+      $('statusEmMassaMsg').textContent = '✓ Status atualizado em ' + qtd + ' produto(s).';
     });
 
-    el.querySelectorAll('.status-select').forEach(sel=>{
-      sel.addEventListener('change', (ev)=>{
-        const idx = parseInt(ev.target.dataset.idx,10);
-        if(ultimosResultados[idx]) ultimosResultados[idx].status = ev.target.value;
+    App.delegar(el, 'click', '.remover-item-btn', async (btn)=>{
+      const idx = parseInt(btn.dataset.idx,10);
+      const nome = ultimosResultados[idx] ? ultimosResultados[idx].produtoEsperado : 'este item';
+      const ok = await App.confirmar({
+        titulo: 'Remover item',
+        mensagem: 'Remover "' + nome + '" desta cotação? Ele não vai entrar nas sugestões nem no total.',
+        confirmar: 'Remover',
+        perigo: true
       });
+      if(!ok) return;
+      ultimosResultados.splice(idx, 1);
+      if(ultimosEsperados[idx] !== undefined) ultimosEsperados.splice(idx, 1);
+      renderResultadoCotacao();
+      renderSugestoesCotacao();
     });
 
-    el.querySelectorAll('.preco-atual-input').forEach(inp=>{
-      inp.addEventListener('change', ()=>{
-        const idx = parseInt(inp.dataset.idx,10);
-        const r = ultimosResultados[idx];
-        if(!r) return;
-        const novoValor = toNum(inp.value);
-        r.precoRecebido = novoValor > 0 ? novoValor : null;
-        recalcularFlags(r);
-        renderResultadoCotacao();
-        renderSugestoesCotacao();
-      });
+    App.delegar(el, 'change', '.match-select', (sel)=>{
+      const idx = parseInt(sel.dataset.idx,10);
+      const novoRecIdx = parseInt(sel.value,10);
+      const exp = ultimosEsperados[idx];
+      const rec = novoRecIdx === -1 ? null : ultimosRecebidos[novoRecIdx];
+      const statusAnterior = ultimosResultados[idx] ? ultimosResultados[idx].status : 'negociacao';
+      ultimosResultados[idx] = construirResultado(exp, rec, novoRecIdx);
+      ultimosResultados[idx].status = statusAnterior || 'negociacao';
+      renderResultadoCotacao();
+      renderSugestoesCotacao();
+    });
+
+    App.delegar(el, 'change', '.status-select', (sel)=>{
+      const idx = parseInt(sel.dataset.idx,10);
+      if(ultimosResultados[idx]) ultimosResultados[idx].status = sel.value;
+    });
+
+    App.delegar(el, 'change', '.preco-atual-input', (inp)=>{
+      const idx = parseInt(inp.dataset.idx,10);
+      const r = ultimosResultados[idx];
+      if(!r) return;
+      const novoValor = toNum(inp.value);
+      r.precoRecebido = novoValor > 0 ? novoValor : null;
+      recalcularFlags(r);
+      renderResultadoCotacao();
+      renderSugestoesCotacao();
     });
   }
 
@@ -4350,7 +3925,7 @@ Tupan</textarea>
   }
 
   $('exportarExcelBtn').addEventListener('click', ()=>{
-    if(!ultimosResultados.length){ alert('Nada para exportar ainda — compare uma cotação primeiro.'); return; }
+    if(!ultimosResultados.length){ App.toast('Nada para exportar ainda — compare uma cotação primeiro.', 'info'); return; }
     const linhas = ultimosResultados.map(r=>({
       'Código': r.codigo || '',
       'Produto': r.produtoEsperado,
@@ -4382,8 +3957,8 @@ Tupan</textarea>
   });
 
   $('compararBtn').addEventListener('click', ()=>{
-    if(!ultimosEsperados.length){ alert('Carregue a planilha de cotação primeiro.'); return; }
-    if(!ultimosRecebidos.length){ alert('Carregue o PDF do fornecedor primeiro.'); return; }
+    if(!ultimosEsperados.length){ App.toast('Carregue a planilha de cotação primeiro.', 'info'); return; }
+    if(!ultimosRecebidos.length){ App.toast('Carregue o PDF do fornecedor primeiro.', 'info'); return; }
     ultimosResultados = compararCotacao(ultimosEsperados, ultimosRecebidos);
     produtosCotacaoSalvos = new Set();
     cotacaoEditandoId = null;
@@ -4406,8 +3981,8 @@ Tupan</textarea>
       return;
     }
     const fornecedor = $('fornecedorCotacao').value.trim();
-    if(!fornecedor){ alert('Informe o fornecedor desta cotação antes de salvar.'); return; }
-    if(ultimosResultados.length === 0){ alert('Não há itens nesta cotação pra salvar (todos foram removidos).'); return; }
+    if(!fornecedor){ App.toast('Informe o fornecedor desta cotação antes de salvar.', 'info'); $('fornecedorCotacao').focus(); return; }
+    if(ultimosResultados.length === 0){ App.toast('Não há itens nesta cotação pra salvar (todos foram removidos).', 'info'); return; }
     const itens = ultimosResultados.map(r=>({
       codigo: r.codigo || '',
       produto: r.produtoEsperado,
@@ -4422,18 +3997,18 @@ Tupan</textarea>
     try{
       if(cotacaoEditandoId){
         // Atualiza a cotação existente (mantém nome/data originais) — não cria duplicata
-        await firestoreDb.collection('cotacoes').doc(cotacaoEditandoId).set({ fornecedor, itens }, { merge: true });
-        alert('✓ Cotação atualizada no histórico.');
+        await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(cotacaoEditandoId).set({ fornecedor, itens }, { merge: true }));
+        App.toast('Cotação atualizada no histórico.', 'ok');
       } else {
         const agora = new Date();
-        const docRef = await firestoreDb.collection('cotacoes').add({
+        const docRef = await App.comAuth(()=> firestoreDb.collection('cotacoes').add({
           fornecedor,
           nomeCotacao: gerarNomeCotacao(fornecedor, agora),
           data: firebase.firestore.FieldValue.serverTimestamp(),
           itens
-        });
+        }));
         cotacaoEditandoId = docRef.id; // se clicar em salvar de novo agora, atualiza em vez de duplicar
-        alert('✓ Cotação salva no histórico.');
+        App.toast('Cotação salva no histórico.', 'ok');
       }
       resetCotacao();
     }catch(e){
@@ -4635,11 +4210,11 @@ Tupan</textarea>
 
   $('salvarIndividualBtn').addEventListener('click', async ()=>{
     const idx = $('individualSelect').value;
-    if(idx === ''){ alert('Escolha um produto primeiro.'); return; }
+    if(idx === ''){ App.toast('Escolha um produto primeiro.', 'info'); return; }
     const r = itensValidosParaSalvar()[parseInt(idx,10)];
     if(!r) return;
     const venda = $('indVenda').value;
-    if(!venda || toNum(venda) <= 0){ alert('Preencha o preço de venda.'); return; }
+    if(!venda || toNum(venda) <= 0){ App.toast('Preencha o preço de venda.', 'info'); $('indVenda').focus(); return; }
     const fornecedor = $('fornecedorProdutos').value.trim();
     const dados = {
       produto: r.produtoEsperado,
@@ -4681,7 +4256,7 @@ Tupan</textarea>
   $('usarFreteBtn').addEventListener('click', ()=>{
     const valor = calcularFrete();
     if(!(valor > 0)){
-      alert('Preencha o preço por tonelada e o peso do produto primeiro.');
+      App.toast('Preencha o preço por tonelada e o peso do produto primeiro.', 'info');
       return;
     }
     $('frete').value = valor.toFixed(2);
@@ -4689,10 +4264,22 @@ Tupan</textarea>
     calcular();
   });
 
+  // ─── Arranque ────────────────────────────────────────────────
   onToggleChange();
   calcular();
   atualizarStatusArmazenamento();
+  router.iniciar(); // abre a tela indicada no endereço (#Historico, ...) ou a Calculadora
+
+  // Depois de entrar, recarrega o que a tela precisa.
+  window.__aoEntrar = ()=>{
+    atualizarListaSalvos();
+    if(router.atual() === 'Historico') carregarHistorico();
+    if(router.atual() === 'Concorrentes') carregarHistoricoConcorrentes();
+    if(router.atual() === 'Notas') carregarNotasEmitidas(true);
+  };
+
   (async ()=>{
+    await promessaFirebase; // sem isto, firestoreDb ainda podia ser null aqui
     if(storageBackend === 'firebase'){
       const ok = await testarConexaoFirebase(false);
       $('firebaseMsg').textContent = ok

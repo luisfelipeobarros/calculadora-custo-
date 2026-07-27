@@ -4,621 +4,56 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Controle de Notas</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='4' y='4' width='56' height='56' rx='10' fill='%23F4EFE4'/><path d='M18 12h20l10 10v30a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z' fill='%23A8462B'/><path d='M38 12v10h10z' fill='%237A3320'/><rect x='19' y='28' width='22' height='3.4' rx='1.2' fill='%23F4EFE4'/><rect x='19' y='36' width='22' height='3.4' rx='1.2' fill='%23F4EFE4'/><rect x='19' y='44' width='14' height='3.4' rx='1.2' fill='%23F4EFE4'/></svg>">
-<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='4' y='4' width='56' height='56' rx='10' fill='%23F4EFE4'/><path d='M18 12h20l10 10v30a3 3 0 0 1-3 3H18a3 3 0 0 1-3-3V15a3 3 0 0 1 3-3z' fill='%23A8462B'/><path d='M38 12v10h10z' fill='%237A3320'/><rect x='19' y='28' width='22' height='3.4' rx='1.2' fill='%23F4EFE4'/><rect x='19' y='36' width='22' height='3.4' rx='1.2' fill='%23F4EFE4'/><rect x='19' y='44' width='14' height='3.4' rx='1.2' fill='%23F4EFE4'/></svg>">
+<link rel="manifest" href="manifest-notas.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#A8462B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Notas">
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Design system comum aos dois apps. Ver app-shared.css -->
+<link rel="stylesheet" href="app-shared.css">
+
 <style>
-  :root{
-    --paper:#F6F3E7;
-    --stripe:#DCE8D2;
-    --stripe2:#EDF3E6;
-    --ink:#202B22;
-    --ink-soft:#5B6B5E;
-    --brick:#A8462B;
-    --brick-dark:#8A3821;
-    --copper:#B9773F;
-    --profit:#2E6B45;
-    --loss:#B23A2E;
-    --line:#C9C2A8;
-    --card:#FFFEF9;
-    --font-display:'Roboto Slab', serif;
-    --font-body:'IBM Plex Sans', sans-serif;
-    --font-mono:'IBM Plex Mono', monospace;
-  }
-  *{box-sizing:border-box;}
-  @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
-  tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
-  .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px; }
-  @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
-  .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
-  .top-forn-row:last-child{ border-bottom:none; }
-  .top-forn-nome{ font-size:13px; }
-  .top-forn-qtd{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); }
-  .top-forn-valor{ font-family:var(--font-mono); font-size:13px; font-weight:700; white-space:nowrap; }
-  body{
-    margin:0;
-    padding:0;
-    background:var(--paper);
-    color:var(--ink);
-    font-family:var(--font-body);
-    -webkit-font-smoothing:antialiased;
-  }
-  .wrap{
-    padding:28px 20px 60px;
-  }
-  header.top{
+  /* Somente o que e' exclusivo do Controle de Notas. */
+  .wrap{ padding:28px 20px 60px; }
+  header.top, footer.note,
+  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas{
     max-width:1700px;
     margin-left:auto;
     margin-right:auto;
   }
-  #viewCalculadora, #viewFrete, #viewSync{
-    max-width:1440px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{
-    max-width:1700px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  footer.note{
-    max-width:1700px;
-    margin-left:auto;
-    margin-right:auto;
-  }
-  header.top{
-    display:flex;
-    align-items:flex-end;
-    justify-content:space-between;
-    flex-wrap:wrap;
-    gap:12px;
-    border-bottom:3px solid var(--ink);
-    padding-bottom:14px;
-    margin-bottom:22px;
-  }
-  .title-block h1{
-    font-family:var(--font-display);
-    font-weight:700;
-    font-size:clamp(24px,4vw,34px);
-    margin:0 0 4px;
-    letter-spacing:0.5px;
-  }
-  .title-block p{
-    margin:0;
-    color:var(--ink-soft);
-    font-size:13px;
-    font-family:var(--font-mono);
-    letter-spacing:0.5px;
-  }
-  .stamp{
-    font-family:var(--font-mono);
-    font-size:11px;
-    letter-spacing:1.5px;
-    color:var(--brick);
-    border:2px solid var(--brick);
-    padding:5px 10px;
-    border-radius:3px;
-    text-transform:uppercase;
-    transform:rotate(-2deg);
-    white-space:nowrap;
-  }
 
-  .grid{
-    display:grid;
-    grid-template-columns:1.15fr 1fr;
-    gap:22px;
-    align-items:start;
-  }
-  @media (max-width:880px){
-    .grid{grid-template-columns:1fr;}
-  }
-
-  .card{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:6px;
-    padding:18px 20px;
-    margin-bottom:18px;
-  }
-  .card h2{
-    font-family:var(--font-display);
-    font-size:15px;
-    font-weight:700;
-    margin:0 0 14px;
-    text-transform:uppercase;
-    letter-spacing:0.8px;
-    color:var(--brick-dark);
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .card h2::after{
-    content:'';
-    flex:1;
-    height:1px;
-    background:var(--line);
-  }
-
-  .field{margin-bottom:14px;}
-  .field:last-child{margin-bottom:0;}
-  .field label{
-    display:block;
-    font-size:12.5px;
-    font-weight:600;
-    margin-bottom:5px;
-    color:var(--ink);
-  }
-  .field .hint{
-    font-size:11px;
-    color:var(--ink-soft);
-    font-weight:400;
-    margin-left:4px;
-  }
-  .input-row{
-    display:flex;
-    align-items:center;
-    border:1.5px solid var(--line);
-    border-radius:4px;
-    background:#fff;
-    overflow:hidden;
-    transition:border-color .15s;
-  }
-  .input-row:focus-within{
-    border-color:var(--brick);
-  }
-  .input-row .prefix{
-    padding:9px 10px;
-    background:var(--stripe2);
-    font-family:var(--font-mono);
-    font-size:13px;
-    color:var(--ink-soft);
-    border-right:1.5px solid var(--line);
-  }
-  .input-row input[type=text],
-  .input-row input[type=number]{
-    border:0;
-    outline:0;
-    padding:9px 10px;
-    font-family:var(--font-mono);
-    font-size:14px;
-    width:100%;
-    background:transparent;
-    color:var(--ink);
-  }
-  input[type=number]::-webkit-outer-spin-button,
-  input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
-  .no-spin::-webkit-outer-spin-button,
-  .no-spin::-webkit-inner-spin-button{
-    -webkit-appearance:none;
-    margin:0;
-  }
-  .no-spin{-moz-appearance:textfield;}
-
-  .toggle{
-    display:inline-flex;
-    border:1.5px solid var(--line);
-    border-radius:4px;
-    overflow:hidden;
-  }
-  .toggle button{
-    border:0;
-    background:#fff;
-    padding:8px 16px;
-    font-family:var(--font-body);
-    font-size:13px;
-    font-weight:600;
-    color:var(--ink-soft);
-    cursor:pointer;
-    transition:background .15s,color .15s;
-  }
-  .toggle button + button{border-left:1.5px solid var(--line);}
-  .toggle button.active{
-    background:var(--brick);
-    color:#fff;
-  }
-  .toggle button:focus-visible{outline:2px solid var(--copper); outline-offset:-2px;}
-
-  .sub-field{
-    margin-top:10px;
-    padding-top:10px;
-    border-top:1px dashed var(--line);
-  }
-  .row2{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:12px;
-  }
-
-  /* Results ledger */
-  .resultado-wrap{
-    position:sticky;
-    top:20px;
-  }
-  .ledger{
-    background:repeating-linear-gradient(
-      var(--card) 0px, var(--card) 34px,
-      var(--stripe) 34px, var(--stripe) 68px
-    );
-    border:1px solid var(--line);
-    border-radius:6px;
-    overflow:hidden;
-  }
-  .ledger-head{
-    background:var(--ink);
-    color:var(--paper);
-    padding:14px 20px;
-    font-family:var(--font-display);
-    font-size:14px;
-    font-weight:700;
-    text-transform:uppercase;
-    letter-spacing:1px;
-  }
-  .hero{
-    padding:20px 20px 16px;
-    background:var(--card);
-    border-bottom:2px solid var(--ink);
-  }
-  .hero-row{
-    display:flex;
-    justify-content:space-between;
-    align-items:baseline;
-    margin-bottom:10px;
-  }
-  .hero-row:last-child{margin-bottom:0;}
-  .hero-label{
-    font-size:12px;
-    font-weight:600;
-    color:var(--ink-soft);
-    text-transform:uppercase;
-    letter-spacing:0.5px;
-  }
-  .hero-value{
-    font-family:var(--font-mono);
-    font-size:26px;
-    font-weight:600;
-  }
-  .hero-value.profit{color:var(--profit);}
-  .hero-value.loss{color:var(--loss);}
-
-  .ledger-body{padding:6px 20px 4px;}
-  .lrow{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    padding:8px 0;
-    font-size:13.5px;
-    line-height:34px;
-    height:34px;
-  }
-  .lrow .lname{color:var(--ink);}
-  .lrow .lval{
-    font-family:var(--font-mono);
-    font-weight:600;
-  }
-
-  .desc-box{
-    margin:14px 20px 18px;
-    padding:12px 14px;
-    background:#fff;
-    border:1px dashed var(--copper);
-    border-radius:4px;
-    font-family:var(--font-mono);
-    font-size:12px;
-    white-space:pre-line;
-    color:var(--ink-soft);
-  }
-
-  .price-tier{
-    display:flex;
-    justify-content:space-between;
-    align-items:baseline;
-    padding:11px 0;
-    border-bottom:1px dashed var(--line);
-  }
-  .price-tier:last-child{border-bottom:0;}
-  .price-tier .ptlabel{font-size:13px; font-weight:600; color:var(--ink);}
-  .price-tier .pthint{font-size:11px; color:var(--ink-soft); font-weight:400; margin-left:5px;}
-  .price-tier .ptvalue{font-family:var(--font-mono); font-size:18px; font-weight:700;}
-  .price-tier.minimo .ptvalue{color:var(--ink-soft);}
-  .price-tier.recomendado .ptvalue{color:var(--copper);}
-  .price-tier.ideal .ptvalue{color:var(--profit);}
-
-  /* Cotação */
-  .quote-table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:12.5px;
-  }
-  .quote-table th{
-    text-align:left;
-    font-family:var(--font-mono);
-    font-size:10.5px;
-    text-transform:uppercase;
-    letter-spacing:0.5px;
-    color:var(--ink-soft);
-    padding:6px 8px;
-    border-bottom:2px solid var(--ink);
-  }
-  .quote-table td{
-    padding:7px 8px;
-    border-bottom:1px solid var(--line);
-    font-family:var(--font-mono);
-  }
-  .quote-table tr:nth-child(even) td{ background:var(--stripe2); }
-  .quote-table select{
-    font-family:var(--font-body);
-    font-size:12px;
-    padding:4px 6px;
-    border:1px solid var(--line);
-    border-radius:4px;
-    background:#fff;
-    color:var(--ink);
-    max-width:220px;
-  }
-  .status-badge{
-    display:inline-flex;
-    align-items:center;
-    gap:5px;
-    font-family:var(--font-body);
-    font-size:12px;
-    font-weight:600;
-    padding:4px 10px;
-    border-radius:20px;
-    white-space:nowrap;
-  }
-  .status-badge.up{ background:rgba(178,58,46,0.12); color:var(--loss); }
-  .status-badge.down{ background:rgba(46,107,69,0.12); color:var(--profit); }
-  .status-badge.qty{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.variacao{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.missing{ background:#e5e5e5; color:#222; }
-  .status-badge.neutral{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-negociacao{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-pedido{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.status-transito{ background:rgba(59,111,166,0.14); color:#2C5A8C; }
-  .status-badge.status-recebido{ background:rgba(46,107,69,0.12); color:var(--profit); }
-
-  .suggestion-item{
-    padding:12px 14px;
-    border-left:4px solid var(--line);
-    background:var(--stripe2);
-    border-radius:0 5px 5px 0;
-    margin-bottom:10px;
-    font-size:13px;
-  }
-  .suggestion-item:last-child{ margin-bottom:0; }
-  .suggestion-item.up{ border-left-color:var(--loss); }
-  .suggestion-item.down{ border-left-color:var(--profit); }
-  .suggestion-item.qty{ border-left-color:#C9962E; }
-  .suggestion-item.missing{ border-left-color:#444; }
-  .suggestion-item .sg-title{ font-weight:700; margin-bottom:3px; }
-  .suggestion-item .sg-detail{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
-
-  .historico-item{ margin-bottom:12px; }
-  .historico-item:last-child{ margin-bottom:0; }
-  .historico-header{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:10px 12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    cursor:pointer;
-    user-select:none;
-    flex-wrap:wrap;
-  }
-  .historico-header:hover{ background:var(--stripe); }
-  .historico-header .h-fornecedor{ font-weight:700; font-size:13.5px; }
-  .historico-header .h-data{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
-  .historico-header .h-count{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
-  .historico-header .h-total{ margin-left:auto; }
-  .historico-body{
-    padding:10px 4px 4px 14px;
-    border-left:2px solid var(--line);
-    margin-top:6px;
-  }
-
-  /* Saved products */
-  .saved-list{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    margin-bottom:10px;
-  }
-  .saved-item{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    padding:10px 12px;
-    flex-wrap:wrap;
-  }
-  .saved-item .info{
-    display:flex;
-    flex-direction:column;
-    gap:2px;
-    min-width:200px;
-    flex:1;
-  }
-  .saved-item .nome{
-    font-weight:600;
-    font-size:13.5px;
-  }
-  .saved-item .desc{
-    font-family:var(--font-mono);
-    font-size:11px;
-    color:var(--ink-soft);
-    white-space:pre-line;
-  }
-  .saved-item .price-highlight{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:6px 12px;
-    background:#fff;
-    border:1px solid var(--line);
-    border-radius:6px;
-  }
-  .saved-item .ph-venda{
-    font-family:var(--font-mono);
-    font-weight:700;
-    font-size:15px;
-    color:var(--ink);
-    white-space:nowrap;
-  }
-  .saved-item .badge{
-    font-family:var(--font-mono);
-    font-size:12px;
-    font-weight:600;
-    padding:3px 8px;
-    border-radius:3px;
-    white-space:nowrap;
-  }
-  .saved-item .badge.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
-  .saved-item .badge.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
-  .saved-item .actions-mini{
-    display:flex;
-    gap:6px;
-  }
-  .saved-item .actions-mini button{
-    border:1px solid var(--line);
-    background:#fff;
-    cursor:pointer;
-    font-size:12px;
-    padding:5px 10px;
-    border-radius:4px;
-    color:var(--ink);
-    font-family:var(--font-body);
-    font-weight:600;
-  }
-  .saved-item .actions-mini button:hover{background:var(--stripe);}
-  .saved-item .actions-mini button.del{color:var(--loss); border-color:var(--loss);}
-  .supplier-group{ margin-bottom:14px; }
-  .supplier-group:last-child{ margin-bottom:0; }
-  .supplier-header{
-    display:flex;
-    align-items:center;
-    gap:8px;
-    padding:9px 12px;
-    background:var(--stripe2);
-    border:1px solid var(--line);
-    border-radius:5px;
-    cursor:pointer;
-    user-select:none;
-  }
-  .supplier-header:hover{ background:var(--stripe); }
-  .supplier-arrow{
-    display:inline-block;
-    font-size:11px;
-    color:var(--brick);
-    transition:transform .15s;
-  }
-  .supplier-arrow.collapsed{ transform:rotate(-90deg); }
-  .supplier-name{
-    flex:1;
-    font-weight:600;
-    font-size:13px;
-  }
-  .supplier-count{
-    font-family:var(--font-mono);
-    font-size:11px;
-    color:var(--ink-soft);
-  }
-  .supplier-avg{
-    font-family:var(--font-mono);
-    font-size:11px;
-    font-weight:600;
-    padding:2px 8px;
-    border-radius:10px;
-    margin-left:auto;
-  }
-  .supplier-avg.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
-  .supplier-avg.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
-  .supplier-items{
-    display:flex;
-    flex-direction:column;
-    gap:8px;
-    margin-top:8px;
-    padding-left:8px;
-    border-left:2px solid var(--line);
-  }
-
-  .empty-note{
-    font-size:12.5px;
-    color:var(--ink-soft);
-    font-style:italic;
-  }
-  .status-pill{
-    display:inline-block;
-    font-family:var(--font-mono);
-    font-size:11.5px;
-    padding:5px 12px;
-    border-radius:20px;
-    margin-bottom:12px;
-  }
-  .status-pill.claude, .status-pill.local, .status-pill.firebase{
-    background:rgba(46,107,69,0.12);
-    color:var(--profit);
-  }
-  .status-pill.memoria{
-    background:#FCEFD6;
-    border:1px solid var(--copper);
-    color:var(--ink);
-  }
-
-  .btn{
-    font-family:var(--font-body);
-    font-weight:600;
-    font-size:13px;
-    border:1.5px solid var(--ink);
-    background:var(--ink);
-    color:var(--paper);
-    padding:9px 16px;
-    border-radius:4px;
-    cursor:pointer;
-    transition:opacity .15s;
-  }
-  .btn:hover{opacity:0.85;}
-  .btn.secondary{
-    background:transparent;
-    color:var(--ink);
-  }
-  .btn:focus-visible, .chip button:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
-
-  .actions{
-    display:flex;
-    gap:10px;
-    margin-top:4px;
-    flex-wrap:wrap;
-  }
-
-  footer.note{
-    margin-top:24px;
-    font-size:11.5px;
-    color:var(--ink-soft);
-    font-family:var(--font-mono);
-    line-height:1.6;
-  }
-</style>
-<style>
-  /* ── Adições do Controle de Notas ── */
   .kpi-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; }
-  .kpi{ background:var(--card); border:1px solid var(--line); border-radius:6px; padding:16px 18px; cursor:pointer; transition:background .15s; }
+  .kpi{
+    display:block;
+    width:100%;
+    text-align:left;
+    font-family:inherit;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:16px 18px;
+    cursor:pointer;
+    transition:background .15s;
+  }
   .kpi:hover{ background:var(--stripe2); }
+  /* As tres linhas do cartao sao <span> dentro de um <button> (o botao
+     e' o que da' foco e teclado); sem display:block elas ficariam na
+     mesma linha, colando o valor no rotulo. */
+  .kpi .k-label, .kpi .k-num, .kpi .k-sub{ display:block; }
   .kpi .k-label{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); }
-  .kpi .k-num{ font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--ink); margin-top:4px; }
+  .kpi .k-num{ font-family:var(--font-display); font-size:30px; font-weight:700; color:var(--ink); margin-top:4px; line-height:1.15; }
+  .kpi .k-num.compacto{ font-size:22px; }
   .kpi .k-sub{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .kpi.alerta .k-num{ color:var(--loss); }
   .kpi.ok .k-num{ color:var(--profit); }
+
   .badge{ display:inline-block; font-family:var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
   .badge.atrasado{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
   .badge.avencer{ background:var(--stripe); color:var(--ink); }
@@ -626,21 +61,44 @@
   .badge.cancelada{ background:#EEE; color:var(--ink-soft); }
   .badge.sim{ background:#E1EFE6; color:var(--profit); }
   .badge.nao{ background:#F7E2DF; color:var(--loss); }
+  .badge.desconhecido{ background:var(--stripe2); color:var(--ink-soft); }
+
   tr.linha-atrasada td{ background:#FBF0EE !important; }
   tr.linha-paga td{ opacity:.62; }
+
   .filtros{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
   .filtros input[type=search]{ flex:1; min-width:180px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px; }
   .chip-filtro{ font-family:var(--font-mono); font-size:11.5px; padding:6px 12px; border:1.5px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink-soft); cursor:pointer; }
-  .chip-filtro.ativo{ background:var(--brick); border-color:var(--brick); color:#fff; }
-  .acao-mini{ font-family:var(--font-mono); font-size:11px; padding:4px 8px; border:1px solid var(--line); border-radius:4px; background:var(--card); cursor:pointer; color:var(--ink); }
+  .chip-filtro[aria-pressed="true"]{ background:var(--brick); border-color:var(--brick); color:#fff; }
+
+  .acao-mini{ font-family:var(--font-mono); font-size:11px; padding:4px 8px; border:1px solid var(--line); border-radius:4px; background:var(--card); cursor:pointer; color:var(--ink); text-decoration:none; display:inline-block; }
   .acao-mini:hover{ background:var(--stripe); }
   .acao-mini.perigo{ color:var(--loss); border-color:var(--loss); }
+  .acao-mini[disabled]{ opacity:.5; cursor:default; }
+
   .pago-check{ width:18px; height:18px; accent-color:var(--profit); cursor:pointer; }
   .rodape-total{ font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft); margin-top:10px; text-align:right; }
+  .previsao-input{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
+  .nota-explicativa{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px; }
+
   #statusConexao{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
+  .barra-status{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+
+  .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px; }
+  @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
+  .top-forn-titulo{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px; }
+  .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .top-forn-row:last-child{ border-bottom:none; }
+  .top-forn-nome{ font-size:13px; }
+  .top-forn-qtd{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); }
+  .top-forn-valor{ font-family:var(--font-mono); font-size:13px; font-weight:700; white-space:nowrap; }
+
+  nav.telas{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  nav.telas .btn[aria-current="page"]{ background:var(--ink); color:var(--paper); }
 </style>
 </head>
 <body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 <div class="wrap">
 
   <header class="top">
@@ -648,62 +106,67 @@
       <h1>Controle de Notas</h1>
       <p>NF-e · IMPORTAÇÃO · DUPLICATAS · PAGAMENTOS</p>
     </div>
-    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+    <nav class="telas" aria-label="Telas do aplicativo">
       <button class="btn secondary" id="navPainel">📊 Painel</button>
       <button class="btn secondary" id="navImportar">📥 A importar <span id="countImportar"></span></button>
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
-      <button class="btn secondary" id="btnAtualizar">⟳ Atualizar</button>
+      <div id="contaBarra"></div>
       <div class="stamp">Uso interno</div>
-    </div>
+    </nav>
   </header>
 
-  <div style="margin-bottom:14px;"><span id="statusConexao">Conectando ao Firebase...</span></div>
+  <div class="barra-status">
+    <span id="statusConexao" role="status" aria-live="polite">Conectando ao Firebase...</span>
+  </div>
+
+  <main id="conteudo">
 
   <!-- ═══════════ PAINEL ═══════════ -->
   <div id="viewPainel">
+    <h2 class="sr-only">Painel</h2>
     <div class="kpi-grid">
-      <div class="kpi" id="kpiImportar">
-        <div class="k-label">Notas a importar</div>
-        <div class="k-num" id="kImportarQtd">--</div>
-        <div class="k-sub" id="kImportarValor"></div>
-      </div>
-      <div class="kpi alerta" id="kpiAtrasadas">
-        <div class="k-label">Duplicatas atrasadas</div>
-        <div class="k-num" id="kAtrasadasValor" style="font-size:22px;">--</div>
-        <div class="k-sub" id="kAtrasadasQtd"></div>
-      </div>
-      <div class="kpi alerta" id="kpiHoje">
-        <div class="k-label">Vencendo hoje</div>
-        <div class="k-num" id="kHojeValor" style="font-size:22px;">--</div>
-        <div class="k-sub" id="kHojeQtd"></div>
-      </div>
-      <div class="kpi" id="kpiSemana">
-        <div class="k-label">Vencendo em 7 dias</div>
-        <div class="k-num" id="kSemanaValor" style="font-size:22px;">--</div>
-        <div class="k-sub" id="kSemanaQtd"></div>
-      </div>
-      <div class="kpi" id="kpiFimMes">
-        <div class="k-label">Vencendo até o fim do mês</div>
-        <div class="k-num" id="kFimMesValor" style="font-size:22px;">--</div>
-        <div class="k-sub" id="kFimMesQtd"></div>
-      </div>
-      <div class="kpi" id="kpiReceber">
-        <div class="k-label">NF-e a receber</div>
-        <div class="k-num" id="kReceberValor" style="font-size:22px;">--</div>
-        <div class="k-sub" id="kReceberQtd"></div>
-      </div>
+      <button type="button" class="kpi" id="kpiImportar">
+        <span class="k-label">Notas a importar</span>
+        <span class="k-num" id="kImportarQtd">--</span>
+        <span class="k-sub" id="kImportarValor"></span>
+      </button>
+      <button type="button" class="kpi alerta" id="kpiAtrasadas">
+        <span class="k-label">Duplicatas atrasadas</span>
+        <span class="k-num compacto" id="kAtrasadasValor">--</span>
+        <span class="k-sub" id="kAtrasadasQtd"></span>
+      </button>
+      <button type="button" class="kpi alerta" id="kpiHoje">
+        <span class="k-label">Vencendo hoje</span>
+        <span class="k-num compacto" id="kHojeValor">--</span>
+        <span class="k-sub" id="kHojeQtd"></span>
+      </button>
+      <button type="button" class="kpi" id="kpiSemana">
+        <span class="k-label">Vencendo em 7 dias</span>
+        <span class="k-num compacto" id="kSemanaValor">--</span>
+        <span class="k-sub" id="kSemanaQtd"></span>
+      </button>
+      <button type="button" class="kpi" id="kpiFimMes">
+        <span class="k-label">Vencendo até o fim do mês</span>
+        <span class="k-num compacto" id="kFimMesValor">--</span>
+        <span class="k-sub" id="kFimMesQtd"></span>
+      </button>
+      <button type="button" class="kpi" id="kpiReceber">
+        <span class="k-label">NF-e a receber</span>
+        <span class="k-num compacto" id="kReceberValor">--</span>
+        <span class="k-sub" id="kReceberQtd"></span>
+      </button>
     </div>
 
     <div class="card" style="margin-top:18px;">
       <h2 id="painelTopTitulo">Top fornecedores — vencendo hoje / atrasados</h2>
-      <div class="top-forn-grid" id="painelTopGrid">
+      <div class="top-forn-grid">
         <div>
-          <div style="font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;" id="painelTopHojeLabel">Vencendo hoje</div>
+          <div class="top-forn-titulo" id="painelTopHojeLabel">Vencendo hoje</div>
           <div id="painelTopHoje"></div>
         </div>
         <div id="painelTopAtrasadasCol">
-          <div style="font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px;">Atrasados</div>
+          <div class="top-forn-titulo">Atrasados</div>
           <div id="painelTopAtrasadas"></div>
         </div>
       </div>
@@ -714,25 +177,27 @@
   <div id="viewImportar" style="display:none;">
     <div class="card">
       <h2>Notas a importar para o sistema</h2>
-      <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
+      <p class="nota-explicativa">
         Emitidas contra a empresa e ainda sem entrada no ERP. Somem daqui automaticamente quando o XML entra na pasta de importação.
       </p>
       <div class="filtros">
+        <label class="sr-only" for="buscaImportar">Buscar nota</label>
         <input type="search" id="buscaImportar" placeholder="Buscar por emitente, número ou chave...">
-        <button class="chip-filtro ativo" data-tipo="todas">Todas</button>
-        <button class="chip-filtro" data-tipo="nfe">Só NF-e</button>
-        <button class="chip-filtro" data-tipo="nfse">Só NFS-e</button>
-        <button class="chip-filtro" data-ord="data" id="ordDataBtn">Mais antigas primeiro</button>
+        <button type="button" class="chip-filtro" data-tipo="todas" aria-pressed="true">Todas</button>
+        <button type="button" class="chip-filtro" data-tipo="nfe" aria-pressed="false">Só NF-e</button>
+        <button type="button" class="chip-filtro" data-tipo="nfse" aria-pressed="false">Só NFS-e</button>
+        <button type="button" class="chip-filtro" id="ordDataBtn">Mais antigas primeiro</button>
       </div>
       <div class="filtros" style="margin-top:-4px;">
-        <input type="search" id="buscaProdutoImportar" placeholder="Filtrar por produto (código ou descrição)..." style="flex:1; min-width:220px;">
+        <label class="sr-only" for="buscaProdutoImportar">Filtrar por produto</label>
+        <input type="search" id="buscaProdutoImportar" placeholder="Filtrar por produto (código ou descrição)...">
         <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;">
           <input type="checkbox" id="excluirProdutoImportar" style="width:15px; height:15px; cursor:pointer;">
           mostrar as que NÃO têm esse produto
         </label>
       </div>
       <div id="tabelaImportar"></div>
-      <div class="rodape-total" id="totalImportar"></div>
+      <div class="rodape-total" id="totalImportar" role="status" aria-live="polite"></div>
     </div>
   </div>
 
@@ -741,19 +206,20 @@
     <div class="card">
       <h2>Controle de pagamentos</h2>
       <div class="filtros">
+        <label class="sr-only" for="buscaPag">Buscar duplicata</label>
         <input type="search" id="buscaPag" placeholder="Buscar por emitente ou nota...">
-        <button class="chip-filtro ativo" data-f="pendentes">Pendentes</button>
-        <button class="chip-filtro" data-f="atrasadas">Atrasadas</button>
-        <button class="chip-filtro" data-f="hoje">Hoje</button>
-        <button class="chip-filtro" data-f="7dias">Próx. 7 dias</button>
-        <button class="chip-filtro" data-f="pagas">Pagas</button>
-        <button class="chip-filtro" data-f="todas">Todas</button>
-        <button class="btn" id="pagarLoteBtn" style="display:none; margin-left:auto;">✓ Pagar filtradas em lote</button>
+        <button type="button" class="chip-filtro" data-f="pendentes" aria-pressed="true">Pendentes</button>
+        <button type="button" class="chip-filtro" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
+        <button type="button" class="chip-filtro" data-f="hoje" aria-pressed="false">Hoje</button>
+        <button type="button" class="chip-filtro" data-f="7dias" aria-pressed="false">Próx. 7 dias</button>
+        <button type="button" class="chip-filtro" data-f="pagas" aria-pressed="false">Pagas</button>
+        <button type="button" class="chip-filtro" data-f="todas" aria-pressed="false">Todas</button>
+        <button type="button" class="btn" id="pagarLoteBtn" style="display:none; margin-left:auto;">✓ Pagar filtradas em lote</button>
       </div>
       <div id="tabelaPag"></div>
-      <div class="rodape-total" id="totalPag"></div>
+      <div class="rodape-total" id="totalPag" role="status" aria-live="polite"></div>
       <div style="text-align:center; margin-top:10px;">
-        <button class="btn secondary" id="maisPagBtn" style="display:none;">Mostrar mais</button>
+        <button type="button" class="btn secondary" id="maisPagBtn" style="display:none;">Mostrar mais</button>
       </div>
     </div>
   </div>
@@ -762,576 +228,769 @@
   <div id="viewCanceladas" style="display:none;">
     <div class="card">
       <h2>Notas canceladas</h2>
-      <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
+      <p class="nota-explicativa">
         Marcadas manualmente na tela "A importar". Cancelar tira a nota da lista de importação e desativa as duplicatas dela.
       </p>
       <div class="filtros">
+        <label class="sr-only" for="buscaCanc">Buscar nota cancelada</label>
         <input type="search" id="buscaCanc" placeholder="Buscar por emitente ou número...">
       </div>
       <div id="tabelaCanc"></div>
-      <div class="rodape-total" id="totalCanc"></div>
+      <div class="rodape-total" id="totalCanc" role="status" aria-live="polite"></div>
     </div>
   </div>
+
+  </main>
 
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="app-shared.js"></script>
 <script>
 (function(){
   'use strict';
 
-  // ─── Config (mesma do projeto da calculadora) ───
-  const FIREBASE_CONFIG = {
-    apiKey: "AIzaSyCYZmYORbmVpgN0rNDsdCwN0Xm2Ce1SRyU",
-    authDomain: "bd-calculadora-d2ce0.firebaseapp.com",
-    projectId: "bd-calculadora-d2ce0",
-    storageBucket: "bd-calculadora-d2ce0.firebasestorage.app",
-    messagingSenderId: "543548220495",
-    appId: "1:543548220495:web:b3559aff504028b3ad363a"
-  };
+  var $ = App.$, escapeHtml = App.escapeHtml, brl = App.brl, fmtData = App.fmtData;
+  var hojeISO = App.hojeISO, somarDias = App.somarDias, diasEntre = App.diasEntre;
+  var norm = App.norm, safeUrl = App.safeUrl;
 
-  const $ = id => document.getElementById(id);
-  let db = null;
-  let notas = [];        // [{id(chave), ...campos}]
-  let duplicatas = [];   // [{id, ...campos}]
-  const notasPorChave = {};
+  App.instalarErroGlobal();
 
-  // ─── Helpers ───
-  const fmtBRL = v => (typeof v === 'number' && isFinite(v))
-    ? v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' }) : '--';
-  const fmtData = iso => {
-    if(!iso) return '--';
-    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? (m[3]+'/'+m[2]+'/'+m[1]) : String(iso);
-  };
-  const hojeISO = () => {
-    const d = new Date();
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-  };
-  const somarDias = (iso, n) => {
-    const d = new Date(iso + 'T12:00:00');
-    d.setDate(d.getDate() + n);
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-  };
-  const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const norm = s => String(s ?? '').toLowerCase();
+  var db = null;
+  var notas = [];        // [{id(chave), ...campos}]
+  var duplicatas = [];   // [{id, ...campos}]
+  var notasPorChave = Object.create(null);
+  var carregouNotas = false, carregouDuplicatas = false;
 
-  // Agrupa disparos rápidos (digitação) numa única execução. Sem isto, cada tecla
-  // re-filtra milhares de notas/duplicatas e reconstrói a tabela inteira.
-  function debounce(fn, ms){
-    let t = null;
-    return function(...args){
-      clearTimeout(t);
-      t = setTimeout(()=>fn.apply(this, args), ms);
-    };
-  }
-  const DEBOUNCE_BUSCA = 250;
+  // ─── Cortes de carga ────────────────────────────────────────
+  // Notas emitidas antes desta data nao contam como pendentes de
+  // importacao: os anos anteriores ja' foram informados a' fazenda.
+  var DATA_CORTE_IMPORTACAO = '2026-01-01';
 
-  // Notas emitidas antes desta data não contam como pendentes de importação:
-  // os anos anteriores já foram informados à fazenda e não devem ser mexidos.
-  const DATA_CORTE_IMPORTACAO = '2026-01-01';
+  // Ate' onde o app baixa notas do Firestore. Antes ele trazia a colecao
+  // INTEIRA a cada F5 — voce paga por documento lido, inclusive por anos
+  // que a tela nem mostra. Este corte e' bem mais antigo que o de
+  // importacao de proposito: as duplicatas em aberto precisam achar a
+  // nota de origem aqui dentro. As canceladas vem por uma consulta
+  // separada, entao a tela de canceladas continua completa.
+  var DATA_CORTE_CARGA = '2024-01-01';
 
-  // "Janela de hoje": numa segunda-feira, os vencimentos de sábado e domingo
-  // são considerados de hoje (pagam-se na segunda). A data de vencimento em si
-  // não muda — só a classificação. Nos demais dias, a janela é só o próprio dia.
-  const inicioJanelaHoje = () => {
-    const h = hojeISO();
+  // ─── Regras de negocio ──────────────────────────────────────
+
+  // "Janela de hoje": numa segunda-feira, os vencimentos de sabado e
+  // domingo sao considerados de hoje (pagam-se na segunda). A data de
+  // vencimento em si nao muda — so' a classificacao.
+  function inicioJanelaHoje(){
+    var h = hojeISO();
     return (new Date().getDay() === 1) ? somarDias(h, -2) : h;
+  }
+
+  var ehNfse = function(n){ return n.tipo === 'nfse'; }; // sem campo tipo = NF-e (documentos antigos)
+  var notaAtiva = function(n){ return (n.status || 'ativa') !== 'cancelada'; };
+  var notaAImportar = function(n){
+    return n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
+      (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
   };
 
-  const ehNfse = n => n.tipo === 'nfse'; // sem campo tipo = NF-e (documentos antigos)
-
-  // Diferença em dias inteiros entre duas datas aaaa-mm-dd (b - a).
-  const diasEntre = (a, b) =>
-    Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
-
-  // Aviso de previsão vencida: toda nota desta tela ainda não entrou no ERP,
-  // então basta a data estar preenchida e já ter passado. Sem data, não mostra nada.
-  function avisoPrevisao(prev){
-    if(!prev) return '';
-    const hoje = hojeISO();
-    if(prev >= hoje) return '';
-    const dias = diasEntre(prev, hoje);
-    const texto = dias === 1 ? '1 dia' : dias + ' dias';
-    return '<span class="badge atrasado" style="margin-left:6px; font-size:9.5px;" title="Previsão de entrega vencida e a nota ainda não foi lançada no ERP">⚠ '+texto+'</span>';
+  // Estes tres devolvem null quando a nota de origem nao esta' carregada
+  // (emitida antes do corte). Antes o codigo devolvia "false", ou seja,
+  // afirmava "nao foi recebida" sem ter como saber.
+  function notaDaDup(d){ return notasPorChave[d.chaveAcesso] || null; }
+  function dupDaNotaCancelada(d){
+    var n = notaDaDup(d);
+    return n ? !notaAtiva(n) : false;
   }
-  const notaAtiva = n => (n.status || 'ativa') !== 'cancelada';
-  const notaAImportar = n => n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
-    (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
-  const dupDaNotaCancelada = d => { const n = notasPorChave[d.chaveAcesso]; return n ? !notaAtiva(n) : false; };
-  const dupRecebida = d => { const n = notasPorChave[d.chaveAcesso]; return n ? n.noSistema === true : false; };
-  const situacaoDup = d => {
+  function dupRecebida(d){
+    var n = notaDaDup(d);
+    return n ? (n.noSistema === true) : null;
+  }
+  function situacaoDup(d){
     if(d.pago === true) return 'PAGO';
     if(dupDaNotaCancelada(d)) return 'CANCELADA';
     return (d.vencimento && d.vencimento < inicioJanelaHoje()) ? 'ATRASADO' : 'A VENCER';
-  };
+  }
 
-  // ─── Firebase ───
-  function conectar(){
-    try{
-      const app = firebase.initializeApp(FIREBASE_CONFIG, 'controleNotas');
-      db = app.firestore();
-      return true;
-    }catch(e){
-      $('statusConexao').textContent = 'Erro ao iniciar o Firebase: ' + (e.message || e);
-      return false;
+  // Aviso de previsao vencida: toda nota desta tela ainda nao entrou no
+  // ERP, entao basta a data estar preenchida e ja' ter passado.
+  function avisoPrevisao(prev){
+    if(!prev) return '';
+    var hoje = hojeISO();
+    if(prev >= hoje) return '';
+    var dias = diasEntre(prev, hoje);
+    var texto = dias === 1 ? '1 dia' : dias + ' dias';
+    return '<span class="badge atrasado" style="margin-left:6px; font-size:9.5px;" ' +
+      'title="Previsão de entrega vencida e a nota ainda não foi lançada no ERP">⚠ ' + texto + '</span>';
+  }
+
+  // ─── Conexao e carga ────────────────────────────────────────
+
+  function setStatus(txt){ $('statusConexao').textContent = txt; }
+
+  function resumoCarga(){
+    return notas.length + ' notas e ' + duplicatas.length + ' duplicatas · ' + App.horaAgora();
+  }
+
+  // onSnapshot em vez de get(): a tela fica viva (o que o Apps Script
+  // importa aparece sozinho) e, junto com o cache local ligado no
+  // app-shared, as visitas seguintes so' pagam pelos documentos que
+  // mudaram, em vez da colecao inteira de novo.
+  function escutarColecoes(){
+    var col = db.collection('notas');
+
+    // Um mapa POR consulta. Sao duas consultas sobre a mesma colecao e
+    // um documento pode estar nas duas ao mesmo tempo. Com um mapa so',
+    // reativar uma nota cancelada faria a consulta 2 disparar "removed"
+    // e apagar do indice uma nota que a consulta 1 ainda tem — ela
+    // sumiria da lista de importacao ate' o proximo F5.
+    var mapaRecentes = Object.create(null);
+    var mapaCanceladas = Object.create(null);
+
+    function aplicarNotas(){
+      notasPorChave = Object.create(null);
+      [mapaRecentes, mapaCanceladas].forEach(function(mapa){
+        Object.keys(mapa).forEach(function(id){ notasPorChave[id] = mapa[id]; });
+      });
+      notas = Object.keys(notasPorChave).map(function(k){ return notasPorChave[k]; });
+      carregouNotas = true;
+      setStatus(resumoCarga());
+      renderAtual();
+    }
+
+    function receberEm(mapa){
+      return function(snap){
+        snap.docChanges().forEach(function(ch){
+          var id = ch.doc.id;
+          if(ch.type === 'removed'){ delete mapa[id]; return; }
+          var dados = ch.doc.data();
+          dados.id = id;
+          mapa[id] = dados;
+        });
+        aplicarNotas();
+      };
+    }
+
+    function aoFalhar(rotulo){
+      return function(e){
+        console.error(rotulo, e);
+        if(App.ehPermissaoNegada(e)){
+          setStatus('Sem permissão para ler os dados — entre com sua conta.');
+          App.pedirLogin('Estes dados exigem login.').then(iniciar).catch(function(){});
+          return;
+        }
+        setStatus('Erro ao carregar: ' + App.erroDe(e));
+        App.toast('Erro ao carregar ' + rotulo + ': ' + App.erroDe(e), 'erro');
+      };
+    }
+
+    // 1) Notas recentes — cobrem a lista de importacao e as duplicatas em aberto.
+    col.where('dataEmissao', '>=', DATA_CORTE_CARGA)
+       .onSnapshot(receberEm(mapaRecentes), aoFalhar('notas'));
+
+    // 2) Canceladas de qualquer epoca — a tela de canceladas nao pode
+    //    ficar incompleta so' porque a nota e' antiga.
+    col.where('status', '==', 'cancelada')
+       .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas'));
+
+    db.collection('duplicatas').onSnapshot(function(snap){
+      var porId = Object.create(null);
+      duplicatas.forEach(function(d){ porId[d.id] = d; });
+      snap.docChanges().forEach(function(ch){
+        var id = ch.doc.id;
+        if(ch.type === 'removed'){ delete porId[id]; return; }
+        var dados = ch.doc.data();
+        dados.id = id;
+        porId[id] = dados;
+      });
+      duplicatas = Object.keys(porId).map(function(k){ return porId[k]; });
+      carregouDuplicatas = true;
+      setStatus(resumoCarga());
+      renderAtual();
+    }, aoFalhar('duplicatas'));
+  }
+
+  function iniciar(){
+    setStatus('Conectando ao Firebase...');
+    App.iniciarFirebase('controleNotas').then(function(r){
+      db = r.db;
+      App.montarBarraConta($('contaBarra'));
+      setStatus('Carregando notas...');
+      escutarColecoes();
+    }).catch(function(e){
+      setStatus('Erro ao iniciar o Firebase: ' + App.erroDe(e));
+      App.toastErro('Erro ao iniciar o Firebase', e);
+    });
+  }
+  window.__aoEntrar = function(){ if(db) renderAtual(); };
+
+  // ─── Gravacao ───────────────────────────────────────────────
+
+  // Nao precisa mais mexer no cache na mao: o onSnapshot devolve a
+  // alteracao na hora (o Firestore aplica a escrita localmente antes
+  // mesmo de o servidor confirmar) e a tela se redesenha sozinha.
+  function atualizarNota(chave, campos){
+    return App.comAuth(function(){
+      return db.collection('notas').doc(chave).set(campos, { merge: true });
+    });
+  }
+
+  function atualizarDuplicata(id, campos){
+    return App.comAuth(function(){
+      return db.collection('duplicatas').doc(id).set(campos, { merge: true });
+    });
+  }
+
+  // ─── Navegacao ──────────────────────────────────────────────
+
+  var router = App.criarRouter({
+    views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos', Canceladas:'viewCanceladas' },
+    padrao: 'Painel',
+    aoEntrar: {
+      Painel: renderPainel,
+      Importar: renderImportar,
+      Pagamentos: renderPagamentos,
+      Canceladas: renderCanceladas
+    },
+    aoTrocar: function(nome){
+      [['Painel','navPainel'], ['Importar','navImportar'],
+       ['Pagamentos','navPagamentos'], ['Canceladas','navCanceladas']].forEach(function(par){
+        var b = $(par[1]);
+        if(par[0] === nome) b.setAttribute('aria-current', 'page');
+        else b.removeAttribute('aria-current');
+      });
+    }
+  });
+
+  $('navPainel').addEventListener('click', function(){ router.ir('Painel'); });
+  $('navImportar').addEventListener('click', function(){ router.ir('Importar'); });
+  $('navPagamentos').addEventListener('click', function(){ router.ir('Pagamentos'); });
+  $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
+
+  $('kpiImportar').addEventListener('click', function(){ router.ir('Importar'); });
+  $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
+  $('kpiAtrasadas').addEventListener('click', function(){ setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
+  $('kpiHoje').addEventListener('click', function(){ setFiltroPag('hoje'); router.ir('Pagamentos'); });
+  $('kpiSemana').addEventListener('click', function(){ setFiltroPag('7dias'); router.ir('Pagamentos'); });
+  $('kpiFimMes').addEventListener('click', function(){ setFiltroPag('pendentes'); router.ir('Pagamentos'); });
+
+  // Redesenha SO' a tela aberta. Antes, marcar uma duplicata como paga
+  // redesenhava as quatro telas, inclusive as tres invisiveis.
+  function renderAtual(){
+    if(!carregouNotas && !carregouDuplicatas) return;
+    var ativo = document.activeElement;
+    var chaveFoco = (ativo && ativo.dataset) ? ativo.dataset.previsao : null;
+
+    var fn = { Painel:renderPainel, Importar:renderImportar,
+               Pagamentos:renderPagamentos, Canceladas:renderCanceladas }[router.atual()];
+    if(fn) fn();
+    atualizarContadores();
+
+    if(chaveFoco){
+      var volta = document.querySelector('[data-previsao="' + CSS.escape(chaveFoco) + '"]');
+      if(volta) volta.focus();
     }
   }
 
-  async function carregarTudo(){
-    $('statusConexao').textContent = 'Carregando notas...';
-    try{
-      const [snapNotas, snapDup] = await Promise.all([
-        db.collection('notas').get(),
-        db.collection('duplicatas').get()
-      ]);
-      notas = [];
-      // Zera o índice antes de repovoar: sem isto, notas removidas do Firestore
-      // continuariam no cache e seguiriam influenciando os cálculos.
-      Object.keys(notasPorChave).forEach(k => delete notasPorChave[k]);
-      snapNotas.forEach(doc => { const n = { id: doc.id, ...doc.data() }; notas.push(n); notasPorChave[doc.id] = n; });
-      duplicatas = [];
-      snapDup.forEach(doc => duplicatas.push({ id: doc.id, ...doc.data() }));
-      $('statusConexao').textContent = notas.length + ' notas e ' + duplicatas.length + ' duplicatas carregadas · ' + new Date().toLocaleTimeString('pt-BR');
-      renderTudo();
-    }catch(e){
-      console.error(e);
-      $('statusConexao').textContent = 'Erro ao carregar do Firestore: ' + (e.message || e) +
-        ' — confira as regras de segurança das coleções "notas" e "duplicatas".';
-    }
+  function atualizarContadores(){
+    var aImportar = notas.filter(notaAImportar);
+    $('countImportar').textContent = aImportar.length ? '(' + aImportar.length + ')' : '';
+    var inicioHoje = inicioJanelaHoje();
+    var atrasadas = duplicatas.filter(function(d){
+      return d.pago !== true && !dupDaNotaCancelada(d) && d.vencimento && d.vencimento < inicioHoje;
+    });
+    $('countAtrasadas').textContent = atrasadas.length ? '(' + atrasadas.length + ')' : '';
   }
 
-  // "redesenhar" evita re-render desnecessário: com milhares de notas e duplicatas,
-  // redesenhar as quatro telas a cada tecla (ex: previsão de entrega) trava a interface.
-  async function atualizarNota(chave, campos, redesenhar){
-    await db.collection('notas').doc(chave).set(campos, { merge: true });
-    Object.assign(notasPorChave[chave] || {}, campos);
-    if(redesenhar !== false) renderTudo();
-  }
+  // ─── Painel ─────────────────────────────────────────────────
 
-  async function atualizarDuplicata(id, campos){
-    await db.collection('duplicatas').doc(id).set(campos, { merge: true });
-    const d = duplicatas.find(x => x.id === id);
-    if(d) Object.assign(d, campos);
-  }
-
-  // ─── Navegação ───
-  const VIEWS = ['Painel','Importar','Pagamentos','Canceladas'];
-  function mostrar(view){
-    VIEWS.forEach(v => $('view'+v).style.display = (v === view) ? 'block' : 'none');
-    window.scrollTo(0,0);
-  }
-  $('navPainel').addEventListener('click', ()=>mostrar('Painel'));
-  $('navImportar').addEventListener('click', ()=>mostrar('Importar'));
-  $('navPagamentos').addEventListener('click', ()=>mostrar('Pagamentos'));
-  $('navCanceladas').addEventListener('click', ()=>mostrar('Canceladas'));
-  $('btnAtualizar').addEventListener('click', carregarTudo);
-  $('kpiImportar').addEventListener('click', ()=>mostrar('Importar'));
-  $('kpiReceber').addEventListener('click', ()=>mostrar('Importar'));
-  $('kpiAtrasadas').addEventListener('click', ()=>{ setFiltroPag('atrasadas'); mostrar('Pagamentos'); });
-  $('kpiHoje').addEventListener('click', ()=>{ setFiltroPag('hoje'); mostrar('Pagamentos'); });
-  $('kpiSemana').addEventListener('click', ()=>{ setFiltroPag('7dias'); mostrar('Pagamentos'); });
-  $('kpiFimMes').addEventListener('click', ()=>{ setFiltroPag('pendentes'); mostrar('Pagamentos'); });
-
-  // ─── Render geral ───
-  function renderTudo(){
-    renderPainel();
-    renderImportar();
-    renderPagamentos();
-    renderCanceladas();
-  }
-
-  // ─── Painel ───
   function renderPainel(){
-    const hoje = hojeISO();
-    const aImportar = notas.filter(notaAImportar);
+    var hoje = hojeISO();
+    var inicioHoje = inicioJanelaHoje();
+
+    var aImportar = notas.filter(notaAImportar);
     $('kImportarQtd').textContent = aImportar.length;
-    $('kImportarValor').textContent = fmtBRL(aImportar.reduce((s,n)=>s+(n.valorTotal||0),0));
-    $('countImportar').textContent = aImportar.length ? '('+aImportar.length+')' : '';
+    $('kImportarValor').textContent = brl(aImportar.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
 
-    const inicioHoje = inicioJanelaHoje();
-    const pendentes = duplicatas.filter(d => d.pago !== true && !dupDaNotaCancelada(d));
-    const atrasadas = pendentes.filter(d => d.vencimento && d.vencimento < inicioHoje);
-    const vHoje = pendentes.filter(d => d.vencimento >= inicioHoje && d.vencimento <= hoje);
-    const em7  = pendentes.filter(d => d.vencimento > hoje && d.vencimento <= somarDias(hoje,7));
-    const fimMes = hoje.substring(0,8) + String(new Date(Number(hoje.substring(0,4)), Number(hoje.substring(5,7)), 0).getDate()).padStart(2,'0');
-    const ateFimMes = pendentes.filter(d => d.vencimento >= inicioHoje && d.vencimento <= fimMes);
-    $('kAtrasadasQtd').textContent = atrasadas.length + ' duplicata(s)';
-    $('kAtrasadasValor').textContent = fmtBRL(atrasadas.reduce((s,d)=>s+(d.valor||0),0));
-    $('countAtrasadas').textContent = atrasadas.length ? '('+atrasadas.length+')' : '';
-    $('kHojeQtd').textContent = vHoje.length + ' duplicata(s)';
-    $('kHojeValor').textContent = fmtBRL(vHoje.reduce((s,d)=>s+(d.valor||0),0));
-    $('kSemanaQtd').textContent = em7.length + ' duplicata(s)';
-    $('kSemanaValor').textContent = fmtBRL(em7.reduce((s,d)=>s+(d.valor||0),0));
-    $('kFimMesQtd').textContent = ateFimMes.length + ' duplicata(s)';
-    $('kFimMesValor').textContent = fmtBRL(ateFimMes.reduce((s,d)=>s+(d.valor||0),0));
+    var pendentes = duplicatas.filter(function(d){ return d.pago !== true && !dupDaNotaCancelada(d); });
+    var atrasadas = pendentes.filter(function(d){ return d.vencimento && d.vencimento < inicioHoje; });
+    var vHoje = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= hoje; });
+    var em7 = pendentes.filter(function(d){ return d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
 
-    // NF-e a receber: SÓ NF-e de mercadoria (sem NFS-e), ainda sem entrada no ERP.
-    // Difere de "Notas a importar", que inclui também as notas de serviço.
-    const nfeAReceber = aImportar.filter(n => !ehNfse(n));
-    $('kReceberValor').textContent = fmtBRL(nfeAReceber.reduce((s,n)=>s+(n.valorTotal||0),0));
+    var ultimoDiaMes = new Date(Number(hoje.substring(0,4)), Number(hoje.substring(5,7)), 0).getDate();
+    var fimMes = hoje.substring(0,8) + String(ultimoDiaMes).padStart(2,'0');
+    var ateFimMes = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= fimMes; });
+
+    function preencher(idQtd, idValor, lista, sufixo){
+      $(idQtd).textContent = lista.length + ' ' + (sufixo || 'duplicata(s)');
+      $(idValor).textContent = brl(lista.reduce(function(s,d){ return s + (d.valor||0); }, 0));
+    }
+    preencher('kAtrasadasQtd', 'kAtrasadasValor', atrasadas);
+    preencher('kHojeQtd', 'kHojeValor', vHoje);
+    preencher('kSemanaQtd', 'kSemanaValor', em7);
+    preencher('kFimMesQtd', 'kFimMesValor', ateFimMes);
+
+    // NF-e a receber: SO' NF-e de mercadoria (sem NFS-e), ainda sem
+    // entrada no ERP. Difere de "Notas a importar", que inclui servico.
+    var nfeAReceber = aImportar.filter(function(n){ return !ehNfse(n); });
+    $('kReceberValor').textContent = brl(nfeAReceber.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
     $('kReceberQtd').textContent = nfeAReceber.length + ' nota(s)';
 
-    // Top fornecedores: agrupa duplicatas por emitente e soma o valor.
-    // Se não houver nada atrasado, a coluna da direita vira o top 10 completo
-    // de "vencendo hoje" em vez de ficar vazia (pedido do usuário).
-    function agruparPorFornecedor(lista){
-      const porNome = {};
-      lista.forEach(d=>{
-        const nome = d.nomeEmitente || 'Sem nome';
-        if(!porNome[nome]) porNome[nome] = { nome, total:0, qtd:0 };
+    // Top fornecedores. Sem nada atrasado, a coluna da direita some e a
+    // esquerda vira o top 10 completo de "vencendo hoje".
+    function agrupar(lista){
+      var porNome = Object.create(null);
+      lista.forEach(function(d){
+        var nome = d.nomeEmitente || 'Sem nome';
+        if(!porNome[nome]) porNome[nome] = { nome:nome, total:0, qtd:0 };
         porNome[nome].total += (d.valor||0);
         porNome[nome].qtd++;
       });
-      return Object.values(porNome).sort((a,b)=>b.total-a.total);
+      return Object.keys(porNome).map(function(k){ return porNome[k]; })
+        .sort(function(a,b){ return b.total - a.total; });
     }
-    function htmlTopFornecedores(grupos){
-      if(!grupos.length) return '<p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Nada aqui. 🎉</p>';
-      return grupos.map(g=>
-        '<div class="top-forn-row"><div><div class="top-forn-nome">'+escapeHtml(g.nome)+'</div>' +
-        '<div class="top-forn-qtd">'+g.qtd+' duplicata(s)</div></div>' +
-        '<div class="top-forn-valor">'+fmtBRL(g.total)+'</div></div>'
-      ).join('');
+    function htmlTop(grupos){
+      if(!grupos.length) return '<p class="nota-explicativa" style="margin:0;">Nada aqui. 🎉</p>';
+      return grupos.map(function(g){
+        return '<div class="top-forn-row"><div><div class="top-forn-nome">' + escapeHtml(g.nome) + '</div>' +
+          '<div class="top-forn-qtd">' + g.qtd + ' duplicata(s)</div></div>' +
+          '<div class="top-forn-valor">' + brl(g.total) + '</div></div>';
+      }).join('');
     }
-    const topHojeTodos = agruparPorFornecedor(vHoje);
-    const topAtrasadasTodos = agruparPorFornecedor(atrasadas);
-    if(topAtrasadasTodos.length){
+
+    var topHoje = agrupar(vHoje);
+    var topAtrasadas = agrupar(atrasadas);
+    if(topAtrasadas.length){
       $('painelTopTitulo').textContent = 'Top fornecedores — vencendo hoje / atrasados';
       $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
       $('painelTopAtrasadasCol').style.display = '';
-      $('painelTopHoje').innerHTML = htmlTopFornecedores(topHojeTodos.slice(0,5));
-      $('painelTopAtrasadas').innerHTML = htmlTopFornecedores(topAtrasadasTodos.slice(0,5));
+      $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,5));
+      $('painelTopAtrasadas').innerHTML = htmlTop(topAtrasadas.slice(0,5));
     } else {
       $('painelTopTitulo').textContent = 'Top 10 fornecedores — vencendo hoje';
       $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 10)';
       $('painelTopAtrasadasCol').style.display = 'none';
-      $('painelTopHoje').innerHTML = htmlTopFornecedores(topHojeTodos.slice(0,10));
+      $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,10));
     }
   }
 
-  // ─── A importar ───
-  // Itens (produtos) das notas: carregados sob demanda da coleção itensNotas,
-  // uma nota por clique — a carga da tela continua leve.
-  const itensCacheImportar = {};
-  const itensAbertosImportar = {};
+  // ─── A importar ─────────────────────────────────────────────
 
-  async function alternarItensImportar(chave){
-    if(itensAbertosImportar[chave]){
-      itensAbertosImportar[chave] = false;
-      renderImportar();
+  // Itens (produtos) das notas: carregados sob demanda da colecao
+  // itensNotas, uma nota por clique — a carga da tela continua leve.
+  var itensCache = Object.create(null);
+  var itensAbertos = Object.create(null);
+
+  function alternarItens(chave, aoTerminar){
+    if(itensAbertos[chave]){
+      itensAbertos[chave] = false;
+      aoTerminar();
       return;
     }
-    itensAbertosImportar[chave] = true;
-    if(!itensCacheImportar[chave]){
-      itensCacheImportar[chave] = { carregando: true };
-      renderImportar();
-      try{
-        const doc = await db.collection('itensNotas').doc(chave).get();
-        itensCacheImportar[chave] = doc.exists ? doc.data() : { semItens: true };
-      }catch(e){
-        itensCacheImportar[chave] = { erro: (e.message||String(e)) };
-      }
-    }
-    renderImportar();
+    itensAbertos[chave] = true;
+    if(itensCache[chave]){ aoTerminar(); return; }
+
+    itensCache[chave] = { carregando:true };
+    aoTerminar();
+    App.comAuth(function(){ return db.collection('itensNotas').doc(chave).get(); })
+      .then(function(doc){ itensCache[chave] = doc.exists ? doc.data() : { semItens:true }; })
+      .catch(function(e){ itensCache[chave] = { erro: App.erroDe(e) }; })
+      .then(aoTerminar);
   }
 
-  function htmlItensImportar(chave){
-    const d = itensCacheImportar[chave];
-    let inner;
+  function htmlItens(chave, colunas){
+    var d = itensCache[chave];
+    var inner;
     if(!d || d.carregando){
-      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Carregando itens...</span>';
+      inner = '<span class="nota-explicativa">Carregando itens...</span>';
     } else if(d.erro){
-      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--loss);">Erro ao carregar itens: '+escapeHtml(d.erro)+'</span>';
-    } else if(d.semItens || !(d.itens||[]).length){
-      inner = '<span style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">Itens não disponíveis para esta nota (o detalhamento cobre as notas dos últimos 60 dias).</span>';
+      inner = '<span class="nota-explicativa" style="color:var(--loss);">Erro ao carregar itens: ' + escapeHtml(d.erro) + '</span>';
+    } else if(d.semItens || !(d.itens || []).length){
+      inner = '<span class="nota-explicativa">Itens não disponíveis para esta nota (o detalhamento cobre as notas dos últimos 60 dias).</span>';
     } else {
-      inner = '<div style="overflow-x:auto;"><table class="quote-table" style="min-width:760px;"><thead><tr>' +
-        '<th>Cód · Produto</th><th>NCM · CFOP</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th><th>ICMS</th><th>IPI</th></tr></thead><tbody>';
-      d.itens.slice().sort((a,b)=>(a.n||0)-(b.n||0)).forEach(it=>{
-        let icms = 'CST '+escapeHtml(it.icmsCst||'-') + (it.icmsValor ? ' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+fmtBRL(it.icmsValor) : '');
-        if(it.icmsStValor > 0){
-          const pctSt = it.vTotal > 0 ? (it.icmsStValor/it.vTotal*100) : 0;
-          icms += '<br><span style="color:var(--brick); font-weight:600;">ST: '+fmtBRL(it.icmsStValor)+' · '+pctSt.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%</span>';
-        }
-        const ipi = it.ipiValor ? ((it.ipiAliq||0).toLocaleString('pt-BR')+'% · '+fmtBRL(it.ipiValor)) : '—';
-        inner += '<tr>' +
-          '<td><span style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft);">'+escapeHtml(it.codigo||'-')+'</span><br>'+escapeHtml(it.descricao||'-')+'</td>' +
-          '<td style="font-family:var(--font-mono); font-size:11px;">'+escapeHtml(it.ncm||'-')+'<br>CFOP '+escapeHtml(it.cfop||'-')+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+(it.qtd||0).toLocaleString('pt-BR')+' '+escapeHtml(it.un||'')+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+fmtBRL(it.vUnit||0)+'</td>' +
-          '<td style="font-family:var(--font-mono);">'+fmtBRL(it.vTotal||0)+'</td>' +
-          '<td style="font-family:var(--font-mono); font-size:11px;">'+icms+'</td>' +
-          '<td style="font-family:var(--font-mono); font-size:11px;">'+ipi+'</td>' +
-          '</tr>';
-      });
-      inner += '</tbody></table></div>';
-      if((d.stTotal||0) > 0){
-        const baseProd = d.valorProdutos || d.itens.reduce((s,it)=>s+(it.vTotal||0),0);
-        const pctStNota = baseProd > 0 ? (d.stTotal/baseProd*100) : 0;
-        inner += '<div style="margin-top:6px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">ST total da nota: '+fmtBRL(d.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'% sobre os produtos</div>';
-      }
+      inner = App.tabelaItensNota(d, { larguraMinima:'760px' });
     }
-    return '<tr><td colspan="8" style="background:var(--stripe2); padding:10px;">'+inner+'</td></tr>';
+    return '<tr><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' + inner + '</td></tr>';
   }
 
-  let ordAntigasPrimeiro = true;
-  let filtroTipoImportar = 'todas';
-  document.querySelectorAll('#viewImportar .chip-filtro[data-tipo]').forEach(c=>c.addEventListener('click', ()=>{
-    document.querySelectorAll('#viewImportar .chip-filtro[data-tipo]').forEach(x=>x.classList.remove('ativo'));
-    c.classList.add('ativo');
-    filtroTipoImportar = c.dataset.tipo;
+  var ordAntigasPrimeiro = true;
+  var filtroTipoImportar = 'todas';
+
+  App.delegar($('viewImportar'), 'click', '.chip-filtro[data-tipo]', function(chip){
+    $('viewImportar').querySelectorAll('.chip-filtro[data-tipo]').forEach(function(x){
+      x.setAttribute('aria-pressed', String(x === chip));
+    });
+    filtroTipoImportar = chip.dataset.tipo;
     renderImportar();
-  }));
-  $('ordDataBtn').addEventListener('click', ()=>{
+  });
+
+  $('ordDataBtn').addEventListener('click', function(){
     ordAntigasPrimeiro = !ordAntigasPrimeiro;
     $('ordDataBtn').textContent = ordAntigasPrimeiro ? 'Mais antigas primeiro' : 'Mais recentes primeiro';
     renderImportar();
   });
-  $('buscaImportar').addEventListener('input', debounce(renderImportar, DEBOUNCE_BUSCA));
-  $('buscaProdutoImportar').addEventListener('input', debounce(renderImportar, DEBOUNCE_BUSCA));
+  $('buscaImportar').addEventListener('input', App.debounce(renderImportar));
+  $('buscaProdutoImportar').addEventListener('input', App.debounce(renderImportar));
   $('excluirProdutoImportar').addEventListener('change', renderImportar);
 
+  var COLUNAS_IMPORTAR = 8;
+
   function renderImportar(){
-    const termo = norm($('buscaImportar').value);
-    const termoProduto = norm($('buscaProdutoImportar').value);
-    const excluirProduto = $('excluirProdutoImportar').checked;
-    let lista = notas.filter(notaAImportar);
-    if(filtroTipoImportar === 'nfe') lista = lista.filter(n => !ehNfse(n));
-    else if(filtroTipoImportar === 'nfse') lista = lista.filter(n => ehNfse(n));
-    if(termo) lista = lista.filter(n =>
-      norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo));
-    if(termoProduto){
-      lista = lista.filter(n => {
-        const contemProduto = (n.produtosResumo||[]).some(p => norm(p).includes(termoProduto));
-        return excluirProduto ? !contemProduto : contemProduto;
-      });
-    }
-    lista.sort((a,b)=>{
-      const cmp = (a.dataEmissao||'').localeCompare(b.dataEmissao||'');
+    var termo = norm($('buscaImportar').value);
+    var termoProduto = norm($('buscaProdutoImportar').value);
+    var excluirProduto = $('excluirProdutoImportar').checked;
+
+    var lista = notas.filter(notaAImportar);
+    if(filtroTipoImportar === 'nfe') lista = lista.filter(function(n){ return !ehNfse(n); });
+    else if(filtroTipoImportar === 'nfse') lista = lista.filter(ehNfse);
+
+    if(termo) lista = lista.filter(function(n){
+      return norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo);
+    });
+    if(termoProduto) lista = lista.filter(function(n){
+      var contem = (n.produtosResumo || []).some(function(p){ return norm(p).includes(termoProduto); });
+      return excluirProduto ? !contem : contem;
+    });
+
+    lista.sort(function(a,b){
+      var cmp = (a.dataEmissao||'').localeCompare(b.dataEmissao||'');
       return ordAntigasPrimeiro ? cmp : -cmp;
     });
 
     if(!lista.length){
-      $('tabelaImportar').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
+      $('tabelaImportar').innerHTML = '<p class="nota-explicativa">' +
         ((termo || termoProduto) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
       $('totalImportar').textContent = '';
       return;
     }
 
-    let html = '<table class="quote-table"><thead><tr><th></th><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th><th>Previsão de entrega</th></tr></thead><tbody>';
-    lista.forEach(n=>{
-      const aberta = !!itensAbertosImportar[n.id];
-      const previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hojeISO();
-      html += '<tr'+(previsaoVencida?' class="linha-atrasada"':'')+'>' +
-        '<td>'+(ehNfse(n) ? '' : '<button class="acao-mini" data-itens="'+escapeHtml(n.id)+'" title="Ver produtos da nota">'+(aberta?'▼':'▶')+'</button>')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
-        '<td>'+escapeHtml(n.nomeEmitente||'-')+(ehNfse(n)?' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>':'')+'<div style="font-family:var(--font-mono); font-size:10px; color:var(--ink-soft);">'+escapeHtml(n.id)+'</div></td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtBRL(n.valorTotal)+'</td>' +
-        '<td>'+(n.linkXml ? '<a class="acao-mini" href="'+escapeHtml(n.linkXml)+'" target="_blank" rel="noopener">⬇ Baixar</a>' : '-')+'</td>' +
-        '<td style="white-space:nowrap;">' +
-          '<button class="acao-mini" data-lancar="'+escapeHtml(n.id)+'">✓ Já lançada</button> ' +
-          '<button class="acao-mini perigo" data-cancelar="'+escapeHtml(n.id)+'">🚫 Cancelada</button>' +
-        '</td>' +
-        '<td style="white-space:nowrap;"><input type="date" class="previsao-input" data-previsao="'+escapeHtml(n.id)+'" value="'+escapeHtml(n.previsaoEntrega||'')+'" style="padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;">' +
-          '<span data-avisoprev="'+escapeHtml(n.id)+'">'+avisoPrevisao(n.previsaoEntrega)+'</span></td>' +
-        '</tr>';
-      if(aberta) html += htmlItensImportar(n.id);
-    });
-    $('tabelaImportar').innerHTML = html + '</tbody></table>';
-    $('totalImportar').textContent = lista.length + ' nota(s) · total ' + fmtBRL(lista.reduce((s,n)=>s+(n.valorTotal||0),0));
+    var hoje = hojeISO();
+    var html = '<div class="tabela-rolavel"><table class="quote-table">' +
+      '<thead><tr><th scope="col"><span class="sr-only">Itens</span></th><th scope="col">Nº</th>' +
+      '<th scope="col">Emissão</th><th scope="col">Emitente</th><th scope="col">Valor</th>' +
+      '<th scope="col">XML</th><th scope="col">Ações</th><th scope="col">Previsão de entrega</th></tr></thead><tbody>';
 
-    $('tabelaImportar').querySelectorAll('[data-itens]').forEach(b=>b.addEventListener('click', ()=>alternarItensImportar(b.dataset.itens)));
-    $('tabelaImportar').querySelectorAll('[data-cancelar]').forEach(b=>b.addEventListener('click', async ()=>{
-      const chave = b.dataset.cancelar;
-      const n = notasPorChave[chave];
-      if(!confirm('Marcar a nota ' + (n?.numero||'') + ' de ' + (n?.nomeEmitente||'') + ' como CANCELADA?\n\nEla sai da lista de importação e as duplicatas dela deixam de contar nos pagamentos.')) return;
-      b.disabled = true;
-      try{ await atualizarNota(chave, { status:'cancelada', canceladaEm: hojeISO() }); }
-      catch(e){ alert('Erro ao gravar: ' + (e.message||e)); b.disabled = false; }
-    }));
-    $('tabelaImportar').querySelectorAll('[data-lancar]').forEach(b=>b.addEventListener('click', async ()=>{
-      const chave = b.dataset.lancar;
-      if(!confirm('Marcar como já lançada no sistema?\n\nUse só se o XML não vai passar pela pasta de importação (ex: lançamento manual no ERP).')) return;
-      b.disabled = true;
-      try{ await atualizarNota(chave, { noSistema:true, noSistemaManual:true }); }
-      catch(e){ alert('Erro ao gravar: ' + (e.message||e)); b.disabled = false; }
-    }));
-    $('tabelaImportar').querySelectorAll('[data-previsao]').forEach(inp=>inp.addEventListener('change', async ()=>{
-      const chave = inp.dataset.previsao;
-      const valorAnterior = notasPorChave[chave]?.previsaoEntrega || '';
-      inp.disabled = true;
-      // redesenhar=false: o campo já mostra o valor escolhido e o cache foi atualizado;
-      // reconstruir a tabela aqui só causaria perda de foco e travada.
-      try{
-        await atualizarNota(chave, { previsaoEntrega: inp.value || null }, false);
-        // Atualiza só o aviso desta linha: mantém o ganho de não redesenhar a tabela,
-        // mas o ⚠ aparece/some na hora se a data escolhida já passou.
-        const span = $('tabelaImportar').querySelector('[data-avisoprev="'+chave+'"]');
-        if(span) span.innerHTML = avisoPrevisao(inp.value);
-        const linha = inp.closest('tr');
-        if(linha) linha.classList.toggle('linha-atrasada', !!inp.value && inp.value < hojeISO());
-      }
-      catch(e){ alert('Erro ao gravar a previsão: ' + (e.message||e)); inp.value = valorAnterior; }
-      finally{ inp.disabled = false; }
-    }));
+    lista.forEach(function(n){
+      var aberta = !!itensAbertos[n.id];
+      var previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hoje;
+      var link = safeUrl(n.linkXml);
+
+      html += '<tr' + (previsaoVencida ? ' class="linha-atrasada"' : '') + '>' +
+        '<td>' + (ehNfse(n) ? '' :
+          '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
+          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
+          (aberta ? '▼' : '▶') + '</button>') + '</td>' +
+        '<td>' + escapeHtml(n.numero || '-') + '</td>' +
+        '<td>' + fmtData(n.dataEmissao) + '</td>' +
+        '<td>' + escapeHtml(n.nomeEmitente || '-') +
+          (ehNfse(n) ? ' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>' : '') +
+          '<div style="font-size:10px; color:var(--ink-soft);">' + escapeHtml(n.id) + '</div></td>' +
+        '<td>' + brl(n.valorTotal) + '</td>' +
+        '<td>' + (link ? '<a class="acao-mini" href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">⬇ Baixar</a>' : '-') + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button type="button" class="acao-mini" data-lancar="' + escapeHtml(n.id) + '">✓ Já lançada</button> ' +
+          '<button type="button" class="acao-mini perigo" data-cancelar="' + escapeHtml(n.id) + '">🚫 Cancelada</button>' +
+        '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<label class="sr-only" for="prev_' + escapeHtml(n.id) + '">Previsão de entrega</label>' +
+          '<input type="date" class="previsao-input" id="prev_' + escapeHtml(n.id) + '" ' +
+          'data-previsao="' + escapeHtml(n.id) + '" value="' + escapeHtml(n.previsaoEntrega || '') + '">' +
+          '<span data-avisoprev="' + escapeHtml(n.id) + '">' + avisoPrevisao(n.previsaoEntrega) + '</span></td>' +
+        '</tr>';
+
+      if(aberta) html += htmlItens(n.id, COLUNAS_IMPORTAR);
+    });
+
+    $('tabelaImportar').innerHTML = html + '</tbody></table></div>';
+    $('totalImportar').textContent = lista.length + ' nota(s) · total ' +
+      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
   }
 
-  // ─── Pagamentos ───
-  let filtroPag = 'pendentes';
-  let limitePag = 200;
-  let ultimaListaPag = [];
-
-  // Pagamento em lote: marca como pagas TODAS as duplicatas do filtro atual
-  // (não só as visíveis na tela), em batches de até 450 gravações.
-  $('pagarLoteBtn').addEventListener('click', async ()=>{
-    const alvo = ultimaListaPag.filter(d => d.pago !== true);
-    if(!alvo.length) return;
-    const total = alvo.reduce((s,d)=>s+(d.valor||0),0);
-    if(!confirm('Marcar ' + alvo.length + ' duplicata(s) como PAGAS?\n\nTotal: ' + fmtBRL(total) +
-      '\nFiltro atual: ' + filtroPag + ($('buscaPag').value ? ' + busca "' + $('buscaPag').value + '"' : '') +
-      '\n\nVale para TODAS as duplicatas do filtro, não só as visíveis na tela.')) return;
-
-    const btn = $('pagarLoteBtn');
-    btn.disabled = true;
-    const dataPgto = hojeISO();
-    try{
-      for(let i = 0; i < alvo.length; i += 450){
-        const pedaco = alvo.slice(i, i + 450);
-        const batch = db.batch();
-        pedaco.forEach(d => batch.set(db.collection('duplicatas').doc(d.id),
-          { pago:true, dataPagamento: dataPgto, pagoEmLote: true }, { merge:true }));
-        btn.textContent = 'Gravando... ' + Math.min(i + 450, alvo.length) + '/' + alvo.length;
-        await batch.commit();
-        pedaco.forEach(d => { d.pago = true; d.dataPagamento = dataPgto; });
-      }
-      renderPainel();
-      renderPagamentos();
-    }catch(e){
-      alert('Erro no pagamento em lote (parte pode ter sido gravada): ' + (e.message||e) +
-        '\nClique em Atualizar para ver o estado real e repita se necessário.');
-    }finally{
-      btn.disabled = false;
-      btn.textContent = '✓ Pagar filtradas em lote';
-    }
+  // Delegacao: registrada UMA vez, vale para todas as linhas de agora e
+  // do futuro. Antes cada render reanexava um listener por botao.
+  App.delegar($('tabelaImportar'), 'click', '[data-itens]', function(b){
+    alternarItens(b.dataset.itens, renderImportar);
   });
+
+  App.delegar($('tabelaImportar'), 'click', '[data-cancelar]', function(b){
+    var chave = b.dataset.cancelar;
+    var n = notasPorChave[chave];
+    App.confirmar({
+      titulo: 'Marcar como cancelada',
+      mensagem: 'Marcar a nota ' + ((n && n.numero) || '') + ' de ' + ((n && n.nomeEmitente) || '') + ' como CANCELADA?\n\n' +
+        'Ela sai da lista de importação e as duplicatas dela deixam de contar nos pagamentos.',
+      confirmar: 'Marcar como cancelada',
+      perigo: true
+    }).then(function(ok){
+      if(!ok) return;
+      b.disabled = true;
+      atualizarNota(chave, { status:'cancelada', canceladaEm: hojeISO() })
+        .then(function(){ App.toast('Nota marcada como cancelada.', 'ok'); })
+        .catch(function(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; });
+    });
+  });
+
+  App.delegar($('tabelaImportar'), 'click', '[data-lancar]', function(b){
+    var chave = b.dataset.lancar;
+    App.confirmar({
+      titulo: 'Marcar como já lançada',
+      mensagem: 'Marcar como já lançada no sistema?\n\n' +
+        'Use só se o XML não vai passar pela pasta de importação (ex: lançamento manual no ERP).',
+      confirmar: 'Marcar como lançada'
+    }).then(function(ok){
+      if(!ok) return;
+      b.disabled = true;
+      atualizarNota(chave, { noSistema:true, noSistemaManual:true })
+        .then(function(){ App.toast('Nota marcada como lançada.', 'ok'); })
+        .catch(function(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; });
+    });
+  });
+
+  App.delegar($('tabelaImportar'), 'change', '[data-previsao]', function(inp){
+    var chave = inp.dataset.previsao;
+    var anterior = (notasPorChave[chave] && notasPorChave[chave].previsaoEntrega) || '';
+    inp.disabled = true;
+    atualizarNota(chave, { previsaoEntrega: inp.value || null })
+      .then(function(){
+        // Atualiza so' o aviso e a cor desta linha. O onSnapshot vai
+        // redesenhar a tabela de qualquer forma, mas assim o ⚠ aparece
+        // ou some no mesmo instante, sem esperar a confirmacao.
+        var span = document.querySelector('[data-avisoprev="' + CSS.escape(chave) + '"]');
+        if(span) span.innerHTML = avisoPrevisao(inp.value);
+        var linha = inp.closest('tr');
+        if(linha) linha.classList.toggle('linha-atrasada', !!inp.value && inp.value < hojeISO());
+      })
+      .catch(function(e){ App.toastErro('Erro ao gravar a previsão', e); inp.value = anterior; })
+      .then(function(){ inp.disabled = false; });
+  });
+
+  // ─── Pagamentos ─────────────────────────────────────────────
+
+  var filtroPag = 'pendentes';
+  var limitePag = 200;
+  var ultimaListaPag = [];
+
   function setFiltroPag(f){
     filtroPag = f;
     limitePag = 200;
-    document.querySelectorAll('#viewPagamentos .chip-filtro').forEach(x=>
-      x.classList.toggle('ativo', x.dataset.f === f));
+    $('viewPagamentos').querySelectorAll('.chip-filtro[data-f]').forEach(function(x){
+      x.setAttribute('aria-pressed', String(x.dataset.f === f));
+    });
     renderPagamentos();
   }
-  document.querySelectorAll('#viewPagamentos .chip-filtro').forEach(c=>c.addEventListener('click', ()=>{
-    setFiltroPag(c.dataset.f);
-  }));
-  $('buscaPag').addEventListener('input', debounce(()=>{ limitePag = 200; renderPagamentos(); }, DEBOUNCE_BUSCA));
-  $('maisPagBtn').addEventListener('click', ()=>{ limitePag += 300; renderPagamentos(); });
+
+  App.delegar($('viewPagamentos'), 'click', '.chip-filtro[data-f]', function(chip){
+    setFiltroPag(chip.dataset.f);
+  });
+  $('buscaPag').addEventListener('input', App.debounce(function(){ limitePag = 200; renderPagamentos(); }));
+  $('maisPagBtn').addEventListener('click', function(){ limitePag += 300; renderPagamentos(); });
+
+  // Pagamento em lote: marca como pagas TODAS as duplicatas do filtro
+  // atual (nao so' as visiveis), em blocos de ate' 450 gravacoes.
+  $('pagarLoteBtn').addEventListener('click', function(){
+    var alvo = ultimaListaPag.filter(function(d){ return d.pago !== true; });
+    if(!alvo.length) return;
+    var total = alvo.reduce(function(s,d){ return s + (d.valor||0); }, 0);
+
+    App.confirmar({
+      titulo: 'Pagar em lote',
+      mensagem: 'Marcar ' + alvo.length + ' duplicata(s) como PAGAS?\n\n' +
+        'Total: ' + brl(total) + '\n' +
+        'Filtro atual: ' + filtroPag + ($('buscaPag').value ? ' + busca "' + $('buscaPag').value + '"' : '') + '\n\n' +
+        'Vale para TODAS as duplicatas do filtro, não só as visíveis na tela.',
+      confirmar: 'Marcar como pagas',
+      perigo: true
+    }).then(function(ok){
+      if(!ok) return;
+      var btn = $('pagarLoteBtn');
+      btn.disabled = true;
+      var dataPgto = hojeISO();
+      var gravadas = 0;
+
+      function bloco(i){
+        if(i >= alvo.length) return Promise.resolve();
+        var pedaco = alvo.slice(i, i + 450);
+        btn.textContent = 'Gravando... ' + Math.min(i + 450, alvo.length) + '/' + alvo.length;
+        return App.comAuth(function(){
+          var batch = db.batch();
+          pedaco.forEach(function(d){
+            batch.set(db.collection('duplicatas').doc(d.id),
+              { pago:true, dataPagamento:dataPgto, pagoEmLote:true }, { merge:true });
+          });
+          return batch.commit();
+        }).then(function(){
+          gravadas += pedaco.length;
+          return bloco(i + 450);
+        });
+      }
+
+      bloco(0).then(function(){
+        App.toast(gravadas + ' duplicata(s) marcadas como pagas.', 'ok');
+      }).catch(function(e){
+        App.toastErro('Erro no pagamento em lote — ' + gravadas + ' de ' + alvo.length +
+          ' já gravadas. Confira a lista e repita se necessário', e);
+      }).then(function(){
+        btn.disabled = false;
+        btn.textContent = '✓ Pagar filtradas em lote';
+      });
+    });
+  });
 
   function renderPagamentos(){
-    const hoje = hojeISO();
-    const inicioHoje = inicioJanelaHoje();
-    const termo = norm($('buscaPag').value);
-    let lista = duplicatas.filter(d => !dupDaNotaCancelada(d));
+    var hoje = hojeISO();
+    var inicioHoje = inicioJanelaHoje();
+    var termo = norm($('buscaPag').value);
 
-    if(filtroPag === 'pendentes') lista = lista.filter(d => d.pago !== true);
-    else if(filtroPag === 'atrasadas') lista = lista.filter(d => d.pago !== true && d.vencimento && d.vencimento < inicioHoje);
-    else if(filtroPag === 'hoje') lista = lista.filter(d => d.pago !== true && d.vencimento >= inicioHoje && d.vencimento <= hoje);
-    else if(filtroPag === '7dias') lista = lista.filter(d => d.pago !== true && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7));
-    else if(filtroPag === 'pagas') lista = lista.filter(d => d.pago === true);
+    var lista = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
 
-    if(termo) lista = lista.filter(d => norm(d.nomeEmitente).includes(termo) || norm(d.numeroNota).includes(termo));
+    if(filtroPag === 'pendentes') lista = lista.filter(function(d){ return d.pago !== true; });
+    else if(filtroPag === 'atrasadas') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento && d.vencimento < inicioHoje; });
+    else if(filtroPag === 'hoje') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento >= inicioHoje && d.vencimento <= hoje; });
+    else if(filtroPag === '7dias') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
+    else if(filtroPag === 'pagas') lista = lista.filter(function(d){ return d.pago === true; });
 
-    lista.sort((a,b)=>(a.vencimento||'9999').localeCompare(b.vencimento||'9999'));
+    if(termo) lista = lista.filter(function(d){
+      return norm(d.nomeEmitente).includes(termo) || norm(d.numeroNota).includes(termo);
+    });
+
+    lista.sort(function(a,b){ return (a.vencimento || '9999').localeCompare(b.vencimento || '9999'); });
     ultimaListaPag = lista;
     $('pagarLoteBtn').style.display = (filtroPag !== 'pagas' && lista.length > 0) ? 'inline-block' : 'none';
 
-    const totalFiltrado = lista.length;
-    const somaFiltrada = lista.reduce((s,d)=>s+(d.valor||0),0);
-    const visiveis = lista.slice(0, limitePag);
+    var totalFiltrado = lista.length;
+    var somaFiltrada = lista.reduce(function(s,d){ return s + (d.valor||0); }, 0);
+    var visiveis = lista.slice(0, limitePag);
     $('maisPagBtn').style.display = totalFiltrado > limitePag ? 'inline-block' : 'none';
 
     if(!visiveis.length){
-      $('tabelaPag').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Nenhuma duplicata nesse filtro.</p>';
+      $('tabelaPag').innerHTML = '<p class="nota-explicativa">Nenhuma duplicata nesse filtro.</p>';
       $('totalPag').textContent = '';
       return;
     }
 
-    let html = '<table class="quote-table"><thead><tr><th>Pago</th><th>Venc.</th><th>Emitente</th><th>Nota</th><th>Parc.</th><th>Valor</th><th>Situação</th><th>Recebido</th></tr></thead><tbody>';
-    visiveis.forEach(d=>{
-      const sit = situacaoDup(d);
-      const cls = d.pago === true ? ' class="linha-paga"' : (sit === 'ATRASADO' ? ' class="linha-atrasada"' : '');
-      html += '<tr'+cls+'>' +
-        '<td><input type="checkbox" class="pago-check" data-dup="'+escapeHtml(d.id)+'"'+(d.pago===true?' checked':'')+'></td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtData(d.vencimento)+'</td>' +
-        '<td>'+escapeHtml(d.nomeEmitente||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+escapeHtml(d.numeroNota||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+escapeHtml(d.parcela||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtBRL(d.valor)+'</td>' +
-        '<td><span class="badge '+(sit==='PAGO'?'pago':(sit==='ATRASADO'?'atrasado':'avencer'))+'">'+sit+'</span></td>' +
-        '<td><span class="badge '+(dupRecebida(d)?'sim':'nao')+'">'+(dupRecebida(d)?'SIM':'NÃO')+'</span></td>' +
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Pago</th><th scope="col">Venc.</th><th scope="col">Emitente</th>' +
+      '<th scope="col">Nota</th><th scope="col">Parc.</th><th scope="col">Valor</th>' +
+      '<th scope="col">Situação</th><th scope="col">Recebido</th></tr></thead><tbody>';
+
+    visiveis.forEach(function(d){
+      var sit = situacaoDup(d);
+      var cls = d.pago === true ? ' class="linha-paga"' : (sit === 'ATRASADO' ? ' class="linha-atrasada"' : '');
+      var receb = dupRecebida(d);
+      // null = a nota de origem e' anterior ao corte de carga, entao nao
+      // da' para afirmar nem SIM nem NAO.
+      var badgeReceb = receb === null
+        ? '<span class="badge desconhecido" title="Nota anterior ao período carregado">—</span>'
+        : '<span class="badge ' + (receb ? 'sim' : 'nao') + '">' + (receb ? 'SIM' : 'NÃO') + '</span>';
+
+      html += '<tr' + cls + '>' +
+        '<td><input type="checkbox" class="pago-check" data-dup="' + escapeHtml(d.id) + '"' +
+          (d.pago === true ? ' checked' : '') +
+          ' aria-label="Marcar duplicata de ' + escapeHtml(d.nomeEmitente || '') + ' como paga"></td>' +
+        '<td>' + fmtData(d.vencimento) + '</td>' +
+        '<td>' + escapeHtml(d.nomeEmitente || '-') + '</td>' +
+        '<td>' + escapeHtml(d.numeroNota || '-') + '</td>' +
+        '<td>' + escapeHtml(d.parcela || '-') + '</td>' +
+        '<td>' + brl(d.valor) + '</td>' +
+        '<td><span class="badge ' + (sit === 'PAGO' ? 'pago' : (sit === 'ATRASADO' ? 'atrasado' : 'avencer')) + '">' + sit + '</span></td>' +
+        '<td>' + badgeReceb + '</td>' +
         '</tr>';
     });
-    $('tabelaPag').innerHTML = html + '</tbody></table>';
-    $('totalPag').textContent = totalFiltrado + ' duplicata(s) · total ' + fmtBRL(somaFiltrada) +
-      (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
 
-    $('tabelaPag').querySelectorAll('.pago-check').forEach(cb=>cb.addEventListener('change', async ()=>{
-      const id = cb.dataset.dup;
-      const marcado = cb.checked;
-      cb.disabled = true;
-      try{
-        await atualizarDuplicata(id, marcado
-          ? { pago:true, dataPagamento: hojeISO() }
-          : { pago:false, dataPagamento: null });
-        renderPainel();
-        renderPagamentos();
-      }catch(e){
-        alert('Erro ao gravar o pagamento: ' + (e.message||e));
-        cb.checked = !marcado;
-        cb.disabled = false;
-      }
-    }));
+    $('tabelaPag').innerHTML = html + '</tbody></table></div>';
+    $('totalPag').textContent = totalFiltrado + ' duplicata(s) · total ' + brl(somaFiltrada) +
+      (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
   }
 
-  // ─── Canceladas ───
-  $('buscaCanc').addEventListener('input', debounce(renderCanceladas, DEBOUNCE_BUSCA));
+  App.delegar($('tabelaPag'), 'change', '.pago-check', function(cb){
+    var id = cb.dataset.dup;
+    var marcado = cb.checked;
+    cb.disabled = true;
+    atualizarDuplicata(id, marcado
+      ? { pago:true, dataPagamento: hojeISO() }
+      : { pago:false, dataPagamento: null })
+      .catch(function(e){
+        App.toastErro('Erro ao gravar o pagamento', e);
+        cb.checked = !marcado;
+      })
+      .then(function(){ cb.disabled = false; });
+  });
+
+  // ─── Canceladas ─────────────────────────────────────────────
+
+  $('buscaCanc').addEventListener('input', App.debounce(renderCanceladas));
+
+  var COLUNAS_CANCELADAS = 7;
+
   function renderCanceladas(){
-    const termo = norm($('buscaCanc').value);
-    let lista = notas.filter(n => !notaAtiva(n));
-    if(termo) lista = lista.filter(n => norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo));
-    lista.sort((a,b)=>(b.canceladaEm||b.dataEmissao||'').localeCompare(a.canceladaEm||a.dataEmissao||''));
+    var termo = norm($('buscaCanc').value);
+    var lista = notas.filter(function(n){ return !notaAtiva(n); });
+    if(termo) lista = lista.filter(function(n){
+      return norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo);
+    });
+    lista.sort(function(a,b){
+      return (b.canceladaEm || b.dataEmissao || '').localeCompare(a.canceladaEm || a.dataEmissao || '');
+    });
 
     if(!lista.length){
-      $('tabelaCanc').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Nenhuma nota cancelada.</p>';
+      $('tabelaCanc').innerHTML = '<p class="nota-explicativa">Nenhuma nota cancelada.</p>';
       $('totalCanc').textContent = '';
       return;
     }
-    let html = '<table class="quote-table"><thead><tr><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>Cancelada em</th><th></th></tr></thead><tbody>';
-    lista.forEach(n=>{
-      const aberta = !!itensAbertosImportar[n.id];
-      html += '<tr>' +
-        '<td>'+(ehNfse(n) ? '' : '<button class="acao-mini" data-itens="'+escapeHtml(n.id)+'" title="Ver produtos da nota">'+(aberta?'▼':'▶')+'</button>')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
-        '<td>'+escapeHtml(n.nomeEmitente||'-')+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtBRL(n.valorTotal)+'</td>' +
-        '<td style="font-family:var(--font-mono);">'+fmtData(n.canceladaEm)+'</td>' +
-        '<td><button class="acao-mini" data-reativar="'+escapeHtml(n.id)+'">↩ Reativar</button></td></tr>';
-    });
-    $('tabelaCanc').innerHTML = html + '</tbody></table>';
-    $('totalCanc').textContent = lista.length + ' nota(s) · total ' + fmtBRL(lista.reduce((s,n)=>s+(n.valorTotal||0),0));
 
-    $('tabelaCanc').querySelectorAll('[data-reativar]').forEach(b=>b.addEventListener('click', async ()=>{
-      b.disabled = true;
-      try{ await atualizarNota(b.dataset.reativar, { status:'ativa', canceladaEm: null }); }
-      catch(e){ alert('Erro ao gravar: ' + (e.message||e)); b.disabled = false; }
-    }));
+    // O cabecalho declarava 6 colunas e cada linha gerava 7 celulas —
+    // toda a tabela aparecia deslocada uma coluna para a direita.
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col"><span class="sr-only">Itens</span></th>' +
+      '<th scope="col">Nº</th><th scope="col">Emissão</th><th scope="col">Emitente</th>' +
+      '<th scope="col">Valor</th><th scope="col">Cancelada em</th>' +
+      '<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>';
+
+    lista.forEach(function(n){
+      var aberta = !!itensAbertos[n.id];
+      html += '<tr>' +
+        '<td>' + (ehNfse(n) ? '' :
+          '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
+          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
+          (aberta ? '▼' : '▶') + '</button>') + '</td>' +
+        '<td>' + escapeHtml(n.numero || '-') + '</td>' +
+        '<td>' + fmtData(n.dataEmissao) + '</td>' +
+        '<td>' + escapeHtml(n.nomeEmitente || '-') + '</td>' +
+        '<td>' + brl(n.valorTotal) + '</td>' +
+        '<td>' + fmtData(n.canceladaEm) + '</td>' +
+        '<td><button type="button" class="acao-mini" data-reativar="' + escapeHtml(n.id) + '">↩ Reativar</button></td>' +
+        '</tr>';
+      // O botao de itens existia mas nunca abria nada nesta tela.
+      if(aberta) html += htmlItens(n.id, COLUNAS_CANCELADAS);
+    });
+
+    $('tabelaCanc').innerHTML = html + '</tbody></table></div>';
+    $('totalCanc').textContent = lista.length + ' nota(s) · total ' +
+      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
   }
 
-  // ─── Início ───
-  if(conectar()) carregarTudo();
+  App.delegar($('tabelaCanc'), 'click', '[data-itens]', function(b){
+    alternarItens(b.dataset.itens, renderCanceladas);
+  });
+
+  App.delegar($('tabelaCanc'), 'click', '[data-reativar]', function(b){
+    var chave = b.dataset.reativar;
+    App.confirmar({
+      titulo: 'Reativar nota',
+      mensagem: 'Reativar esta nota? Ela volta para a lista de importação e as duplicatas dela voltam a contar nos pagamentos.',
+      confirmar: 'Reativar'
+    }).then(function(ok){
+      if(!ok) return;
+      b.disabled = true;
+      atualizarNota(chave, { status:'ativa', canceladaEm: null })
+        .then(function(){ App.toast('Nota reativada.', 'ok'); })
+        .catch(function(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; });
+    });
+  });
+
+  // ─── Inicio ─────────────────────────────────────────────────
+  router.iniciar();
+  iniciar();
 })();
 </script>
 </body>

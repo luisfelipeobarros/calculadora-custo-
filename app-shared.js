@@ -1,0 +1,799 @@
+/* ============================================================
+   app-shared.js — nucleo comum aos dois aplicativos
+   (Calculadora de Custo e Controle de Notas).
+
+   Antes cada HTML tinha sua propria copia de escapeHtml, debounce,
+   formatacao de moeda/data e da config do Firebase. Corrigir um bug
+   em um arquivo e esquecer o outro era so' questao de tempo.
+
+   Carregue com <script src="app-shared.js"></script> ANTES do script
+   da pagina. Nao usa modulos ES, entao funciona tambem em file://.
+   ============================================================ */
+(function (global) {
+  'use strict';
+
+  /* ============================================================
+     1. Configuracao
+     ============================================================ */
+
+  // A apiKey de um app web do Firebase e' publica por design — ela
+  // identifica o projeto, nao autoriza nada. Quem autoriza sao as
+  // regras do Firestore (veja firestore.rules) + o login abaixo.
+  var FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyCYZmYORbmVpgN0rNDsdCwN0Xm2Ce1SRyU',
+    authDomain: 'bd-calculadora-d2ce0.firebaseapp.com',
+    projectId: 'bd-calculadora-d2ce0',
+    storageBucket: 'bd-calculadora-d2ce0.firebasestorage.app',
+    messagingSenderId: '543548220495',
+    appId: '1:543548220495:web:b3559aff504028b3ad363a'
+  };
+
+  var DEBOUNCE_BUSCA = 250;
+
+  /* ============================================================
+     2. Helpers de DOM e texto
+     ============================================================ */
+
+  function $(id) { return document.getElementById(id); }
+
+  var MAPA_ESCAPE = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return MAPA_ESCAPE[c]; });
+  }
+
+  // Toda URL que vai parar num href precisa passar por aqui.
+  // O escapeHtml impede quebrar o atributo, mas nao impede
+  // "javascript:..." — e boa parte das URLs desta aplicacao vem de
+  // texto que o Gemini leu de paginas da web, ou seja, de fora.
+  function safeUrl(u) {
+    if (!u) return '';
+    try {
+      var p = new URL(String(u), global.location.href);
+      return (p.protocol === 'http:' || p.protocol === 'https:') ? p.href : '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Minusculas + sem acento, para busca tolerante.
+  function normalizarTexto(str) {
+    return String(str == null ? '' : str)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // remove os acentos separados pelo NFD
+  }
+
+  function norm(s) { return String(s == null ? '' : s).toLowerCase(); }
+
+  /* ============================================================
+     3. Numeros, moeda e datas
+     ============================================================ */
+
+  function toNum(v) {
+    var n = parseFloat(v);
+    return isNaN(n) ? 0 : n;
+  }
+
+  // Dinheiro em float acumula erro de fracao de centavo. Arredondar
+  // nos pontos em que o valor vira "resultado" mantem os totais
+  // batendo com a soma das partes exibidas.
+  //
+  // Arredonda meio centavo SEMPRE para longe do zero (2,345 -> 2,35 e
+  // -2,345 -> -2,35). O Math.round puro empurra o meio para cima nos
+  // dois sinais, o que trataria prejuizo e lucro com criterios
+  // diferentes — e aqui ha' valores negativos de verdade (lucro
+  // negativo, diferenca de preco para menos).
+  function centavos(v) {
+    if (v == null || !isFinite(v)) return v;
+    var sinal = v < 0 ? -1 : 1;
+    return sinal * Math.round((Math.abs(v) + Number.EPSILON) * 100) / 100;
+  }
+
+  function brl(v) {
+    if (typeof v !== 'number' || !isFinite(v)) return '--';
+    return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+
+  function pct(v, casas) {
+    if (v == null || !isFinite(v)) return '--';
+    var c = casas == null ? 2 : casas;
+    return (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c }) + '%';
+  }
+
+  function num(v, casas) {
+    if (v == null || !isFinite(v)) return '0';
+    var o = {};
+    if (casas != null) { o.minimumFractionDigits = casas; o.maximumFractionDigits = casas; }
+    return Number(v).toLocaleString('pt-BR', o);
+  }
+
+  // Aceita "1.234,56", "1234.56", "R$ 99,90" e devolve numero ou null.
+  function parseNumeroBR(v) {
+    if (v === '' || v == null) return null;
+    if (typeof v === 'number') return v;
+    var s = String(v).trim().replace(/^R\$\s*/i, '').trim();
+    if (s === '') return null;
+    s = /,\d{1,2}$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    var n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function iso(d) {
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
+  function hojeISO() { return iso(new Date()); }
+
+  // aaaa-mm-dd -> dd/mm/aaaa
+  function fmtData(v) {
+    if (!v) return '--';
+    var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : String(v);
+  }
+
+  // Meio-dia evita que fuso horario empurre a data para o dia anterior.
+  function somarDias(isoStr, n) {
+    var d = new Date(isoStr + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return iso(d);
+  }
+
+  function diasEntre(a, b) {
+    return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+  }
+
+  function fmtDataFirestore(ts) {
+    try {
+      var d = (ts && ts.toDate) ? ts.toDate() : new Date(ts);
+      if (isNaN(d.getTime())) return '-';
+      return d.toLocaleDateString('pt-BR');
+    } catch (e) { return '-'; }
+  }
+
+  function horaAgora() { return new Date().toLocaleTimeString('pt-BR'); }
+
+  /* ============================================================
+     4. Eventos
+     ============================================================ */
+
+  // Agrupa disparos rapidos (digitacao) numa unica execucao.
+  function debounce(fn, ms) {
+    var t = null;
+    return function () {
+      var args = arguments, ctx = this;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(ctx, args); }, ms == null ? DEBOUNCE_BUSCA : ms);
+    };
+  }
+
+  // Delegacao de evento: registre UMA vez no container, e vale para
+  // todo elemento que casar com o seletor, inclusive os que ainda nem
+  // existem. Substitui o padrao "innerHTML + querySelectorAll +
+  // addEventListener em cada render", que reanexava centenas de
+  // listeners a cada redesenho.
+  function delegar(container, evento, seletor, handler) {
+    if (!container) return;
+    container.addEventListener(evento, function (ev) {
+      var alvo = ev.target.closest ? ev.target.closest(seletor) : null;
+      if (alvo && container.contains(alvo)) handler(alvo, ev);
+    });
+  }
+
+  // Cabecalho que abre/fecha precisa responder a Enter e Espaco quando
+  // nao e' um <button> de verdade.
+  function delegarTeclado(container, seletor, handler) {
+    if (!container) return;
+    container.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+      var alvo = ev.target.closest ? ev.target.closest(seletor) : null;
+      if (!alvo || !container.contains(alvo)) return;
+      if (alvo.tagName === 'BUTTON' || alvo.tagName === 'A') return; // o navegador ja' cuida
+      ev.preventDefault();
+      handler(alvo, ev);
+    });
+  }
+
+  /* ============================================================
+     5. Avisos e confirmacoes (substituem alert/confirm)
+     ============================================================ */
+
+  function areaToast() {
+    var el = $('toastArea');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'toastArea';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
+  // tipo: 'ok' | 'erro' | 'info'
+  function toast(mensagem, tipo, segundos) {
+    var area = areaToast();
+    var el = document.createElement('div');
+    el.className = 'toast ' + (tipo || 'info');
+
+    var msg = document.createElement('div');
+    msg.className = 'toast-msg';
+    msg.textContent = String(mensagem);
+
+    var fechar = document.createElement('button');
+    fechar.type = 'button';
+    fechar.className = 'toast-fechar';
+    fechar.setAttribute('aria-label', 'Fechar aviso');
+    fechar.textContent = '✕';
+
+    function sair() { if (el.parentNode) el.parentNode.removeChild(el); }
+    fechar.addEventListener('click', sair);
+
+    el.appendChild(msg);
+    el.appendChild(fechar);
+    area.appendChild(el);
+
+    // Erro fica ate' o usuario fechar; o resto some sozinho.
+    var espera = segundos != null ? segundos : (tipo === 'erro' ? 0 : 5);
+    if (espera > 0) setTimeout(sair, espera * 1000);
+    return el;
+  }
+
+  function erroDe(e) {
+    if (!e) return 'erro desconhecido';
+    return e.message || String(e);
+  }
+
+  function toastErro(prefixo, e) {
+    console.error(prefixo, e);
+    return toast(prefixo + ': ' + erroDe(e), 'erro');
+  }
+
+  // Modal generico. Devolve uma Promise com o valor passado a resolver().
+  function abrirModal(construir) {
+    return new Promise(function (resolve) {
+      var focoAnterior = document.activeElement;
+      var fundo = document.createElement('div');
+      fundo.className = 'modal-fundo';
+
+      var caixa = document.createElement('div');
+      caixa.className = 'modal-caixa';
+      caixa.setAttribute('role', 'dialog');
+      caixa.setAttribute('aria-modal', 'true');
+
+      var fechado = false;
+      function fechar(valor) {
+        if (fechado) return;
+        fechado = true;
+        document.removeEventListener('keydown', aoTeclar, true);
+        if (fundo.parentNode) fundo.parentNode.removeChild(fundo);
+        if (focoAnterior && focoAnterior.focus) focoAnterior.focus();
+        resolve(valor);
+      }
+
+      function aoTeclar(ev) {
+        if (ev.key === 'Escape') { ev.preventDefault(); fechar(null); return; }
+        if (ev.key !== 'Tab') return;
+        // Prende o Tab dentro do modal.
+        var focaveis = caixa.querySelectorAll('button, input, select, textarea, a[href]');
+        if (!focaveis.length) return;
+        var primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1];
+        if (ev.shiftKey && document.activeElement === primeiro) { ev.preventDefault(); ultimo.focus(); }
+        else if (!ev.shiftKey && document.activeElement === ultimo) { ev.preventDefault(); primeiro.focus(); }
+      }
+
+      fundo.addEventListener('mousedown', function (ev) { if (ev.target === fundo) fechar(null); });
+      document.addEventListener('keydown', aoTeclar, true);
+
+      construir(caixa, fechar);
+      fundo.appendChild(caixa);
+      document.body.appendChild(fundo);
+
+      var primeiroFoco = caixa.querySelector('input, button');
+      if (primeiroFoco) primeiroFoco.focus();
+    });
+  }
+
+  // Substitui confirm(). opcoes: {titulo, mensagem, confirmar, cancelar, perigo}
+  function confirmar(opcoes) {
+    var o = opcoes || {};
+    return abrirModal(function (caixa, fechar) {
+      var h = document.createElement('h2');
+      h.textContent = o.titulo || 'Confirmar';
+      var p = document.createElement('p');
+      p.textContent = o.mensagem || '';
+      var acoes = document.createElement('div');
+      acoes.className = 'modal-acoes';
+
+      var cancelar = document.createElement('button');
+      cancelar.type = 'button';
+      cancelar.className = 'btn secondary';
+      cancelar.textContent = o.cancelar || 'Cancelar';
+      cancelar.addEventListener('click', function () { fechar(false); });
+
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn' + (o.perigo ? ' perigo' : '');
+      ok.textContent = o.confirmar || 'Confirmar';
+      ok.addEventListener('click', function () { fechar(true); });
+
+      acoes.appendChild(cancelar);
+      acoes.appendChild(ok);
+      caixa.appendChild(h);
+      caixa.appendChild(p);
+      caixa.appendChild(acoes);
+      caixa.setAttribute('aria-label', o.titulo || 'Confirmar');
+      // Foco comeca no Cancelar: acao destrutiva nao deve sair no Enter reflexo.
+      setTimeout(function () { cancelar.focus(); }, 0);
+    }).then(function (v) { return v === true; });
+  }
+
+  // Substitui alert().
+  function avisar(mensagem, titulo) {
+    return abrirModal(function (caixa, fechar) {
+      var h = document.createElement('h2');
+      h.textContent = titulo || 'Aviso';
+      var p = document.createElement('p');
+      p.textContent = String(mensagem);
+      var acoes = document.createElement('div');
+      acoes.className = 'modal-acoes';
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn';
+      ok.textContent = 'Entendi';
+      ok.addEventListener('click', function () { fechar(true); });
+      acoes.appendChild(ok);
+      caixa.appendChild(h);
+      caixa.appendChild(p);
+      caixa.appendChild(acoes);
+      caixa.setAttribute('aria-label', titulo || 'Aviso');
+    });
+  }
+
+  /* ============================================================
+     6. Autenticacao
+     ============================================================
+
+     Estrategia: o app tenta trabalhar normalmente. Se o Firestore
+     recusar por falta de permissao, ai' sim abre a tela de login e
+     repete a operacao. Assim o mesmo arquivo funciona antes e depois
+     de voce publicar as regras novas — nao ha' risco de ficar
+     trancado para fora enquanto a migracao nao termina.
+  */
+
+  var _auth = null;
+  var _usuario = null;
+  var _loginEmAndamento = null;
+  var _ouvintesUsuario = [];
+
+  function ehPermissaoNegada(e) {
+    if (!e) return false;
+    var c = e.code || '';
+    return c === 'permission-denied' ||
+      c === 'firestore/permission-denied' ||
+      c === 'unauthenticated' ||
+      /missing or insufficient permissions/i.test(e.message || '');
+  }
+
+  function iniciarAuth(app) {
+    if (!app || typeof app.auth !== 'function') return null; // SDK de auth nao carregado
+    _auth = app.auth();
+    _auth.onAuthStateChanged(function (u) {
+      _usuario = u;
+      _ouvintesUsuario.forEach(function (fn) {
+        try { fn(u); } catch (e) { console.error('ouvinte de auth:', e); }
+      });
+    });
+    return _auth;
+  }
+
+  function usuario() { return _usuario; }
+
+  function aoMudarUsuario(fn) {
+    _ouvintesUsuario.push(fn);
+    if (_usuario !== undefined) { try { fn(_usuario); } catch (e) {} }
+  }
+
+  // Abre a caixa de login. Chamadas simultaneas compartilham a mesma
+  // caixa, em vez de empilhar cinco modais quando cinco consultas
+  // falham juntas.
+  function pedirLogin(motivo) {
+    if (_loginEmAndamento) return _loginEmAndamento;
+    if (!_auth) {
+      return Promise.reject(new Error(
+        'Este app precisa de login, mas o SDK de autenticacao do Firebase nao carregou.'
+      ));
+    }
+
+    _loginEmAndamento = abrirModal(function (caixa, fechar) {
+      var h = document.createElement('h2');
+      h.textContent = 'Entrar';
+      caixa.setAttribute('aria-label', 'Entrar');
+
+      var p = document.createElement('p');
+      p.textContent = motivo || 'Entre com a conta autorizada para acessar os dados da empresa.';
+
+      var form = document.createElement('form');
+      form.noValidate = true;
+
+      function campo(id, rotulo, tipo, autocomplete) {
+        var wrap = document.createElement('div');
+        wrap.className = 'field';
+        var lab = document.createElement('label');
+        lab.setAttribute('for', id);
+        lab.textContent = rotulo;
+        var linha = document.createElement('div');
+        linha.className = 'input-row';
+        var inp = document.createElement('input');
+        inp.type = tipo;
+        inp.id = id;
+        inp.autocomplete = autocomplete;
+        inp.required = true;
+        linha.appendChild(inp);
+        wrap.appendChild(lab);
+        wrap.appendChild(linha);
+        form.appendChild(wrap);
+        return inp;
+      }
+
+      var email = campo('authEmail', 'E-mail', 'email', 'username');
+      var senha = campo('authSenha', 'Senha', 'password', 'current-password');
+
+      var msg = document.createElement('div');
+      msg.className = 'empty-note';
+      msg.style.display = 'block';
+      msg.style.margin = '8px 0 0';
+      msg.setAttribute('role', 'alert');
+
+      var acoes = document.createElement('div');
+      acoes.className = 'modal-acoes';
+      acoes.style.marginTop = '14px';
+
+      var entrar = document.createElement('button');
+      entrar.type = 'submit';
+      entrar.className = 'btn';
+      entrar.textContent = 'Entrar';
+      acoes.appendChild(entrar);
+
+      form.addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        var e = email.value.trim(), s = senha.value;
+        if (!e || !s) { msg.textContent = 'Preencha e-mail e senha.'; msg.style.color = 'var(--loss)'; return; }
+        entrar.disabled = true;
+        msg.style.color = 'var(--ink-soft)';
+        msg.textContent = 'Entrando...';
+        _auth.signInWithEmailAndPassword(e, s)
+          .then(function (cred) { fechar(cred.user); })
+          .catch(function (err) {
+            entrar.disabled = false;
+            msg.style.color = 'var(--loss)';
+            msg.textContent = mensagemErroAuth(err);
+          });
+      });
+
+      form.appendChild(msg);
+      form.appendChild(acoes);
+      caixa.appendChild(h);
+      caixa.appendChild(p);
+      caixa.appendChild(form);
+    }).then(function (u) {
+      _loginEmAndamento = null;
+      if (!u) throw new Error('Login cancelado.');
+      _usuario = u;
+      return u;
+    }, function (e) {
+      _loginEmAndamento = null;
+      throw e;
+    });
+
+    return _loginEmAndamento;
+  }
+
+  function mensagemErroAuth(err) {
+    var c = (err && err.code) || '';
+    if (c === 'auth/invalid-credential' || c === 'auth/wrong-password' || c === 'auth/user-not-found') {
+      return 'E-mail ou senha incorretos.';
+    }
+    if (c === 'auth/too-many-requests') return 'Muitas tentativas. Aguarde alguns minutos.';
+    if (c === 'auth/network-request-failed') return 'Sem conexao com a internet.';
+    if (c === 'auth/user-disabled') return 'Esta conta foi desativada.';
+    if (c === 'auth/operation-not-allowed') {
+      return 'Login por e-mail/senha ainda nao foi ativado no Firebase Console (Authentication > Sign-in method).';
+    }
+    return erroDe(err);
+  }
+
+  function sair() {
+    if (!_auth) return Promise.resolve();
+    return _auth.signOut();
+  }
+
+  // Envolve qualquer operacao no Firestore. Se cair por permissao,
+  // pede o login e tenta UMA vez mais.
+  function comAuth(operacao) {
+    return Promise.resolve().then(operacao).catch(function (e) {
+      if (!ehPermissaoNegada(e)) throw e;
+      return pedirLogin('Sua sessao expirou ou estes dados exigem login.').then(function () {
+        return operacao();
+      });
+    });
+  }
+
+  /* ============================================================
+     7. Firebase
+     ============================================================ */
+
+  // Inicializa (ou reinicializa) um app nomeado do Firebase.
+  // Aguarda o delete do app anterior — sem o await, o initializeApp
+  // seguinte podia esbarrar num app com o mesmo nome ainda vivo.
+  function iniciarFirebase(nomeApp, config) {
+    if (typeof global.firebase === 'undefined') {
+      return Promise.reject(new Error('SDK do Firebase nao carregou (sem internet?)'));
+    }
+    var existente = null;
+    try {
+      existente = global.firebase.apps.filter(function (a) { return a.name === nomeApp; })[0] || null;
+    } catch (e) { /* apps ainda nao inicializado */ }
+
+    return Promise.resolve(existente ? existente.delete() : null).then(function () {
+      var app = global.firebase.initializeApp(config || FIREBASE_CONFIG, nomeApp);
+      var db = app.firestore();
+      iniciarAuth(app);
+      // Cache local: a segunda visita abre instantaneamente e o app
+      // continua util sem internet. Falha de proposito quando ha' outra
+      // aba aberta com persistencia — nao e' erro, so' seguir sem cache.
+      return Promise.resolve()
+        .then(function () { return db.enablePersistence({ synchronizeTabs: true }); })
+        .catch(function (e) {
+          if (e && e.code !== 'failed-precondition' && e.code !== 'unimplemented') {
+            console.warn('Cache local indisponivel:', e);
+          }
+        })
+        .then(function () { return { app: app, db: db }; });
+    });
+  }
+
+  /* ============================================================
+     8. Roteador por hash
+     ============================================================
+
+     Antes a navegacao era um monte de style.display na mao e nao dava
+     para recarregar a pagina na mesma tela, nem mandar um link para
+     alguem "ja' aberto em Pagamentos".
+  */
+
+  function criarRouter(config) {
+    var views = config.views;                       // { Painel: 'viewPainel', ... }
+    var padrao = config.padrao;
+    var aoEntrar = config.aoEntrar || {};
+    var naoRestauraveis = config.naoRestauraveis || []; // telas que dependem de contexto
+    var nomes = Object.keys(views);
+    var atual = null;
+
+    function existe(nome) { return Object.prototype.hasOwnProperty.call(views, nome); }
+
+    function aplicar(nome) {
+      nomes.forEach(function (n) {
+        var el = $(views[n]);
+        if (el) el.style.display = (n === nome) ? 'block' : 'none';
+      });
+      atual = nome;
+      if (config.aoTrocar) config.aoTrocar(nome);
+      var fn = aoEntrar[nome];
+      if (fn) fn();
+    }
+
+    function ir(nome, opcoes) {
+      var o = opcoes || {};
+      if (!existe(nome)) nome = padrao;
+      if (nome === atual && !o.forcar) return;
+
+      // Troca a tela AGORA e so' depois atualiza o endereco. Delegar a
+      // troca ao evento hashchange nao funciona: ele e' assincrono, e a
+      // tela ficava sem mudar no mesmo instante do clique.
+      aplicar(nome);
+
+      var alvoHash = '#' + nome;
+      if (global.location.hash !== alvoHash) global.location.hash = nome;
+      // O hashchange que isso dispara cai no guarda "nome === atual"
+      // do ouvinte abaixo e nao faz nada — o estado ja' esta' certo.
+
+      if (!o.semRolar) global.scrollTo(0, 0);
+    }
+
+    global.addEventListener('hashchange', function () {
+      var nome = decodeURIComponent(global.location.hash.slice(1));
+      if (!existe(nome) || naoRestauraveis.indexOf(nome) !== -1) nome = padrao;
+      if (nome === atual) return;
+      aplicar(nome);
+      global.scrollTo(0, 0);
+    });
+
+    function iniciar() {
+      var nome = decodeURIComponent(global.location.hash.slice(1));
+      // Telas que precisam de um registro selecionado nao podem ser
+      // restauradas de um link; caem na tela padrao.
+      if (!existe(nome) || naoRestauraveis.indexOf(nome) !== -1) nome = padrao;
+      aplicar(nome);
+    }
+
+    return { ir: ir, iniciar: iniciar, atual: function () { return atual; } };
+  }
+
+  /* ============================================================
+     9. Tabela de itens de NF-e (usada pelos dois apps)
+     ============================================================ */
+
+  // dados: { itens:[...], stTotal, valorProdutos }
+  // opcoes: { comPisCofins: bool, larguraMinima: '900px' }
+  function tabelaItensNota(dados, opcoes) {
+    var o = opcoes || {};
+    var itens = (dados && dados.itens) || [];
+    if (!itens.length) {
+      return '<p class="empty-note" style="display:block;">Esta nota nao tem itens detalhados.</p>';
+    }
+
+    var colunas = ['Cod. / Produto', 'NCM / CFOP', 'Qtd', 'V. Unit.', 'V. Total', 'ICMS', 'IPI'];
+    if (o.comPisCofins) colunas.push('PIS+COFINS');
+
+    var html = '<div class="tabela-rolavel"><table class="quote-table" style="min-width:' +
+      (o.larguraMinima || '860px') + ';"><thead><tr>' +
+      colunas.map(function (c) { return '<th scope="col">' + c + '</th>'; }).join('') +
+      '</tr></thead><tbody>';
+
+    itens.slice().sort(function (a, b) { return (a.n || 0) - (b.n || 0); }).forEach(function (it) {
+      var icms = 'CST ' + escapeHtml(it.icmsCst || '-');
+      if (it.icmsValor) icms += ' · ' + num(it.icmsAliq || 0) + '% · ' + brl(it.icmsValor);
+      if (it.icmsStValor > 0) {
+        var pctSt = (it.vTotal > 0) ? (it.icmsStValor / it.vTotal * 100) : 0;
+        icms += '<br><span style="color:var(--brick); font-weight:600;">ST: ' + brl(it.icmsStValor) +
+          ' · ' + num(pctSt, 2) + '%</span>';
+      }
+      var ipi = it.ipiValor ? (num(it.ipiAliq || 0) + '% · ' + brl(it.ipiValor)) : '—';
+
+      html += '<tr>' +
+        '<td><span style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft);">' +
+        escapeHtml(it.codigo || '-') + '</span><br>' + escapeHtml(it.descricao || '-') + '</td>' +
+        '<td style="font-size:11px;">' + escapeHtml(it.ncm || '-') + '<br>CFOP ' + escapeHtml(it.cfop || '-') + '</td>' +
+        '<td>' + num(it.qtd || 0) + ' ' + escapeHtml(it.un || '') + '</td>' +
+        '<td>' + brl(it.vUnit || 0) + '</td>' +
+        '<td>' + brl(it.vTotal || 0) + '</td>' +
+        '<td style="font-size:11px;">' + icms + '</td>' +
+        '<td style="font-size:11px;">' + ipi + '</td>';
+      if (o.comPisCofins) {
+        var pc = (it.pisValor || it.cofinsValor)
+          ? (num((it.pisAliq || 0) + (it.cofinsAliq || 0)) + '% · ' + brl((it.pisValor || 0) + (it.cofinsValor || 0)))
+          : '—';
+        html += '<td style="font-size:11px;">' + pc + '</td>';
+      }
+      html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    if ((dados.stTotal || 0) > 0) {
+      var baseProd = dados.valorProdutos || itens.reduce(function (s, it) { return s + (it.vTotal || 0); }, 0);
+      var pctStNota = baseProd > 0 ? (dados.stTotal / baseProd * 100) : 0;
+      html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">' +
+        'ST total da nota: ' + brl(dados.stTotal) + ' · ' + num(pctStNota, 2) + '% sobre os produtos' +
+        (baseProd > 0 ? ' (' + brl(baseProd) + ')' : '') + '</div>';
+    }
+
+    var link = safeUrl(dados.linkXml);
+    if (link) {
+      html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="' +
+        escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">⬇ Baixar XML</a></div>';
+    }
+    return html;
+  }
+
+  /* ============================================================
+     10. Rede de seguranca
+     ============================================================ */
+
+  // Sem isto, um erro inesperado deixava a tela em branco em silencio.
+  function instalarErroGlobal() {
+    global.addEventListener('error', function (ev) {
+      console.error('Erro nao tratado:', ev.error || ev.message);
+      toast('Algo deu errado nesta tela. Recarregue a pagina se ela parar de responder.', 'erro');
+    });
+    global.addEventListener('unhandledrejection', function (ev) {
+      var e = ev.reason;
+      if (e && e.message === 'Login cancelado.') return; // o usuario fechou a caixa de proposito
+      console.error('Promise rejeitada sem tratamento:', e);
+      toast('Uma operacao falhou: ' + erroDe(e), 'erro');
+    });
+  }
+
+  // Barra de conta no cabecalho: mostra quem esta' logado e o botao Sair.
+  function montarBarraConta(container) {
+    if (!container) return;
+    container.className = 'conta-barra';
+    var email = document.createElement('span');
+    email.className = 'conta-email';
+    var botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'btn secondary mini';
+
+    function pintar(u) {
+      if (u) {
+        email.textContent = u.email || 'conectado';
+        botao.textContent = 'Sair';
+        botao.onclick = function () {
+          sair().then(function () { toast('Voce saiu da conta.', 'info'); });
+        };
+      } else {
+        email.textContent = '';
+        botao.textContent = 'Entrar';
+        botao.onclick = function () {
+          pedirLogin().then(function () {
+            toast('Conectado. Recarregando os dados...', 'ok');
+            if (typeof global.__aoEntrar === 'function') global.__aoEntrar();
+          }).catch(function () { /* cancelado */ });
+        };
+      }
+    }
+
+    container.appendChild(email);
+    container.appendChild(botao);
+    aoMudarUsuario(pintar);
+    pintar(_usuario);
+  }
+
+  /* ============================================================
+     Exporta
+     ============================================================ */
+
+  global.App = {
+    FIREBASE_CONFIG: FIREBASE_CONFIG,
+    DEBOUNCE_BUSCA: DEBOUNCE_BUSCA,
+
+    $: $,
+    escapeHtml: escapeHtml,
+    safeUrl: safeUrl,
+    normalizarTexto: normalizarTexto,
+    norm: norm,
+
+    toNum: toNum,
+    centavos: centavos,
+    brl: brl,
+    pct: pct,
+    num: num,
+    parseNumeroBR: parseNumeroBR,
+
+    iso: iso,
+    hojeISO: hojeISO,
+    fmtData: fmtData,
+    somarDias: somarDias,
+    diasEntre: diasEntre,
+    fmtDataFirestore: fmtDataFirestore,
+    horaAgora: horaAgora,
+
+    debounce: debounce,
+    delegar: delegar,
+    delegarTeclado: delegarTeclado,
+
+    toast: toast,
+    toastErro: toastErro,
+    erroDe: erroDe,
+    confirmar: confirmar,
+    avisar: avisar,
+    abrirModal: abrirModal,
+
+    iniciarFirebase: iniciarFirebase,
+    iniciarAuth: iniciarAuth,
+    pedirLogin: pedirLogin,
+    comAuth: comAuth,
+    sair: sair,
+    usuario: usuario,
+    aoMudarUsuario: aoMudarUsuario,
+    ehPermissaoNegada: ehPermissaoNegada,
+    montarBarraConta: montarBarraConta,
+
+    criarRouter: criarRouter,
+    tabelaItensNota: tabelaItensNota,
+    instalarErroGlobal: instalarErroGlobal
+  };
+})(window);

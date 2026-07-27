@@ -1,0 +1,15 @@
+# Lixo do sistema
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editores
+.vscode/
+.idea/
+*.swp
+
+# Configuracao local do Claude Code
+.claude/
+
+# Backups gerados pelo proprio app
+calculadora-custo-backup-*.json

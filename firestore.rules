@@ -1,0 +1,86 @@
+rules_version = '2';
+
+// ============================================================
+//  Regras de seguranca do Firestore
+//  Projeto: bd-calculadora-d2ce0
+//
+//  Estas regras SUBSTITUEM o modo aberto. Sem elas, qualquer pessoa
+//  com o arquivo HTML (que traz a apiKey, publica por design) le e
+//  apaga notas fiscais, duplicatas, cotacoes e precos de fornecedor.
+//
+//  COMO PUBLICAR
+//  1) Firebase Console > Authentication > Sign-in method
+//     > ative "E-mail/senha".
+//  2) Authentication > Users > "Add user": crie uma conta para cada
+//     pessoa que usa os aplicativos.
+//  3) Firestore Database > Rules: cole este arquivo e clique
+//     em "Publicar".
+//
+//  Depois disso os apps pedem login sozinhos na primeira operacao
+//  que o Firestore recusar. Antes disso, continuam funcionando como
+//  hoje — da' para publicar as regras sem parar o trabalho de ninguem.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Toda pessoa autenticada no projeto e' um usuario interno.
+    // Se um dia houver acesso externo, troque por uma checagem de
+    // custom claim, por exemplo: request.auth.token.interno == true
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    // ------------------------------------------------------------
+    // Colecoes alimentadas pelo Apps Script (importacao de XML).
+    // O navegador so' precisa LER e marcar alguns campos de controle;
+    // nunca criar nem apagar uma nota.
+    // O Apps Script usa uma conta de servico (Admin SDK), que ignora
+    // estas regras — entao restringir aqui nao atrapalha a importacao.
+    // ------------------------------------------------------------
+
+    match /notas/{chaveAcesso} {
+      allow read: if autenticado();
+      allow create, delete: if false;
+      // Da tela so' saem estes campos de controle. Assim um erro de
+      // codigo nao consegue sobrescrever valor, emitente ou chave.
+      allow update: if autenticado()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual', 'previsaoEntrega']);
+    }
+
+    match /duplicatas/{id} {
+      allow read: if autenticado();
+      allow create, delete: if false;
+      allow update: if autenticado()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote']);
+    }
+
+    match /itensNotas/{chaveAcesso} {
+      allow read: if autenticado();
+      allow write: if false; // so' o Apps Script escreve aqui
+    }
+
+    // ------------------------------------------------------------
+    // Colecoes criadas e mantidas pelos proprios aplicativos.
+    // ------------------------------------------------------------
+
+    match /produtos/{nome} {
+      allow read, write: if autenticado();
+    }
+
+    match /cotacoes/{id} {
+      allow read, write: if autenticado();
+    }
+
+    match /concorrentes/{id} {
+      allow read, write: if autenticado();
+    }
+
+    // Nada mais e' acessivel pelo navegador.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

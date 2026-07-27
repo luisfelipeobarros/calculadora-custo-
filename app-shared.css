@@ -1,0 +1,795 @@
+/* ============================================================
+   app-shared.css - design system comum aos dois aplicativos
+   (Calculadora de Custo e Controle de Notas).
+   Extraido dos dois HTML, onde este bloco era byte a byte identico.
+   ============================================================ */
+
+  :root{
+    --paper:#F6F3E7;
+    --stripe:#DCE8D2;
+    --stripe2:#EDF3E6;
+    --ink:#202B22;
+    --ink-soft:#5B6B5E;
+    --brick:#A8462B;
+    --brick-dark:#8A3821;
+    --copper:#B9773F;
+    --profit:#2E6B45;
+    --loss:#B23A2E;
+    --line:#C9C2A8;
+    --card:#FFFEF9;
+    --font-display:'Roboto Slab', serif;
+    --font-body:'IBM Plex Sans', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+  }
+  *{box-sizing:border-box;}
+  @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
+  tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
+
+  body{
+    margin:0;
+    padding:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{
+    padding:28px 20px 60px;
+  }
+  header.top{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #viewCalculadora, #viewFrete, #viewSync{
+    max-width:1440px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  footer.note{
+    max-width:1700px;
+    margin-left:auto;
+    margin-right:auto;
+  }
+  header.top{
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:12px;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:22px;
+  }
+  .title-block h1{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:clamp(24px,4vw,34px);
+    margin:0 0 4px;
+    letter-spacing:0.5px;
+  }
+  .title-block p{
+    margin:0;
+    color:var(--ink-soft);
+    font-size:13px;
+    font-family:var(--font-mono);
+    letter-spacing:0.5px;
+  }
+  .stamp{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:1.5px;
+    color:var(--brick);
+    border:2px solid var(--brick);
+    padding:5px 10px;
+    border-radius:3px;
+    text-transform:uppercase;
+    transform:rotate(-2deg);
+    white-space:nowrap;
+  }
+
+  .grid{
+    display:grid;
+    grid-template-columns:1.15fr 1fr;
+    gap:22px;
+    align-items:start;
+  }
+  @media (max-width:880px){
+    .grid{grid-template-columns:1fr;}
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:18px 20px;
+    margin-bottom:18px;
+  }
+  .card h2{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:700;
+    margin:0 0 14px;
+    text-transform:uppercase;
+    letter-spacing:0.8px;
+    color:var(--brick-dark);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+
+  .field{margin-bottom:14px;}
+  .field:last-child{margin-bottom:0;}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    margin-bottom:5px;
+    color:var(--ink);
+  }
+  .field .hint{
+    font-size:11px;
+    color:var(--ink-soft);
+    font-weight:400;
+    margin-left:4px;
+  }
+  .input-row{
+    display:flex;
+    align-items:center;
+    border:1.5px solid var(--line);
+    border-radius:4px;
+    background:#fff;
+    overflow:hidden;
+    transition:border-color .15s;
+  }
+  .input-row:focus-within{
+    border-color:var(--brick);
+  }
+  .input-row .prefix{
+    padding:9px 10px;
+    background:var(--stripe2);
+    font-family:var(--font-mono);
+    font-size:13px;
+    color:var(--ink-soft);
+    border-right:1.5px solid var(--line);
+  }
+  .input-row input[type=text],
+  .input-row input[type=number]{
+    border:0;
+    outline:0;
+    padding:9px 10px;
+    font-family:var(--font-mono);
+    font-size:14px;
+    width:100%;
+    background:transparent;
+    color:var(--ink);
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{opacity:0.4;}
+  .no-spin::-webkit-outer-spin-button,
+  .no-spin::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  .no-spin{-moz-appearance:textfield;}
+
+  .toggle{
+    display:inline-flex;
+    border:1.5px solid var(--line);
+    border-radius:4px;
+    overflow:hidden;
+  }
+  .toggle button{
+    border:0;
+    background:#fff;
+    padding:8px 16px;
+    font-family:var(--font-body);
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    cursor:pointer;
+    transition:background .15s,color .15s;
+  }
+  .toggle button + button{border-left:1.5px solid var(--line);}
+  .toggle button.active{
+    background:var(--brick);
+    color:#fff;
+  }
+  .toggle button:focus-visible{outline:2px solid var(--copper); outline-offset:-2px;}
+
+  .sub-field{
+    margin-top:10px;
+    padding-top:10px;
+    border-top:1px dashed var(--line);
+  }
+  .row2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+  }
+
+  /* Results ledger */
+  .resultado-wrap{
+    position:sticky;
+    top:20px;
+  }
+  .ledger{
+    background:repeating-linear-gradient(
+      var(--card) 0px, var(--card) 34px,
+      var(--stripe) 34px, var(--stripe) 68px
+    );
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+  }
+  .ledger-head{
+    background:var(--ink);
+    color:var(--paper);
+    padding:14px 20px;
+    font-family:var(--font-display);
+    font-size:14px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:1px;
+  }
+  .hero{
+    padding:20px 20px 16px;
+    background:var(--card);
+    border-bottom:2px solid var(--ink);
+  }
+  .hero-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin-bottom:10px;
+  }
+  .hero-row:last-child{margin-bottom:0;}
+  .hero-label{
+    font-size:12px;
+    font-weight:600;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .hero-value{
+    font-family:var(--font-mono);
+    font-size:26px;
+    font-weight:600;
+  }
+  .hero-value.profit{color:var(--profit);}
+  .hero-value.loss{color:var(--loss);}
+
+  .ledger-body{padding:6px 20px 4px;}
+  .lrow{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:8px 0;
+    font-size:13.5px;
+    line-height:34px;
+    height:34px;
+  }
+  .lrow .lname{color:var(--ink);}
+  .lrow .lval{
+    font-family:var(--font-mono);
+    font-weight:600;
+  }
+
+  .desc-box{
+    margin:14px 20px 18px;
+    padding:12px 14px;
+    background:#fff;
+    border:1px dashed var(--copper);
+    border-radius:4px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    white-space:pre-line;
+    color:var(--ink-soft);
+  }
+
+  .price-tier{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:11px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .price-tier:last-child{border-bottom:0;}
+  .price-tier .ptlabel{font-size:13px; font-weight:600; color:var(--ink);}
+  .price-tier .pthint{font-size:11px; color:var(--ink-soft); font-weight:400; margin-left:5px;}
+  .price-tier .ptvalue{font-family:var(--font-mono); font-size:18px; font-weight:700;}
+  .price-tier.minimo .ptvalue{color:var(--ink-soft);}
+  .price-tier.recomendado .ptvalue{color:var(--copper);}
+  .price-tier.ideal .ptvalue{color:var(--profit);}
+
+  /* Cotação */
+  .quote-table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12.5px;
+  }
+  .quote-table th{
+    text-align:left;
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:0.5px;
+    color:var(--ink-soft);
+    padding:6px 8px;
+    border-bottom:2px solid var(--ink);
+  }
+  .quote-table td{
+    padding:7px 8px;
+    border-bottom:1px solid var(--line);
+    font-family:var(--font-mono);
+  }
+  .quote-table tr:nth-child(even) td{ background:var(--stripe2); }
+  .quote-table select{
+    font-family:var(--font-body);
+    font-size:12px;
+    padding:4px 6px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    background:#fff;
+    color:var(--ink);
+    max-width:220px;
+  }
+  .status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-family:var(--font-body);
+    font-size:12px;
+    font-weight:600;
+    padding:4px 10px;
+    border-radius:20px;
+    white-space:nowrap;
+  }
+  .status-badge.up{ background:rgba(178,58,46,0.12); color:var(--loss); }
+  .status-badge.down{ background:rgba(46,107,69,0.12); color:var(--profit); }
+  .status-badge.qty{ background:#FCEFD6; color:#8A6414; }
+  .status-badge.variacao{ background:#FCEFD6; color:#8A6414; }
+  .status-badge.missing{ background:#e5e5e5; color:#222; }
+  .status-badge.neutral{ background:var(--stripe2); color:var(--ink-soft); }
+  .status-badge.status-negociacao{ background:var(--stripe2); color:var(--ink-soft); }
+  .status-badge.status-pedido{ background:#FCEFD6; color:#8A6414; }
+  .status-badge.status-transito{ background:rgba(59,111,166,0.14); color:#2C5A8C; }
+  .status-badge.status-recebido{ background:rgba(46,107,69,0.12); color:var(--profit); }
+
+  .suggestion-item{
+    padding:12px 14px;
+    border-left:4px solid var(--line);
+    background:var(--stripe2);
+    border-radius:0 5px 5px 0;
+    margin-bottom:10px;
+    font-size:13px;
+  }
+  .suggestion-item:last-child{ margin-bottom:0; }
+  .suggestion-item.up{ border-left-color:var(--loss); }
+  .suggestion-item.down{ border-left-color:var(--profit); }
+  .suggestion-item.qty{ border-left-color:#C9962E; }
+  .suggestion-item.missing{ border-left-color:#444; }
+  .suggestion-item .sg-title{ font-weight:700; margin-bottom:3px; }
+  .suggestion-item .sg-detail{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+
+  .historico-item{ margin-bottom:12px; }
+  .historico-item:last-child{ margin-bottom:0; }
+  .historico-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    cursor:pointer;
+    user-select:none;
+    flex-wrap:wrap;
+  }
+  .historico-header:hover{ background:var(--stripe); }
+  .historico-header .h-fornecedor{ font-weight:700; font-size:13.5px; }
+  .historico-header .h-data{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
+  .historico-header .h-count{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
+  .historico-header .h-total{ margin-left:auto; }
+  .historico-body{
+    padding:10px 4px 4px 14px;
+    border-left:2px solid var(--line);
+    margin-top:6px;
+  }
+
+  /* Saved products */
+  .saved-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .saved-item{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:10px 12px;
+    flex-wrap:wrap;
+  }
+  .saved-item .info{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    min-width:200px;
+    flex:1;
+  }
+  .saved-item .nome{
+    font-weight:600;
+    font-size:13.5px;
+  }
+  .saved-item .desc{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    white-space:pre-line;
+  }
+  .saved-item .price-highlight{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 12px;
+    background:#fff;
+    border:1px solid var(--line);
+    border-radius:6px;
+  }
+  .saved-item .ph-venda{
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:15px;
+    color:var(--ink);
+    white-space:nowrap;
+  }
+  .saved-item .badge{
+    font-family:var(--font-mono);
+    font-size:12px;
+    font-weight:600;
+    padding:3px 8px;
+    border-radius:3px;
+    white-space:nowrap;
+  }
+  .saved-item .badge.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
+  .saved-item .badge.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
+  .saved-item .actions-mini{
+    display:flex;
+    gap:6px;
+  }
+  .saved-item .actions-mini button{
+    border:1px solid var(--line);
+    background:#fff;
+    cursor:pointer;
+    font-size:12px;
+    padding:5px 10px;
+    border-radius:4px;
+    color:var(--ink);
+    font-family:var(--font-body);
+    font-weight:600;
+  }
+  .saved-item .actions-mini button:hover{background:var(--stripe);}
+  .saved-item .actions-mini button.del{color:var(--loss); border-color:var(--loss);}
+  .supplier-group{ margin-bottom:14px; }
+  .supplier-group:last-child{ margin-bottom:0; }
+  .supplier-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:9px 12px;
+    background:var(--stripe2);
+    border:1px solid var(--line);
+    border-radius:5px;
+    cursor:pointer;
+    user-select:none;
+  }
+  .supplier-header:hover{ background:var(--stripe); }
+  .supplier-arrow{
+    display:inline-block;
+    font-size:11px;
+    color:var(--brick);
+    transition:transform .15s;
+  }
+  .supplier-arrow.collapsed{ transform:rotate(-90deg); }
+  .supplier-name{
+    flex:1;
+    font-weight:600;
+    font-size:13px;
+  }
+  .supplier-count{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .supplier-avg{
+    font-family:var(--font-mono);
+    font-size:11px;
+    font-weight:600;
+    padding:2px 8px;
+    border-radius:10px;
+    margin-left:auto;
+  }
+  .supplier-avg.profit{background:rgba(46,107,69,0.12); color:var(--profit);}
+  .supplier-avg.loss{background:rgba(178,58,46,0.12); color:var(--loss);}
+  .supplier-items{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top:8px;
+    padding-left:8px;
+    border-left:2px solid var(--line);
+  }
+
+  .empty-note{
+    font-size:12.5px;
+    color:var(--ink-soft);
+    font-style:italic;
+  }
+  .status-pill{
+    display:inline-block;
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    padding:5px 12px;
+    border-radius:20px;
+    margin-bottom:12px;
+  }
+  .status-pill.claude, .status-pill.local, .status-pill.firebase{
+    background:rgba(46,107,69,0.12);
+    color:var(--profit);
+  }
+  .status-pill.memoria{
+    background:#FCEFD6;
+    border:1px solid var(--copper);
+    color:var(--ink);
+  }
+
+  .btn{
+    font-family:var(--font-body);
+    font-weight:600;
+    font-size:13px;
+    border:1.5px solid var(--ink);
+    background:var(--ink);
+    color:var(--paper);
+    padding:9px 16px;
+    border-radius:4px;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  .btn:hover{opacity:0.85;}
+  .btn.secondary{
+    background:transparent;
+    color:var(--ink);
+  }
+  .btn:focus-visible, .chip button:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
+
+  .actions{
+    display:flex;
+    gap:10px;
+    margin-top:4px;
+    flex-wrap:wrap;
+  }
+
+  footer.note{
+    margin-top:24px;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    font-family:var(--font-mono);
+    line-height:1.6;
+  }
+
+  /* ============================================================
+     A partir daqui: componentes acrescentados na revisao.
+     ============================================================ */
+
+  /* --- Acessibilidade --------------------------------------- */
+
+  /* Contorno de foco visivel e consistente em tudo que e' focavel.
+     Antes so' .btn e .toggle button tinham; links, inputs, selects e
+     cabecalhos clicaveis ficavam sem indicacao nenhuma no teclado. */
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  button:focus-visible,
+  [tabindex]:focus-visible{
+    outline:2px solid var(--copper);
+    outline-offset:2px;
+  }
+  .input-row:focus-within{ outline:2px solid var(--copper); outline-offset:1px; }
+  .input-row input:focus-visible{ outline:none; }
+
+  /* Respeita quem pediu menos animacao no sistema operacional.
+     A linha "pesquisando..." piscava sem parar, o que atrapalha
+     pessoas com sensibilidade a movimento. */
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{
+      animation-duration:0.01ms !important;
+      animation-iteration-count:1 !important;
+      transition-duration:0.01ms !important;
+      scroll-behavior:auto !important;
+    }
+    tr.pesq-pendente td{ animation:none; opacity:0.65; }
+  }
+
+  /* Texto visivel so' para leitores de tela. */
+  .sr-only{
+    position:absolute;
+    width:1px; height:1px;
+    padding:0; margin:-1px;
+    overflow:hidden;
+    clip:rect(0,0,0,0);
+    white-space:nowrap;
+    border:0;
+  }
+
+  /* Atalho "pular para o conteudo", primeiro Tab da pagina. */
+  .skip-link{
+    position:absolute;
+    left:-9999px;
+    top:0;
+    z-index:200;
+    background:var(--ink);
+    color:var(--paper);
+    padding:10px 16px;
+    border-radius:0 0 4px 0;
+    font-family:var(--font-body);
+    font-size:13px;
+    font-weight:600;
+  }
+  .skip-link:focus{ left:0; }
+
+  /* Cabecalhos de secao que abrem/fecham. Eram <div> com cursor:pointer,
+     sem foco nem teclado; agora sao <button> ou tem role/tabindex. */
+  .historico-header, .supplier-header{
+    width:100%;
+    text-align:left;
+    font-family:inherit;
+    color:inherit;
+  }
+  .historico-header[aria-expanded="true"] .supplier-arrow,
+  .supplier-header[aria-expanded="true"] .supplier-arrow{ transform:none; }
+  .historico-header[aria-expanded="false"] .supplier-arrow,
+  .supplier-header[aria-expanded="false"] .supplier-arrow{ transform:rotate(-90deg); }
+
+  /* --- Tabelas ---------------------------------------------- */
+
+  /* Qualquer tabela larga rola dentro da propria caixa, em vez de
+     empurrar a pagina inteira para o lado no celular. */
+  .tabela-rolavel{
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .quote-table caption{
+    caption-side:top;
+    text-align:left;
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+    padding-bottom:6px;
+  }
+
+  /* --- Avisos (toast) --------------------------------------- */
+
+  /* Substitui o alert() de sucesso/erro: nao bloqueia a aba. */
+  #toastArea{
+    position:fixed;
+    right:16px;
+    bottom:16px;
+    z-index:120;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    max-width:min(420px, calc(100vw - 32px));
+  }
+  .toast{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    background:var(--card);
+    border:1px solid var(--line);
+    border-left:4px solid var(--ink);
+    border-radius:5px;
+    padding:11px 14px;
+    font-size:13px;
+    line-height:1.45;
+    box-shadow:0 4px 14px rgba(32,43,34,0.16);
+    animation:toastEntra .18s ease-out;
+  }
+  @keyframes toastEntra{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
+  .toast.ok{ border-left-color:var(--profit); }
+  .toast.erro{ border-left-color:var(--loss); }
+  .toast.info{ border-left-color:var(--copper); }
+  .toast .toast-msg{ flex:1; }
+  .toast .toast-fechar{
+    border:0;
+    background:transparent;
+    cursor:pointer;
+    color:var(--ink-soft);
+    font-size:15px;
+    line-height:1;
+    padding:0 2px;
+  }
+
+  /* --- Modal (confirmacao e login) -------------------------- */
+
+  .modal-fundo{
+    position:fixed;
+    inset:0;
+    background:rgba(32,43,34,0.45);
+    z-index:150;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .modal-caixa{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:22px 24px;
+    width:min(460px, 100%);
+    box-shadow:0 12px 40px rgba(32,43,34,0.28);
+  }
+  .modal-caixa h2{
+    font-family:var(--font-display);
+    font-size:15px;
+    font-weight:700;
+    margin:0 0 10px;
+    text-transform:uppercase;
+    letter-spacing:0.8px;
+    color:var(--brick-dark);
+  }
+  .modal-caixa p{
+    margin:0 0 16px;
+    font-size:13.5px;
+    line-height:1.55;
+    white-space:pre-line;
+  }
+  .modal-acoes{
+    display:flex;
+    gap:10px;
+    justify-content:flex-end;
+    flex-wrap:wrap;
+  }
+  .btn.perigo{
+    background:var(--loss);
+    border-color:var(--loss);
+    color:#fff;
+  }
+
+  /* --- Barra de conta / autenticacao ------------------------ */
+
+  .conta-barra{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .conta-barra .conta-email{
+    max-width:220px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .btn.mini{
+    padding:5px 11px;
+    font-size:11.5px;
+  }
