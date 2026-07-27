@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=2">
+<link rel="stylesheet" href="app-shared.css?v=3">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -75,6 +75,8 @@
       <button type="button" class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
       <button type="button" class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
       <button type="button" class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
+      <!-- Outro aplicativo, nao outra tela deste: por isso e' um link. -->
+      <a class="btn secondary" href="controle-notas.html">🧾 Controle de Notas</a>
       <div id="contaBarra"></div>
       <div class="stamp">Uso interno</div>
     </nav>
@@ -710,7 +712,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=2"></script>
+<script src="app-shared.js?v=3"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';

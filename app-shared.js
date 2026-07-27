@@ -707,7 +707,19 @@
     }
 
     global.addEventListener('hashchange', function () {
-      var nome = decodeURIComponent(global.location.hash.slice(1));
+      var bruto = decodeURIComponent(global.location.hash.slice(1));
+
+      // Navegacao feita pelo proprio app: ir() ja' aplicou a tela e so'
+      // depois mexeu no endereco. Sem esta saida antecipada, as telas de
+      // "naoRestauraveis" eram jogadas de volta para a tela padrao logo
+      // apos abrir — era o que fazia a pesquisa em lote e a comparacao
+      // com NF-e pularem sozinhas para a Calculadora.
+      if (bruto === atual) return;
+
+      // Daqui para baixo e' navegacao de fora (Voltar/Avancar do
+      // navegador, ou link colado): ai' sim vale o filtro das telas que
+      // dependem de um registro selecionado.
+      var nome = bruto;
       if (!existe(nome) || naoRestauraveis.indexOf(nome) !== -1) nome = padrao;
       if (nome === atual) return;
       aplicar(nome);

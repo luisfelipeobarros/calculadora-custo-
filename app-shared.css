@@ -773,6 +773,15 @@
     color:#fff;
   }
 
+  /* Link que leva ao OUTRO aplicativo, com cara de botao. Precisa de
+     display e text-decoration proprios: <a> nasce inline e sublinhado,
+     entao o padding do .btn sairia torto. */
+  a.btn{
+    display:inline-block;
+    text-decoration:none;
+    line-height:normal;
+  }
+
   /* --- Barra de conta / autenticacao ------------------------ */
 
   .conta-barra{

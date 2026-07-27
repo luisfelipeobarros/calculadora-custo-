@@ -29,7 +29,8 @@ const etapas = [
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
-  ['Helpers de app-shared.js', 'helpers.js', []]
+  ['Helpers de app-shared.js', 'helpers.js', []],
+  ['Roteador de telas', 'router.js', []]
 ];
 
 let falhou = 0;
