@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=4">
+<link rel="stylesheet" href="app-shared.css?v=5">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -319,7 +319,7 @@
           </div>
           <div class="hero" style="border:1px solid var(--line); border-radius:6px; margin-top:6px;">
             <div class="hero-row">
-              <span class="hero-label">Preço sugerido <span class="hint">margem de 8%</span></span>
+              <span class="hero-label">Preço sugerido <span class="hint" id="indSugeridoRotulo"></span></span>
               <span class="hero-value" id="indSugerido" style="color:var(--copper); font-size:20px;">--</span>
             </div>
             <div class="hero-row">
@@ -717,7 +717,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=4"></script>
+<script src="app-shared.js?v=5"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -4094,10 +4094,16 @@ Tupan</textarea>
     };
   }
 
-  // Preço com a margem "Aceitável" (8%), arredondado para ,90 — o mesmo
-  // número que a calculadora sugere. Serve de referência para o
-  // comprador na hora de definir a venda.
-  const MARGEM_SUGERIDA = 0.08;
+  // Preço com a margem "Ideal", arredondado para ,90 — o mesmo número
+  // que a calculadora sugere naquele nível. Serve de referência ao
+  // comprador: partir do ideal deixa espaço para negociar para baixo
+  // sem furar o piso.
+  //
+  // Este é o ÚNICO lugar onde a margem aparece. Os rótulos da tela são
+  // escritos a partir daqui, para o texto nunca discordar da conta.
+  const MARGEM_SUGERIDA = 0.13;
+  const ROTULO_MARGEM_SUGERIDA = pct(MARGEM_SUGERIDA, 0); // "13%"
+  $('indSugeridoRotulo').textContent = 'margem de ' + ROTULO_MARGEM_SUGERIDA;
 
   function precoSugerido(custoNFe, cfg){
     if(!(custoNFe > 0)) return null;
@@ -4121,7 +4127,7 @@ Tupan</textarea>
     }
     let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>'
       + '<th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
-      + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(8%)</span></th>'
+      + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(' + ROTULO_MARGEM_SUGERIDA + ')</span></th>'
       + '<th scope="col">Venda</th><th scope="col">Margem</th></tr></thead><tbody>';
     itens.forEach(r=>{
       const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
@@ -4151,7 +4157,7 @@ Tupan</textarea>
     const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input'+seletor);
     if(!r || !previewEl || !vendaInput) return;
 
-    // Sugestão de preço: mesma conta da calculadora, com a margem de 8%.
+    // Sugestão de preço: mesma conta da calculadora, na margem ideal.
     if(sugeridoEl){
       const sug = precoSugerido(r.precoRecebido, cfg);
       sugeridoEl.textContent = sug != null ? brl(sug) : '--';

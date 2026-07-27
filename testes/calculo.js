@@ -161,15 +161,29 @@ for(let i = 0; i < 20000; i++){
 }
 console.log('preco sugerido atinge a margem pedida, pior erro:', piorAlvo.toExponential(3));
 
-// ---------- precoSugerido: a coluna "Sugerido (8%)" da cotacao ----------
+// ---------- precoSugerido: a coluna "Sugerido" da cotacao ----------
 // Precisa dar exatamente o mesmo numero que a calculadora mostra em
 // "Aceitavel". Se divergir, o comprador ve um preco na cotacao e outro
 // na calculadora para o mesmo produto — e nao sabe em qual acreditar.
 const toNumTeste = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
-const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum',
+const pctTeste = (v, casas) => {
+  const c = casas == null ? 2 : casas;
+  return (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c }) + '%';
+};
+// O trecho extraido tambem escreve o rotulo na tela; aqui o $ devolve um
+// objeto de mentira so' para a atribuicao nao estourar.
+const $teste = () => ({ textContent: '' });
+const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum', 'pct', '$',
   html.slice(html.indexOf('const MARGEM_SUGERIDA'), html.indexOf('function renderListaLote')) +
-  '\nreturn { precoSugerido, MARGEM_SUGERIDA };'
-)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste);
+  '\nreturn { precoSugerido, MARGEM_SUGERIDA, ROTULO_MARGEM_SUGERIDA };'
+)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste, pctTeste, $teste);
+
+// O rotulo da tela e a conta tem que sair da MESMA constante, senao a
+// coluna diz um percentual e o numero e' de outro.
+if (extra.ROTULO_MARGEM_SUGERIDA !== pctTeste(extra.MARGEM_SUGERIDA, 0)) {
+  console.log('ROTULO nao acompanha a MARGEM_SUGERIDA:', extra.ROTULO_MARGEM_SUGERIDA);
+  process.exitCode = 1;
+}
 
 let divSug = 0, comparados = 0, semSugestao = 0;
 for (let i = 0; i < 20000; i++) {
@@ -194,7 +208,7 @@ for (let i = 0; i < 20000; i++) {
     ipi: Number(cfg.ipi), custoFinanceiroPct: Number(cfg.custoFinanceiroPct),
     avariasPct: Number(cfg.avariasPct), bonificacao: Number(cfg.bonificacao),
     tipoBonificacao: cfg.tipoBonificacao, venda: 0, comST: cfg.comST, prejuizoContabil: 0
-  }, 0.08));
+  }, extra.MARGEM_SUGERIDA));
 
   if (esperado == null) {
     semSugestao++;
@@ -215,7 +229,8 @@ const cfgZero = { frete:'0', pctCredFrete:'0', valorST:'0', icmsCredito:'0', ipi
                   custoFinanceiroPct:'0', avariasPct:'0', bonificacao:'0', tipoBonificacao:0, comST:1 };
 if (extra.precoSugerido(0, cfgZero) !== null) { divSug++; console.log('custo zero deveria nao sugerir nada'); }
 if (extra.precoSugerido(null, cfgZero) !== null) { divSug++; console.log('custo nulo deveria nao sugerir nada'); }
-if (extra.MARGEM_SUGERIDA !== 0.08) { divSug++; console.log('MARGEM_SUGERIDA nao e 8%:', extra.MARGEM_SUGERIDA); }
+// A margem sugerida e' a mesma do nivel 'Ideal' da calculadora.
+if (extra.MARGEM_SUGERIDA !== 0.13) { divSug++; console.log('MARGEM_SUGERIDA nao e 13%:', extra.MARGEM_SUGERIDA); }
 
 console.log('precoSugerido: ' + comparados + ' comparados, ' + semSugestao + ' sem sugestao possivel');
 console.log(divSug === 0 ? '>>> precoSugerido bate com a calculadora'
