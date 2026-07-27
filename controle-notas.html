@@ -841,6 +841,21 @@
   };
 
   const ehNfse = n => n.tipo === 'nfse'; // sem campo tipo = NF-e (documentos antigos)
+
+  // Diferença em dias inteiros entre duas datas aaaa-mm-dd (b - a).
+  const diasEntre = (a, b) =>
+    Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
+
+  // Aviso de previsão vencida: toda nota desta tela ainda não entrou no ERP,
+  // então basta a data estar preenchida e já ter passado. Sem data, não mostra nada.
+  function avisoPrevisao(prev){
+    if(!prev) return '';
+    const hoje = hojeISO();
+    if(prev >= hoje) return '';
+    const dias = diasEntre(prev, hoje);
+    const texto = dias === 1 ? '1 dia' : dias + ' dias';
+    return '<span class="badge atrasado" style="margin-left:6px; font-size:9.5px;" title="Previsão de entrega vencida e a nota ainda não foi lançada no ERP">⚠ '+texto+'</span>';
+  }
   const notaAtiva = n => (n.status || 'ativa') !== 'cancelada';
   const notaAImportar = n => n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
     (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
@@ -1107,7 +1122,8 @@
     let html = '<table class="quote-table"><thead><tr><th></th><th>Nº</th><th>Emissão</th><th>Emitente</th><th>Valor</th><th>XML</th><th>Ações</th><th>Previsão de entrega</th></tr></thead><tbody>';
     lista.forEach(n=>{
       const aberta = !!itensAbertosImportar[n.id];
-      html += '<tr>' +
+      const previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hojeISO();
+      html += '<tr'+(previsaoVencida?' class="linha-atrasada"':'')+'>' +
         '<td>'+(ehNfse(n) ? '' : '<button class="acao-mini" data-itens="'+escapeHtml(n.id)+'" title="Ver produtos da nota">'+(aberta?'▼':'▶')+'</button>')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+escapeHtml(n.numero||'-')+'</td>' +
         '<td style="font-family:var(--font-mono);">'+fmtData(n.dataEmissao)+'</td>' +
@@ -1118,7 +1134,8 @@
           '<button class="acao-mini" data-lancar="'+escapeHtml(n.id)+'">✓ Já lançada</button> ' +
           '<button class="acao-mini perigo" data-cancelar="'+escapeHtml(n.id)+'">🚫 Cancelada</button>' +
         '</td>' +
-        '<td><input type="date" class="previsao-input" data-previsao="'+escapeHtml(n.id)+'" value="'+escapeHtml(n.previsaoEntrega||'')+'" style="padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></td>' +
+        '<td style="white-space:nowrap;"><input type="date" class="previsao-input" data-previsao="'+escapeHtml(n.id)+'" value="'+escapeHtml(n.previsaoEntrega||'')+'" style="padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;">' +
+          '<span data-avisoprev="'+escapeHtml(n.id)+'">'+avisoPrevisao(n.previsaoEntrega)+'</span></td>' +
         '</tr>';
       if(aberta) html += htmlItensImportar(n.id);
     });
@@ -1147,7 +1164,15 @@
       inp.disabled = true;
       // redesenhar=false: o campo já mostra o valor escolhido e o cache foi atualizado;
       // reconstruir a tabela aqui só causaria perda de foco e travada.
-      try{ await atualizarNota(chave, { previsaoEntrega: inp.value || null }, false); }
+      try{
+        await atualizarNota(chave, { previsaoEntrega: inp.value || null }, false);
+        // Atualiza só o aviso desta linha: mantém o ganho de não redesenhar a tabela,
+        // mas o ⚠ aparece/some na hora se a data escolhida já passou.
+        const span = $('tabelaImportar').querySelector('[data-avisoprev="'+chave+'"]');
+        if(span) span.innerHTML = avisoPrevisao(inp.value);
+        const linha = inp.closest('tr');
+        if(linha) linha.classList.toggle('linha-atrasada', !!inp.value && inp.value < hojeISO());
+      }
       catch(e){ alert('Erro ao gravar a previsão: ' + (e.message||e)); inp.value = valorAnterior; }
       finally{ inp.disabled = false; }
     }));
