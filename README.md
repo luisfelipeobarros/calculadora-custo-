@@ -15,6 +15,25 @@ Os quatro primeiros precisam ficar **na mesma pasta**. Se você publica os
 aplicativos em algum lugar, suba `app-shared.css`, `app-shared.js`,
 `icon-192.png`, `icon-512.png` e os dois `manifest*.json` junto.
 
+### ⚠ Sempre que alterar `app-shared.css` ou `app-shared.js`
+
+O navegador guarda esses dois arquivos em cache. Depois de publicar uma
+mudança neles, as máquinas continuam usando a **cópia antiga** por um
+tempo — e o sintoma é confuso: o app parece não ter mudado, ou mistura
+comportamento novo com antigo.
+
+Por isso os dois HTML referenciam os arquivos com um número de versão:
+
+```html
+<link rel="stylesheet" href="app-shared.css?v=2">
+<script src="app-shared.js?v=2"></script>
+```
+
+**Ao mexer nos arquivos compartilhados, aumente esse número nos dois
+HTML.** Trocar `?v=2` por `?v=3` faz cada navegador baixar a versão nova
+na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
+reclama se a referência estiver sem `?v=`.
+
 ---
 
 ## ⚠ Passo obrigatório: fechar o banco

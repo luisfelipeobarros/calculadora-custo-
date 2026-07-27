@@ -57,9 +57,20 @@ if (forOrfao.length) erro('label for= sem campo: ' + forOrfao.join(', '));
 else ok(fors.length + ' labels casam com campos');
 
 // 6) arquivos locais referenciados existem
+//    O "?v=N" no fim e' so' quebra de cache; o arquivo em disco nao tem isso.
 const refs = [...html.matchAll(/(?:href|src)=["'](?!https?:|data:|#)([^"']+)["']/g)].map(m => m[1]);
-refs.forEach(r => { if (!fs.existsSync(r)) erro('arquivo referenciado nao existe: ' + r); });
+refs.forEach(r => {
+  const caminho = r.split('?')[0].split('#')[0];
+  if (!fs.existsSync(caminho)) erro('arquivo referenciado nao existe: ' + caminho);
+});
 ok('refs locais: ' + refs.join(', '));
+
+// 7) os arquivos compartilhados precisam de ?v=, senao o navegador
+//    continua servindo a copia antiga depois de um deploy.
+['app-shared.css', 'app-shared.js'].forEach(nome => {
+  const semVersao = new RegExp('(?:href|src)=["\']' + nome.replace('.', '\\.') + '["\']');
+  if (semVersao.test(html)) erro(nome + ' referenciado sem ?v= (quebra de cache)');
+});
 
 // 7) href com dado dinamico precisa passar por safeUrl
 const hrefsDinamicos = [...html.matchAll(/href='\s*\+\s*([A-Za-z0-9_.()]+)/g)].map(m => m[1]);
