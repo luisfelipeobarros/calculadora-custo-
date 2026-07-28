@@ -104,6 +104,70 @@ sozinho a operação que falhou.
 
 ---
 
+## O preço de venda mora em um lugar só
+
+O preço de venda de um produto fica em **Produtos salvos**
+(`produtos/{nome}`, campo `venda`). Não existe outra cópia.
+
+Quem identifica o produto é o **código interno** (campo `codigo`), não o
+nome. Nome muda de planilha para planilha — `TELHA 2,44M`, `Telha 2.44
+m` — e casar por texto erra justamente nos produtos que mais aparecem.
+O nome fica como segunda tentativa, para os produtos salvos antes de
+existir campo de código.
+
+A ficha guarda os dois códigos: `codigo` (o nosso, da coluna Código da
+planilha de cotação) e `codigoFornecedor` (o que vem no PDF do
+fornecedor, só para conferência — não é usado para buscar).
+
+Produto salvo sem código **ganha o código sozinho** na primeira cotação
+em que aparecer: se ele foi achado pelo nome e a cotação traz um código,
+o campo é preenchido na gravação. Código já preenchido nunca é
+sobrescrito — quem manda é a ficha do produto.
+
+Na tabela do card "3. Adicionar produtos", cada linha com preço mostra
+de onde ele veio: **✓ por código** (casamento seguro) ou **≈ por nome**
+(palpite — confira antes de salvar).
+
+Dois produtos com o mesmo código interno é erro de cadastro: salvar pela
+Calculadora pergunta antes, e na carga o segundo é ignorado com aviso no
+console. O primeiro encontrado é que vale.
+
+Isso vale para as três telas onde ele aparece:
+
+| Tela | O que faz com o preço |
+|---|---|
+| Calculadora / Produtos salvos | Lê e grava — é a fonte |
+| Cotação, card "3. Adicionar produtos" | Chega preenchido com o preço do produto (achado pelo código); o que você digitar passa a valer em Produtos salvos |
+| Histórico e Pesquisar concorrentes | Só leem |
+
+**Antes** o mesmo número era guardado duas vezes: em `produtos.venda` e
+em `cotacoes.itens[].precoVenda`. Alterar um não alterava o outro, então
+a mesma peça podia aparecer a R$ 90 no histórico e a R$ 110 na
+Calculadora, sem nada dizendo qual dos dois valia.
+
+Duas consequências de a fonte ser única, que valem saber:
+
+- A coluna **Venda** do Histórico mostra o preço de **hoje**, não uma
+  foto do dia da cotação. Trocar o preço em Produtos salvos muda a
+  coluna e a margem em todas as cotações daquele produto.
+- **Apagar o campo Venda na cotação não apaga o preço do produto.**
+  Tirar o preço de um produto é decisão da tela de Produtos salvos —
+  uma cotação não mexe no catálogo por omissão.
+
+Salvar a cotação grava os preços digitados em Produtos salvos e diz
+quantos foram (`"Cotação salva no histórico. 3 preços de venda gravados
+em Produtos salvos."`). Produto que ainda não existia nasce com a
+configuração de custo que está na tela do modo em lote; produto que já
+existe tem **só** o preço trocado — frete, impostos e o resto da ficha
+dele ficam como estavam.
+
+As cotações salvas antes dessa unificação ainda têm o `precoVenda`
+gravado no item. Ele continua sendo lido quando o produto não tem preço
+em Produtos salvos, para nada sumir da tela, mas nada volta a escrever
+ali.
+
+---
+
 ## Rodando os testes
 
 ```bash
@@ -181,6 +245,22 @@ constante `LOJAS_PADRAO`.
 
 **Modelos do Gemini** — bloco `<script type="module">`, constantes
 `MODELO_EXTRATOR`, `MODELO_PESQUISA`, `MODELO_FORMATADOR`.
+
+**Esforço de raciocínio da pesquisa de preços** (`thinkingLevel`), no
+mesmo bloco. São dois níveis:
+
+| Nível | Onde roda | Volume |
+|---|---|---|
+| `medium` | toda pesquisa, em lote ou avulsa | produtos × lojas |
+| `high` | 2ª tentativa do que não foi achado, e a lupa 🔍 de uma célula | só o que falhou |
+
+O padrão já foi `low`. O barato saía caro: preço do produto errado passa
+despercebido na tabela, enquanto "não encontrado" pelo menos se vê — e
+cada falha voltava como uma segunda chamada, devolvendo parte da
+economia em repetição.
+
+O `high` fica onde não há custo de escala. É a última chance de acertar
+aquela célula, e são poucas chamadas.
 
 ---
 
