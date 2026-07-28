@@ -566,6 +566,16 @@ Tupan</textarea>
             <input type="text" id="produto" placeholder="Ex: Porcelanato Onyx 60x60">
           </div>
         </div>
+        <div class="row2">
+          <div class="field">
+            <label for="codigo">Código interno <span class="hint">é o que liga este produto às cotações</span></label>
+            <div class="input-row"><input type="text" id="codigo" placeholder="Ex: AAB1010012"></div>
+          </div>
+          <div class="field">
+            <label for="codigoFornecedor">Código do fornecedor <span class="hint">opcional</span></label>
+            <div class="input-row"><input type="text" id="codigoFornecedor" placeholder="Ex: 7891234"></div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -1050,7 +1060,7 @@ Tupan</textarea>
 
   App.instalarErroGlobal();
 
-  const fields = ['produto','fornecedor','custoNFe','frete','pctCredFrete','valorST','icmsCredito','ipi','custoFinanceiroPct','avariasPct','bonificacao','venda'];
+  const fields = ['produto','fornecedor','codigo','codigoFornecedor','custoNFe','frete','pctCredFrete','valorST','icmsCredito','ipi','custoFinanceiroPct','avariasPct','bonificacao','venda'];
   const toggleDefaults = { credIcmsFrete:0, comST:1, prejuizoContabil:0, tipoBonificacao:0 };
   const toggles = { ...toggleDefaults };
 
@@ -1618,12 +1628,32 @@ Tupan</textarea>
   // e em `cotacoes.itens[].precoVenda`. Alterar um não alterava o
   // outro, então a mesma peça podia aparecer a R$ 90 no histórico e a
   // R$ 110 na Calculadora, sem nada indicando qual dos dois valia.
-  let vendaPorProduto = new Map(); // nome do produto -> preço de venda (sempre > 0)
+  // Quem identifica o produto é o CÓDIGO INTERNO, não o nome. O nome
+  // muda de planilha para planilha ("TELHA 2,44M", "Telha 2.44 m") e
+  // casar por texto erra justamente nos produtos que mais aparecem.
+  // O nome fica como segunda tentativa, para os produtos salvos antes
+  // de existir campo de código.
+  let vendaPorProduto = new Map(); // nome do produto        -> preço de venda (> 0)
+  let vendaPorCodigo  = new Map(); // código interno (normal.) -> preço de venda (> 0)
 
-  function precoVendaDoProduto(nome){
-    if(!nome) return null;
-    const v = vendaPorProduto.get(nome);
-    return (v != null && v > 0) ? v : null;
+  // Código é identificador, não texto corrido: espaço e caixa não
+  // podem separar "aab1010012" de "AAB1010012". Acento não é mexido
+  // de propósito — código com acento é código diferente.
+  function normalizarCodigo(codigo){
+    return String(codigo == null ? '' : codigo).trim().toUpperCase();
+  }
+
+  function precoVendaDoProduto(nome, codigo){
+    const cod = normalizarCodigo(codigo);
+    if(cod){
+      const porCodigo = vendaPorCodigo.get(cod);
+      if(porCodigo > 0) return porCodigo;
+    }
+    if(nome){
+      const porNome = vendaPorProduto.get(nome);
+      if(porNome > 0) return porNome;
+    }
+    return null;
   }
 
   // Preço de venda de um item de cotação. As cotações gravadas antes
@@ -1631,7 +1661,7 @@ Tupan</textarea>
   // sendo lido como último recurso, para não sumir da tela de quem já
   // usava o app, mas nada volta a escrever ali.
   function precoVendaItem(it){
-    const atual = precoVendaDoProduto(it.produto);
+    const atual = precoVendaDoProduto(it.produto, it.codigo);
     if(atual != null) return atual;
     return it.precoVenda != null ? it.precoVenda : null;
   }
@@ -1643,6 +1673,8 @@ Tupan</textarea>
     return {
       produto: r.produtoEsperado,
       fornecedor: fornecedor,
+      codigo: r.codigo || '',                      // interno, da nossa planilha
+      codigoFornecedor: r.codigoRecebido || '',    // o que o fornecedor usa no PDF dele
       custoNFe: String(r.precoRecebido),
       frete: cfg.frete, pctCredFrete: cfg.pctCredFrete, valorST: cfg.valorST, icmsCredito: cfg.icmsCredito,
       ipi: cfg.ipi, custoFinanceiroPct: cfg.custoFinanceiroPct, avariasPct: cfg.avariasPct, bonificacao: cfg.bonificacao,
@@ -1651,18 +1683,43 @@ Tupan</textarea>
     };
   }
 
+  // Acha a ficha do produto pela mesma regra do preço: código interno
+  // primeiro, nome depois. Devolve a entrada de produtosCache ou null.
+  function produtoSalvoDe(nome, codigo){
+    const cod = normalizarCodigo(codigo);
+    if(cod){
+      const porCodigo = produtosCache.find(p => normalizarCodigo(p.codigo) === cod);
+      if(porCodigo) return porCodigo;
+    }
+    return produtosCache.find(p => p.nome === nome) || null;
+  }
+
   // Grava o preço de venda no produto. Se o produto já existe, SÓ o
   // preço muda: frete, impostos e o resto da ficha continuam como
   // estavam — a cotação não tem por que mexer neles.
-  async function gravarPrecoVenda(r, cfg, fornecedor){
-    const key = 'calc:' + encodeURIComponent(r.produtoEsperado);
+  async function gravarPrecoVenda(r, cfg, fornecedor, salvo){
+    // Grava no produto que a busca por código encontrou, ainda que o
+    // nome na ficha dele seja diferente do nome que veio na planilha.
+    // Usar o nome da planilha como chave criaria um segundo registro
+    // do mesmo produto, e aí o preço voltaria a existir em dois lugares.
+    const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
+    const key = 'calc:' + encodeURIComponent(nomeDestino);
     let dados = null;
     try{
       const res = await storageGet(key);
       if(res && res.value) dados = JSON.parse(res.value);
     }catch(e){ /* sem registro anterior (ou corrompido): cria um novo abaixo */ }
-    if(dados) dados.venda = String(r.precoVenda);
-    else dados = registroProdutoLote(r, cfg, fornecedor, r.precoVenda);
+    if(dados){
+      dados.venda = String(r.precoVenda);
+      // Produto salvo antes de existir campo de código ganha o código
+      // agora, sem ninguém digitar nada: a partir da próxima cotação
+      // ele passa a casar por código em vez de por nome. Código já
+      // preenchido não é sobrescrito — quem manda é a ficha do produto.
+      if(!normalizarCodigo(dados.codigo) && r.codigo) dados.codigo = r.codigo;
+      if(!normalizarCodigo(dados.codigoFornecedor) && r.codigoRecebido) dados.codigoFornecedor = r.codigoRecebido;
+    } else {
+      dados = registroProdutoLote(r, cfg, fornecedor, r.precoVenda);
+    }
     await storageSet(key, JSON.stringify(dados));
   }
 
@@ -1701,25 +1758,41 @@ Tupan</textarea>
         const nome = decodeURIComponent(key.replace('calc:',''));
         let r = null;
         let fornecedor = '';
+        let codigo = '';
+        let codigoFornecedor = '';
         try{
           const data = JSON.parse(value);
           fornecedor = (data.fornecedor || '').toString().trim();
+          codigo = (data.codigo || '').toString().trim();
+          codigoFornecedor = (data.codigoFornecedor || '').toString().trim();
           r = computeCalc(dadosParaCalculo(data));
         }catch(e){ /* segue sem previa se o registro estiver corrompido */ }
-        return { nome, fornecedor: fornecedor || 'Sem fornecedor', r };
+        return { nome, fornecedor: fornecedor || 'Sem fornecedor', codigo, codigoFornecedor, r };
       });
-      // Índice consultado pela cotação, pelo histórico e pela pesquisa
+
+      // Índices consultados pela cotação, pelo histórico e pela pesquisa
       // de concorrentes — todos leem o preço de venda daqui.
-      vendaPorProduto = new Map(
-        produtosCache
-          .filter(p => p.r && p.r.venda > 0)
-          .map(p => [p.nome, p.r.venda])
-      );
+      const comVenda = produtosCache.filter(p => p.r && p.r.venda > 0);
+      vendaPorProduto = new Map(comVenda.map(p => [p.nome, p.r.venda]));
+      vendaPorCodigo  = new Map();
+      comVenda.forEach(p => {
+        const cod = normalizarCodigo(p.codigo);
+        // Dois produtos com o mesmo código interno é erro de cadastro,
+        // não algo a resolver por adivinhação: o primeiro vale e o
+        // segundo vira aviso no console, com os dois nomes.
+        if(!cod) return;
+        if(vendaPorCodigo.has(cod)){
+          console.warn('Código interno repetido em Produtos salvos: "' + cod + '". Ignorando "' + p.nome + '".');
+          return;
+        }
+        vendaPorCodigo.set(cod, p.r.venda);
+      });
       renderListaSalvos();
     }catch(e){
       console.error('Erro ao listar produtos salvos:', e);
       produtosCache = [];
       vendaPorProduto = new Map();
+      vendaPorCodigo = new Map();
       $('savedList').innerHTML = '';
       if(emptyEl){
         emptyEl.textContent = 'Não foi possível carregar a lista: ' + App.erroDe(e);
@@ -1728,7 +1801,7 @@ Tupan</textarea>
     }
   }
 
-  function criarItemProdutoEl(nome, r){
+  function criarItemProdutoEl(nome, r, codigo){
     const item = document.createElement('div');
     item.className = 'saved-item';
 
@@ -1741,7 +1814,9 @@ Tupan</textarea>
     if(r){
       const descEl = document.createElement('div');
       descEl.className = 'desc';
-      descEl.textContent = 'Custo NF-e R$ ' + r.custoNFe.toFixed(2) + ' | Frete R$ ' + r.frete.toFixed(2) + ' | ' + (r.custoFinanceiroRS > 0 ? 'Cartão' : 'À vista');
+      // O código vem primeiro: é por ele que a cotação acha este produto.
+      const prefixo = codigo ? (codigo + ' | ') : 'sem código | ';
+      descEl.textContent = prefixo + 'Custo NF-e R$ ' + r.custoNFe.toFixed(2) + ' | Frete R$ ' + r.frete.toFixed(2) + ' | ' + (r.custoFinanceiroRS > 0 ? 'Cartão' : 'À vista');
       info.appendChild(descEl);
     }
     item.appendChild(info);
@@ -1788,7 +1863,12 @@ Tupan</textarea>
     const termoFornecedor = normalizarTexto($('buscaFornecedor') ? $('buscaFornecedor').value : '');
 
     let filtrados = produtosCache;
-    if(termo) filtrados = filtrados.filter(p => normalizarTexto(p.nome).includes(termo));
+    // Busca por nome OU por código — quem tem o código na mão não
+    // deveria precisar lembrar como o produto foi escrito.
+    if(termo) filtrados = filtrados.filter(p =>
+      normalizarTexto(p.nome).includes(termo) ||
+      normalizarTexto(p.codigo || '').includes(termo) ||
+      normalizarTexto(p.codigoFornecedor || '').includes(termo));
     if(termoFornecedor) filtrados = filtrados.filter(p => normalizarTexto(p.fornecedor).includes(termoFornecedor));
 
     listEl.innerHTML = '';
@@ -1871,7 +1951,7 @@ Tupan</textarea>
         const itensContainer = document.createElement('div');
         itensContainer.className = 'supplier-items';
         itens.forEach(p=>{
-          itensContainer.appendChild(criarItemProdutoEl(p.nome, p.r));
+          itensContainer.appendChild(criarItemProdutoEl(p.nome, p.r, p.codigo));
         });
         grupoEl.appendChild(itensContainer);
       }
@@ -1901,6 +1981,22 @@ Tupan</textarea>
         perigo: true
       });
       if(!ok) return;
+    }
+
+    // Código interno repetido não dá erro nenhum — só faz a cotação
+    // buscar o preço do produto errado, calada. Melhor perguntar agora.
+    const cod = normalizarCodigo($('codigo').value);
+    if(cod){
+      const conflito = produtosCache.find(p => p.nome !== nome && normalizarCodigo(p.codigo) === cod);
+      if(conflito){
+        const ok = await App.confirmar({
+          titulo: 'Esse código interno já é de outro produto',
+          mensagem: 'O código "' + cod + '" já está em "' + conflito.nome + '". Com dois produtos no mesmo código, a cotação vai puxar o preço de venda de um só deles — e não dá para prever qual.',
+          confirmar: 'Salvar mesmo assim',
+          perigo: true
+        });
+        if(!ok){ $('codigo').focus(); return; }
+      }
     }
 
     const key = 'calc:' + encodeURIComponent(nome);
@@ -3383,6 +3479,7 @@ Tupan</textarea>
           produtoRecebido: it.produtoRecebido || null,
           quantidadeRecebida: it.quantidadeRecebida != null ? it.quantidadeRecebida : null,
           precoRecebido: it.precoRecebido != null ? it.precoRecebido : null,
+          codigoRecebido: it.codigoRecebido || '',
           precoVenda: precoVendaItem(it), // vem de Produtos Salvos, não da cotação
           status: it.status || 'negociacao',
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
@@ -3693,9 +3790,12 @@ Tupan</textarea>
       produtoRecebido: rec ? rec.produto : null,
       quantidadeRecebida: rec ? rec.quantidade : null,
       precoRecebido: rec ? rec.valor : null,
+      // Código que o fornecedor usa no PDF dele — guardado na ficha do
+      // produto para dar pra conferir depois de que item ele falava.
+      codigoRecebido: rec ? (rec.codigo || '') : '',
       // Produto que já tem preço em Produtos Salvos chega com ele
       // preenchido — não se digita duas vezes o mesmo número.
-      precoVenda: precoVendaDoProduto(exp.produto),
+      precoVenda: precoVendaDoProduto(exp.produto, exp.codigo),
       status: 'negociacao',
       flags: [],
       diffPct: null,
@@ -4106,15 +4206,23 @@ Tupan</textarea>
     const cfg = coletarConfigLote();
     const fornecedor = $('fornecedorProdutos').value.trim() || $('fornecedorCotacao').value.trim();
     let gravados = 0;
+    let escreveu = false;
     for(const r of ultimosResultados){
       if(!(r.precoVenda > 0)) continue;
-      if(precoVendaDoProduto(r.produtoEsperado) === r.precoVenda) continue; // já está assim
+      const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+      const precoIgual = !!(salvo && salvo.r && salvo.r.venda === r.precoVenda);
+      // Produto antigo, achado pelo nome porque ainda não tem código:
+      // vale a gravação mesmo com o preço igual, só para ele ganhar o
+      // código e passar a casar direito da próxima vez.
+      const faltaCodigo = !!(salvo && r.codigo && !normalizarCodigo(salvo.codigo));
+      if(precoIgual && !faltaCodigo) continue;
       try{
-        await gravarPrecoVenda(r, cfg, fornecedor);
-        gravados++;
+        await gravarPrecoVenda(r, cfg, fornecedor, salvo);
+        escreveu = true;
+        if(!precoIgual) gravados++; // o aviso conta preço mudado, não código preenchido
       }catch(e){ console.error('Erro ao gravar o preço de venda de ' + r.produtoEsperado, e); }
     }
-    if(gravados) await atualizarListaSalvos();
+    if(escreveu) await atualizarListaSalvos();
     return gravados;
   }
 
@@ -4139,6 +4247,7 @@ Tupan</textarea>
       produtoRecebido: r.produtoRecebido,
       quantidadeRecebida: r.quantidadeRecebida,
       precoRecebido: r.precoRecebido,
+      codigoRecebido: r.codigoRecebido || '', // código do fornecedor, como veio no PDF
       // Sem `precoVenda` aqui de propósito: o preço de venda mora em
       // Produtos Salvos, e o histórico o lê de lá. Guardar uma cópia
       // nesta linha é o que fazia os dois números divergirem.
@@ -4233,14 +4342,25 @@ Tupan</textarea>
       return;
     }
     let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>'
-      + '<th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
+      + '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
       + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(' + ROTULO_MARGEM_SUGERIDA + ')</span></th>'
       + '<th scope="col">Venda</th><th scope="col">Margem</th></tr></thead><tbody>';
     itens.forEach(r=>{
       const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
       const chave = escapeHtml(r.produtoEsperado);
+      // Selo de onde veio o preço: por código é casamento seguro; por
+      // nome é palpite, e o comprador precisa saber a diferença antes
+      // de confiar na margem que aparece ao lado.
+      let origem = '';
+      if(r.precoVenda > 0){
+        const porCodigo = r.codigo && vendaPorCodigo.get(normalizarCodigo(r.codigo)) > 0;
+        origem = porCodigo
+          ? ' <span class="status-badge down" title="Preço achado pelo código interno">✓ por código</span>'
+          : ' <span class="status-badge qty" title="Sem código casando: preço achado pelo nome do produto. Confira antes de salvar.">≈ por nome</span>';
+      }
       html += '<tr>'
-        + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+'</td>'
+        + '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(r.codigo||'-')+'</td>'
+        + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+origem+'</td>'
         + '<td>'+brl(r.precoRecebido)+'</td>'
         + '<td class="lote-sugerido" data-produto="'+chave+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
         + 'title="Clique para usar este preço">--</td>'
@@ -4336,8 +4456,14 @@ Tupan</textarea>
       const venda = vendaInput ? vendaInput.value : '';
       if(!venda || toNum(venda) <= 0) continue;
       const dados = registroProdutoLote(r, cfg, fornecedor, venda);
+      // Produto que já existe com esse código é atualizado onde está,
+      // mesmo que o nome na planilha esteja diferente do nome da ficha.
+      // Sem isto, "TELHA 2,44M" e "Telha 2.44m" viravam dois produtos.
+      const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+      const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
+      dados.produto = nomeDestino;
       try{
-        await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
+        await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
         produtosCotacaoSalvos.add(r.produtoEsperado);
         salvos++;
       }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
@@ -4420,8 +4546,8 @@ Tupan</textarea>
     $('indCustoNFe').textContent = brl(r.precoRecebido);
     $('indFrete').value=''; $('indPctCredFrete').value=''; $('indValorST').value=''; $('indIcmsCredito').value='';
     $('indIpi').value='0.65'; $('indCustoFinanceiroPct').value=''; $('indAvariasPct').value='1.5'; $('indBonificacao').value='';
-    // Preço de venda vem de Produtos Salvos, se o produto já tiver um.
-    const vendaSalva = precoVendaDoProduto(r.produtoEsperado);
+    // Preço de venda vem de Produtos Salvos, achado pelo código interno.
+    const vendaSalva = precoVendaDoProduto(r.produtoEsperado, r.codigo);
     $('indVenda').value = vendaSalva != null ? vendaSalva : '';
     $('indCredIcmsFrete').value='0'; $('indComST').value='1'; $('indTipoBonificacao').value='0'; $('indBonificacaoPrefix').textContent='R$';
     $('indPctCredFreteSub').style.display='none';
@@ -4455,9 +4581,15 @@ Tupan</textarea>
     const venda = $('indVenda').value;
     if(!venda || toNum(venda) <= 0){ App.toast('Preencha o preço de venda.', 'info'); $('indVenda').focus(); return; }
     const fornecedor = $('fornecedorProdutos').value.trim();
+    // Mesma regra do lote: atualiza o produto que já tem esse código,
+    // em vez de criar um segundo registro com o nome da planilha.
+    const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+    const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
     const dados = {
-      produto: r.produtoEsperado,
+      produto: nomeDestino,
       fornecedor,
+      codigo: r.codigo || '',
+      codigoFornecedor: r.codigoRecebido || '',
       custoNFe: String(r.precoRecebido),
       frete: $('indFrete').value || '0',
       pctCredFrete: $('indPctCredFrete').value || '0',
@@ -4471,10 +4603,10 @@ Tupan</textarea>
       toggles: { credIcmsFrete: parseInt($('indCredIcmsFrete').value,10), comST: parseInt($('indComST').value,10), prejuizoContabil: 0, tipoBonificacao: parseInt($('indTipoBonificacao').value,10) }
     };
     try{
-      await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
+      await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
       produtosCotacaoSalvos.add(r.produtoEsperado);
-      await atualizarListaSalvos(); // reindexa o preço de venda
-      $('individualMsg').textContent = '✓ ' + r.produtoEsperado + ' salvo com sucesso.';
+      await atualizarListaSalvos(); // reindexa preço de venda e códigos
+      $('individualMsg').textContent = '✓ ' + nomeDestino + ' salvo com sucesso.';
       popularSelectIndividual();
       $('individualSelect').value = '';
       $('individualForm').style.display = 'none';

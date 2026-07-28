@@ -109,12 +109,35 @@ sozinho a operação que falhou.
 O preço de venda de um produto fica em **Produtos salvos**
 (`produtos/{nome}`, campo `venda`). Não existe outra cópia.
 
+Quem identifica o produto é o **código interno** (campo `codigo`), não o
+nome. Nome muda de planilha para planilha — `TELHA 2,44M`, `Telha 2.44
+m` — e casar por texto erra justamente nos produtos que mais aparecem.
+O nome fica como segunda tentativa, para os produtos salvos antes de
+existir campo de código.
+
+A ficha guarda os dois códigos: `codigo` (o nosso, da coluna Código da
+planilha de cotação) e `codigoFornecedor` (o que vem no PDF do
+fornecedor, só para conferência — não é usado para buscar).
+
+Produto salvo sem código **ganha o código sozinho** na primeira cotação
+em que aparecer: se ele foi achado pelo nome e a cotação traz um código,
+o campo é preenchido na gravação. Código já preenchido nunca é
+sobrescrito — quem manda é a ficha do produto.
+
+Na tabela do card "3. Adicionar produtos", cada linha com preço mostra
+de onde ele veio: **✓ por código** (casamento seguro) ou **≈ por nome**
+(palpite — confira antes de salvar).
+
+Dois produtos com o mesmo código interno é erro de cadastro: salvar pela
+Calculadora pergunta antes, e na carga o segundo é ignorado com aviso no
+console. O primeiro encontrado é que vale.
+
 Isso vale para as três telas onde ele aparece:
 
 | Tela | O que faz com o preço |
 |---|---|
 | Calculadora / Produtos salvos | Lê e grava — é a fonte |
-| Cotação, card "3. Adicionar produtos" | Chega preenchido com o preço do produto; o que você digitar passa a valer em Produtos salvos |
+| Cotação, card "3. Adicionar produtos" | Chega preenchido com o preço do produto (achado pelo código); o que você digitar passa a valer em Produtos salvos |
 | Histórico e Pesquisar concorrentes | Só leem |
 
 **Antes** o mesmo número era guardado duas vezes: em `produtos.venda` e
