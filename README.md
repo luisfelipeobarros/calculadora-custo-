@@ -246,6 +246,22 @@ constante `LOJAS_PADRAO`.
 **Modelos do Gemini** — bloco `<script type="module">`, constantes
 `MODELO_EXTRATOR`, `MODELO_PESQUISA`, `MODELO_FORMATADOR`.
 
+**Esforço de raciocínio da pesquisa de preços** (`thinkingLevel`), no
+mesmo bloco. São dois níveis:
+
+| Nível | Onde roda | Volume |
+|---|---|---|
+| `medium` | toda pesquisa, em lote ou avulsa | produtos × lojas |
+| `high` | 2ª tentativa do que não foi achado, e a lupa 🔍 de uma célula | só o que falhou |
+
+O padrão já foi `low`. O barato saía caro: preço do produto errado passa
+despercebido na tabela, enquanto "não encontrado" pelo menos se vê — e
+cada falha voltava como uma segunda chamada, devolvendo parte da
+economia em repetição.
+
+O `high` fica onde não há custo de escala. É a última chance de acertar
+aquela célula, e são poucas chamadas.
+
 ---
 
 ## Endereços das telas

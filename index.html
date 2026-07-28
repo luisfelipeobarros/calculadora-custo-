@@ -738,9 +738,8 @@ Tupan</textarea>
      do resto do app (que usa o SDK "compat"). Expõe funções em window.* pro script principal usar. -->
 <script type="module">
   let geminiModel = null;
-  let geminiModelPesquisa = null;        // base: rápida (thinking low)
-  let geminiModelPesquisaProfunda = null; // reprocessamento em lote: mais precisa (thinking medium)
-  let geminiModelPesquisaMaxima = null;   // busca avulsa de 1 loja: precisão máxima (thinking high)
+  let geminiModelPesquisa = null;       // padrão de toda pesquisa (thinking medium)
+  let geminiModelPesquisaMaxima = null; // 2ª tentativa e busca avulsa (thinking high)
   let geminiModelFormatador = null;
   window.__geminiPronto = false;
 
@@ -805,21 +804,21 @@ Tupan</textarea>
       // já é estável (não é "preview"), e mais rápido. Forçar JSON na mesma chamada que
       // pesquisa prejudica a qualidade da busca — por isso aqui ele só pesquisa e escreve
       // o que achou em texto livre.
-      // Duas instâncias do MESMO modelo, diferindo só no esforço de raciocínio:
-      // "low" para a varredura do dia a dia (rápida e barata) e "medium" para
-      // reprocessar pontualmente o que não foi encontrado ou ficou duvidoso.
+      // Duas instâncias do MESMO modelo, diferindo só no esforço de raciocínio.
+      //
+      // "medium" é o padrão de TODA pesquisa. Antes era "low", e o barato saía
+      // caro: preço do produto errado passa despercebido na tabela, enquanto
+      // "não encontrado" pelo menos se vê. Cada falha do modo rápido voltava
+      // como uma segunda chamada, então a economia por chamada era parte
+      // devolvida em repetição.
       geminiModelPesquisa = getGenerativeModel(ai, {
-        model: MODELO_PESQUISA,
-        tools: [{ urlContext: {} }, { googleSearch: {} }],
-        generationConfig: { thinkingConfig: { thinkingLevel: 'low' } }
-      });
-      geminiModelPesquisaProfunda = getGenerativeModel(ai, {
         model: MODELO_PESQUISA,
         tools: [{ urlContext: {} }, { googleSearch: {} }],
         generationConfig: { thinkingConfig: { thinkingLevel: 'medium' } }
       });
-      // "high" só para buscas avulsas (uma loja por clique): sem custo de escala,
-      // vale gastar o máximo de raciocínio pra acertar o produto certo.
+      // "high" onde não há custo de escala: a 2ª tentativa (só o que falhou) e
+      // a lupa de uma loja por clique. São poucas chamadas e é a última
+      // chance de acertar — vale gastar o máximo de raciocínio.
       geminiModelPesquisaMaxima = getGenerativeModel(ai, {
         model: MODELO_PESQUISA,
         tools: [{ urlContext: {} }, { googleSearch: {} }],
@@ -864,7 +863,6 @@ Tupan</textarea>
   window.geminiDesconectar = function(){
     geminiModel = null;
     geminiModelPesquisa = null;
-    geminiModelPesquisaProfunda = null;
     geminiModelPesquisaMaxima = null;
     geminiModelFormatador = null;
     window.__geminiPronto = false;
@@ -949,11 +947,10 @@ Tupan</textarea>
       '- Preço à vista em R$, especificando se é por m², por caixa ou por unidade\n' +
       '- URL direta do produto na loja';
     try{
-      // nivel: 'maxima' (high) para busca avulsa · 'profunda' (medium) para
-      // reprocessar falhas em lote · qualquer outro valor = base rápida (low)
-      const modelo = nivel === 'maxima' ? geminiModelPesquisaMaxima
-                   : nivel === 'profunda' ? geminiModelPesquisaProfunda
-                   : geminiModelPesquisa;
+      // nivel 'maxima' (high) para a 2ª tentativa e para a lupa de uma loja.
+      // Qualquer outro valor cai no padrão (medium) — inclusive o antigo
+      // 'profunda', que era exatamente medium e virou o próprio padrão.
+      const modelo = nivel === 'maxima' ? geminiModelPesquisaMaxima : geminiModelPesquisa;
       const result = await modelo.generateContent(prompt);
       const texto = result.response.text();
       const grounding = result.response.candidates?.[0]?.groundingMetadata?.searchEntryPoint?.renderedContent || null;
@@ -1011,16 +1008,16 @@ Tupan</textarea>
     }
   }
 
-  // Pesquisa em todas as lojas em paralelo (intervalo curto entre os inícios pra não esbarrar
-  // em limite de requisições). Se "onResultado" for passado, é chamado com (indice, resultado)
-  // assim que CADA loja termina — permitindo mostrar a tabela progressivamente.
-  // Refaz a busca de UM par produto×loja com raciocínio maior (thinking medium).
-  // Usada no reprocessamento seletivo do que o modo rápido não encontrou.
+  // Refaz a busca de UM par produto×loja em precisão máxima (thinking high).
+  // Usada pela lupa de cada célula e pela 2ª tentativa do que não foi achado.
   window.geminiRebuscarUmaLoja = async function(descricaoProduto, loja, nivel){
     if(!geminiModelPesquisaMaxima || !geminiModelFormatador) throw new Error('Gemini não está conectado.');
     return await pesquisarEFormatarUmaLoja(descricaoProduto, loja, nivel || 'maxima');
   };
 
+  // Pesquisa em todas as lojas em paralelo (intervalo curto entre os inícios pra não esbarrar
+  // em limite de requisições). Se "onResultado" for passado, é chamado com (indice, resultado)
+  // assim que CADA loja termina — permitindo mostrar a tabela progressivamente.
   window.geminiBuscarPrecos = async function(descricaoProduto, lojas, onResultado, nivel){
     if(!geminiModelPesquisa || !geminiModelFormatador) throw new Error('Gemini não está conectado.');
 
@@ -2502,6 +2499,8 @@ Tupan</textarea>
           const precoHtml = r.url
             ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+brl(r.preco)+'</a>'
             : brl(r.preco);
+          // 'profunda' não é mais gravado, mas está em pesquisas já salvas
+          // no Firestore — continua sendo exibido para elas não perderem o selo.
           const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
           const rodape = r.marca
             ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+escapeHtml(r.marca)+selo+'</span>'
@@ -2648,8 +2647,12 @@ Tupan</textarea>
     }
   }
 
-  // Reprocessa SÓ as células sem preço, uma a uma, em modo profundo (thinking medium).
-  // As que já acharam preço não são tocadas.
+  // Reprocessa SÓ as células sem preço, uma a uma, em precisão máxima
+  // (thinking high). As que já acharam preço não são tocadas.
+  //
+  // O botão sempre disse "precisão máxima", mas rodava em medium — o mesmo
+  // nível da varredura que acabara de falhar naquelas células. Repetir a
+  // busca no mesmo esforço tinha pouca chance de mudar o resultado.
   $('refazerFalhasBtn').addEventListener('click', async ()=>{
     const falhas = listarFalhasLote();
     if(!falhas.length) return;
@@ -2667,8 +2670,8 @@ Tupan</textarea>
       $('pesqLoteMsg').textContent = 'Precisão máxima ' + (i+1) + '/' + falhas.length + ': ' + f.produto + ' — ' + f.loja;
       renderLoteTabela();
       try{
-        const r = await window.geminiRebuscarUmaLoja(f.produto, f.loja, 'profunda');
-        loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'profunda' });
+        const r = await window.geminiRebuscarUmaLoja(f.produto, f.loja, 'maxima');
+        loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
       }catch(e){
         console.error('Erro no reprocessamento:', e);
         loteItens[f.idx].porLoja[f.lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
