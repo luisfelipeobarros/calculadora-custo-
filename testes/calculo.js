@@ -1,5 +1,13 @@
 // Compara a formula ORIGINAL (copiada literalmente do arquivo antes da
-// mudanca) com a NOVA (extraida do arquivo atual), sobre entradas aleatorias.
+// mudanca, e mantida aqui de proposito) com a que roda hoje, sobre
+// entradas aleatorias.
+//
+// A formula de hoje vem de require('calculo-nucleo.js') — o MESMO
+// arquivo que o index.html carrega. Antes este teste recortava o texto
+// das funcoes de dentro do HTML com indexOf e remontava tudo com
+// new Function(): media uma copia remontada, nao o codigo que roda na
+// tela, e passava a medir outra coisa (ou parava de achar o que
+// procurava) se alguem renomeasse uma funcao ou movesse um trecho.
 
 // ---------- ORIGINAL ----------
 function computeCalcAntigo(v){
@@ -58,27 +66,48 @@ function precoParaMargemAntigo(v, t){
   return (!isFinite(p) || p <= 0) ? null : p;
 }
 
-// ---------- NOVO: extraido do arquivo atual ----------
+// ---------- O QUE RODA HOJE ----------
 const fs = require('fs');
-const html = fs.readFileSync(process.argv[2] || 'index.html', 'utf8');
-function extrair(nome){
-  const i = html.indexOf('function ' + nome + '(');
-  if(i === -1) throw new Error('nao achei ' + nome);
-  let d = 0, j = html.indexOf('{', i);
-  const ini = j;
-  for(; j < html.length; j++){
-    if(html[j] === '{') d++;
-    else if(html[j] === '}'){ d--; if(d === 0) break; }
-  }
-  return html.slice(i, j + 1);
-}
-const App = { centavos: v => (v == null || !isFinite(v)) ? v : Math.round((v + Number.EPSILON) * 100) / 100 };
-const codigo = html.slice(html.indexOf('const TRIBUTOS'), html.indexOf('TRIBUTOS.fatorLucro') ) +
-  'TRIBUTOS.fatorLucro = 1 - TRIBUTOS.irpj - TRIBUTOS.csll;\n' +
-  extrair('computeCoeficientes') + '\n' + extrair('computeCalc') + '\n' + extrair('precoParaMargem') + '\n' +
-  extrair('arredondarNovanta') + '\n' +
-  'return { computeCalc, computeCoeficientes, precoParaMargem, arredondarNovanta };';
-const novo = new Function('App', codigo)(App);
+const path = require('path');
+const raiz = path.resolve(__dirname, '..');
+const App = require(path.join(raiz, 'app-shared.js'));
+const novo = require(path.join(raiz, 'calculo-nucleo.js'));
+const html = fs.readFileSync(path.join(raiz, process.argv[2] || 'index.html'), 'utf8');
+
+// ---------- A tela usa mesmo este arquivo? ----------
+// O teste chamar o nucleo nao serve de nada se o HTML tiver voltado a
+// ter a propria copia da formula, ou se parar de carregar o arquivo.
+let ligacao = 0;
+const exigir = (cond, msg) => { if(!cond){ console.log('  [X] ' + msg); ligacao++; } };
+
+exigir(/<script src="calculo-nucleo\.js\?v=\d+"><\/script>/.test(html),
+  'index.html nao carrega calculo-nucleo.js (com ?v= para quebra de cache)');
+
+['computeCalc', 'computeCoeficientes', 'precoParaMargem', 'arredondarNovanta', 'precoSugerido']
+  .forEach(nome => {
+    exigir(!new RegExp('function\\s+' + nome + '\\s*\\(').test(html),
+      'index.html voltou a definir function ' + nome + '() — a tela usaria a copia, e este teste mediria o nucleo');
+  });
+
+// As aliquotas e as metas nao podem reaparecer escritas na mao no HTML.
+exigir(!/pisCofins\s*:/.test(html), 'aliquotas de tributo voltaram para o index.html');
+
+// Percentual de margem escrito no markup: so' o texto que o usuario le',
+// sem os <!-- comentarios --> (que citam "margem de 8%" de exemplo).
+const markup = html.slice(0, html.indexOf('<script') === -1 ? undefined : html.indexOf('<script'))
+  .replace(/<!--[\s\S]*?-->/g, '');
+exigir(!/margem de \d+%/.test(markup),
+  'percentual de margem escrito na mao no markup (deve sair de METAS)');
+
+// Cada meta precisa de um <span> de valor e um de dica no markup.
+const idsHtml = new Set([...html.matchAll(/\sid=["']([^"']+)["']/g)].map(m => m[1]));
+novo.METAS.forEach(meta => {
+  exigir(idsHtml.has(meta.id), 'META aponta para id inexistente: ' + meta.id);
+  exigir(idsHtml.has(meta.idDica), 'META aponta para id de dica inexistente: ' + meta.idDica);
+});
+
+console.log(ligacao === 0 ? 'index.html usa o nucleo (nenhuma copia da formula no HTML)'
+                          : '>>> ' + ligacao + ' PROBLEMA(S) na ligacao HTML <-> nucleo');
 
 // ---------- Comparacao ----------
 function rnd(a, b){ return a + Math.random() * (b - a); }
@@ -118,7 +147,9 @@ for(let i = 0; i < N; i++){
   const dm = Math.abs((a.margem || 0) - (b.margem || 0));
   if(isFinite(dm) && dm > 1e-9){ falhas++; if(falhas < 4) console.log('MARGEM diverge', a.margem, b.margem); }
 
-  [0.04, 0.08, 0.13].forEach(alvo => {
+  // As metas de hoje, mais as tres originais — trocar uma meta nao pode
+  // fazer o teste deixar de cobrir a faixa que sempre cobriu.
+  [...new Set([...novo.METAS.map(m => m.alvo), 0.04, 0.08, 0.13])].forEach(alvo => {
     const pa = precoParaMargemAntigo(v, alvo);
     const pb = novo.precoParaMargem(v, alvo);
     if((pa === null) !== (pb === null)){ falhas++; console.log('PRECO null diverge', alvo, pa, pb); return; }
@@ -152,7 +183,7 @@ for(let i = 0; i < 20000; i++){
   const v = { custoNFe: rnd(1,2000), frete: rnd(0,300), pctCredFrete: 0, valorST: rnd(0,30),
     icmsCredito: rnd(0,20), ipi: rnd(0,10), custoFinanceiroPct: rnd(0,5), avariasPct: rnd(0,3),
     bonificacao: 0, tipoBonificacao: 0, venda: 0, comST: 1, prejuizoContabil: 0 };
-  [0.04,0.08,0.13].forEach(alvo => {
+  novo.METAS.forEach(({ alvo }) => {
     const p = novo.precoParaMargem(v, alvo);
     if(p === null) return;
     const r = novo.computeCalc(Object.assign({}, v, { venda: p }));
@@ -162,30 +193,31 @@ for(let i = 0; i < 20000; i++){
 console.log('preco sugerido atinge a margem pedida, pior erro:', piorAlvo.toExponential(3));
 
 // ---------- precoSugerido: a coluna "Sugerido" da cotacao ----------
-// Precisa dar exatamente o mesmo numero que a calculadora mostra em
-// "Aceitavel". Se divergir, o comprador ve um preco na cotacao e outro
-// na calculadora para o mesmo produto — e nao sabe em qual acreditar.
-const toNumTeste = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
-const pctTeste = (v, casas) => {
-  const c = casas == null ? 2 : casas;
-  return (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: c, maximumFractionDigits: c }) + '%';
-};
-// O trecho extraido tambem escreve o rotulo na tela; aqui o $ devolve um
-// objeto de mentira so' para a atribuicao nao estourar.
-const $teste = () => ({ textContent: '' });
-const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum', 'pct', '$',
-  html.slice(html.indexOf('const MARGEM_SUGERIDA'), html.indexOf('function renderListaLote')) +
-  '\nreturn { precoSugerido, MARGEM_SUGERIDA, ROTULO_MARGEM_SUGERIDA };'
-)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste, pctTeste, $teste);
+// Precisa dar exatamente o mesmo numero que a calculadora mostra na
+// meta sugerida. Se divergir, o comprador ve um preco na cotacao e
+// outro na calculadora para o mesmo produto — e nao sabe em qual
+// acreditar.
+let divSug = 0, comparados = 0, semSugestao = 0;
 
 // O rotulo da tela e a conta tem que sair da MESMA constante, senao a
 // coluna diz um percentual e o numero e' de outro.
-if (extra.ROTULO_MARGEM_SUGERIDA !== pctTeste(extra.MARGEM_SUGERIDA, 0)) {
-  console.log('ROTULO nao acompanha a MARGEM_SUGERIDA:', extra.ROTULO_MARGEM_SUGERIDA);
-  process.exitCode = 1;
+if (novo.ROTULO_MARGEM_SUGERIDA !== App.pct(novo.MARGEM_SUGERIDA, 0)) {
+  divSug++;
+  console.log('ROTULO nao acompanha a MARGEM_SUGERIDA:', novo.ROTULO_MARGEM_SUGERIDA);
+}
+// A margem sugerida e' uma das metas da calculadora, nao um numero solto.
+const alvosMetas = novo.METAS.map(m => m.alvo);
+if (!alvosMetas.includes(novo.MARGEM_SUGERIDA)) {
+  divSug++;
+  console.log('MARGEM_SUGERIDA nao e uma das METAS:', novo.MARGEM_SUGERIDA, alvosMetas);
+}
+// A referencia da cotacao e' a meta mais alta (o "Ideal"): partir dela
+// deixa espaco para negociar para baixo.
+if (novo.MARGEM_SUGERIDA !== Math.max(...alvosMetas)) {
+  divSug++;
+  console.log('MARGEM_SUGERIDA nao e a meta mais alta:', novo.MARGEM_SUGERIDA, alvosMetas);
 }
 
-let divSug = 0, comparados = 0, semSugestao = 0;
 for (let i = 0; i < 20000; i++) {
   const cfg = {
     frete: String(Math.round(rnd(0, 500) * 100) / 100),
@@ -201,14 +233,14 @@ for (let i = 0; i < 20000; i++) {
   };
   const custo = Math.round(rnd(1, 3000) * 100) / 100;
 
-  const obtido = extra.precoSugerido(custo, cfg);
+  const obtido = novo.precoSugerido(custo, cfg);
   const esperado = novo.arredondarNovanta(novo.precoParaMargem({
     custoNFe: custo, frete: Number(cfg.frete), pctCredFrete: 0,
     valorST: Number(cfg.valorST), icmsCredito: Number(cfg.icmsCredito),
     ipi: Number(cfg.ipi), custoFinanceiroPct: Number(cfg.custoFinanceiroPct),
     avariasPct: Number(cfg.avariasPct), bonificacao: Number(cfg.bonificacao),
     tipoBonificacao: cfg.tipoBonificacao, venda: 0, comST: cfg.comST, prejuizoContabil: 0
-  }, extra.MARGEM_SUGERIDA));
+  }, novo.MARGEM_SUGERIDA));
 
   if (esperado == null) {
     semSugestao++;
@@ -227,13 +259,13 @@ for (let i = 0; i < 20000; i++) {
 }
 const cfgZero = { frete:'0', pctCredFrete:'0', valorST:'0', icmsCredito:'0', ipi:'0',
                   custoFinanceiroPct:'0', avariasPct:'0', bonificacao:'0', tipoBonificacao:0, comST:1 };
-if (extra.precoSugerido(0, cfgZero) !== null) { divSug++; console.log('custo zero deveria nao sugerir nada'); }
-if (extra.precoSugerido(null, cfgZero) !== null) { divSug++; console.log('custo nulo deveria nao sugerir nada'); }
-// A margem sugerida e' a mesma do nivel 'Ideal' da calculadora.
-if (extra.MARGEM_SUGERIDA !== 0.13) { divSug++; console.log('MARGEM_SUGERIDA nao e 13%:', extra.MARGEM_SUGERIDA); }
+if (novo.precoSugerido(0, cfgZero) !== null) { divSug++; console.log('custo zero deveria nao sugerir nada'); }
+if (novo.precoSugerido(null, cfgZero) !== null) { divSug++; console.log('custo nulo deveria nao sugerir nada'); }
 
 console.log('precoSugerido: ' + comparados + ' comparados, ' + semSugestao + ' sem sugestao possivel');
+console.log('metas de margem: ' + novo.METAS.map(m => m.rotulo).join(', ')
+            + ' | referencia da cotacao: ' + novo.ROTULO_MARGEM_SUGERIDA);
 console.log(divSug === 0 ? '>>> precoSugerido bate com a calculadora'
                          : '>>> ' + divSug + ' DIVERGENCIA(S) no precoSugerido');
 
-process.exitCode = (falhas || divSug) ? 1 : 0;
+process.exitCode = (falhas || divSug || ligacao) ? 1 : 0;

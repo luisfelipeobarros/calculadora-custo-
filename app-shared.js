@@ -8,6 +8,10 @@
 
    Carregue com <script src="app-shared.js"></script> ANTES do script
    da pagina. Nao usa modulos ES, entao funciona tambem em file://.
+
+   O rodape tambem exporta para require(), sem prejuizo do navegador:
+   e' assim que os testes e o calculo-nucleo.js usam o arredondamento
+   de centavos de verdade, em vez de uma copia escrita a parte.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -926,4 +930,8 @@
     tabelaItensNota: tabelaItensNota,
     instalarErroGlobal: instalarErroGlobal
   };
-})(window);
+
+  // No Node (testes, calculo-nucleo.js) nao existe window: cai no
+  // globalThis e devolve o mesmo App pelo require().
+  if (typeof module === 'object' && module.exports) module.exports = global.App;
+})(typeof window !== 'undefined' ? window : globalThis);

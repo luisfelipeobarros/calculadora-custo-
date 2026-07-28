@@ -6,33 +6,40 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 |---|---|
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, notas canceladas |
+| `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
 | `app-shared.css` | Design system comum aos dois |
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos dois |
 | `firestore.rules` | Regras de segurança do banco (**precisa ser publicada**) |
 | `testes/` | Verificação automatizada, roda só com Node |
 
-Os quatro primeiros precisam ficar **na mesma pasta**. Se você publica os
-aplicativos em algum lugar, suba `app-shared.css`, `app-shared.js`,
-`icon-192.png`, `icon-512.png` e os dois `manifest*.json` junto.
+Os cinco primeiros precisam ficar **na mesma pasta**. Se você publica os
+aplicativos em algum lugar, suba `calculo-nucleo.js`, `app-shared.css`,
+`app-shared.js`, `icon-192.png`, `icon-512.png` e os dois
+`manifest*.json` junto.
 
-### ⚠ Sempre que alterar `app-shared.css` ou `app-shared.js`
+### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou `calculo-nucleo.js`
 
-O navegador guarda esses dois arquivos em cache. Depois de publicar uma
+O navegador guarda esses arquivos em cache. Depois de publicar uma
 mudança neles, as máquinas continuam usando a **cópia antiga** por um
 tempo — e o sintoma é confuso: o app parece não ter mudado, ou mistura
 comportamento novo com antigo.
 
-Por isso os dois HTML referenciam os arquivos com um número de versão:
+Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=2">
-<script src="app-shared.js?v=2"></script>
+<link rel="stylesheet" href="app-shared.css?v=6">
+<script src="app-shared.js?v=6"></script>
+<script src="calculo-nucleo.js?v=6"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número nos dois
-HTML.** Trocar `?v=2` por `?v=3` faz cada navegador baixar a versão nova
+HTML.** Trocar `?v=6` por `?v=7` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
 reclama se a referência estiver sem `?v=`.
+
+O `calculo-nucleo.js` só é carregado pelo `index.html` (o Controle de
+Notas não faz conta de margem), e precisa vir **depois** do
+`app-shared.js` — ele usa o arredondamento de centavos de lá.
 
 ---
 
@@ -174,19 +181,25 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São seis etapas, em quatro frentes:
+Não precisa instalar nada. São sete etapas, em cinco frentes:
 
-1. **Núcleo de cálculo** — compara a fórmula atual com a original em
+1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
+   mesmo arquivo que a tela usa) e compara com a fórmula original em
    200 mil casos aleatórios. É a rede de proteção contra mexer nas
    alíquotas sem perceber. Também confere que a coluna TOTAL fecha com
-   a soma das linhas e que o preço sugerido atinge a margem pedida.
+   a soma das linhas, que o preço sugerido atinge a margem pedida, que
+   a cotação sugere o mesmo número da calculadora, e que o `index.html`
+   continua ligado no núcleo em vez de ter voltado a ter sua própria
+   cópia da conta.
 2. **Estrutura dos dois HTML** — sintaxe dos scripts, tags balanceadas,
    ids duplicados, `$()` apontando para id inexistente, `label for=`
    órfão, arquivo referenciado que sumiu.
-3. **Carga em DOM simulado** — executa os scripts de verdade e pega
-   referência quebrada em tempo de carga.
-4. **Helpers** — 49 verificações em `app-shared.js` (escape de HTML,
+3. **Carga em DOM simulado** — executa os scripts de verdade (os que
+   cada página carrega, na ordem em que ela carrega) e pega referência
+   quebrada em tempo de carga.
+4. **Helpers** — 58 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento).
+5. **Roteador de telas** — 12 verificações no endereço `#Tela`.
 
 Rode antes de publicar qualquer alteração.
 
@@ -194,8 +207,8 @@ Rode antes de publicar qualquer alteração.
 
 ## Onde mexer em cada coisa
 
-**Alíquotas de imposto** — `index.html`, objeto `TRIBUTOS`,
-logo no começo do bloco de cálculo:
+**Alíquotas de imposto** — `calculo-nucleo.js`, objeto `TRIBUTOS`, no
+começo do arquivo:
 
 ```js
 const TRIBUTOS = {
@@ -212,8 +225,26 @@ sugerido passariam a discordar sem erro nenhum. Agora `computeCalc` e
 `precoParaMargem` saem os dois da mesma decomposição
 (`custo = C0 + k × venda`).
 
-**Metas de margem** (mínimo 4%, aceitável 8%, ideal 13%) — array `metas`
-dentro de `calcular()`.
+**Metas de margem** (mínimo 4%, aceitável 8%, ideal 13%) — array `METAS`,
+no mesmo arquivo. Mudar um percentual aí muda **tudo junto**: o preço de
+cada faixa, o texto "margem de 13%" embaixo dele e a coluna "Sugerido"
+da cotação. A meta marcada com `sugerida: true` é a que serve de
+referência na cotação.
+
+Antes esses três números apareciam em quatro lugares (o markup do HTML,
+o array dentro de `calcular()`, a constante `MARGEM_SUGERIDA` e o
+teste). Dava para trocar a meta e a tela continuar escrito "margem de
+8%" ao lado de um preço de 13% — foi o que quase aconteceu quando o
+preço sugerido da cotação passou de Aceitável para Ideal.
+
+**Por que a fórmula não mora mais no `index.html`** — porque o teste não
+tinha como chamá-la. Ele recortava o texto da função de dentro do HTML
+com `indexOf` e remontava com `new Function()`: media uma cópia
+remontada, não o código que roda na tela. Renomear uma função ou mover
+um trecho era suficiente para o teste passar a medir outra coisa sem
+avisar. Hoje a tela e o teste carregam o mesmo arquivo, e o teste
+reclama se o `index.html` voltar a definir a fórmula por conta própria
+ou parar de carregar o núcleo.
 
 **Quanto de histórico o Controle de Notas baixa** — `controle-notas.html`:
 

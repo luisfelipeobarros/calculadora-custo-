@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=5">
+<link rel="stylesheet" href="app-shared.css?v=6">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -697,16 +697,18 @@ Tupan</textarea>
 
     <div class="card" id="sugestaoCard" style="margin-top:18px;">
       <h2>Sugestão de preço</h2>
+      <!-- As dicas ("margem de 8%") sao escritas pelo script a partir de
+           METAS, em calculo-nucleo.js: o texto nunca discorda da conta. -->
       <div class="price-tier minimo">
-        <span class="ptlabel">Mínimo<span class="pthint">margem de 4%</span></span>
+        <span class="ptlabel">Mínimo<span class="pthint" id="precoMinimoDica"></span></span>
         <span class="ptvalue" id="precoMinimo">--</span>
       </div>
       <div class="price-tier recomendado">
-        <span class="ptlabel">Aceitável<span class="pthint">margem de 8%</span></span>
+        <span class="ptlabel">Aceitável<span class="pthint" id="precoRecomendadoDica"></span></span>
         <span class="ptvalue" id="precoRecomendado">--</span>
       </div>
       <div class="price-tier ideal">
-        <span class="ptlabel">Ideal<span class="pthint">margem de 13%</span></span>
+        <span class="ptlabel">Ideal<span class="pthint" id="precoIdealDica"></span></span>
         <span class="ptvalue" id="precoIdeal">--</span>
       </div>
     </div>
@@ -727,7 +729,9 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=5"></script>
+<script src="app-shared.js?v=6"></script>
+<!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
+<script src="calculo-nucleo.js?v=6"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1374,130 +1378,26 @@ Tupan</textarea>
 
   // ==================== NUCLEO DE CALCULO ====================
   //
-  // ATENCAO: as aliquotas ficam SO' aqui. Antes elas estavam escritas
-  // na mao em dois lugares (computeCalc e computeCoeficientes). Se um
-  // dia o ICMS mudasse e alguem editasse so' um dos dois, a margem
-  // exibida e o preco sugerido passariam a discordar em silencio, sem
-  // erro nenhum — num sistema de precificacao, o pior tipo de bug.
-  const TRIBUTOS = {
-    pisCofins:  0.0925, // PIS+COFINS sobre a venda (e credito sobre custo+frete)
-    icmsDebito: 0.205,  // debito de ICMS na venda, quando o produto NAO tem ST
-    irpj:       0.25,
-    csll:       0.09
-  };
-  // Quanto do lucro antes de impostos sobra depois de IRPJ+CSLL.
-  TRIBUTOS.fatorLucro = 1 - TRIBUTOS.irpj - TRIBUTOS.csll; // 0,66
+  // A formula (aliquotas, custo, margem, preco-alvo) mora em
+  // calculo-nucleo.js — arquivo proprio, carregado no <head>. Foi
+  // tirada daqui para os testes automatizados chamarem exatamente a
+  // MESMA funcao que esta tela chama: antes o teste recortava o texto
+  // da funcao do HTML e remontava uma copia, o que passava a medir
+  // outra coisa se alguem mudasse um nome ou movesse um trecho.
+  //
+  // Os apelidos abaixo existem para o resto deste arquivo (umas 8
+  // chamadas) continuar escrevendo computeCalc(...) direto. Quem
+  // precisar de outra coisa do nucleo usa Calculo.xxx — nao vale a
+  // pena criar apelido que nao e' chamado.
+  const METAS = Calculo.METAS;
+  const computeCalc = Calculo.computeCalc;
+  const precoParaMargem = Calculo.precoParaMargem;
+  const arredondarNovanta = Calculo.arredondarNovanta;
 
-  // Decompoe o custo em: custo = C0 + k * venda.
-  // "k" e' a parte que varia com o preco (PIS/COFINS sobre a venda e,
-  // quando nao ha' ST, o debito de ICMS). "m" e' quanto de cada real
-  // vendido sobra antes dos impostos sobre o lucro.
-  // Esta e' a UNICA definicao da formula; computeCalc usa ela tambem.
-  function computeCoeficientes(v){
-    const custoNFe = v.custoNFe;
-    const frete = v.frete;
-    const pctCredFrete = v.pctCredFrete/100;
-    const valorST = v.valorST/100;
-    const icmsCredito = v.icmsCredito/100;
-    const ipi = v.ipi/100;
-    const custoFinanceiroPct = v.custoFinanceiroPct/100;
-    const avariasPct = v.avariasPct/100;
-    const bonificacaoRS = v.tipoBonificacao === 1 ? (custoNFe * (v.bonificacao||0)/100) : (v.bonificacao || 0);
-    const comST = !!v.comST;
-    const creditoFrete = pctCredFrete !== 0 ? (pctCredFrete * frete) : 0;
-
-    // Parte fixa, igual nos dois cenarios.
-    const base = custoNFe + frete + (ipi*custoNFe)
-               - ((custoNFe+frete) * TRIBUTOS.pisCofins)
-               - creditoFrete - bonificacaoRS;
-
-    let k, C0;
-    if(comST){
-      k = TRIBUTOS.pisCofins;
-      C0 = (custoNFe * valorST) + base;
-    } else {
-      k = TRIBUTOS.icmsDebito + TRIBUTOS.pisCofins;
-      C0 = -(custoNFe * icmsCredito) + base;
-    }
-
-    const m = 1 - k - custoFinanceiroPct - avariasPct;
-    return { C0, k, m, bonificacaoRS, custoFinanceiroPct, avariasPct };
-  }
-
-  // Nucleo puro — usado pelo formulario ao vivo e pela previa da lista
-  // de produtos salvos.
-  function computeCalc(v){
-    const { C0, k, m, bonificacaoRS, custoFinanceiroPct, avariasPct } = computeCoeficientes(v);
-    const venda = v.venda;
-    const prejuizoContabil = !!v.prejuizoContabil;
-
-    const custo = C0 + k * venda;
-    const avariasRS = venda * avariasPct;
-    const custoFinanceiroRS = venda * custoFinanceiroPct;
-
-    // base = venda - custo - custo financeiro - avarias = m*venda - C0
-    const base = m * venda - C0;
-    const semTributo = (base < 0) || prejuizoContabil;
-    const irpj = semTributo ? 0 : base * TRIBUTOS.irpj;
-    const csll = semTributo ? 0 : base * TRIBUTOS.csll;
-
-    const lucro = base - irpj - csll;
-    const margem = venda !== 0 ? (lucro/venda) : NaN;
-
-    const vista = custoFinanceiroPct === 0 ? ' à vista' : ' cartão';
-    const descricao = 'Custo NF-e R$ ' + v.custoNFe.toFixed(2) + ' | Frete R$ ' + v.frete.toFixed(2) + ' |\n' +
-      'Venda R$ ' + venda.toFixed(2) + vista;
-
-    // Arredonda os valores em dinheiro no ponto em que viram resultado:
-    // sem isso o erro de fracao de centavo do float se acumula nos
-    // totais somados na tela do historico.
-    const rCusto = App.centavos(custo);
-    const rIrpj = App.centavos(irpj);
-    const rCsll = App.centavos(csll);
-    const rAvarias = App.centavos(avariasRS);
-    const rCustoFin = App.centavos(custoFinanceiroRS);
-
-    return {
-      custo: rCusto,
-      irpj: rIrpj,
-      csll: rCsll,
-      avariasRS: rAvarias,
-      custoFinanceiroRS: rCustoFin,
-      // Soma das parcelas JA' arredondadas: a coluna TOTAL do razao
-      // sempre fecha com as linhas exibidas acima dela.
-      total: App.centavos(rCusto + rCustoFin + rIrpj + rCsll + rAvarias),
-      lucro: App.centavos(lucro),
-      margem,
-      descricao,
-      venda,
-      custoNFe: v.custoNFe,
-      frete: v.frete,
-      bonificacao: App.centavos(bonificacaoRS)
-    };
-  }
-
-  // Resolve o preco de venda que resulta na margem-alvo informada
-  // (ex: 0.08 = 8%). Sai da mesma decomposicao acima:
-  //   margem = fatorLucro * (m*venda - C0) / venda = alvo
-  //   =>  venda = fatorLucro*C0 / (fatorLucro*m - alvo)
-  function precoParaMargem(v, targetMargem){
-    const { C0, m } = computeCoeficientes(v);
-    const f = TRIBUTOS.fatorLucro;
-    const denom = f*m - targetMargem;
-    if(denom <= 0) return null; // custo alto demais para essa margem ser atingivel
-    const preco = (f*C0) / denom;
-    if(!isFinite(preco) || preco <= 0) return null;
-    return preco;
-  }
-
-  // Arredonda para cima até o próximo valor terminado em ",90" (24.90, 25.90, 26.90...)
-  function arredondarNovanta(v){
-    if(v == null || !isFinite(v) || v <= 0) return null;
-    const inteiro = Math.floor(v);
-    let candidato = inteiro + 0.9;
-    if(candidato < v - 1e-9) candidato += 1;
-    return candidato;
-  }
+  // O texto "margem de 8%" embaixo de cada preco sai da mesma
+  // constante que a conta usa, e nao de um numero escrito no markup:
+  // trocar a meta em calculo-nucleo.js muda os dois juntos.
+  METAS.forEach(meta => { $(meta.idDica).textContent = meta.dica; });
 
   function getFormValues(){
     return {
@@ -1559,13 +1459,9 @@ Tupan</textarea>
 
     $('outDescricao').textContent = r.descricao;
 
-    // Sugestão de preço: mínimo (4%), recomendado (8%) e ideal (13%), arredondados p/ ,90
-    const metas = [
-      { id:'precoMinimo', alvo:0.04 },
-      { id:'precoRecomendado', alvo:0.08 },
-      { id:'precoIdeal', alvo:0.13 }
-    ];
-    metas.forEach(({id, alvo})=>{
+    // Sugestão de preço em cada meta de margem, arredondada p/ ,90.
+    // Os percentuais vêm de METAS (calculo-nucleo.js).
+    METAS.forEach(({id, alvo})=>{
       const bruto = precoParaMargem(v, alvo);
       const arredondado = arredondarNovanta(bruto);
       $(id).textContent = arredondado != null ? brl(arredondado) : '--';
@@ -4313,29 +4209,16 @@ Tupan</textarea>
     };
   }
 
-  // Preço com a margem "Ideal", arredondado para ,90 — o mesmo número
-  // que a calculadora sugere naquele nível. Serve de referência ao
-  // comprador: partir do ideal deixa espaço para negociar para baixo
-  // sem furar o piso.
+  // Preço com a margem sugerida (a meta "Ideal"), arredondado para ,90
+  // — o mesmo número que a calculadora mostra naquele nível. Serve de
+  // referência ao comprador: partir do ideal deixa espaço para
+  // negociar para baixo sem furar o piso.
   //
-  // Este é o ÚNICO lugar onde a margem aparece. Os rótulos da tela são
-  // escritos a partir daqui, para o texto nunca discordar da conta.
-  const MARGEM_SUGERIDA = 0.13;
-  const ROTULO_MARGEM_SUGERIDA = pct(MARGEM_SUGERIDA, 0); // "13%"
+  // A margem e o rótulo vêm os dois de calculo-nucleo.js, para o texto
+  // da tela nunca discordar da conta.
+  const ROTULO_MARGEM_SUGERIDA = Calculo.ROTULO_MARGEM_SUGERIDA; // "13%"
+  const precoSugerido = Calculo.precoSugerido;
   $('indSugeridoRotulo').textContent = 'margem de ' + ROTULO_MARGEM_SUGERIDA;
-
-  function precoSugerido(custoNFe, cfg){
-    if(!(custoNFe > 0)) return null;
-    return arredondarNovanta(precoParaMargem({
-      custoNFe,
-      frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
-      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito),
-      ipi: toNum(cfg.ipi), custoFinanceiroPct: toNum(cfg.custoFinanceiroPct),
-      avariasPct: toNum(cfg.avariasPct), bonificacao: toNum(cfg.bonificacao),
-      tipoBonificacao: cfg.tipoBonificacao, venda: 0,
-      comST: cfg.comST, prejuizoContabil: 0
-    }, MARGEM_SUGERIDA));
-  }
 
   function renderListaLote(){
     const container = $('loteListaProdutos');
@@ -4511,7 +4394,7 @@ Tupan</textarea>
     if(!r) return;
     const cfg = configIndividual();
 
-    // Mesma referência do modo em lote: o preço com 8% de margem.
+    // Mesma referência do modo em lote: o preço na margem sugerida.
     const sug = precoSugerido(r.precoRecebido, cfg);
     $('indSugerido').textContent = sug != null ? brl(sug) : '--';
     $('usarSugeridoBtn').style.display = sug != null ? 'inline-block' : 'none';
