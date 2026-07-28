@@ -30,7 +30,8 @@ const etapas = [
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
   ['Helpers de app-shared.js', 'helpers.js', []],
-  ['Roteador de telas', 'router.js', []]
+  ['Roteador de telas', 'router.js', []],
+  ['Regras da tela de cotacao', 'cotacao.js', ['index.html']]
 ];
 
 let falhou = 0;

@@ -77,7 +77,7 @@ const codigo = html.slice(html.indexOf('const TRIBUTOS'), html.indexOf('TRIBUTOS
   'TRIBUTOS.fatorLucro = 1 - TRIBUTOS.irpj - TRIBUTOS.csll;\n' +
   extrair('computeCoeficientes') + '\n' + extrair('computeCalc') + '\n' + extrair('precoParaMargem') + '\n' +
   extrair('arredondarNovanta') + '\n' +
-  'return { computeCalc, computeCoeficientes, precoParaMargem, arredondarNovanta };';
+  'return { computeCalc, computeCoeficientes, precoParaMargem, arredondarNovanta, METAS_MARGEM };';
 const novo = new Function('App', codigo)(App);
 
 // ---------- Comparacao ----------
@@ -173,10 +173,10 @@ const pctTeste = (v, casas) => {
 // O trecho extraido tambem escreve o rotulo na tela; aqui o $ devolve um
 // objeto de mentira so' para a atribuicao nao estourar.
 const $teste = () => ({ textContent: '' });
-const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum', 'pct', '$',
+const extra = new Function('precoParaMargem', 'arredondarNovanta', 'toNum', 'pct', '$', 'METAS_MARGEM',
   html.slice(html.indexOf('const MARGEM_SUGERIDA'), html.indexOf('function renderListaLote')) +
-  '\nreturn { precoSugerido, MARGEM_SUGERIDA, ROTULO_MARGEM_SUGERIDA };'
-)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste, pctTeste, $teste);
+  '\nreturn { precoSugerido, MARGEM_SUGERIDA, ROTULO_MARGEM_SUGERIDA, valoresParaCalculo, CFG_SO_PRODUTO };'
+)(novo.precoParaMargem, novo.arredondarNovanta, toNumTeste, pctTeste, $teste, novo.METAS_MARGEM);
 
 // O rotulo da tela e a conta tem que sair da MESMA constante, senao a
 // coluna diz um percentual e o numero e' de outro.
@@ -184,6 +184,144 @@ if (extra.ROTULO_MARGEM_SUGERIDA !== pctTeste(extra.MARGEM_SUGERIDA, 0)) {
   console.log('ROTULO nao acompanha a MARGEM_SUGERIDA:', extra.ROTULO_MARGEM_SUGERIDA);
   process.exitCode = 1;
 }
+
+// ---------- METAS_MARGEM: uma fonte so' para numero, campo e rotulo ----------
+// Os percentuais "4%", "8%" e "13%" ja' estiveram digitados a mao no HTML
+// E repetidos como numero em calcular(). Aqui garantimos que existe uma
+// definicao unica, e que o preco sugerido da cotacao sai dela.
+let divMetas = 0;
+const niveisEsperados = ['minimo', 'aceitavel', 'ideal'];
+niveisEsperados.forEach(nivel => {
+  const m = novo.METAS_MARGEM[nivel];
+  if (!m) { divMetas++; console.log('METAS_MARGEM sem o nivel', nivel); return; }
+  if (!(m.alvo > 0 && m.alvo < 1)) { divMetas++; console.log('alvo fora de faixa em', nivel, m.alvo); }
+  // O id do campo e o do rotulo tem que existir no HTML, senao a tela
+  // fica com o percentual em branco e ninguem percebe.
+  [m.campo, m.rotulo].forEach(id => {
+    if (!new RegExp('id="' + id + '"').test(html)) {
+      divMetas++; console.log('METAS_MARGEM aponta para id inexistente:', id);
+    }
+  });
+});
+// A ordem dos niveis precisa fazer sentido: minimo < aceitavel < ideal.
+if (!(novo.METAS_MARGEM.minimo.alvo < novo.METAS_MARGEM.aceitavel.alvo &&
+      novo.METAS_MARGEM.aceitavel.alvo < novo.METAS_MARGEM.ideal.alvo)) {
+  divMetas++; console.log('as metas nao estao em ordem crescente');
+}
+// O preco sugerido da cotacao E' o nivel "Ideal" — nao um numero solto.
+if (extra.MARGEM_SUGERIDA !== novo.METAS_MARGEM.ideal.alvo) {
+  divMetas++;
+  console.log('MARGEM_SUGERIDA desgrudou do nivel Ideal:',
+    extra.MARGEM_SUGERIDA, novo.METAS_MARGEM.ideal.alvo);
+}
+// Nenhum percentual de margem pode continuar digitado a mao no markup.
+const estatico = html.slice(0, html.indexOf('<script'));
+const rotuloNaMao = estatico.match(/margem de \d/);
+if (rotuloNaMao) {
+  divMetas++;
+  console.log('rotulo de margem digitado a mao no HTML:', rotuloNaMao[0]);
+}
+console.log(divMetas === 0 ? 'METAS_MARGEM: numero, campo e rotulo vem de um lugar so'
+                           : '>>> ' + divMetas + ' PROBLEMA(S) em METAS_MARGEM');
+
+// ---------- valoresParaCalculo: o mapeamento cfg -> nucleo ----------
+// Esta funcao e' a unica ponte entre os campos da tela e computeCalc.
+// Se ela esquecer um campo, a margem daquela tela discorda das outras
+// em silencio — foi o que aconteceu com a coluna do historico.
+let divMap = 0;
+const cfgCheia = {
+  frete:'10', pctCredFrete:'12', valorST:'20', icmsCredito:'7', ipi:'0.65',
+  custoFinanceiroPct:'2', avariasPct:'1.5', bonificacao:'3',
+  tipoBonificacao:1, comST:0
+};
+const mapeado = extra.valoresParaCalculo(100, cfgCheia, 250);
+const esperadoMap = {
+  custoNFe:100, frete:10, pctCredFrete:12, valorST:20, icmsCredito:7, ipi:0.65,
+  custoFinanceiroPct:2, avariasPct:1.5, bonificacao:3, tipoBonificacao:1,
+  venda:250, comST:0, prejuizoContabil:0
+};
+Object.keys(esperadoMap).forEach(k => {
+  if (mapeado[k] !== esperadoMap[k]) {
+    divMap++;
+    console.log('valoresParaCalculo perdeu/torceu o campo', k, ':', mapeado[k], '!=', esperadoMap[k]);
+  }
+});
+// computeCoeficientes le exatamente estes campos; sobrar e' inofensivo,
+// faltar nao e'.
+['custoNFe','frete','pctCredFrete','valorST','icmsCredito','ipi',
+ 'custoFinanceiroPct','avariasPct','bonificacao','tipoBonificacao',
+ 'venda','comST','prejuizoContabil'].forEach(k => {
+  if (!(k in mapeado)) { divMap++; console.log('valoresParaCalculo nao devolve', k); }
+});
+
+// O preco sugerido, avaliado com a MESMA cfg, tem que devolver a meta
+// pedida — e' o que garante que a coluna "Sugerido" e a coluna "Margem"
+// da cotacao contam a mesma historia.
+let piorMetaCotacao = 0;
+for (let i = 0; i < 5000; i++) {
+  const cfg = {
+    frete: String(Math.round(rnd(0, 400) * 100) / 100),
+    pctCredFrete: '0',
+    valorST: String(Math.round(rnd(0, 30) * 100) / 100),
+    icmsCredito: '0',
+    ipi: String(Math.round(rnd(0, 10) * 100) / 100),
+    custoFinanceiroPct: String(Math.round(rnd(0, 5) * 100) / 100),
+    avariasPct: String(Math.round(rnd(0, 4) * 100) / 100),
+    bonificacao: '0', tipoBonificacao: 0, comST: 1
+  };
+  const custo = Math.round(rnd(1, 2000) * 100) / 100;
+  const venda = extra.precoSugerido(custo, cfg);
+  if (venda == null) continue;
+  const margem = novo.computeCalc(extra.valoresParaCalculo(custo, cfg, venda)).margem;
+  // O arredondamento para ",90" so' empurra o preco para CIMA, entao a
+  // margem realizada fica >= a meta, nunca abaixo dela.
+  if (margem < extra.MARGEM_SUGERIDA - 1e-9) {
+    divMap++;
+    console.log('sugerido ficou ABAIXO da meta:', margem, '<', extra.MARGEM_SUGERIDA, JSON.stringify(cfg));
+    break;
+  }
+  piorMetaCotacao = Math.max(piorMetaCotacao, margem - extra.MARGEM_SUGERIDA);
+}
+console.log('margem realizada acima da meta (efeito do ",90"), pior caso:',
+  (piorMetaCotacao * 100).toFixed(2) + ' p.p.');
+
+// O historico so' consegue repetir esse numero se a cfg for gravada
+// junto do item. Sem ela sobra CFG_SO_PRODUTO, que ignora frete/ST/IPI
+// e devolve uma margem MAIOR — o mesmo item aparecia com 13% na cotacao
+// e 25% no historico. Estes dois testes travam a regressao.
+const cfgReal = { frete:'10', pctCredFrete:'0', valorST:'20', icmsCredito:'0', ipi:'0',
+                  custoFinanceiroPct:'0', avariasPct:'0', bonificacao:'0',
+                  tipoBonificacao:0, comST:1 };
+const vendaReal = extra.precoSugerido(100, cfgReal);
+const margemReal = novo.computeCalc(extra.valoresParaCalculo(100, cfgReal, vendaReal)).margem;
+const margemSoProduto = novo.computeCalc(
+  extra.valoresParaCalculo(100, extra.CFG_SO_PRODUTO, vendaReal)).margem;
+if (!(margemSoProduto > margemReal + 0.05)) {
+  divMap++;
+  console.log('CFG_SO_PRODUTO deveria dar margem bem maior que a real:', margemSoProduto, margemReal);
+}
+// A tela do historico precisa mesmo LER a cfg gravada, e nao so' chamar
+// valoresParaCalculo com qualquer coisa. Um grep e' feio, mas e' o que
+// pega quem "simplificar" a coluna de volta para o custo puro — a cfg
+// so' entra na conta se cfgItem for o argumento.
+const compacto = html.replace(/\s+/g, ' ');
+if (!/const cfgItem = it\.precoVendaCfg/.test(compacto)) {
+  divMap++;
+  console.log('o historico nao le it.precoVendaCfg');
+}
+if (!/valoresParaCalculo\(it\.precoRecebido, cfgItem \|\| CFG_SO_PRODUTO, it\.precoVenda\)/.test(compacto)) {
+  divMap++;
+  console.log('o historico nao passa a cfg gravada para valoresParaCalculo');
+}
+// E a cfg precisa continuar sendo GRAVADA junto do item, senao o
+// historico recebe sempre null e cai no custo puro para todo mundo.
+if (!/precoVendaCfg: r\.precoVendaCfg \|\| null/.test(compacto)) {
+  divMap++;
+  console.log('salvarCotacao nao esta gravando precoVendaCfg no item');
+}
+console.log(divMap === 0
+  ? 'valoresParaCalculo: mapeamento completo e historico amarrado a cfg gravada'
+  : '>>> ' + divMap + ' PROBLEMA(S) em valoresParaCalculo');
 
 let divSug = 0, comparados = 0, semSugestao = 0;
 for (let i = 0; i < 20000; i++) {
@@ -236,4 +374,4 @@ console.log('precoSugerido: ' + comparados + ' comparados, ' + semSugestao + ' s
 console.log(divSug === 0 ? '>>> precoSugerido bate com a calculadora'
                          : '>>> ' + divSug + ' DIVERGENCIA(S) no precoSugerido');
 
-process.exitCode = (falhas || divSug) ? 1 : 0;
+process.exitCode = (falhas || divSug || divMetas || divMap) ? 1 : 0;

@@ -25,12 +25,12 @@ comportamento novo com antigo.
 Por isso os dois HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=2">
-<script src="app-shared.js?v=2"></script>
+<link rel="stylesheet" href="app-shared.css?v=7">
+<script src="app-shared.js?v=7"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número nos dois
-HTML.** Trocar `?v=2` por `?v=3` faz cada navegador baixar a versão nova
+HTML.** Trocar `?v=7` por `?v=8` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
 reclama se a referência estiver sem `?v=`.
 
@@ -110,19 +110,26 @@ sozinho a operação que falhou.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São seis etapas, em quatro frentes:
+Não precisa instalar nada. São oito etapas, em seis frentes:
 
 1. **Núcleo de cálculo** — compara a fórmula atual com a original em
    200 mil casos aleatórios. É a rede de proteção contra mexer nas
    alíquotas sem perceber. Também confere que a coluna TOTAL fecha com
-   a soma das linhas e que o preço sugerido atinge a margem pedida.
+   a soma das linhas, que o preço sugerido atinge a margem pedida, que
+   as metas de margem têm uma definição só (número, campo e rótulo) e
+   que o histórico recalcula a margem com a configuração gravada.
 2. **Estrutura dos dois HTML** — sintaxe dos scripts, tags balanceadas,
    ids duplicados, `$()` apontando para id inexistente, `label for=`
    órfão, arquivo referenciado que sumiu.
 3. **Carga em DOM simulado** — executa os scripts de verdade e pega
    referência quebrada em tempo de carga.
-4. **Helpers** — 49 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 58 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento).
+5. **Roteador de telas** — 12 verificações, incluindo o caso da tela
+   que pulava sozinha de volta para a Calculadora.
+6. **Regras da tela de cotação** — campo escondido não entra na conta,
+   e o vaivém entre o modo em lote e o individual não perde nem
+   inventa configuração.
 
 Rode antes de publicar qualquer alteração.
 
@@ -148,8 +155,30 @@ sugerido passariam a discordar sem erro nenhum. Agora `computeCalc` e
 `precoParaMargem` saem os dois da mesma decomposição
 (`custo = C0 + k × venda`).
 
-**Metas de margem** (mínimo 4%, aceitável 8%, ideal 13%) — array `metas`
-dentro de `calcular()`.
+**Metas de margem** (mínimo 4%, aceitável 8%, ideal 13%) — objeto
+`METAS_MARGEM`, logo abaixo de `TRIBUTOS`:
+
+```js
+const METAS_MARGEM = {
+  minimo:    { alvo: 0.04, campo: 'precoMinimo',      rotulo: 'precoMinimoRotulo' },
+  aceitavel: { alvo: 0.08, campo: 'precoRecomendado', rotulo: 'precoRecomendadoRotulo' },
+  ideal:     { alvo: 0.13, campo: 'precoIdeal',       rotulo: 'precoIdealRotulo' }
+};
+```
+
+Mude só o `alvo`: os rótulos da tela ("margem de 8%") são escritos a
+partir dele, e o **preço sugerido da cotação é o nível `ideal`**
+(`MARGEM_SUGERIDA = METAS_MARGEM.ideal.alvo`). Antes esses percentuais
+estavam digitados à mão no HTML e repetidos como número em `calcular()`;
+mudar um sem o outro deixava a tela anunciando um percentual e mostrando
+o preço de outro. O teste reclama se alguém voltar a digitá-los no HTML.
+
+**A margem que o histórico mostra** — cada item da cotação guarda, junto
+do `precoVenda`, a configuração com que aquele preço foi avaliado
+(`precoVendaCfg`: frete, ST, IPI, avarias...). Sem ela o histórico só
+tinha o custo do produto e mostrava uma margem bem maior que a da tela
+da cotação — 13% viravam 25% no mesmo item. Cotações salvas antes disso
+não têm o campo: a margem delas aparece com um `*` explicando.
 
 **Quanto de histórico o Controle de Notas baixa** — `controle-notas.html`:
 
@@ -181,6 +210,19 @@ constante `LOJAS_PADRAO`.
 
 **Modelos do Gemini** — bloco `<script type="module">`, constantes
 `MODELO_EXTRATOR`, `MODELO_PESQUISA`, `MODELO_FORMATADOR`.
+
+A pesquisa de concorrentes usa o **mesmo modelo em dois níveis de
+raciocínio**:
+
+| Nível | Quando | `thinkingLevel` |
+|---|---|---|
+| padrão | toda varredura, em lote ou individual | `medium` |
+| máxima | a lupa 🔍 de uma loja, "Refazer as sem resultado" e a **segunda** varredura do mesmo pedido | `high` |
+
+A regra é: a primeira busca vai no padrão; pedir a **mesma** busca de
+novo sobe para o máximo, porque insistir com o mesmo esforço só
+repetiria o resultado. O selo `🔍 máx.` na célula mostra o que já veio
+em precisão máxima.
 
 ---
 

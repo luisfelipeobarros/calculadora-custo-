@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=5">
+<link rel="stylesheet" href="app-shared.css?v=7">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -250,7 +250,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=5"></script>
+<script src="app-shared.js?v=7"></script>
 <script>
 (function(){
   'use strict';
@@ -267,6 +267,11 @@
   var notasPorChave = Object.create(null);
   var carregouNotas = false, carregouDuplicatas = false;
   var assinaturas = []; // funcoes de cancelamento dos onSnapshot ativos
+
+  function pararEscutas(){
+    assinaturas.forEach(function(cancelar){ try{ cancelar(); }catch(e){} });
+    assinaturas = [];
+  }
 
   // ─── Cortes de carga ────────────────────────────────────────
   // Notas emitidas antes desta data nao contam como pendentes de
@@ -353,6 +358,13 @@
   // app-shared, as visitas seguintes so' pagam pelos documentos que
   // mudaram, em vez da colecao inteira de novo.
   function escutarColecoes(){
+    // Cancela o que ja' estava escutando antes de abrir escuta nova.
+    // Sem isto, cada rechamada (login refeito, historico completo)
+    // somava mais quatro assinaturas sobre as mesmas colecoes — varias
+    // delas contra um app do Firebase ja' deletado, e todas cobradas
+    // por documento lido.
+    pararEscutas();
+
     var col = db.collection('notas');
 
     // Um mapa POR consulta. Sao duas consultas sobre a mesma colecao e
@@ -471,12 +483,11 @@
       '<button type="button" class="acao-mini" id="btnHistoricoCompleto">carregar histórico completo</button>';
   }
 
-  // Refaz a carga sem corte. Cancela as escutas anteriores primeiro,
-  // senao o app ficaria com duas assinaturas para a mesma colecao.
+  // Refaz a carga sem corte. Quem cancela as escutas anteriores e'
+  // escutarColecoes(), no comeco dela — senao o app ficaria com duas
+  // assinaturas para a mesma colecao.
   App.delegar($('avisoJanela'), 'click', '#btnHistoricoCompleto', function(){
     carregarTudo = true;
-    assinaturas.forEach(function(cancelar){ try{ cancelar(); }catch(e){} });
-    assinaturas = [];
     notas = []; duplicatas = [];
     notasPorChave = Object.create(null);
     carregouNotas = false; carregouDuplicatas = false;
@@ -485,7 +496,15 @@
     escutarColecoes();
   });
 
+  // As quatro consultas compartilham o mesmo aoFalhar. Quando as regras
+  // recusam tudo de uma vez, as quatro chamavam pedirLogin().then(iniciar)
+  // — o modal era um so', mas iniciar() rodava quatro vezes, cada uma
+  // recriando o app do Firebase e abrindo mais quatro escutas.
+  var iniciando = false;
+
   function iniciar(){
+    if(iniciando) return;
+    iniciando = true;
     setStatus('Conectando ao Firebase...');
     App.iniciarFirebase('controleNotas').then(function(r){
       db = r.db;
@@ -501,7 +520,7 @@
     }).catch(function(e){
       setStatus('Erro ao iniciar: ' + App.erroDe(e));
       App.toastErro('Erro ao iniciar', e);
-    });
+    }).then(function(){ iniciando = false; });
   }
   window.__aoEntrar = function(){ if(db) renderAtual(); };
 

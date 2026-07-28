@@ -823,8 +823,15 @@
   }
 
   // Barra de conta no cabecalho: mostra quem esta' logado e o botao Sair.
+  //
+  // Idempotente de proposito: iniciarFirebase() roda de novo toda vez
+  // que alguem troca a configuracao na aba Sincronizacao, e antes disso
+  // cada chamada acrescentava um segundo nome de usuario, um segundo
+  // botao "Sair" e mais um ouvinte de auth que nunca era removido.
   function montarBarraConta(container) {
     if (!container) return;
+    if (container.dataset.contaMontada === '1') return;
+    container.dataset.contaMontada = '1';
     container.className = 'conta-barra';
     var email = document.createElement('span');
     email.className = 'conta-email';
