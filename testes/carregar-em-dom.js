@@ -1,4 +1,5 @@
-// Executa app-shared.js + o script da pagina num DOM simulado.
+// Executa os scripts locais da pagina (app-shared.js, calculo-nucleo.js)
+// + o script inline dela, num DOM simulado.
 // Pega referencias quebradas, colisoes de nome e erros em tempo de carga.
 const fs = require('fs');
 const vm = require('vm');
@@ -14,12 +15,20 @@ const { window } = instalar([...new Set(ids)]);
 const contexto = vm.createContext(window);
 const erros = [];
 
-// 1) app-shared.js
-try {
-  vm.runInContext(fs.readFileSync('app-shared.js', 'utf8'), contexto, { filename: 'app-shared.js' });
-} catch (e) {
-  erros.push('app-shared.js: ' + e.message);
-}
+// 1) os <script src="..."> locais, na ordem em que a pagina os carrega.
+//    Sai do proprio HTML para nao existir uma lista de arquivos aqui
+//    que alguem precise lembrar de atualizar: se a pagina passar a
+//    carregar um arquivo novo, o teste passa a executa-lo tambem.
+const locais = [...html.matchAll(/<script[^>]*\bsrc=["'](?!https?:|\/\/)([^"']+)["']/g)]
+  .map(m => m[1].split('?')[0]);
+
+locais.forEach(arq => {
+  try {
+    vm.runInContext(fs.readFileSync(arq, 'utf8'), contexto, { filename: arq });
+  } catch (e) {
+    erros.push(arq + ': ' + e.message);
+  }
+});
 
 // 2) blocos <script> inline nao-modulo
 const blocos = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
@@ -35,6 +44,7 @@ blocos.forEach((codigo, i) => {
 });
 
 console.log('== ' + arquivo + ' (execucao em DOM simulado) ==');
+console.log('  arquivos locais: ' + (locais.join(', ') || '(nenhum)'));
 console.log('  ids no markup: ' + ids.length + ' | blocos executados: ' + blocos.length);
 if (window.App) {
   console.log('  App exportado com ' + Object.keys(window.App).length + ' membros');
