@@ -104,6 +104,47 @@ sozinho a operação que falhou.
 
 ---
 
+## O preço de venda mora em um lugar só
+
+O preço de venda de um produto fica em **Produtos salvos**
+(`produtos/{nome}`, campo `venda`). Não existe outra cópia.
+
+Isso vale para as três telas onde ele aparece:
+
+| Tela | O que faz com o preço |
+|---|---|
+| Calculadora / Produtos salvos | Lê e grava — é a fonte |
+| Cotação, card "3. Adicionar produtos" | Chega preenchido com o preço do produto; o que você digitar passa a valer em Produtos salvos |
+| Histórico e Pesquisar concorrentes | Só leem |
+
+**Antes** o mesmo número era guardado duas vezes: em `produtos.venda` e
+em `cotacoes.itens[].precoVenda`. Alterar um não alterava o outro, então
+a mesma peça podia aparecer a R$ 90 no histórico e a R$ 110 na
+Calculadora, sem nada dizendo qual dos dois valia.
+
+Duas consequências de a fonte ser única, que valem saber:
+
+- A coluna **Venda** do Histórico mostra o preço de **hoje**, não uma
+  foto do dia da cotação. Trocar o preço em Produtos salvos muda a
+  coluna e a margem em todas as cotações daquele produto.
+- **Apagar o campo Venda na cotação não apaga o preço do produto.**
+  Tirar o preço de um produto é decisão da tela de Produtos salvos —
+  uma cotação não mexe no catálogo por omissão.
+
+Salvar a cotação grava os preços digitados em Produtos salvos e diz
+quantos foram (`"Cotação salva no histórico. 3 preços de venda gravados
+em Produtos salvos."`). Produto que ainda não existia nasce com a
+configuração de custo que está na tela do modo em lote; produto que já
+existe tem **só** o preço trocado — frete, impostos e o resto da ficha
+dele ficam como estavam.
+
+As cotações salvas antes dessa unificação ainda têm o `precoVenda`
+gravado no item. Ele continua sendo lido quando o produto não tem preço
+em Produtos salvos, para nada sumir da tela, mas nada volta a escrever
+ali.
+
+---
+
 ## Rodando os testes
 
 ```bash

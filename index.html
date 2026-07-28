@@ -165,7 +165,7 @@
 
       <!-- MODO LOTE -->
       <div id="modoLote">
-        <p class="empty-note" style="display:block; margin-bottom:12px;">Esses valores se aplicam a TODOS os produtos abaixo — só o preço de venda muda de um pra outro.</p>
+        <p class="empty-note" style="display:block; margin-bottom:12px;">Esses valores se aplicam a TODOS os produtos abaixo — só o preço de venda muda de um pra outro. O preço de venda é o mesmo que aparece em <strong>Produtos salvos</strong>: quem já tem preço chega com ele preenchido, e o que você digitar aqui passa a valer lá também.</p>
         <div class="row2">
           <div class="field">
             <label for="loteFrete">Frete</label>
@@ -423,7 +423,7 @@
     <div class="card">
       <h2 id="loteTitulo">Pesquisar concorrentes — Pedido</h2>
       <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
-        Pesquisa cada produto do pedido nas mesmas lojas da aba Concorrentes. "Nosso preço" vem pré-preenchido com o <strong>preço de venda</strong> definido na cotação (editável) — as células ficam vermelhas quando o concorrente está mais barato que nós, e verdes quando estamos mais baratos ou iguais. Produtos sem preço de venda definido ficam com o campo vazio: preencha antes de pesquisar, senão não há com o que comparar.
+        Pesquisa cada produto do pedido nas mesmas lojas da aba Concorrentes. "Nosso preço" vem pré-preenchido com o <strong>preço de venda</strong> do produto em Produtos salvos (editável só para esta pesquisa) — as células ficam vermelhas quando o concorrente está mais barato que nós, e verdes quando estamos mais baratos ou iguais. Produtos sem preço de venda definido ficam com o campo vazio: preencha antes de pesquisar, senão não há com o que comparar.
       </p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
         <button class="btn" id="iniciarLoteBtn">🏪 Iniciar pesquisa</button>
@@ -1608,6 +1608,64 @@ Tupan</textarea>
   let produtosCache = []; // [{nome, fornecedor, r}] - populado por atualizarListaSalvos, filtrado por renderListaSalvos
   let gruposExpandidos = new Set(); // nomes de fornecedores abertos manualmente pelo usuário
 
+  // ─── Preço de venda: uma fonte só ────────────────────────────
+  // O preço de venda de um produto mora em Produtos Salvos
+  // (`produtos/{nome}`, campo `venda`) e em nenhum outro lugar. A
+  // cotação, o histórico e a comparação com concorrentes LEEM daqui;
+  // quem digita um preço na cotação está gravando no produto.
+  //
+  // Antes o mesmo número era guardado duas vezes — em `produtos.venda`
+  // e em `cotacoes.itens[].precoVenda`. Alterar um não alterava o
+  // outro, então a mesma peça podia aparecer a R$ 90 no histórico e a
+  // R$ 110 na Calculadora, sem nada indicando qual dos dois valia.
+  let vendaPorProduto = new Map(); // nome do produto -> preço de venda (sempre > 0)
+
+  function precoVendaDoProduto(nome){
+    if(!nome) return null;
+    const v = vendaPorProduto.get(nome);
+    return (v != null && v > 0) ? v : null;
+  }
+
+  // Preço de venda de um item de cotação. As cotações gravadas antes
+  // da unificação guardavam o preço no próprio item; ele continua
+  // sendo lido como último recurso, para não sumir da tela de quem já
+  // usava o app, mas nada volta a escrever ali.
+  function precoVendaItem(it){
+    const atual = precoVendaDoProduto(it.produto);
+    if(atual != null) return atual;
+    return it.precoVenda != null ? it.precoVenda : null;
+  }
+
+  // Ficha de produto montada com a configuração do modo em lote —
+  // usada tanto por "Salvar todos os produtos" quanto para criar o
+  // produto que ainda não existe quando a cotação é salva.
+  function registroProdutoLote(r, cfg, fornecedor, venda){
+    return {
+      produto: r.produtoEsperado,
+      fornecedor: fornecedor,
+      custoNFe: String(r.precoRecebido),
+      frete: cfg.frete, pctCredFrete: cfg.pctCredFrete, valorST: cfg.valorST, icmsCredito: cfg.icmsCredito,
+      ipi: cfg.ipi, custoFinanceiroPct: cfg.custoFinanceiroPct, avariasPct: cfg.avariasPct, bonificacao: cfg.bonificacao,
+      venda: String(venda),
+      toggles: { credIcmsFrete: cfg.credIcmsFrete, comST: cfg.comST, prejuizoContabil: 0, tipoBonificacao: cfg.tipoBonificacao }
+    };
+  }
+
+  // Grava o preço de venda no produto. Se o produto já existe, SÓ o
+  // preço muda: frete, impostos e o resto da ficha continuam como
+  // estavam — a cotação não tem por que mexer neles.
+  async function gravarPrecoVenda(r, cfg, fornecedor){
+    const key = 'calc:' + encodeURIComponent(r.produtoEsperado);
+    let dados = null;
+    try{
+      const res = await storageGet(key);
+      if(res && res.value) dados = JSON.parse(res.value);
+    }catch(e){ /* sem registro anterior (ou corrompido): cria um novo abaixo */ }
+    if(dados) dados.venda = String(r.precoVenda);
+    else dados = registroProdutoLote(r, cfg, fornecedor, r.precoVenda);
+    await storageSet(key, JSON.stringify(dados));
+  }
+
   // normalizarTexto, escapeHtml, parseNumeroBR e a formatacao de data
   // agora vem de app-shared.js (aliases no topo deste arquivo).
 
@@ -1650,10 +1708,18 @@ Tupan</textarea>
         }catch(e){ /* segue sem previa se o registro estiver corrompido */ }
         return { nome, fornecedor: fornecedor || 'Sem fornecedor', r };
       });
+      // Índice consultado pela cotação, pelo histórico e pela pesquisa
+      // de concorrentes — todos leem o preço de venda daqui.
+      vendaPorProduto = new Map(
+        produtosCache
+          .filter(p => p.r && p.r.venda > 0)
+          .map(p => [p.nome, p.r.venda])
+      );
       renderListaSalvos();
     }catch(e){
       console.error('Erro ao listar produtos salvos:', e);
       produtosCache = [];
+      vendaPorProduto = new Map();
       $('savedList').innerHTML = '';
       if(emptyEl){
         emptyEl.textContent = 'Não foi possível carregar a lista: ' + App.erroDe(e);
@@ -2276,8 +2342,9 @@ Tupan</textarea>
       // preço de venda ao consumidor; comparar isso com o nosso custo
       // faria parecer que estamos sempre mais baratos, e as cores da
       // tabela apontariam o contrário do que de fato acontece.
-      // Sem venda definida o campo fica vazio, para ser preenchido à mão.
-      nossoPreco: it.precoVenda != null ? it.precoVenda : null,
+      // Vem de Produtos Salvos — a única fonte do preço de venda. Sem
+      // venda definida o campo fica vazio, para ser preenchido à mão.
+      nossoPreco: precoVendaItem(it),
       porLoja: {}
     })).filter(it => it.produto);
 
@@ -3040,6 +3107,11 @@ Tupan</textarea>
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
     try{
+      // A coluna "Venda" e a margem saem dos produtos salvos. Abrir o
+      // histórico por link direto (#Historico) chega aqui antes de a
+      // lista de produtos ter carregado, e sem isto as duas colunas
+      // apareceriam vazias até alguém trocar de tela.
+      if(vendaPorProduto.size === 0) await atualizarListaSalvos();
       const snap = await App.comAuth(()=> firestoreDb.collection('cotacoes').orderBy('data','desc').limit(200).get());
       historicoDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
       atualizarFiltroMesHistorico();
@@ -3186,18 +3258,23 @@ Tupan</textarea>
         let tabela = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
           '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Quantidade</th>' +
           '<th scope="col">Esperado</th><th scope="col">Recebido</th>' +
-          '<th scope="col">Venda</th><th scope="col">Margem</th>' +
+          '<th scope="col" title="Preço de venda atual do produto, lido de Produtos salvos">Venda</th><th scope="col">Margem</th>' +
           '<th scope="col">Situação</th><th scope="col">Status</th></tr></thead><tbody>';
         itensFiltrados.forEach(it=>{
-          // Margem: recalculada com as regras de HOJE, a partir do custo e
-          // da venda gravados. Só o custo do produto entra aqui — frete e
-          // impostos ficaram na tela de cadastro, não na cotação.
+          // Venda: o preço que o produto tem HOJE em Produtos Salvos —
+          // não uma cópia congelada na cotação. Trocar o preço lá muda
+          // esta coluna, que é justamente o ponto: um preço só.
+          //
+          // Margem: recalculada com as regras de hoje, a partir do custo
+          // gravado e desse preço. Só o custo do produto entra aqui —
+          // frete e impostos ficaram na tela de cadastro, não na cotação.
+          const precoVenda = precoVendaItem(it);
           let margemHtml = '-';
-          if(it.precoVenda != null && it.precoRecebido != null){
+          if(precoVenda != null && it.precoRecebido != null){
             const calc = computeCalc({
               custoNFe: it.precoRecebido, frete: 0, pctCredFrete: 0, valorST: 0,
               icmsCredito: 0, ipi: 0, custoFinanceiroPct: 0, avariasPct: 0,
-              bonificacao: 0, tipoBonificacao: 0, venda: it.precoVenda,
+              bonificacao: 0, tipoBonificacao: 0, venda: precoVenda,
               comST: 1, prejuizoContabil: 0
             });
             if(isFinite(calc.margem)){
@@ -3207,7 +3284,7 @@ Tupan</textarea>
           }
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
             '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+
-            '</td><td>'+(it.precoVenda!=null?('<strong>'+brl(it.precoVenda)+'</strong>'):'-')+
+            '</td><td>'+(precoVenda!=null?('<strong>'+brl(precoVenda)+'</strong>'):'-')+
             '</td><td>'+margemHtml+
             '</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
         });
@@ -3306,7 +3383,7 @@ Tupan</textarea>
           produtoRecebido: it.produtoRecebido || null,
           quantidadeRecebida: it.quantidadeRecebida != null ? it.quantidadeRecebida : null,
           precoRecebido: it.precoRecebido != null ? it.precoRecebido : null,
-          precoVenda: it.precoVenda != null ? it.precoVenda : null,
+          precoVenda: precoVendaItem(it), // vem de Produtos Salvos, não da cotação
           status: it.status || 'negociacao',
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
@@ -3616,6 +3693,9 @@ Tupan</textarea>
       produtoRecebido: rec ? rec.produto : null,
       quantidadeRecebida: rec ? rec.quantidade : null,
       precoRecebido: rec ? rec.valor : null,
+      // Produto que já tem preço em Produtos Salvos chega com ele
+      // preenchido — não se digita duas vezes o mesmo número.
+      precoVenda: precoVendaDoProduto(exp.produto),
       status: 'negociacao',
       flags: [],
       diffPct: null,
@@ -4016,6 +4096,33 @@ Tupan</textarea>
     resetCotacao();
   });
 
+  // Salvar a cotação leva os preços de venda digitados para Produtos
+  // Salvos — é lá que eles moram. Sem isto o número ficaria só na tela
+  // e o histórico não teria de onde lê-lo.
+  //
+  // Campo em branco NÃO apaga o preço do catálogo: tirar o preço de um
+  // produto é decisão da tela de Produtos Salvos, não de uma cotação.
+  async function gravarPrecosVendaDaCotacao(){
+    const cfg = coletarConfigLote();
+    const fornecedor = $('fornecedorProdutos').value.trim() || $('fornecedorCotacao').value.trim();
+    let gravados = 0;
+    for(const r of ultimosResultados){
+      if(!(r.precoVenda > 0)) continue;
+      if(precoVendaDoProduto(r.produtoEsperado) === r.precoVenda) continue; // já está assim
+      try{
+        await gravarPrecoVenda(r, cfg, fornecedor);
+        gravados++;
+      }catch(e){ console.error('Erro ao gravar o preço de venda de ' + r.produtoEsperado, e); }
+    }
+    if(gravados) await atualizarListaSalvos();
+    return gravados;
+  }
+
+  function sufixoPrecosGravados(n){
+    if(!n) return '';
+    return ' ' + n + (n === 1 ? ' preço de venda gravado' : ' preços de venda gravados') + ' em Produtos salvos.';
+  }
+
   $('salvarCotacaoBtn').addEventListener('click', async ()=>{
     if(!firestoreDb){
       $('cotacaoMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar o histórico.';
@@ -4032,18 +4139,18 @@ Tupan</textarea>
       produtoRecebido: r.produtoRecebido,
       quantidadeRecebida: r.quantidadeRecebida,
       precoRecebido: r.precoRecebido,
-      // Preço de venda definido no card "3. Adicionar produtos".
-      // Fica junto da cotação para aparecer no histórico e para servir
-      // de base na comparação com concorrentes.
-      precoVenda: r.precoVenda != null ? r.precoVenda : null,
+      // Sem `precoVenda` aqui de propósito: o preço de venda mora em
+      // Produtos Salvos, e o histórico o lê de lá. Guardar uma cópia
+      // nesta linha é o que fazia os dois números divergirem.
       flags: r.flags,
       status: r.status || 'negociacao'
     }));
     try{
+      const precosGravados = await gravarPrecosVendaDaCotacao();
       if(cotacaoEditandoId){
         // Atualiza a cotação existente (mantém nome/data originais) — não cria duplicata
         await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(cotacaoEditandoId).set({ fornecedor, itens }, { merge: true }));
-        App.toast('Cotação atualizada no histórico.', 'ok');
+        App.toast('Cotação atualizada no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       } else {
         const agora = new Date();
         const docRef = await App.comAuth(()=> firestoreDb.collection('cotacoes').add({
@@ -4053,7 +4160,7 @@ Tupan</textarea>
           itens
         }));
         cotacaoEditandoId = docRef.id; // se clicar em salvar de novo agora, atualiza em vez de duplicar
-        App.toast('Cotação salva no histórico.', 'ok');
+        App.toast('Cotação salva no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       }
       resetCotacao();
     }catch(e){
@@ -4228,20 +4335,14 @@ Tupan</textarea>
       const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(r.produtoEsperado)+'"]');
       const venda = vendaInput ? vendaInput.value : '';
       if(!venda || toNum(venda) <= 0) continue;
-      const dados = {
-        produto: r.produtoEsperado,
-        fornecedor: fornecedor,
-        custoNFe: String(r.precoRecebido),
-        frete: cfg.frete, pctCredFrete: cfg.pctCredFrete, valorST: cfg.valorST, icmsCredito: cfg.icmsCredito,
-        ipi: cfg.ipi, custoFinanceiroPct: cfg.custoFinanceiroPct, avariasPct: cfg.avariasPct, bonificacao: cfg.bonificacao, venda: venda,
-        toggles: { credIcmsFrete: cfg.credIcmsFrete, comST: cfg.comST, prejuizoContabil: 0, tipoBonificacao: cfg.tipoBonificacao }
-      };
+      const dados = registroProdutoLote(r, cfg, fornecedor, venda);
       try{
         await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
         produtosCotacaoSalvos.add(r.produtoEsperado);
         salvos++;
       }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
     }
+    if(salvos) await atualizarListaSalvos(); // reindexa os preços de venda
     renderListaLote();
     popularSelectIndividual();
     $('loteMsg').textContent = salvos > 0
@@ -4318,7 +4419,10 @@ Tupan</textarea>
     $('indNomeProduto').textContent = r.produtoEsperado;
     $('indCustoNFe').textContent = brl(r.precoRecebido);
     $('indFrete').value=''; $('indPctCredFrete').value=''; $('indValorST').value=''; $('indIcmsCredito').value='';
-    $('indIpi').value='0.65'; $('indCustoFinanceiroPct').value=''; $('indAvariasPct').value='1.5'; $('indBonificacao').value=''; $('indVenda').value='';
+    $('indIpi').value='0.65'; $('indCustoFinanceiroPct').value=''; $('indAvariasPct').value='1.5'; $('indBonificacao').value='';
+    // Preço de venda vem de Produtos Salvos, se o produto já tiver um.
+    const vendaSalva = precoVendaDoProduto(r.produtoEsperado);
+    $('indVenda').value = vendaSalva != null ? vendaSalva : '';
     $('indCredIcmsFrete').value='0'; $('indComST').value='1'; $('indTipoBonificacao').value='0'; $('indBonificacaoPrefix').textContent='R$';
     $('indPctCredFreteSub').style.display='none';
     $('indStSub').style.display='block';
@@ -4369,6 +4473,7 @@ Tupan</textarea>
     try{
       await storageSet('calc:' + encodeURIComponent(r.produtoEsperado), JSON.stringify(dados));
       produtosCotacaoSalvos.add(r.produtoEsperado);
+      await atualizarListaSalvos(); // reindexa o preço de venda
       $('individualMsg').textContent = '✓ ' + r.produtoEsperado + ' salvo com sucesso.';
       popularSelectIndividual();
       $('individualSelect').value = '';
@@ -4406,8 +4511,10 @@ Tupan</textarea>
   router.iniciar(); // abre a tela indicada no endereço (#Historico, ...) ou a Calculadora
 
   // Depois de entrar, recarrega o que a tela precisa.
-  window.__aoEntrar = ()=>{
-    atualizarListaSalvos();
+  window.__aoEntrar = async ()=>{
+    // Antes do histórico: é a lista de produtos que traz os preços de
+    // venda que a coluna "Venda" e a margem mostram.
+    await atualizarListaSalvos();
     if(router.atual() === 'Historico') carregarHistorico();
     if(router.atual() === 'Concorrentes') carregarHistoricoConcorrentes();
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
