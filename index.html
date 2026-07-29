@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=7">
+<link rel="stylesheet" href="app-shared.css?v=8">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -74,7 +74,12 @@
       <h1>Calculadora de Custo</h1>
       <p>CUSTO · IMPOSTOS · FRETE · MARGEM DE VENDA</p>
     </div>
-    <nav class="telas" aria-label="Telas do aplicativo">
+    <!-- Só aparece abaixo de 880px; no desktop as telas ficam todas
+         visíveis e este botão fica escondido pelo CSS. -->
+    <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false"
+            aria-controls="navTelas" aria-label="Abrir menu de telas">☰</button>
+    <nav class="telas" id="navTelas" aria-label="Telas do aplicativo">
+      <button type="button" class="btn secondary" id="verCalculadoraBtn">🧮 Calculadora</button>
       <button type="button" class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
       <button type="button" class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
       <button type="button" class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
@@ -92,7 +97,6 @@
   <main id="conteudo">
 
   <div id="viewFrete" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn2" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card" style="max-width:520px;">
       <h2>Calculadora de Frete (R$/m²)</h2>
@@ -117,7 +121,6 @@
   </div>
 
   <div id="viewCotacao" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn4" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>1. Planilha de Cotação (Excel)</h2>
@@ -345,7 +348,6 @@
   </div>
 
   <div id="viewHistorico" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn5" style="margin-bottom:16px;">← Voltar à calculadora</button>
     <div class="card">
       <h2>Histórico de cotações</h2>
       <div style="display:flex; gap:16px; flex-wrap:wrap;">
@@ -385,7 +387,6 @@
   </div>
 
   <div id="viewNotas" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn7" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>NF-e Emitidas — últimos 60 dias</h2>
@@ -448,7 +449,6 @@
   </div>
 
   <div id="viewConcorrentes" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn6" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card" style="max-width:720px;">
       <h2>Comparação com Concorrentes</h2>
@@ -502,7 +502,6 @@ Tupan</textarea>
   </div>
 
   <div id="viewSync" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn3" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>Sincronização (Firebase)</h2>
@@ -533,7 +532,6 @@ Tupan</textarea>
   </div>
 
   <div id="viewProdutos" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>Produtos salvos</h2>
@@ -736,7 +734,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=7"></script>
+<script src="app-shared.js?v=8"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -2205,6 +2203,7 @@ Tupan</textarea>
     },
     aoTrocar: (nome) => {
       const botoes = {
+        Calculadora:'verCalculadoraBtn',
         Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
         Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
         Notas:'verNotasBtn', Sync:'verSyncBtn'
@@ -2227,13 +2226,18 @@ Tupan</textarea>
   const mostrarViewNotas        = () => router.ir('Notas');
   const mostrarViewSync         = () => router.ir('Sync');
 
+  App.montarMenu('menuBtn', 'navTelas');
+
+  // A Calculadora virou uma tela como as outras, com botão próprio no
+  // cabeçalho. Antes cada view tinha o seu "← Voltar à calculadora",
+  // que no mobile empurrava o conteúdo para baixo e ainda deixava o
+  // caminho de volta diferente do caminho de ida.
+  $('verCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
   $('buscaProduto').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
   $('buscaFornecedor').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
-  $('voltarCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
-  $('voltarCalculadoraBtn7').addEventListener('click', mostrarViewCalculadora);
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
   $('buscaNotas').addEventListener('input', debounce(renderNotasEmitidas, DEBOUNCE_BUSCA));
   $('buscaNotasCmp').addEventListener('input', debounce(renderListaNotasCmp, DEBOUNCE_BUSCA));
@@ -2852,17 +2856,11 @@ Tupan</textarea>
       renderListaNotas(suf);
     }));
   }
-
-  $('voltarCalculadoraBtn2').addEventListener('click', mostrarViewCalculadora);
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
-  $('voltarCalculadoraBtn3').addEventListener('click', mostrarViewCalculadora);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
-  $('voltarCalculadoraBtn4').addEventListener('click', mostrarViewCalculadora);
   $('verHistoricoBtn').addEventListener('click', mostrarViewHistorico);
-  $('voltarCalculadoraBtn5').addEventListener('click', mostrarViewCalculadora);
   $('verConcorrentesBtn').addEventListener('click', mostrarViewConcorrentes);
-  $('voltarCalculadoraBtn6').addEventListener('click', mostrarViewCalculadora);
 
   // ==================== COMPARAÇÃO COM CONCORRENTES ====================
 
