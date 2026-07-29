@@ -2962,10 +2962,16 @@ Tupan</textarea>
   // ==================== HISTÓRICO DE COMPARAÇÕES COM CONCORRENTES ====================
   let concorrentesHistColapsados = new Set();
 
+  // Os documentos ficam em memória, como no histórico de cotações.
+  // Antes, abrir ou fechar UMA comparação chamava a carga inteira de
+  // novo: 50 leituras no Firestore por clique, sem nenhum dado novo.
+  let concorrentesDocsCache = null;
+
   async function carregarHistoricoConcorrentes(){
     const lista = $('concorrentesHistLista');
     const msg = $('concorrentesHistMsg');
     if(!firestoreDb){
+      concorrentesDocsCache = null;
       lista.innerHTML = '';
       msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver comparações salvas.';
       msg.style.display = 'block';
@@ -2975,93 +2981,105 @@ Tupan</textarea>
     msg.style.display = 'block';
     try{
       const snap = await App.comAuth(()=> firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get());
-      if(snap.empty){
-        lista.innerHTML = '';
-        msg.textContent = 'Nenhuma comparação salva ainda.';
-        return;
-      }
-      msg.style.display = 'none';
-      lista.innerHTML = '';
-      snap.forEach(doc=>{
-        const d = doc.data();
-        const resultados = d.resultados || [];
-        let menorPreco = null;
-        resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
-
-        const aberto = concorrentesHistColapsados.has(doc.id);
-        const item = document.createElement('div');
-        item.className = 'historico-item';
-
-        const header = document.createElement('button');
-        header.type = 'button';
-        header.className = 'historico-header';
-        header.setAttribute('aria-expanded', String(!!aberto));
-        header.innerHTML =
-          '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
-          '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
-          '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
-          '<span class="h-count">'+resultados.length+' loja(s)</span>'+
-          (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
-          (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
-        header.addEventListener('click', ()=>{
-          if(concorrentesHistColapsados.has(doc.id)) concorrentesHistColapsados.delete(doc.id);
-          else concorrentesHistColapsados.add(doc.id);
-          carregarHistoricoConcorrentes();
-        });
-        item.appendChild(header);
-
-        if(aberto){
-          const body = document.createElement('div');
-          body.className = 'historico-body';
-          let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
-          resultados.forEach(r=>{
-            tabela += '<tr><td>'+(safeUrl(r.url)?('<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
-              + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
-              + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
-          });
-          tabela += '</tbody></table>';
-          if(d.meuPreco != null){
-            tabela += '<div class="empty-note" style="display:block; margin-top:8px;">Seu preço na época: <strong>'+brl(d.meuPreco)+'</strong></div>';
-          }
-          body.innerHTML = tabela;
-
-          const acoes = document.createElement('div');
-          acoes.className = 'actions-mini';
-          acoes.style.marginTop = '10px';
-          const excluirBtn = document.createElement('button');
-          excluirBtn.type = 'button';
-          excluirBtn.className = 'del';
-          excluirBtn.textContent = 'Excluir';
-          excluirBtn.addEventListener('click', async ()=>{
-            const ok = await App.confirmar({
-              titulo: 'Excluir comparação',
-              mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
-              confirmar: 'Excluir',
-              perigo: true
-            });
-            if(!ok) return;
-            try{
-              await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(doc.id).delete());
-              App.toast('Comparação excluída.', 'ok');
-              carregarHistoricoConcorrentes();
-            }catch(e){
-              App.toastErro('Erro ao excluir', e);
-            }
-          });
-          acoes.appendChild(excluirBtn);
-          body.appendChild(acoes);
-
-          item.appendChild(body);
-        }
-
-        lista.appendChild(item);
-      });
+      concorrentesDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      renderHistoricoConcorrentes();
     }catch(e){
       console.error(e);
+      concorrentesDocsCache = null;
       lista.innerHTML = '';
       msg.textContent = 'Erro ao carregar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
       msg.style.display = 'block';
     }
+  }
+
+  function renderHistoricoConcorrentes(){
+    const lista = $('concorrentesHistLista');
+    const msg = $('concorrentesHistMsg');
+    const docs = concorrentesDocsCache || [];
+    if(!docs.length){
+      lista.innerHTML = '';
+      msg.textContent = 'Nenhuma comparação salva ainda.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.style.display = 'none';
+    lista.innerHTML = '';
+    docs.forEach(d=>{
+      const resultados = d.resultados || [];
+      let menorPreco = null;
+      resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
+
+      const aberto = concorrentesHistColapsados.has(d.id);
+      const item = document.createElement('div');
+      item.className = 'historico-item';
+
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'historico-header';
+      header.setAttribute('aria-expanded', String(!!aberto));
+      header.innerHTML =
+        '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+        '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
+        '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+        '<span class="h-count">'+resultados.length+' loja(s)</span>'+
+        (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
+        (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
+      header.addEventListener('click', ()=>{
+        if(concorrentesHistColapsados.has(d.id)) concorrentesHistColapsados.delete(d.id);
+        else concorrentesHistColapsados.add(d.id);
+        renderHistoricoConcorrentes(); // só redesenha — nada de reler o banco
+      });
+      item.appendChild(header);
+
+      if(aberto){
+        const body = document.createElement('div');
+        body.className = 'historico-body';
+        let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
+        resultados.forEach(r=>{
+          tabela += '<tr><td>'+(safeUrl(r.url)?('<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
+            + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
+            + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
+        });
+        tabela += '</tbody></table>';
+        if(d.meuPreco != null){
+          tabela += '<div class="empty-note" style="display:block; margin-top:8px;">Seu preço na época: <strong>'+brl(d.meuPreco)+'</strong></div>';
+        }
+        body.innerHTML = tabela;
+
+        const acoes = document.createElement('div');
+        acoes.className = 'actions-mini';
+        acoes.style.marginTop = '10px';
+        const excluirBtn = document.createElement('button');
+        excluirBtn.type = 'button';
+        excluirBtn.className = 'del';
+        excluirBtn.textContent = 'Excluir';
+        excluirBtn.addEventListener('click', async ()=>{
+          const ok = await App.confirmar({
+            titulo: 'Excluir comparação',
+            mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
+            confirmar: 'Excluir',
+            perigo: true
+          });
+          if(!ok) return;
+          try{
+            await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(d.id).delete());
+            App.toast('Comparação excluída.', 'ok');
+            // Tira do cache e redesenha, em vez de reler a coleção.
+            concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== d.id);
+            concorrentesHistColapsados.delete(d.id);
+            renderHistoricoConcorrentes();
+          }catch(e){
+            App.toastErro('Erro ao excluir', e);
+          }
+        });
+        acoes.appendChild(excluirBtn);
+        body.appendChild(acoes);
+
+        item.appendChild(body);
+      }
+
+      lista.appendChild(item);
+    });
   }
 
   // ==================== HISTÓRICO DE COTAÇÕES ====================
