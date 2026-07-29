@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=11">
+<link rel="stylesheet" href="app-shared.css?v=12">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -402,6 +402,9 @@
       </div>
       <div id="notasMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
       <div id="listaNotasEmitidas"></div>
+      <div style="text-align:center; margin-top:10px;">
+        <button type="button" class="btn secondary" id="maisNotasBtn" style="display:none;">Mostrar mais</button>
+      </div>
     </div>
   </div>
 
@@ -422,6 +425,9 @@
         </div>
         <div id="notasMsgCmp" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
         <div id="listaNotasEmitidasCmp"></div>
+        <div style="text-align:center; margin-top:10px;">
+          <button type="button" class="btn secondary" id="maisNotasBtnCmp" style="display:none;">Mostrar mais</button>
+        </div>
       </div>
     </div>
   </div>
@@ -2239,14 +2245,14 @@ Tupan</textarea>
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
-  $('buscaNotas').addEventListener('input', debounce(renderNotasEmitidas, DEBOUNCE_BUSCA));
-  $('buscaNotasCmp').addEventListener('input', debounce(renderListaNotasCmp, DEBOUNCE_BUSCA));
-  $('notasDataDeCmp').addEventListener('change', renderListaNotasCmp);
-  $('notasDataAteCmp').addEventListener('change', renderListaNotasCmp);
+  $('buscaNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
+  $('buscaNotasCmp').addEventListener('input', debounce(()=>refiltrarNotas('Cmp'), DEBOUNCE_BUSCA));
+  $('notasDataDeCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
+  $('notasDataAteCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
   $('limparDatasNotasBtnCmp').addEventListener('click', ()=>{
     $('notasDataDeCmp').value = '';
     $('notasDataAteCmp').value = '';
-    renderListaNotasCmp();
+    refiltrarNotas('Cmp');
   });
   $('voltarHistoricoCmpBtn').addEventListener('click', mostrarViewHistorico);
 
@@ -2744,17 +2750,27 @@ Tupan</textarea>
     mostrarViewHistorico();
   });
 
-  $('notasDataDe').addEventListener('change', renderNotasEmitidas);
-  $('notasDataAte').addEventListener('change', renderNotasEmitidas);
+  $('notasDataDe').addEventListener('change', ()=>refiltrarNotas(''));
+  $('notasDataAte').addEventListener('change', ()=>refiltrarNotas(''));
   $('limparDatasNotasBtn').addEventListener('click', ()=>{
     $('notasDataDe').value = '';
     $('notasDataAte').value = '';
-    renderNotasEmitidas();
+    refiltrarNotas('');
   });
 
   // ─── NF-e Emitidas (últimos 60 dias, coleção itensNotas) ───
   let notasEmitidasCache = null;
   const notasAbertas = {};
+
+  // Uma página por variante da tela: a aba "NF-e Emitidas" ('') e o
+  // painel direito da comparação com NF-e ('Cmp'). Rolar uma não pode
+  // mexer na outra.
+  const PAGINA_NOTAS = 30;
+  const limiteNotas = { '': PAGINA_NOTAS, 'Cmp': PAGINA_NOTAS };
+
+  function reiniciarPaginaNotas(suf){
+    limiteNotas[suf] = PAGINA_NOTAS;
+  }
 
   function setNotasMsg(txt){
     if($('notasMsg')) $('notasMsg').textContent = txt;
@@ -2788,6 +2804,22 @@ Tupan</textarea>
 
   function renderNotasEmitidas(){ renderListaNotas(''); }
   function renderListaNotasCmp(){ renderListaNotas('Cmp'); }
+
+  // Mudou o filtro: a lista é outra, então volta para a primeira página.
+  // Abrir/fechar uma nota NÃO passa por aqui — ali a página tem de ficar
+  // onde está, senão a nota que a pessoa acabou de abrir sumiria da tela.
+  function refiltrarNotas(suf){
+    reiniciarPaginaNotas(suf);
+    renderListaNotas(suf);
+  }
+  $('maisNotasBtn').addEventListener('click', ()=>{
+    limiteNotas[''] += PAGINA_NOTAS;
+    renderListaNotas('');
+  });
+  $('maisNotasBtnCmp').addEventListener('click', ()=>{
+    limiteNotas['Cmp'] += PAGINA_NOTAS;
+    renderListaNotas('Cmp');
+  });
   function renderListaNotas(suf){
     if(!notasEmitidasCache) return;
     if(!$('listaNotasEmitidas'+suf)) return;
@@ -2808,10 +2840,20 @@ Tupan</textarea>
     if(!lista.length){
       $('listaNotasEmitidas'+suf).innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
         ((termo || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 60 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+      $('maisNotasBtn'+suf).style.display = 'none';
       return;
     }
+
+    // Página menor que nas outras listas: aqui cada nota aberta expande
+    // uma tabela de itens inteira dentro da linha, então o custo por
+    // linha é bem maior. Os dados já estão todos em memória — isto corta
+    // a montagem do HTML, não a leitura.
+    const totalFiltrado = lista.length;
+    const visiveis = lista.slice(0, limiteNotas[suf]);
+    $('maisNotasBtn'+suf).style.display = totalFiltrado > limiteNotas[suf] ? 'inline-block' : 'none';
+
     let html = '';
-    lista.forEach(n=>{
+    visiveis.forEach(n=>{
       const aberta = !!notasAbertas[n.chave];
       const qtdItens = (n.itens||[]).length;
       html += '<div style="margin-bottom:8px;">';

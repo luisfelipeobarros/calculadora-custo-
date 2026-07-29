@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=11">
+<link rel="stylesheet" href="app-shared.css?v=12">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -190,9 +190,13 @@
       <div class="filtros">
         <label class="sr-only" for="buscaImportar">Buscar nota</label>
         <input type="search" id="buscaImportar" placeholder="Buscar por emitente, número ou chave...">
-        <button type="button" class="chip-filtro" data-tipo="todas" aria-pressed="true">Todas</button>
-        <button type="button" class="chip-filtro" data-tipo="nfe" aria-pressed="false">Só NF-e</button>
-        <button type="button" class="chip-filtro" data-tipo="nfse" aria-pressed="false">Só NFS-e</button>
+        <!-- Sem "Todas": mercadoria e serviço são fluxos diferentes, e
+             misturar os dois só obrigava a filtrar depois. NF-e é o
+             padrão ao abrir a tela. A contagem em cada chip evita a
+             dúvida de por que a lista tem menos linhas que o contador
+             do menu, que soma os dois tipos. -->
+        <button type="button" class="chip-filtro" data-tipo="nfe" aria-pressed="true">NF-e <span id="chipQtdNfe"></span></button>
+        <button type="button" class="chip-filtro" data-tipo="nfse" aria-pressed="false">NFS-e <span id="chipQtdNfse"></span></button>
         <button type="button" class="chip-filtro" id="ordDataBtn">Mais antigas primeiro</button>
       </div>
       <div class="filtros" style="margin-top:-4px;">
@@ -205,6 +209,9 @@
       </div>
       <div id="tabelaImportar"></div>
       <div class="rodape-total" id="totalImportar" role="status" aria-live="polite"></div>
+      <div style="text-align:center; margin-top:10px;">
+        <button type="button" class="btn secondary" id="maisImportarBtn" style="display:none;">Mostrar mais</button>
+      </div>
     </div>
   </div>
 
@@ -244,6 +251,9 @@
       </div>
       <div id="tabelaCanc"></div>
       <div class="rodape-total" id="totalCanc" role="status" aria-live="polite"></div>
+      <div style="text-align:center; margin-top:10px;">
+        <button type="button" class="btn secondary" id="maisCancBtn" style="display:none;">Mostrar mais</button>
+      </div>
     </div>
   </div>
 
@@ -736,24 +746,41 @@
   }
 
   var ordAntigasPrimeiro = true;
-  var filtroTipoImportar = 'todas';
+  var filtroTipoImportar = 'nfe'; // mercadoria primeiro: e' o fluxo do dia a dia
+
+  // Quantas linhas vao para o DOM de uma vez. Os dados ja' estao todos
+  // em memoria (onSnapshot), entao isto nao economiza leitura no
+  // Firestore — economiza a montagem da tabela, que e' o que trava a
+  // tela quando a lista passa de algumas centenas de linhas.
+  var PAGINA_IMPORTAR = 100;
+  var limiteImportar = PAGINA_IMPORTAR;
+
+  function reiniciarPaginaImportar(){
+    limiteImportar = PAGINA_IMPORTAR;
+  }
 
   App.delegar($('viewImportar'), 'click', '.chip-filtro[data-tipo]', function(chip){
     $('viewImportar').querySelectorAll('.chip-filtro[data-tipo]').forEach(function(x){
       x.setAttribute('aria-pressed', String(x === chip));
     });
     filtroTipoImportar = chip.dataset.tipo;
+    reiniciarPaginaImportar(); // lista nova, volta para a primeira página
     renderImportar();
   });
 
   $('ordDataBtn').addEventListener('click', function(){
     ordAntigasPrimeiro = !ordAntigasPrimeiro;
     $('ordDataBtn').textContent = ordAntigasPrimeiro ? 'Mais antigas primeiro' : 'Mais recentes primeiro';
+    reiniciarPaginaImportar(); // inverteu a ordem: as 100 primeiras são outras
     renderImportar();
   });
-  $('buscaImportar').addEventListener('input', App.debounce(renderImportar));
-  $('buscaProdutoImportar').addEventListener('input', App.debounce(renderImportar));
-  $('excluirProdutoImportar').addEventListener('change', renderImportar);
+  $('buscaImportar').addEventListener('input', App.debounce(function(){ reiniciarPaginaImportar(); renderImportar(); }));
+  $('buscaProdutoImportar').addEventListener('input', App.debounce(function(){ reiniciarPaginaImportar(); renderImportar(); }));
+  $('excluirProdutoImportar').addEventListener('change', function(){ reiniciarPaginaImportar(); renderImportar(); });
+  $('maisImportarBtn').addEventListener('click', function(){
+    limiteImportar += PAGINA_IMPORTAR;
+    renderImportar();
+  });
 
   var COLUNAS_IMPORTAR = 8;
 
@@ -762,9 +789,19 @@
     var termoProduto = norm($('buscaProdutoImportar').value);
     var excluirProduto = $('excluirProdutoImportar').checked;
 
-    var lista = notas.filter(notaAImportar);
-    if(filtroTipoImportar === 'nfe') lista = lista.filter(function(n){ return !ehNfse(n); });
-    else if(filtroTipoImportar === 'nfse') lista = lista.filter(ehNfse);
+    var pendentes = notas.filter(notaAImportar);
+
+    // Contagem por tipo ANTES dos filtros de texto: os chips dizem
+    // quantas notas existem de cada lado, e a soma dos dois bate com o
+    // contador do menu — senão a lista pareceria estar escondendo algo.
+    var totalNfe = 0, totalNfse = 0;
+    pendentes.forEach(function(n){ if(ehNfse(n)) totalNfse++; else totalNfe++; });
+    $('chipQtdNfe').textContent = totalNfe ? '(' + totalNfe + ')' : '';
+    $('chipQtdNfse').textContent = totalNfse ? '(' + totalNfse + ')' : '';
+
+    var lista = pendentes.filter(filtroTipoImportar === 'nfse'
+      ? ehNfse
+      : function(n){ return !ehNfse(n); });
 
     if(termo) lista = lista.filter(function(n){
       return norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo);
@@ -783,8 +820,17 @@
       $('tabelaImportar').innerHTML = '<p class="nota-explicativa">' +
         ((termo || termoProduto) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
       $('totalImportar').textContent = '';
+      $('maisImportarBtn').style.display = 'none';
       return;
     }
+
+    // Só as primeiras N vão para o DOM. Cada linha desta tela carrega um
+    // <input type="date"> — o componente mais caro de montar aqui —,
+    // então uma lista de centenas travava a rolagem. O total continua
+    // sendo o da lista inteira, no rodapé.
+    var totalFiltrado = lista.length;
+    var visiveis = lista.slice(0, limiteImportar);
+    $('maisImportarBtn').style.display = totalFiltrado > limiteImportar ? 'inline-block' : 'none';
 
     var hoje = hojeISO();
     var html = '<div class="tabela-rolavel"><table class="quote-table">' +
@@ -792,7 +838,7 @@
       '<th scope="col">Emissão</th><th scope="col">Emitente</th><th scope="col">Valor</th>' +
       '<th scope="col">XML</th><th scope="col">Ações</th><th scope="col">Previsão de entrega</th></tr></thead><tbody>';
 
-    lista.forEach(function(n){
+    visiveis.forEach(function(n){
       var aberta = !!itensAbertos[n.id];
       var previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hoje;
       var link = safeUrl(n.linkXml);
@@ -824,8 +870,11 @@
     });
 
     $('tabelaImportar').innerHTML = html + '</tbody></table></div>';
-    $('totalImportar').textContent = lista.length + ' nota(s) · total ' +
-      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
+    // O total é sempre o da lista filtrada inteira, não o da página:
+    // é ele que responde "quanto ainda falta importar".
+    $('totalImportar').textContent = totalFiltrado + ' nota(s) · total ' +
+      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0)) +
+      (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
   }
 
   // Delegacao: registrada UMA vez, vale para todas as linhas de agora e
@@ -1040,7 +1089,17 @@
 
   // ─── Canceladas ─────────────────────────────────────────────
 
-  $('buscaCanc').addEventListener('input', App.debounce(renderCanceladas));
+  var PAGINA_CANCELADAS = 100;
+  var limiteCanc = PAGINA_CANCELADAS;
+
+  $('buscaCanc').addEventListener('input', App.debounce(function(){
+    limiteCanc = PAGINA_CANCELADAS;
+    renderCanceladas();
+  }));
+  $('maisCancBtn').addEventListener('click', function(){
+    limiteCanc += PAGINA_CANCELADAS;
+    renderCanceladas();
+  });
 
   var COLUNAS_CANCELADAS = 7;
 
@@ -1057,8 +1116,13 @@
     if(!lista.length){
       $('tabelaCanc').innerHTML = '<p class="nota-explicativa">Nenhuma nota cancelada.</p>';
       $('totalCanc').textContent = '';
+      $('maisCancBtn').style.display = 'none';
       return;
     }
+
+    var totalCanc = lista.length;
+    var visiveisCanc = lista.slice(0, limiteCanc);
+    $('maisCancBtn').style.display = totalCanc > limiteCanc ? 'inline-block' : 'none';
 
     // O cabecalho declarava 6 colunas e cada linha gerava 7 celulas —
     // toda a tabela aparecia deslocada uma coluna para a direita.
@@ -1068,7 +1132,7 @@
       '<th scope="col">Valor</th><th scope="col">Cancelada em</th>' +
       '<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>';
 
-    lista.forEach(function(n){
+    visiveisCanc.forEach(function(n){
       var aberta = !!itensAbertos[n.id];
       html += '<tr>' +
         '<td>' + (ehNfse(n) ? '' :
@@ -1087,8 +1151,9 @@
     });
 
     $('tabelaCanc').innerHTML = html + '</tbody></table></div>';
-    $('totalCanc').textContent = lista.length + ' nota(s) · total ' +
-      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
+    $('totalCanc').textContent = totalCanc + ' nota(s) · total ' +
+      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0)) +
+      (totalCanc > visiveisCanc.length ? ' · mostrando ' + visiveisCanc.length : '');
   }
 
   App.delegar($('tabelaCanc'), 'click', '[data-itens]', function(b){
