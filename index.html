@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=6">
+<link rel="stylesheet" href="app-shared.css?v=7">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -27,12 +27,19 @@
   #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{ max-width:1700px; margin-left:auto; margin-right:auto; }
 
   /* Pesquisa de concorrentes em lote */
-  .lote-table{ border-collapse:collapse; font-size:12.5px; min-width:1400px; }
-  .lote-table th, .lote-table td{ border:1px solid var(--line); padding:7px 9px; vertical-align:top; }
-  .lote-table thead th{ background:var(--stripe); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; text-align:left; white-space:nowrap; }
+  /* A tabela usa o MESMO desenho da pesquisa individual (.quote-table:
+     zebrado, sem grade, cabecalho sublinhado). Aqui fica so' o que e'
+     proprio da matriz produto x loja. As regras de cor tem tres classes
+     (.lote-table td.lote-loja.barato) para ganhar do zebrado do
+     .quote-table, que tem duas. */
+  .lote-table{ min-width:1400px; }
+  .lote-table td{ vertical-align:top; }
+  .lote-table th{ white-space:nowrap; }
   .lote-table td.lote-produto{ min-width:220px; max-width:280px; }
-  .lote-table td.lote-nosso input{ width:100px; padding:5px 6px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
-  .lote-table td.lote-loja{ min-width:130px; font-family:var(--font-mono); font-size:11.5px; }
+  /* min-width, e nao width: numa tabela larga o navegador espreme as
+     colunas com "width" ate' o campo de preco caber so' dois digitos. */
+  .lote-table td.lote-nosso{ min-width:150px; }
+  .lote-table td.lote-loja{ min-width:150px; font-size:11.5px; }
   .lote-table td.lote-loja.barato{ background:#F7E2DF; }
   .lote-table td.lote-loja.caro{ background:#E1EFE6; }
   .lote-table td.lote-loja a{ color:inherit; text-decoration:underline dotted; }
@@ -2362,6 +2369,79 @@ Tupan</textarea>
       .filter(l => l);
   }
 
+  // Lojas desta execução (ou as do campo, antes de a pesquisa começar).
+  function lojasAtuais(){
+    return loteLojas.length ? loteLojas : lojasDoCampo();
+  }
+
+  // Menor preço já encontrado nesta linha — é ele que leva o 🏆, igual
+  // ao que a pesquisa individual faz na coluna Preço.
+  function menorPrecoDaLinha(item){
+    let menor = null;
+    Object.keys(item.porLoja).forEach(k=>{
+      const r = item.porLoja[k];
+      if(r && !r.pendente && r.preco != null && (menor === null || r.preco < menor)) menor = r.preco;
+    });
+    return menor;
+  }
+
+  // Conteúdo de UMA célula produto×loja, extraída para que o resultado
+  // de cada loja possa trocar só a própria linha (ver atualizarLinhaLote).
+  function celulaLoteLoja(item, idx, lojaIdx, menorLinha){
+    const r = item.porLoja[lojaIdx];
+    // Botão pra refazer só esta célula em precisão máxima — útil quando o
+    // preço veio, mas parece do produto errado.
+    const btnRefazer = '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
+    if(!r) return { cls:'lote-loja', titulo:'', html:'—' };
+    if(r.pendente) return { cls:'lote-loja pesq-pendente', titulo:'', html:'pesquisando…' };
+    if(r.erro || r.preco == null){
+      return { cls:'lote-loja', titulo: r.mensagemErro || '', html:'não encontrado '+btnRefazer };
+    }
+    let cls = 'lote-loja';
+    if(item.nossoPreco != null && item.nossoPreco > 0){
+      cls += (r.preco < item.nossoPreco) ? ' barato' : ' caro';
+    }
+    const ganhador = (menorLinha != null && r.preco === menorLinha);
+    const precoTexto = brl(r.preco) + (ganhador ? ' 🏆' : '');
+    const precoHtml = r.url
+      ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+precoTexto+'</a>'
+      : precoTexto;
+    // 'profunda' não é mais gravado, mas está em pesquisas já salvas
+    // no Firestore — continua sendo exibido para elas não perderem o selo.
+    const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
+    const rodape = r.marca
+      ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+escapeHtml(r.marca)+selo+'</span>'
+      : (selo ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+selo.replace(' · ','')+'</span>' : '');
+    return {
+      cls,
+      titulo:'',
+      html: '<span'+(ganhador?' style="font-weight:700;"':'')+'>'+precoHtml+'</span> '+btnRefazer+rodape
+    };
+  }
+
+  // Redesenha só as células de UMA linha. Numa pesquisa de 50 produtos ×
+  // 7 lojas a tabela era reconstruída inteira ~350 vezes — e a cada vez
+  // era preciso salvar e repor o que o usuário estivesse digitando em
+  // "Nosso preço", além de devolver o cursor ao campo em foco.
+  //
+  // A linha toda, e não a célula solta, porque o 🏆 do menor preço pode
+  // mudar de lugar quando uma loja nova responde.
+  function atualizarLinhaLote(idx){
+    const item = loteItens[idx];
+    if(!item) return;
+    const container = $('loteTabela');
+    if(!container.querySelector('[data-celula="'+idx+'_0"]')){ renderLoteTabela(); return; }
+    const menor = menorPrecoDaLinha(item);
+    lojasAtuais().forEach((_, lojaIdx)=>{
+      const td = container.querySelector('[data-celula="'+idx+'_'+lojaIdx+'"]');
+      if(!td) return;
+      const c = celulaLoteLoja(item, idx, lojaIdx, menor);
+      td.className = c.cls;
+      if(c.titulo) td.title = c.titulo; else td.removeAttribute('title');
+      td.innerHTML = c.html;
+    });
+  }
+
   function renderLoteTabela(){
     if(!loteItens.length){
       $('loteTabela').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Este pedido não tem itens.</p>';
@@ -2378,45 +2458,31 @@ Tupan</textarea>
       valoresDigitados[inp.dataset.nosso] = inp.value;
     });
 
-    const lojas = loteLojas.length ? loteLojas : lojasDoCampo();
-    let html = '<table class="lote-table"><thead><tr><th>Código</th><th>Produto</th><th>Nosso preço</th>';
-    lojas.forEach(loja => html += '<th>'+escapeHtml(loja)+'</th>');
+    const lojas = lojasAtuais();
+    // .quote-table é o mesmo desenho da pesquisa individual; .lote-table
+    // acrescenta só o que a matriz produto × loja precisa.
+    let html = '<table class="quote-table lote-table"><thead><tr>'
+      + '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Nosso preço</th>';
+    lojas.forEach(loja => html += '<th scope="col">'+escapeHtml(loja)+'</th>');
     html += '</tr></thead><tbody>';
 
     loteItens.forEach((item, idx) => {
       const emAndamento = loteRodando && idx === loteIdxAtual;
+      const menor = menorPrecoDaLinha(item);
       html += '<tr'+(emAndamento?' class="lote-row-atual"':'')+'>';
-      html += '<td style="font-family:var(--font-mono); font-size:11px;">'+escapeHtml(item.codigo||'-')+'</td>';
+      html += '<td style="font-size:11px;">'+escapeHtml(item.codigo||'-')+'</td>';
       html += '<td class="lote-produto">'+escapeHtml(item.produto)+'</td>';
-      html += '<td class="lote-nosso"><input type="number" step="0.01" data-nosso="'+idx+'" value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="R$"></td>';
+      // Mesmo campo de preço do resto do app: prefixo R$ e sem as
+      // setinhas do input number.
+      html += '<td class="lote-nosso"><div class="input-row" style="max-width:140px;">'
+        + '<span class="prefix">R$</span>'
+        + '<input type="number" step="0.01" class="no-spin" data-nosso="'+idx+'" '
+        + 'value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="0"></div></td>';
 
-      lojas.forEach((loja, lojaIdx) => {
-        const r = item.porLoja[lojaIdx];
-        // Botão pra refazer só esta célula em precisão máxima — útil quando o
-        // preço veio, mas parece do produto errado.
-        const btnRefazer = '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
-        if(!r){
-          html += '<td class="lote-loja">—</td>';
-        } else if(r.pendente){
-          html += '<td class="lote-loja pesq-pendente">pesquisando…</td>';
-        } else if(r.erro || r.preco == null){
-          html += '<td class="lote-loja" title="'+escapeHtml(r.mensagemErro||'')+'">não encontrado '+btnRefazer+'</td>';
-        } else {
-          let cls = 'lote-loja';
-          if(item.nossoPreco != null && item.nossoPreco > 0){
-            cls += (r.preco < item.nossoPreco) ? ' barato' : ' caro';
-          }
-          const precoHtml = r.url
-            ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+brl(r.preco)+'</a>'
-            : brl(r.preco);
-          // 'profunda' não é mais gravado, mas está em pesquisas já salvas
-          // no Firestore — continua sendo exibido para elas não perderem o selo.
-          const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
-          const rodape = r.marca
-            ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+escapeHtml(r.marca)+selo+'</span>'
-            : (selo ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+selo.replace(' · ','')+'</span>' : '');
-          html += '<td class="'+cls+'">'+precoHtml+' '+btnRefazer+rodape+'</td>';
-        }
+      lojas.forEach((_, lojaIdx) => {
+        const c = celulaLoteLoja(item, idx, lojaIdx, menor);
+        const attrTitulo = c.titulo ? ' title="'+escapeHtml(c.titulo)+'"' : '';
+        html += '<td class="'+c.cls+'"'+attrTitulo+' data-celula="'+idx+'_'+lojaIdx+'">'+c.html+'</td>';
       });
       html += '</tr>';
     });
@@ -2442,7 +2508,7 @@ Tupan</textarea>
     const idx = Number(inp.dataset.nosso);
     if(!loteItens[idx]) return;
     loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
-    renderLoteTabela();
+    atualizarLinhaLote(idx); // só as cores desta linha mudam
   });
 
   App.delegar($('loteTabela'), 'click', '[data-refazer]', async (btn)=>{
@@ -2455,7 +2521,7 @@ Tupan</textarea>
     if(!item || !loja) return;
     const meuToken = loteExecToken;
     item.porLoja[lojaIdx] = { pendente: true };
-    renderLoteTabela();
+    atualizarLinhaLote(idx);
     try{
       const r = await window.geminiRebuscarUmaLoja(item.produto, loja, 'maxima');
       if(meuToken !== loteExecToken) return;
@@ -2465,7 +2531,7 @@ Tupan</textarea>
       if(meuToken !== loteExecToken) return;
       item.porLoja[lojaIdx] = { erro:true, mensagemErro: App.erroDe(e) };
     }
-    renderLoteTabela();
+    atualizarLinhaLote(idx);
     atualizarBotaoFalhas();
   });
 
@@ -2501,7 +2567,7 @@ Tupan</textarea>
       try{
         const { buscaHtml } = await window.geminiBuscarPrecos(item.produto, loteLojas, (lojaIdx, r) => {
           item.porLoja[lojaIdx] = r;
-          if(meuToken === loteExecToken) renderLoteTabela();
+          if(meuToken === loteExecToken) atualizarLinhaLote(idx);
         });
         if(buscaHtml && meuToken === loteExecToken) mostrarWidgetBusca('buscaGoogleWidgetLote', buscaHtml);
       }catch(e){
@@ -2511,7 +2577,7 @@ Tupan</textarea>
             item.porLoja[lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
           }
         });
-        if(meuToken === loteExecToken) renderLoteTabela();
+        if(meuToken === loteExecToken) atualizarLinhaLote(idx);
       }
     }
 
@@ -2578,7 +2644,7 @@ Tupan</textarea>
       const f = falhas[i];
       loteItens[f.idx].porLoja[f.lojaIdx] = { pendente: true };
       $('pesqLoteMsg').textContent = 'Precisão máxima ' + (i+1) + '/' + falhas.length + ': ' + f.produto + ' — ' + f.loja;
-      renderLoteTabela();
+      atualizarLinhaLote(f.idx);
       try{
         const r = await window.geminiRebuscarUmaLoja(f.produto, f.loja, 'maxima');
         loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
@@ -2586,7 +2652,7 @@ Tupan</textarea>
         console.error('Erro no reprocessamento:', e);
         loteItens[f.idx].porLoja[f.lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
       }
-      if(meuToken === loteExecToken) renderLoteTabela();
+      if(meuToken === loteExecToken) atualizarLinhaLote(f.idx);
     }
 
     if(meuToken !== loteExecToken) return;

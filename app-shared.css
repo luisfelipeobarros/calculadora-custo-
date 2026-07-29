@@ -23,7 +23,9 @@
   }
   *{box-sizing:border-box;}
   @keyframes pesqPulse{0%,100%{opacity:1;}50%{opacity:0.45;}}
-  tr.pesq-pendente td{animation:pesqPulse 1.4s ease-in-out infinite;}
+  /* A linha inteira na pesquisa individual; so' a celula na pesquisa em
+     lote, onde cada loja da mesma linha responde no seu tempo. */
+  tr.pesq-pendente td, td.pesq-pendente{animation:pesqPulse 1.4s ease-in-out infinite;}
 
   body{
     margin:0;
@@ -624,7 +626,7 @@
       transition-duration:0.01ms !important;
       scroll-behavior:auto !important;
     }
-    tr.pesq-pendente td{ animation:none; opacity:0.65; }
+    tr.pesq-pendente td, td.pesq-pendente{ animation:none; opacity:0.65; }
   }
 
   /* Texto visivel so' para leitores de tela. */
