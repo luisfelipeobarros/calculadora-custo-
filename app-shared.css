@@ -105,6 +105,65 @@
     .grid{grid-template-columns:1fr;}
   }
 
+  /* ============================================================
+     Menu de telas
+     ------------------------------------------------------------
+     No desktop as telas sao botoes lado a lado no cabecalho.
+     Abaixo de 880px eles nao cabem — viravam quatro linhas de
+     botoes empurrando o conteudo para baixo da dobra — entao
+     colapsam num menu que abre pelo botao de hamburguer.
+     ============================================================ */
+  .menu-btn{
+    display:none;               /* so' aparece no mobile */
+    align-items:center;
+    justify-content:center;
+    width:42px;
+    height:42px;
+    padding:0;
+    border:1.5px solid var(--line);
+    border-radius:6px;
+    background:var(--card);
+    color:var(--ink);
+    cursor:pointer;
+    font-size:20px;
+    line-height:1;
+  }
+  .menu-btn:focus-visible{ outline:2px solid var(--copper); outline-offset:2px; }
+  .menu-btn[aria-expanded="true"]{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+
+  @media (max-width:880px){
+    header.top{ align-items:center; }
+    /* Titulo e botao dividem a primeira linha, com o ☰ encostado na
+       direita. Sem o flex:1 no titulo ele ocupa a largura toda, empurra
+       o botao para uma segunda linha e ele acaba aparecendo embaixo, a'
+       esquerda. */
+    header.top .title-block{ flex:1 1 0; min-width:0; }
+    .menu-btn{ display:flex; flex:0 0 auto; margin-left:auto; }
+
+    /* O menu fechado nao ocupa espaco nenhum; aberto, empilha as
+       telas em coluna, cada uma ocupando a largura toda para virar
+       alvo de toque confortavel.
+       O seletor comeca em header.top de proposito: os dois HTML tem um
+       "nav.telas{display:flex}" no <style> deles, que vem DEPOIS deste
+       arquivo. Com a mesma especificidade o de la' ganharia, e o menu
+       ficaria sempre aberto no celular. */
+    header.top nav.telas{
+      display:none;
+      order:3;                  /* cai abaixo do titulo e do botao */
+      width:100%;
+      flex-direction:column;
+      align-items:stretch;
+      gap:8px;
+      padding-top:12px;
+      margin-top:4px;
+      border-top:1px solid var(--line);
+    }
+    header.top nav.telas.aberto{ display:flex; }
+    header.top nav.telas .btn{ width:100%; text-align:left; padding:11px 14px; }
+    header.top nav.telas .stamp{ display:none; }   /* selo decorativo, nao cabe */
+    header.top .conta-barra{ justify-content:space-between; width:100%; }
+  }
+
   .card{
     background:var(--card);
     border:1px solid var(--line);

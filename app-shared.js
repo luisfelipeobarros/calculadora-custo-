@@ -191,6 +191,39 @@
   // Os cabecalhos viraram <button>, o navegador passou a cuidar disso
   // sozinho, e a funcao ficou sem nenhum chamador.)
 
+  // Menu de telas do mobile. No desktop o CSS mantem a nav sempre
+  // visivel e o botao escondido, entao isto so' tem efeito abaixo de
+  // 880px — nao ha' nada a desligar quando a janela cresce.
+  function montarMenu(idBotao, idNav) {
+    var botao = $(idBotao), nav = $(idNav);
+    if (!botao || !nav) return;
+
+    function fechar() {
+      nav.classList.remove('aberto');
+      botao.setAttribute('aria-expanded', 'false');
+    }
+
+    botao.addEventListener('click', function () {
+      var abrindo = !nav.classList.contains('aberto');
+      nav.classList.toggle('aberto', abrindo);
+      botao.setAttribute('aria-expanded', abrindo ? 'true' : 'false');
+    });
+
+    // Escolher uma tela fecha o menu — senao ele cobriria justamente o
+    // conteudo que a pessoa acabou de pedir. O <a> para o outro app
+    // troca de pagina, entao nao precisa de tratamento.
+    nav.addEventListener('click', function (ev) {
+      if (ev.target.closest && ev.target.closest('button')) fechar();
+    });
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && nav.classList.contains('aberto')) {
+        fechar();
+        botao.focus();
+      }
+    });
+  }
+
   /* ============================================================
      5. Avisos e confirmacoes (substituem alert/confirm)
      ============================================================ */
@@ -899,6 +932,7 @@
 
     debounce: debounce,
     delegar: delegar,
+    montarMenu: montarMenu,
 
     toast: toast,
     toastErro: toastErro,

@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=7">
+<link rel="stylesheet" href="app-shared.css?v=11">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -106,7 +106,11 @@
       <h1>Controle de Notas</h1>
       <p>NF-e · IMPORTAÇÃO · DUPLICATAS · PAGAMENTOS</p>
     </div>
-    <nav class="telas" aria-label="Telas do aplicativo">
+    <!-- Só aparece abaixo de 880px; no desktop as telas ficam todas
+         visíveis e este botão fica escondido pelo CSS. -->
+    <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false"
+            aria-controls="navTelas" aria-label="Abrir menu de telas">☰</button>
+    <nav class="telas" id="navTelas" aria-label="Telas do aplicativo">
       <button class="btn secondary" id="navPainel">📊 Painel</button>
       <button class="btn secondary" id="navImportar">📥 A importar <span id="countImportar"></span></button>
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
@@ -250,7 +254,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=7"></script>
+<script src="app-shared.js?v=8"></script>
 <script>
 (function(){
   'use strict';
@@ -561,6 +565,8 @@
       });
     }
   });
+
+  App.montarMenu('menuBtn', 'navTelas');
 
   $('navPainel').addEventListener('click', function(){ router.ir('Painel'); });
   $('navImportar').addEventListener('click', function(){ router.ir('Importar'); });

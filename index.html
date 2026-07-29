@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=7">
+<link rel="stylesheet" href="app-shared.css?v=11">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -74,7 +74,12 @@
       <h1>Calculadora de Custo</h1>
       <p>CUSTO · IMPOSTOS · FRETE · MARGEM DE VENDA</p>
     </div>
-    <nav class="telas" aria-label="Telas do aplicativo">
+    <!-- Só aparece abaixo de 880px; no desktop as telas ficam todas
+         visíveis e este botão fica escondido pelo CSS. -->
+    <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false"
+            aria-controls="navTelas" aria-label="Abrir menu de telas">☰</button>
+    <nav class="telas" id="navTelas" aria-label="Telas do aplicativo">
+      <button type="button" class="btn secondary" id="verCalculadoraBtn">🧮 Calculadora</button>
       <button type="button" class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
       <button type="button" class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
       <button type="button" class="btn secondary" id="verCotacaoBtn">📊 Cotação</button>
@@ -92,7 +97,6 @@
   <main id="conteudo">
 
   <div id="viewFrete" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn2" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card" style="max-width:520px;">
       <h2>Calculadora de Frete (R$/m²)</h2>
@@ -117,7 +121,6 @@
   </div>
 
   <div id="viewCotacao" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn4" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>1. Planilha de Cotação (Excel)</h2>
@@ -345,7 +348,6 @@
   </div>
 
   <div id="viewHistorico" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn5" style="margin-bottom:16px;">← Voltar à calculadora</button>
     <div class="card">
       <h2>Histórico de cotações</h2>
       <div style="display:flex; gap:16px; flex-wrap:wrap;">
@@ -385,7 +387,6 @@
   </div>
 
   <div id="viewNotas" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn7" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>NF-e Emitidas — últimos 60 dias</h2>
@@ -448,7 +449,6 @@
   </div>
 
   <div id="viewConcorrentes" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn6" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card" style="max-width:720px;">
       <h2>Comparação com Concorrentes</h2>
@@ -502,7 +502,6 @@ Tupan</textarea>
   </div>
 
   <div id="viewSync" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn3" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>Sincronização (Firebase)</h2>
@@ -533,7 +532,6 @@ Tupan</textarea>
   </div>
 
   <div id="viewProdutos" style="display:none;">
-    <button class="btn secondary" id="voltarCalculadoraBtn" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
     <div class="card">
       <h2>Produtos salvos</h2>
@@ -736,7 +734,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=7"></script>
+<script src="app-shared.js?v=8"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -2205,6 +2203,7 @@ Tupan</textarea>
     },
     aoTrocar: (nome) => {
       const botoes = {
+        Calculadora:'verCalculadoraBtn',
         Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
         Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
         Notas:'verNotasBtn', Sync:'verSyncBtn'
@@ -2227,13 +2226,18 @@ Tupan</textarea>
   const mostrarViewNotas        = () => router.ir('Notas');
   const mostrarViewSync         = () => router.ir('Sync');
 
+  App.montarMenu('menuBtn', 'navTelas');
+
+  // A Calculadora virou uma tela como as outras, com botão próprio no
+  // cabeçalho. Antes cada view tinha o seu "← Voltar à calculadora",
+  // que no mobile empurrava o conteúdo para baixo e ainda deixava o
+  // caminho de volta diferente do caminho de ida.
+  $('verCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
   $('buscaProduto').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
   $('buscaFornecedor').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
-  $('voltarCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
-  $('voltarCalculadoraBtn7').addEventListener('click', mostrarViewCalculadora);
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
   $('buscaNotas').addEventListener('input', debounce(renderNotasEmitidas, DEBOUNCE_BUSCA));
   $('buscaNotasCmp').addEventListener('input', debounce(renderListaNotasCmp, DEBOUNCE_BUSCA));
@@ -2330,6 +2334,7 @@ Tupan</textarea>
   let loteDocId = null;
   let loteNomePedido = '';
   let loteExecToken = 0;   // invalida o loop anterior quando outro pedido é aberto
+  let loteSomenteLeitura = false; // remontagem de uma pesquisa já salva
 
   function abrirPesquisaLote(docId){
     const d = historicoDocsCache.find(x => x.id === docId);
@@ -2341,6 +2346,7 @@ Tupan</textarea>
     loteExecToken++;      // qualquer pesquisa ainda rodando deixa de valer
     loteRodando = false;
     loteParar = false;
+    loteSomenteLeitura = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').disabled = false;
     $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
@@ -2400,8 +2406,10 @@ Tupan</textarea>
   function celulaLoteLoja(item, idx, lojaIdx, menorLinha){
     const r = item.porLoja[lojaIdx];
     // Botão pra refazer só esta célula em precisão máxima — útil quando o
-    // preço veio, mas parece do produto errado.
-    const btnRefazer = '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
+    // preço veio, mas parece do produto errado. Numa pesquisa salva ele
+    // não aparece: ali nada é refeito nem gravado.
+    const btnRefazer = loteSomenteLeitura ? ''
+      : '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
     if(!r) return { cls:'lote-loja', titulo:'', html:'—' };
     if(r.pendente) return { cls:'lote-loja pesq-pendente', titulo:'', html:'pesquisando…' };
     if(r.erro || r.preco == null){
@@ -2487,7 +2495,10 @@ Tupan</textarea>
       html += '<td class="lote-nosso"><div class="input-row" style="max-width:140px;">'
         + '<span class="prefix">R$</span>'
         + '<input type="number" step="0.01" class="no-spin" data-nosso="'+idx+'" '
-        + 'value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="0"></div></td>';
+        + 'value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="0"'
+        // Numa pesquisa salva o campo é histórico: editar não gravaria
+        // nada, só mudaria as cores e daria a impressão contrária.
+        + (loteSomenteLeitura ? ' disabled' : '') + '></div></td>';
 
       lojas.forEach((_, lojaIdx) => {
         const c = celulaLoteLoja(item, idx, lojaIdx, menor);
@@ -2852,17 +2863,11 @@ Tupan</textarea>
       renderListaNotas(suf);
     }));
   }
-
-  $('voltarCalculadoraBtn2').addEventListener('click', mostrarViewCalculadora);
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
-  $('voltarCalculadoraBtn3').addEventListener('click', mostrarViewCalculadora);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
-  $('voltarCalculadoraBtn4').addEventListener('click', mostrarViewCalculadora);
   $('verHistoricoBtn').addEventListener('click', mostrarViewHistorico);
-  $('voltarCalculadoraBtn5').addEventListener('click', mostrarViewCalculadora);
   $('verConcorrentesBtn').addEventListener('click', mostrarViewConcorrentes);
-  $('voltarCalculadoraBtn6').addEventListener('click', mostrarViewCalculadora);
 
   // ==================== COMPARAÇÃO COM CONCORRENTES ====================
 
@@ -3212,6 +3217,25 @@ Tupan</textarea>
     renderHistorico();
   }
 
+  // O dia em que uma pesquisa foi salva. Serve de chave do agrupamento
+  // e de rótulo na tela — uma varredura de 50 produtos gera 50
+  // documentos, todos do mesmo dia, e é assim que a pessoa se lembra
+  // dela ("a pesquisa do dia 27").
+  function diaDaPesquisa(p){
+    const dt = (p.data && p.data.toDate) ? p.data.toDate() : (p.data ? new Date(p.data) : null);
+    if(!dt || isNaN(dt.getTime())) return { chave:'sem-data', rotulo:'sem data', ordem:0 };
+    const chave = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') +
+      '-' + String(dt.getDate()).padStart(2,'0');
+    return { chave, rotulo: dt.toLocaleDateString('pt-BR'), ordem: dt.getTime() };
+  }
+
+  // Delegação registrada uma vez: o histórico inteiro é redesenhado a
+  // cada abrir/fechar, e os botões de data nascem dentro dele.
+  App.delegar($('historicoLista'), 'click', '[data-abrirpesq]', (btn)=>{
+    const [pedidoId, chaveDia] = btn.dataset.abrirpesq.split('|');
+    abrirPesquisaSalva(pedidoId, chaveDia);
+  });
+
   function htmlPesquisasDoPedido(d){
     const estado = pesquisasPorPedido[d.id];
     if(!estado || estado.carregando){
@@ -3226,53 +3250,112 @@ Tupan</textarea>
         'Use "🏪 Pesquisar concorrentes" e, ao terminar, "💾 Salvar estas pesquisas".</div>';
     }
 
-    let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
-      '<th scope="col">Produto</th><th scope="col">Nosso preço</th>' +
-      '<th scope="col">Menor concorrente</th><th scope="col">Loja</th>' +
-      '<th scope="col">Diferença</th><th scope="col">Lojas</th>' +
-      '<th scope="col">Pesquisado em</th></tr></thead><tbody>';
-
+    // Agrupa por dia. Cada linha é uma pesquisa inteira, não um produto:
+    // o detalhe loja por loja abre na tela da pesquisa em lote.
+    const porDia = new Map();
     estado.lista.forEach(p=>{
-      const resultados = p.resultados || [];
-      const comPreco = resultados.filter(r => r && r.preco != null);
-      let menor = null;
-      comPreco.forEach(r => { if(menor === null || r.preco < menor.preco) menor = r; });
+      const dia = diaDaPesquisa(p);
+      if(!porDia.has(dia.chave)) porDia.set(dia.chave, { dia, docs: [] });
+      porDia.get(dia.chave).docs.push(p);
+    });
+    const dias = Array.from(porDia.values()).sort((a,b)=> b.dia.ordem - a.dia.ordem);
 
-      // Nosso preço acima do menor concorrente = estamos mais caros.
-      let difHtml = '-';
-      if(menor && p.meuPreco != null && p.meuPreco > 0){
-        const dif = p.meuPreco - menor.preco;
-        const difPct = (dif / p.meuPreco) * 100;
-        const caro = dif > 0;
-        difHtml = '<span style="color:' + (caro ? 'var(--loss)' : 'var(--profit)') + '; font-weight:700;">' +
-          (caro ? '+' : '−') + brl(Math.abs(dif)) +
-          ' (' + (caro ? '+' : '−') + Math.abs(difPct).toFixed(1).replace('.',',') + '%)</span>' +
-          '<div style="font-size:10px; color:var(--ink-soft);">' +
-          (caro ? 'estamos mais caros' : 'estamos mais baratos') + '</div>';
-      }
+    let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Pesquisa</th><th scope="col">Produtos</th>' +
+      '<th scope="col">Lojas</th><th scope="col">Com preço</th>' +
+      '<th scope="col">Estamos mais caros em</th></tr></thead><tbody>';
 
-      const lojaHtml = menor
-        ? (safeUrl(menor.url)
-            ? '<a href="'+escapeHtml(safeUrl(menor.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(menor.loja||'-')+'</a>'
-            : escapeHtml(menor.loja||'-'))
-        : '-';
+    dias.forEach(({ dia, docs })=>{
+      const lojas = new Set();
+      let paresComPreco = 0, pares = 0, maisCaros = 0, comparados = 0;
+      docs.forEach(p=>{
+        (p.resultados||[]).forEach(r=>{
+          if(!r) return;
+          if(r.loja) lojas.add(String(r.loja));
+          pares++;
+          if(r.preco != null) paresComPreco++;
+        });
+        // "Mais caros" conta por produto: basta um concorrente abaixo
+        // do nosso preço para o produto entrar na conta.
+        const menor = (p.resultados||[]).reduce((m,r)=>
+          (r && r.preco != null && (m === null || r.preco < m)) ? r.preco : m, null);
+        if(menor != null && p.meuPreco != null && p.meuPreco > 0){
+          comparados++;
+          if(p.meuPreco > menor) maisCaros++;
+        }
+      });
 
       html += '<tr>' +
-        '<td>'+escapeHtml(p.produto||'-')+'</td>' +
-        '<td>'+(p.meuPreco != null ? brl(p.meuPreco) : '<span class="empty-note" style="display:inline;">sem preço de venda</span>')+'</td>' +
-        '<td>'+(menor ? '<strong>'+brl(menor.preco)+'</strong>' : '<span class="empty-note" style="display:inline;">não encontrado</span>')+'</td>' +
-        '<td>'+lojaHtml+'</td>' +
-        '<td>'+difHtml+'</td>' +
-        '<td>'+comPreco.length+' de '+resultados.length+'</td>' +
-        '<td>'+formatarDataFirestore(p.data)+'</td>' +
+        '<td><button type="button" class="btn secondary mini" data-abrirpesq="' +
+          escapeHtml(d.id) + '|' + escapeHtml(dia.chave) + '" ' +
+          'title="Abrir a pesquisa completa, loja por loja">📅 ' + escapeHtml(dia.rotulo) + '</button></td>' +
+        '<td>' + docs.length + '</td>' +
+        '<td>' + lojas.size + '</td>' +
+        '<td>' + paresComPreco + ' de ' + pares + '</td>' +
+        '<td>' + (comparados
+          ? (maisCaros + ' de ' + comparados +
+             (maisCaros ? ' <span style="color:var(--loss); font-weight:700;">●</span>' : ''))
+          : '<span class="empty-note" style="display:inline;">sem preço de venda</span>') + '</td>' +
         '</tr>';
     });
 
     html += '</tbody></table></div>' +
       '<div class="empty-note" style="display:block; margin-top:6px;">' +
-      estado.lista.length + ' produto(s) pesquisado(s). A comparação completa, loja por loja, ' +
-      'está na aba Concorrentes em "Comparações salvas".</div>';
+      'Clique na data para abrir a pesquisa completa, com todos os preços de todas as lojas.</div>';
     return html;
+  }
+
+  // Remonta na tela da pesquisa em lote uma varredura já salva, para
+  // ver o resultado inteiro — o mesmo quadro produto × loja de quando
+  // ela rodou. Somente leitura: nada aqui refaz busca nem grava.
+  function abrirPesquisaSalva(pedidoId, chaveDia){
+    const estado = pesquisasPorPedido[pedidoId];
+    if(!estado || !estado.lista) return;
+    const docs = estado.lista.filter(p => diaDaPesquisa(p).chave === chaveDia);
+    if(!docs.length) return;
+
+    // As lojas da execução, na ordem em que aparecem. Documentos
+    // diferentes podem ter lojas diferentes (uma falhou e foi refeita
+    // sozinha, por exemplo), então é a união que vira a coluna.
+    const lojas = [];
+    docs.forEach(p => (p.resultados||[]).forEach(r=>{
+      const nome = (r && r.loja) ? String(r.loja) : '';
+      if(nome && lojas.indexOf(nome) === -1) lojas.push(nome);
+    }));
+
+    loteExecToken++;          // invalida qualquer varredura ainda rodando
+    loteRodando = false;
+    loteParar = false;
+    loteSomenteLeitura = true;
+    loteDocId = pedidoId;
+    loteLojas = lojas;
+    loteItens = docs.map(p=>{
+      const porLoja = {};
+      (p.resultados||[]).forEach(r=>{
+        const i = lojas.indexOf((r && r.loja) ? String(r.loja) : '');
+        if(i !== -1) porLoja[i] = r;
+      });
+      return {
+        codigo: '',
+        produto: p.produto || '',
+        nossoPreco: p.meuPreco != null ? p.meuPreco : null,
+        porLoja
+      };
+    });
+
+    router.ir('PesquisaLote');
+
+    const pedido = historicoDocsCache.find(x => x.id === pedidoId);
+    loteNomePedido = pedido ? (pedido.nomeCotacao || pedido.fornecedor || 'Pedido') : 'Pedido';
+    const rotulo = diaDaPesquisa(docs[0]).rotulo;
+    $('loteTitulo').textContent = 'Pesquisa salva de ' + rotulo + ' — ' + loteNomePedido;
+    ['iniciarLoteBtn','pararLoteBtn','salvarPesqLoteBtn','refazerFalhasBtn']
+      .forEach(id => { $(id).style.display = 'none'; });
+    $('pesqLoteMsg').textContent = 'Somente leitura — ' + loteItens.length +
+      ' produto(s) em ' + lojas.length + ' loja(s), como ficou em ' + rotulo + '.';
+    $('salvarLoteMsg').textContent = '';
+    mostrarWidgetBusca('buscaGoogleWidgetLote', null);
+    renderLoteTabela();
   }
 
   const formatarDataFirestore = App.fmtDataFirestore; // app-shared.js
