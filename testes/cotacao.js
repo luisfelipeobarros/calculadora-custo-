@@ -143,7 +143,73 @@ if(/vendaPorProduto = new Map\(comVenda\.map\(p => \[p\.nome, \{ venda: p\.r\.ve
 }
 
 // ============================================================
-// 3) Barra de conta e escutas: nada se multiplica
+// 3) A ficha gravada tambem e' normalizada na LEITURA
+// ============================================================
+
+// Fichas salvas antes de normalizarCfg existir podem ter um percentual
+// de credito de frete guardado com o toggle em "Nao". A Calculadora
+// zera o campo ao abrir a ficha (onToggleChange), entao sem normalizar
+// na leitura a mesma ficha rendia 14,85% na lista de Produtos salvos e
+// 13,10% depois de aberta — e agora tambem no historico, que passou a
+// usar essa configuracao.
+const dadosParaCalculo = new Function('toNum', extrair('dadosParaCalculo') + '\nreturn dadosParaCalculo;')
+  (v => { const x = parseFloat(v); return isNaN(x) ? 0 : x; });
+
+let d = dadosParaCalculo({ pctCredFrete:'12', valorST:'20', icmsCredito:'7',
+  toggles:{ credIcmsFrete:0, comST:1 } });
+if(d.pctCredFrete === 0) ok('ficha gravada com credito de frete e toggle em Nao: credito ignorado');
+else erro('a leitura da ficha manteve o credito fantasma: ' + d.pctCredFrete);
+if(d.icmsCredito === 0 && d.valorST === 20) ok('ficha com ST: le o valor de ST, ignora o ICMS de credito');
+else erro('ficha com ST leu icmsCredito=' + d.icmsCredito + ' valorST=' + d.valorST);
+
+d = dadosParaCalculo({ pctCredFrete:'12', valorST:'20', icmsCredito:'7',
+  toggles:{ credIcmsFrete:1, comST:0 } });
+if(d.pctCredFrete === 12) ok('ficha com o toggle em Sim: credito preservado');
+else erro('ficha com o toggle em Sim perdeu o credito: ' + d.pctCredFrete);
+if(d.valorST === 0 && d.icmsCredito === 7) ok('ficha sem ST: le o ICMS de credito, ignora o valor de ST');
+else erro('ficha sem ST leu valorST=' + d.valorST + ' icmsCredito=' + d.icmsCredito);
+
+// ============================================================
+// 4) Uma ponte so' entre a tela e a formula
+// ============================================================
+
+// O mapeamento cfg -> nucleo estava copiado em quatro lugares (nucleo,
+// margem do lote, margem do individual, coluna do historico). Bastava
+// um deles esquecer um campo para aquela tela discordar das outras.
+const mapeado = nucleo.valoresParaCalculo(100, {
+  frete:'10', pctCredFrete:'12', valorST:'20', icmsCredito:'7', ipi:'0.65',
+  custoFinanceiroPct:'2', avariasPct:'1.5', bonificacao:'3',
+  tipoBonificacao:1, comST:0
+}, 250);
+const esperado = {
+  custoNFe:100, frete:10, pctCredFrete:12, valorST:20, icmsCredito:7, ipi:0.65,
+  custoFinanceiroPct:2, avariasPct:1.5, bonificacao:3, tipoBonificacao:1,
+  venda:250, comST:0, prejuizoContabil:0
+};
+const errados = Object.keys(esperado).filter(k => mapeado[k] !== esperado[k]);
+if(errados.length === 0) ok('valoresParaCalculo mapeia os 13 campos que computeCoeficientes le');
+else erro('valoresParaCalculo perdeu/torceu: ' + errados.join(', '));
+
+// E as telas precisam usar a ponte, nao remontar o objeto na mao.
+const copias = (compacto.match(/custoFinanceiroPct: toNum\(cfg\.custoFinanceiroPct\)/g) || []).length;
+if(copias === 0) ok('nenhuma tela remonta o objeto do nucleo por conta propria');
+else erro(copias + ' copia(s) do mapeamento cfg -> nucleo sobraram no index.html');
+
+// ============================================================
+// 5) A tabela do lote e' chaveada por indice, nao por nome
+// ============================================================
+
+// Numa cotacao com dois itens de mesmo nome, a chave por nome fazia as
+// duas linhas apontarem para a mesma celula e para o mesmo objeto: a
+// segunda nunca recebia margem, e digitar nela alterava a primeira.
+if(!/data-produto=/.test(compacto) && !/dataset\.produto/.test(compacto)){
+  ok('as linhas do card de produtos sao chaveadas por indice');
+} else {
+  erro('ainda ha celula do card de produtos chaveada pelo nome do produto');
+}
+
+// ============================================================
+// 6) Barra de conta e escutas: nada se multiplica
 // ============================================================
 
 if(/container\.dataset\.contaMontada/.test(shared.replace(/\s+/g, ' '))){

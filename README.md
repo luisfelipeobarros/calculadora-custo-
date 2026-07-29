@@ -29,7 +29,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 ```html
 <link rel="stylesheet" href="app-shared.css?v=7">
 <script src="app-shared.js?v=7"></script>
-<script src="calculo-nucleo.js?v=6"></script>
+<script src="calculo-nucleo.js?v=7"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número nos dois

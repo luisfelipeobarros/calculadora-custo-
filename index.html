@@ -504,7 +504,7 @@ Tupan</textarea>
   <div id="viewSync" style="display:none;">
     <button class="btn secondary" id="voltarCalculadoraBtn3" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
-    <div class="card" id="firebaseCard">
+    <div class="card">
       <h2>Sincronização (Firebase)</h2>
       <div class="field">
         <label for="firebaseConfigInput">Cole aqui o bloco "firebaseConfig" do Firebase Console</label>
@@ -517,7 +517,7 @@ Tupan</textarea>
       <div class="empty-note" id="firebaseMsg" style="margin-top:8px;"></div>
     </div>
 
-    <div class="card" id="geminiCard">
+    <div class="card">
       <h2>Leitura de PDF com IA (Gemini)</h2>
       <p class="empty-note" style="display:block; margin-bottom:12px;">Usa o mesmo projeto Firebase acima. Precisa da IA Logic ativada e do App Check configurado (veja o passo a passo que o Claude te deu).</p>
       <div class="field">
@@ -535,7 +535,7 @@ Tupan</textarea>
   <div id="viewProdutos" style="display:none;">
     <button class="btn secondary" id="voltarCalculadoraBtn" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
-    <div class="card" id="savedCard">
+    <div class="card">
       <h2>Produtos salvos</h2>
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
         <div id="storageStatus" class="status-pill" style="margin-bottom:0;"></div>
@@ -702,7 +702,7 @@ Tupan</textarea>
       <div class="desc-box" id="outDescricao">Preencha os campos ao lado para calcular.</div>
     </div>
 
-    <div class="card" id="sugestaoCard" style="margin-top:18px;">
+    <div class="card" style="margin-top:18px;">
       <h2>Sugestão de preço</h2>
       <!-- As dicas ("margem de 8%") sao escritas pelo script a partir de
            METAS, em calculo-nucleo.js: o texto nunca discorda da conta. -->
@@ -738,7 +738,7 @@ Tupan</textarea>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="app-shared.js?v=7"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
-<script src="calculo-nucleo.js?v=6"></script>
+<script src="calculo-nucleo.js?v=7"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1400,6 +1400,7 @@ Tupan</textarea>
   const computeCalc = Calculo.computeCalc;
   const precoParaMargem = Calculo.precoParaMargem;
   const arredondarNovanta = Calculo.arredondarNovanta;
+  const valoresParaCalculo = Calculo.valoresParaCalculo;
 
   // O texto "margem de 8%" embaixo de cada preco sai da mesma
   // constante que a conta usa, e nao de um numero escrito no markup:
@@ -1639,20 +1640,29 @@ Tupan</textarea>
   // Converte o registro salvo (tudo string, como veio do formulario)
   // nos numeros que o nucleo de calculo espera.
   function dadosParaCalculo(data){
+    const t = data.toggles || {};
+    const comST = t.comST ? 1 : 0;
     return {
       custoNFe: toNum(data.custoNFe),
       frete: toNum(data.frete),
-      pctCredFrete: toNum(data.pctCredFrete),
-      valorST: toNum(data.valorST),
-      icmsCredito: toNum(data.icmsCredito),
+      // Mesma regra do normalizarCfg da cotação, aplicada agora na
+      // LEITURA: fichas gravadas antes daquela correção podem ter um
+      // percentual de crédito guardado com o toggle em "Não". A tela da
+      // Calculadora zera o campo ao carregar (onToggleChange), então sem
+      // isto a mesma ficha rendia uma margem na lista de Produtos
+      // salvos e outra depois de aberta — e agora também no histórico,
+      // que passou a usar esta configuração.
+      pctCredFrete: t.credIcmsFrete ? toNum(data.pctCredFrete) : 0,
+      valorST: comST ? toNum(data.valorST) : 0,
+      icmsCredito: comST ? 0 : toNum(data.icmsCredito),
       ipi: toNum(data.ipi),
       custoFinanceiroPct: toNum(data.custoFinanceiroPct),
       avariasPct: toNum(data.avariasPct),
       bonificacao: toNum(data.bonificacao),
-      tipoBonificacao: data.toggles ? data.toggles.tipoBonificacao : 0,
+      tipoBonificacao: t.tipoBonificacao || 0,
       venda: toNum(data.venda),
-      comST: data.toggles ? data.toggles.comST : 0,
-      prejuizoContabil: data.toggles ? data.toggles.prejuizoContabil : 0
+      comST: comST,
+      prejuizoContabil: t.prejuizoContabil || 0
     };
   }
 
@@ -4491,9 +4501,15 @@ Tupan</textarea>
   const precoSugerido = Calculo.precoSugerido;
   $('indSugeridoRotulo').textContent = 'margem de ' + ROTULO_MARGEM_SUGERIDA;
 
+  // Lista que a tabela do lote está mostrando AGORA. O índice dela é a
+  // chave usada no DOM, então quem lê uma linha (margem, botão salvar)
+  // precisa olhar para a mesma lista que gerou o HTML — e não refiltrar
+  // ultimosResultados, que pode ter mudado no meio.
+  let linhasLote = [];
+
   function renderListaLote(){
     const container = $('loteListaProdutos');
-    const itens = itensValidosParaSalvar();
+    const itens = linhasLote = itensValidosParaSalvar();
     if(itens.length === 0){
       container.innerHTML = '<div class="empty-note" style="display:block;">Nenhum produto com preço reconhecido pra adicionar.</div>';
       return;
@@ -4502,9 +4518,8 @@ Tupan</textarea>
       + '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
       + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(' + ROTULO_MARGEM_SUGERIDA + ')</span></th>'
       + '<th scope="col">Venda</th><th scope="col">Margem</th></tr></thead><tbody>';
-    itens.forEach(r=>{
+    itens.forEach((r, idx)=>{
       const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
-      const chave = escapeHtml(r.produtoEsperado);
       // Selo de onde veio o preço: por código é casamento seguro; por
       // nome é palpite, e o comprador precisa saber a diferença antes
       // de confiar na margem que aparece ao lado.
@@ -4519,12 +4534,12 @@ Tupan</textarea>
         + '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(r.codigo||'-')+'</td>'
         + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+origem+'</td>'
         + '<td>'+brl(r.precoRecebido)+'</td>'
-        + '<td class="lote-sugerido" data-produto="'+chave+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
+        + '<td class="lote-sugerido" data-idx="'+idx+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
         + 'title="Clique para usar este preço">--</td>'
         + '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span>'
-        + '<input type="number" step="0.01" class="lote-venda-input no-spin" data-produto="'+chave+'" '
+        + '<input type="number" step="0.01" class="lote-venda-input no-spin" data-idx="'+idx+'" '
         + 'value="'+(r.precoVenda != null ? r.precoVenda : '')+'" placeholder="0"></div></td>'
-        + '<td class="lote-margem-preview" data-produto="'+chave+'">--</td>'
+        + '<td class="lote-margem-preview" data-idx="'+idx+'">--</td>'
         + '</tr>';
     });
     html += '</tbody></table></div>';
@@ -4532,13 +4547,22 @@ Tupan</textarea>
     atualizarTodasMargensLote();
   }
 
-  function atualizarMargemLote(produtoNome){
-    const cfg = coletarConfigLote();
-    const r = ultimosResultados.find(x=>x.produtoEsperado===produtoNome);
-    const seletor = '[data-produto="'+CSS.escape(produtoNome)+'"]';
-    const previewEl = $('loteListaProdutos').querySelector('.lote-margem-preview'+seletor);
-    const sugeridoEl = $('loteListaProdutos').querySelector('.lote-sugerido'+seletor);
-    const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input'+seletor);
+  // Chaveada pelo ÍNDICE da linha, não pelo nome do produto. Numa
+  // cotação com dois itens de mesmo nome, a chave por nome fazia as
+  // duas linhas apontarem para a mesma célula e para o mesmo objeto: a
+  // segunda nunca recebia margem, e digitar nela alterava a primeira.
+  //
+  // A cfg vem de fora quando a chamada é em lote: coletarConfigLote()
+  // lê onze campos do DOM, e refazer isso por linha tornava a
+  // atualização quadrática numa cotação grande.
+  function atualizarMargemLote(idx, cfgPronta){
+    const cfg = cfgPronta || coletarConfigLote();
+    const r = linhasLote[idx];
+    const seletor = '[data-idx="'+idx+'"]';
+    const container = $('loteListaProdutos');
+    const previewEl = container.querySelector('.lote-margem-preview'+seletor);
+    const sugeridoEl = container.querySelector('.lote-sugerido'+seletor);
+    const vendaInput = container.querySelector('.lote-venda-input'+seletor);
     if(!r || !previewEl || !vendaInput) return;
 
     // Sugestão de preço: mesma conta da calculadora, na margem ideal.
@@ -4554,24 +4578,21 @@ Tupan</textarea>
     r.precoVenda = venda > 0 ? venda : null;
 
     if(venda <= 0){ previewEl.textContent = '--'; previewEl.style.color=''; return; }
-    const calc = computeCalc({
-      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
-      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
-      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
-      bonificacao: toNum(cfg.bonificacao), tipoBonificacao: cfg.tipoBonificacao, venda, comST: cfg.comST, prejuizoContabil: 0
-    });
+    const calc = computeCalc(valoresParaCalculo(r.precoRecebido, cfg, venda));
     previewEl.textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
     previewEl.style.color = calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)';
     previewEl.style.fontWeight = '700';
   }
 
   function atualizarTodasMargensLote(){
-    document.querySelectorAll('.lote-venda-input').forEach(inp=>atualizarMargemLote(inp.dataset.produto));
+    const cfg = coletarConfigLote(); // uma leitura do DOM para todas as linhas
+    $('loteListaProdutos').querySelectorAll('.lote-venda-input')
+      .forEach(inp=>atualizarMargemLote(Number(inp.dataset.idx), cfg));
   }
 
   // Delegação registrada uma vez (a tabela é reconstruída a cada render).
   App.delegar($('loteListaProdutos'), 'input', '.lote-venda-input', (inp)=>{
-    atualizarMargemLote(inp.dataset.produto);
+    atualizarMargemLote(Number(inp.dataset.idx));
   });
 
   // Clicar no preço sugerido joga ele para o campo de venda — poupa o
@@ -4579,11 +4600,11 @@ Tupan</textarea>
   App.delegar($('loteListaProdutos'), 'click', '.lote-sugerido', (celula)=>{
     const valor = celula.dataset.valor;
     if(!valor) return;
-    const inp = $('loteListaProdutos')
-      .querySelector('.lote-venda-input[data-produto="'+CSS.escape(celula.dataset.produto)+'"]');
+    const idx = Number(celula.dataset.idx);
+    const inp = $('loteListaProdutos').querySelector('.lote-venda-input[data-idx="'+idx+'"]');
     if(!inp) return;
     inp.value = valor;
-    atualizarMargemLote(celula.dataset.produto);
+    atualizarMargemLote(idx);
   });
   ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteIpi','loteCustoFinanceiroPct','loteAvariasPct','loteBonificacao'].forEach(id=>{
     $(id).addEventListener('input', atualizarTodasMargensLote);
@@ -4611,10 +4632,10 @@ Tupan</textarea>
   $('salvarLoteBtn').addEventListener('click', async ()=>{
     const cfg = coletarConfigLote();
     const fornecedor = $('fornecedorProdutos').value.trim();
-    const itens = itensValidosParaSalvar();
     let salvos = 0;
-    for(const r of itens){
-      const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(r.produtoEsperado)+'"]');
+    for(let idx = 0; idx < linhasLote.length; idx++){
+      const r = linhasLote[idx];
+      const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-idx="'+idx+'"]');
       const venda = vendaInput ? vendaInput.value : '';
       if(!venda || toNum(venda) <= 0) continue;
       const dados = registroProdutoLote(r, cfg, fornecedor, venda);
@@ -4681,13 +4702,7 @@ Tupan</textarea>
     r.precoVenda = venda > 0 ? venda : null;
 
     if(venda <= 0){ $('indMargemPreview').textContent = '--'; $('indMargemPreview').className='hero-value'; return; }
-    const calc = computeCalc({
-      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
-      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
-      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
-      bonificacao: toNum(cfg.bonificacao), tipoBonificacao: cfg.tipoBonificacao, venda,
-      comST: cfg.comST, prejuizoContabil: 0
-    });
+    const calc = computeCalc(valoresParaCalculo(r.precoRecebido, cfg, venda));
     $('indMargemPreview').textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
     $('indMargemPreview').className = 'hero-value ' + (calc.lucro >= 0 ? 'profit' : 'loss');
   }

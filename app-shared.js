@@ -186,19 +186,10 @@
     });
   }
 
-  // Cabecalho que abre/fecha precisa responder a Enter e Espaco quando
-  // nao e' um <button> de verdade.
-  function delegarTeclado(container, seletor, handler) {
-    if (!container) return;
-    container.addEventListener('keydown', function (ev) {
-      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
-      var alvo = ev.target.closest ? ev.target.closest(seletor) : null;
-      if (!alvo || !container.contains(alvo)) return;
-      if (alvo.tagName === 'BUTTON' || alvo.tagName === 'A') return; // o navegador ja' cuida
-      ev.preventDefault();
-      handler(alvo, ev);
-    });
-  }
+  // (Havia aqui um delegarTeclado, para cabecalho que abre/fecha
+  // responder a Enter e Espaco quando nao era um <button> de verdade.
+  // Os cabecalhos viraram <button>, o navegador passou a cuidar disso
+  // sozinho, e a funcao ficou sem nenhum chamador.)
 
   /* ============================================================
      5. Avisos e confirmacoes (substituem alert/confirm)
@@ -908,7 +899,6 @@
 
     debounce: debounce,
     delegar: delegar,
-    delegarTeclado: delegarTeclado,
 
     toast: toast,
     toastErro: toastErro,
