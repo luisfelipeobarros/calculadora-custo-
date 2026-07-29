@@ -27,13 +27,13 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=6">
-<script src="app-shared.js?v=6"></script>
-<script src="calculo-nucleo.js?v=6"></script>
+<link rel="stylesheet" href="app-shared.css?v=7">
+<script src="app-shared.js?v=7"></script>
+<script src="calculo-nucleo.js?v=7"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número nos dois
-HTML.** Trocar `?v=6` por `?v=7` faz cada navegador baixar a versão nova
+HTML.** Trocar `?v=7` por `?v=8` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
 reclama se a referência estiver sem `?v=`.
 
@@ -157,6 +157,11 @@ Duas consequências de a fonte ser única, que valem saber:
 - A coluna **Venda** do Histórico mostra o preço de **hoje**, não uma
   foto do dia da cotação. Trocar o preço em Produtos salvos muda a
   coluna e a margem em todas as cotações daquele produto.
+- A coluna **Margem** do Histórico sai da mesma ficha: frete, ST, IPI e
+  avarias vêm dela, e só o custo é o negociado naquela cotação. Produto
+  que não está em Produtos salvos não tem de onde tirar isso — a margem
+  dele considera só o custo do produto, sai maior que a real, e a célula
+  marca com `*` avisando.
 - **Apagar o campo Venda na cotação não apaga o preço do produto.**
   Tirar o preço de um produto é decisão da tela de Produtos salvos —
   uma cotação não mexe no catálogo por omissão.
@@ -181,7 +186,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São sete etapas, em cinco frentes:
+Não precisa instalar nada. São oito etapas, em seis frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -200,6 +205,9 @@ Não precisa instalar nada. São sete etapas, em cinco frentes:
 4. **Helpers** — 58 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento).
 5. **Roteador de telas** — 12 verificações no endereço `#Tela`.
+6. **Regras da tela de cotação** — campo escondido não entra na conta,
+   a margem do histórico bate com a da cotação, e nada (barra de conta,
+   escutas do Firestore) se multiplica a cada reconexão.
 
 Rode antes de publicar qualquer alteração.
 

@@ -186,19 +186,10 @@
     });
   }
 
-  // Cabecalho que abre/fecha precisa responder a Enter e Espaco quando
-  // nao e' um <button> de verdade.
-  function delegarTeclado(container, seletor, handler) {
-    if (!container) return;
-    container.addEventListener('keydown', function (ev) {
-      if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
-      var alvo = ev.target.closest ? ev.target.closest(seletor) : null;
-      if (!alvo || !container.contains(alvo)) return;
-      if (alvo.tagName === 'BUTTON' || alvo.tagName === 'A') return; // o navegador ja' cuida
-      ev.preventDefault();
-      handler(alvo, ev);
-    });
-  }
+  // (Havia aqui um delegarTeclado, para cabecalho que abre/fecha
+  // responder a Enter e Espaco quando nao era um <button> de verdade.
+  // Os cabecalhos viraram <button>, o navegador passou a cuidar disso
+  // sozinho, e a funcao ficou sem nenhum chamador.)
 
   /* ============================================================
      5. Avisos e confirmacoes (substituem alert/confirm)
@@ -827,8 +818,14 @@
   }
 
   // Barra de conta no cabecalho: mostra quem esta' logado e o botao Sair.
+  // Idempotente de proposito: iniciarFirebase() roda de novo toda vez
+  // que alguem troca a configuracao na aba Sincronizacao, e sem esta
+  // guarda cada chamada acrescentava um segundo nome de usuario, um
+  // segundo botao "Sair" e mais um ouvinte de auth que nunca saia.
   function montarBarraConta(container) {
     if (!container) return;
+    if (container.dataset.contaMontada === '1') return;
+    container.dataset.contaMontada = '1';
     container.className = 'conta-barra';
     var email = document.createElement('span');
     email.className = 'conta-email';
@@ -902,7 +899,6 @@
 
     debounce: debounce,
     delegar: delegar,
-    delegarTeclado: delegarTeclado,
 
     toast: toast,
     toastErro: toastErro,

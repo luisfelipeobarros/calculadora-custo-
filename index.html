@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=6">
+<link rel="stylesheet" href="app-shared.css?v=7">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -27,12 +27,19 @@
   #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{ max-width:1700px; margin-left:auto; margin-right:auto; }
 
   /* Pesquisa de concorrentes em lote */
-  .lote-table{ border-collapse:collapse; font-size:12.5px; min-width:1400px; }
-  .lote-table th, .lote-table td{ border:1px solid var(--line); padding:7px 9px; vertical-align:top; }
-  .lote-table thead th{ background:var(--stripe); font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; text-align:left; white-space:nowrap; }
+  /* A tabela usa o MESMO desenho da pesquisa individual (.quote-table:
+     zebrado, sem grade, cabecalho sublinhado). Aqui fica so' o que e'
+     proprio da matriz produto x loja. As regras de cor tem tres classes
+     (.lote-table td.lote-loja.barato) para ganhar do zebrado do
+     .quote-table, que tem duas. */
+  .lote-table{ min-width:1400px; }
+  .lote-table td{ vertical-align:top; }
+  .lote-table th{ white-space:nowrap; }
   .lote-table td.lote-produto{ min-width:220px; max-width:280px; }
-  .lote-table td.lote-nosso input{ width:100px; padding:5px 6px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
-  .lote-table td.lote-loja{ min-width:130px; font-family:var(--font-mono); font-size:11.5px; }
+  /* min-width, e nao width: numa tabela larga o navegador espreme as
+     colunas com "width" ate' o campo de preco caber so' dois digitos. */
+  .lote-table td.lote-nosso{ min-width:150px; }
+  .lote-table td.lote-loja{ min-width:150px; font-size:11.5px; }
   .lote-table td.lote-loja.barato{ background:#F7E2DF; }
   .lote-table td.lote-loja.caro{ background:#E1EFE6; }
   .lote-table td.lote-loja a{ color:inherit; text-decoration:underline dotted; }
@@ -497,7 +504,7 @@ Tupan</textarea>
   <div id="viewSync" style="display:none;">
     <button class="btn secondary" id="voltarCalculadoraBtn3" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
-    <div class="card" id="firebaseCard">
+    <div class="card">
       <h2>Sincronização (Firebase)</h2>
       <div class="field">
         <label for="firebaseConfigInput">Cole aqui o bloco "firebaseConfig" do Firebase Console</label>
@@ -510,7 +517,7 @@ Tupan</textarea>
       <div class="empty-note" id="firebaseMsg" style="margin-top:8px;"></div>
     </div>
 
-    <div class="card" id="geminiCard">
+    <div class="card">
       <h2>Leitura de PDF com IA (Gemini)</h2>
       <p class="empty-note" style="display:block; margin-bottom:12px;">Usa o mesmo projeto Firebase acima. Precisa da IA Logic ativada e do App Check configurado (veja o passo a passo que o Claude te deu).</p>
       <div class="field">
@@ -528,7 +535,7 @@ Tupan</textarea>
   <div id="viewProdutos" style="display:none;">
     <button class="btn secondary" id="voltarCalculadoraBtn" style="margin-bottom:16px;">← Voltar à calculadora</button>
 
-    <div class="card" id="savedCard">
+    <div class="card">
       <h2>Produtos salvos</h2>
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:4px;">
         <div id="storageStatus" class="status-pill" style="margin-bottom:0;"></div>
@@ -695,7 +702,7 @@ Tupan</textarea>
       <div class="desc-box" id="outDescricao">Preencha os campos ao lado para calcular.</div>
     </div>
 
-    <div class="card" id="sugestaoCard" style="margin-top:18px;">
+    <div class="card" style="margin-top:18px;">
       <h2>Sugestão de preço</h2>
       <!-- As dicas ("margem de 8%") sao escritas pelo script a partir de
            METAS, em calculo-nucleo.js: o texto nunca discorda da conta. -->
@@ -729,9 +736,9 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=6"></script>
+<script src="app-shared.js?v=7"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
-<script src="calculo-nucleo.js?v=6"></script>
+<script src="calculo-nucleo.js?v=7"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1393,6 +1400,7 @@ Tupan</textarea>
   const computeCalc = Calculo.computeCalc;
   const precoParaMargem = Calculo.precoParaMargem;
   const arredondarNovanta = Calculo.arredondarNovanta;
+  const valoresParaCalculo = Calculo.valoresParaCalculo;
 
   // O texto "margem de 8%" embaixo de cada preco sai da mesma
   // constante que a conta usa, e nao de um numero escrito no markup:
@@ -1526,8 +1534,10 @@ Tupan</textarea>
   // casar por texto erra justamente nos produtos que mais aparecem.
   // O nome fica como segunda tentativa, para os produtos salvos antes
   // de existir campo de código.
-  let vendaPorProduto = new Map(); // nome do produto        -> preço de venda (> 0)
-  let vendaPorCodigo  = new Map(); // código interno (normal.) -> preço de venda (> 0)
+  // Guardam a FICHA inteira, não só o preço: o histórico precisa também
+  // do frete, do ST e do IPI dela para recalcular a margem de verdade.
+  let vendaPorProduto = new Map(); // nome do produto        -> ficha (venda > 0)
+  let vendaPorCodigo  = new Map(); // código interno (normal.) -> ficha (venda > 0)
 
   // Código é identificador, não texto corrido: espaço e caixa não
   // podem separar "aab1010012" de "AAB1010012". Acento não é mexido
@@ -1536,17 +1546,25 @@ Tupan</textarea>
     return String(codigo == null ? '' : codigo).trim().toUpperCase();
   }
 
-  function precoVendaDoProduto(nome, codigo){
+  // Ficha do produto em Produtos salvos: { venda, cfg }. Mesma ordem de
+  // busca de sempre — código interno primeiro, nome como segunda
+  // tentativa.
+  function fichaDoProduto(nome, codigo){
     const cod = normalizarCodigo(codigo);
     if(cod){
       const porCodigo = vendaPorCodigo.get(cod);
-      if(porCodigo > 0) return porCodigo;
+      if(porCodigo) return porCodigo;
     }
     if(nome){
       const porNome = vendaPorProduto.get(nome);
-      if(porNome > 0) return porNome;
+      if(porNome) return porNome;
     }
     return null;
+  }
+
+  function precoVendaDoProduto(nome, codigo){
+    const ficha = fichaDoProduto(nome, codigo);
+    return (ficha && ficha.venda > 0) ? ficha.venda : null;
   }
 
   // Preço de venda de um item de cotação. As cotações gravadas antes
@@ -1622,20 +1640,29 @@ Tupan</textarea>
   // Converte o registro salvo (tudo string, como veio do formulario)
   // nos numeros que o nucleo de calculo espera.
   function dadosParaCalculo(data){
+    const t = data.toggles || {};
+    const comST = t.comST ? 1 : 0;
     return {
       custoNFe: toNum(data.custoNFe),
       frete: toNum(data.frete),
-      pctCredFrete: toNum(data.pctCredFrete),
-      valorST: toNum(data.valorST),
-      icmsCredito: toNum(data.icmsCredito),
+      // Mesma regra do normalizarCfg da cotação, aplicada agora na
+      // LEITURA: fichas gravadas antes daquela correção podem ter um
+      // percentual de crédito guardado com o toggle em "Não". A tela da
+      // Calculadora zera o campo ao carregar (onToggleChange), então sem
+      // isto a mesma ficha rendia uma margem na lista de Produtos
+      // salvos e outra depois de aberta — e agora também no histórico,
+      // que passou a usar esta configuração.
+      pctCredFrete: t.credIcmsFrete ? toNum(data.pctCredFrete) : 0,
+      valorST: comST ? toNum(data.valorST) : 0,
+      icmsCredito: comST ? 0 : toNum(data.icmsCredito),
       ipi: toNum(data.ipi),
       custoFinanceiroPct: toNum(data.custoFinanceiroPct),
       avariasPct: toNum(data.avariasPct),
       bonificacao: toNum(data.bonificacao),
-      tipoBonificacao: data.toggles ? data.toggles.tipoBonificacao : 0,
+      tipoBonificacao: t.tipoBonificacao || 0,
       venda: toNum(data.venda),
-      comST: data.toggles ? data.toggles.comST : 0,
-      prejuizoContabil: data.toggles ? data.toggles.prejuizoContabil : 0
+      comST: comST,
+      prejuizoContabil: t.prejuizoContabil || 0
     };
   }
 
@@ -1650,6 +1677,7 @@ Tupan</textarea>
       produtosCache = itens.map(({ key, value })=>{
         const nome = decodeURIComponent(key.replace('calc:',''));
         let r = null;
+        let cfg = null;
         let fornecedor = '';
         let codigo = '';
         let codigoFornecedor = '';
@@ -1658,15 +1686,18 @@ Tupan</textarea>
           fornecedor = (data.fornecedor || '').toString().trim();
           codigo = (data.codigo || '').toString().trim();
           codigoFornecedor = (data.codigoFornecedor || '').toString().trim();
-          r = computeCalc(dadosParaCalculo(data));
+          // cfg guardada: é ela que leva frete, ST, IPI e avarias ao
+          // histórico, que só conhece o custo negociado na cotação.
+          cfg = dadosParaCalculo(data);
+          r = computeCalc(cfg);
         }catch(e){ /* segue sem previa se o registro estiver corrompido */ }
-        return { nome, fornecedor: fornecedor || 'Sem fornecedor', codigo, codigoFornecedor, r };
+        return { nome, fornecedor: fornecedor || 'Sem fornecedor', codigo, codigoFornecedor, r, cfg };
       });
 
       // Índices consultados pela cotação, pelo histórico e pela pesquisa
-      // de concorrentes — todos leem o preço de venda daqui.
+      // de concorrentes — todos leem a ficha daqui.
       const comVenda = produtosCache.filter(p => p.r && p.r.venda > 0);
-      vendaPorProduto = new Map(comVenda.map(p => [p.nome, p.r.venda]));
+      vendaPorProduto = new Map(comVenda.map(p => [p.nome, { venda: p.r.venda, cfg: p.cfg }]));
       vendaPorCodigo  = new Map();
       comVenda.forEach(p => {
         const cod = normalizarCodigo(p.codigo);
@@ -1678,7 +1709,7 @@ Tupan</textarea>
           console.warn('Código interno repetido em Produtos salvos: "' + cod + '". Ignorando "' + p.nome + '".');
           return;
         }
-        vendaPorCodigo.set(cod, p.r.venda);
+        vendaPorCodigo.set(cod, { venda: p.r.venda, cfg: p.cfg });
       });
       renderListaSalvos();
     }catch(e){
@@ -2348,6 +2379,79 @@ Tupan</textarea>
       .filter(l => l);
   }
 
+  // Lojas desta execução (ou as do campo, antes de a pesquisa começar).
+  function lojasAtuais(){
+    return loteLojas.length ? loteLojas : lojasDoCampo();
+  }
+
+  // Menor preço já encontrado nesta linha — é ele que leva o 🏆, igual
+  // ao que a pesquisa individual faz na coluna Preço.
+  function menorPrecoDaLinha(item){
+    let menor = null;
+    Object.keys(item.porLoja).forEach(k=>{
+      const r = item.porLoja[k];
+      if(r && !r.pendente && r.preco != null && (menor === null || r.preco < menor)) menor = r.preco;
+    });
+    return menor;
+  }
+
+  // Conteúdo de UMA célula produto×loja, extraída para que o resultado
+  // de cada loja possa trocar só a própria linha (ver atualizarLinhaLote).
+  function celulaLoteLoja(item, idx, lojaIdx, menorLinha){
+    const r = item.porLoja[lojaIdx];
+    // Botão pra refazer só esta célula em precisão máxima — útil quando o
+    // preço veio, mas parece do produto errado.
+    const btnRefazer = '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
+    if(!r) return { cls:'lote-loja', titulo:'', html:'—' };
+    if(r.pendente) return { cls:'lote-loja pesq-pendente', titulo:'', html:'pesquisando…' };
+    if(r.erro || r.preco == null){
+      return { cls:'lote-loja', titulo: r.mensagemErro || '', html:'não encontrado '+btnRefazer };
+    }
+    let cls = 'lote-loja';
+    if(item.nossoPreco != null && item.nossoPreco > 0){
+      cls += (r.preco < item.nossoPreco) ? ' barato' : ' caro';
+    }
+    const ganhador = (menorLinha != null && r.preco === menorLinha);
+    const precoTexto = brl(r.preco) + (ganhador ? ' 🏆' : '');
+    const precoHtml = r.url
+      ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+precoTexto+'</a>'
+      : precoTexto;
+    // 'profunda' não é mais gravado, mas está em pesquisas já salvas
+    // no Firestore — continua sendo exibido para elas não perderem o selo.
+    const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
+    const rodape = r.marca
+      ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+escapeHtml(r.marca)+selo+'</span>'
+      : (selo ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+selo.replace(' · ','')+'</span>' : '');
+    return {
+      cls,
+      titulo:'',
+      html: '<span'+(ganhador?' style="font-weight:700;"':'')+'>'+precoHtml+'</span> '+btnRefazer+rodape
+    };
+  }
+
+  // Redesenha só as células de UMA linha. Numa pesquisa de 50 produtos ×
+  // 7 lojas a tabela era reconstruída inteira ~350 vezes — e a cada vez
+  // era preciso salvar e repor o que o usuário estivesse digitando em
+  // "Nosso preço", além de devolver o cursor ao campo em foco.
+  //
+  // A linha toda, e não a célula solta, porque o 🏆 do menor preço pode
+  // mudar de lugar quando uma loja nova responde.
+  function atualizarLinhaLote(idx){
+    const item = loteItens[idx];
+    if(!item) return;
+    const container = $('loteTabela');
+    if(!container.querySelector('[data-celula="'+idx+'_0"]')){ renderLoteTabela(); return; }
+    const menor = menorPrecoDaLinha(item);
+    lojasAtuais().forEach((_, lojaIdx)=>{
+      const td = container.querySelector('[data-celula="'+idx+'_'+lojaIdx+'"]');
+      if(!td) return;
+      const c = celulaLoteLoja(item, idx, lojaIdx, menor);
+      td.className = c.cls;
+      if(c.titulo) td.title = c.titulo; else td.removeAttribute('title');
+      td.innerHTML = c.html;
+    });
+  }
+
   function renderLoteTabela(){
     if(!loteItens.length){
       $('loteTabela').innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">Este pedido não tem itens.</p>';
@@ -2364,45 +2468,31 @@ Tupan</textarea>
       valoresDigitados[inp.dataset.nosso] = inp.value;
     });
 
-    const lojas = loteLojas.length ? loteLojas : lojasDoCampo();
-    let html = '<table class="lote-table"><thead><tr><th>Código</th><th>Produto</th><th>Nosso preço</th>';
-    lojas.forEach(loja => html += '<th>'+escapeHtml(loja)+'</th>');
+    const lojas = lojasAtuais();
+    // .quote-table é o mesmo desenho da pesquisa individual; .lote-table
+    // acrescenta só o que a matriz produto × loja precisa.
+    let html = '<table class="quote-table lote-table"><thead><tr>'
+      + '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Nosso preço</th>';
+    lojas.forEach(loja => html += '<th scope="col">'+escapeHtml(loja)+'</th>');
     html += '</tr></thead><tbody>';
 
     loteItens.forEach((item, idx) => {
       const emAndamento = loteRodando && idx === loteIdxAtual;
+      const menor = menorPrecoDaLinha(item);
       html += '<tr'+(emAndamento?' class="lote-row-atual"':'')+'>';
-      html += '<td style="font-family:var(--font-mono); font-size:11px;">'+escapeHtml(item.codigo||'-')+'</td>';
+      html += '<td style="font-size:11px;">'+escapeHtml(item.codigo||'-')+'</td>';
       html += '<td class="lote-produto">'+escapeHtml(item.produto)+'</td>';
-      html += '<td class="lote-nosso"><input type="number" step="0.01" data-nosso="'+idx+'" value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="R$"></td>';
+      // Mesmo campo de preço do resto do app: prefixo R$ e sem as
+      // setinhas do input number.
+      html += '<td class="lote-nosso"><div class="input-row" style="max-width:140px;">'
+        + '<span class="prefix">R$</span>'
+        + '<input type="number" step="0.01" class="no-spin" data-nosso="'+idx+'" '
+        + 'value="'+(item.nossoPreco!=null?item.nossoPreco:'')+'" placeholder="0"></div></td>';
 
-      lojas.forEach((loja, lojaIdx) => {
-        const r = item.porLoja[lojaIdx];
-        // Botão pra refazer só esta célula em precisão máxima — útil quando o
-        // preço veio, mas parece do produto errado.
-        const btnRefazer = '<button class="lote-refazer" data-refazer="'+idx+'_'+lojaIdx+'" title="Refazer só esta busca com precisão máxima (mais lenta e mais precisa)">🔍</button>';
-        if(!r){
-          html += '<td class="lote-loja">—</td>';
-        } else if(r.pendente){
-          html += '<td class="lote-loja pesq-pendente">pesquisando…</td>';
-        } else if(r.erro || r.preco == null){
-          html += '<td class="lote-loja" title="'+escapeHtml(r.mensagemErro||'')+'">não encontrado '+btnRefazer+'</td>';
-        } else {
-          let cls = 'lote-loja';
-          if(item.nossoPreco != null && item.nossoPreco > 0){
-            cls += (r.preco < item.nossoPreco) ? ' barato' : ' caro';
-          }
-          const precoHtml = r.url
-            ? '<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+brl(r.preco)+'</a>'
-            : brl(r.preco);
-          // 'profunda' não é mais gravado, mas está em pesquisas já salvas
-          // no Firestore — continua sendo exibido para elas não perderem o selo.
-          const selo = r.nivel === 'maxima' ? ' · 🔍 máx.' : (r.nivel === 'profunda' ? ' · 🔍' : '');
-          const rodape = r.marca
-            ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+escapeHtml(r.marca)+selo+'</span>'
-            : (selo ? '<br><span style="color:var(--ink-soft); font-size:10px;">'+selo.replace(' · ','')+'</span>' : '');
-          html += '<td class="'+cls+'">'+precoHtml+' '+btnRefazer+rodape+'</td>';
-        }
+      lojas.forEach((_, lojaIdx) => {
+        const c = celulaLoteLoja(item, idx, lojaIdx, menor);
+        const attrTitulo = c.titulo ? ' title="'+escapeHtml(c.titulo)+'"' : '';
+        html += '<td class="'+c.cls+'"'+attrTitulo+' data-celula="'+idx+'_'+lojaIdx+'">'+c.html+'</td>';
       });
       html += '</tr>';
     });
@@ -2428,7 +2518,7 @@ Tupan</textarea>
     const idx = Number(inp.dataset.nosso);
     if(!loteItens[idx]) return;
     loteItens[idx].nossoPreco = inp.value ? Number(inp.value) : null;
-    renderLoteTabela();
+    atualizarLinhaLote(idx); // só as cores desta linha mudam
   });
 
   App.delegar($('loteTabela'), 'click', '[data-refazer]', async (btn)=>{
@@ -2441,7 +2531,7 @@ Tupan</textarea>
     if(!item || !loja) return;
     const meuToken = loteExecToken;
     item.porLoja[lojaIdx] = { pendente: true };
-    renderLoteTabela();
+    atualizarLinhaLote(idx);
     try{
       const r = await window.geminiRebuscarUmaLoja(item.produto, loja, 'maxima');
       if(meuToken !== loteExecToken) return;
@@ -2451,7 +2541,7 @@ Tupan</textarea>
       if(meuToken !== loteExecToken) return;
       item.porLoja[lojaIdx] = { erro:true, mensagemErro: App.erroDe(e) };
     }
-    renderLoteTabela();
+    atualizarLinhaLote(idx);
     atualizarBotaoFalhas();
   });
 
@@ -2487,7 +2577,7 @@ Tupan</textarea>
       try{
         const { buscaHtml } = await window.geminiBuscarPrecos(item.produto, loteLojas, (lojaIdx, r) => {
           item.porLoja[lojaIdx] = r;
-          if(meuToken === loteExecToken) renderLoteTabela();
+          if(meuToken === loteExecToken) atualizarLinhaLote(idx);
         });
         if(buscaHtml && meuToken === loteExecToken) mostrarWidgetBusca('buscaGoogleWidgetLote', buscaHtml);
       }catch(e){
@@ -2497,7 +2587,7 @@ Tupan</textarea>
             item.porLoja[lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
           }
         });
-        if(meuToken === loteExecToken) renderLoteTabela();
+        if(meuToken === loteExecToken) atualizarLinhaLote(idx);
       }
     }
 
@@ -2564,7 +2654,7 @@ Tupan</textarea>
       const f = falhas[i];
       loteItens[f.idx].porLoja[f.lojaIdx] = { pendente: true };
       $('pesqLoteMsg').textContent = 'Precisão máxima ' + (i+1) + '/' + falhas.length + ': ' + f.produto + ' — ' + f.loja;
-      renderLoteTabela();
+      atualizarLinhaLote(f.idx);
       try{
         const r = await window.geminiRebuscarUmaLoja(f.produto, f.loja, 'maxima');
         loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
@@ -2572,7 +2662,7 @@ Tupan</textarea>
         console.error('Erro no reprocessamento:', e);
         loteItens[f.idx].porLoja[f.lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
       }
-      if(meuToken === loteExecToken) renderLoteTabela();
+      if(meuToken === loteExecToken) atualizarLinhaLote(f.idx);
     }
 
     if(meuToken !== loteExecToken) return;
@@ -2618,10 +2708,17 @@ Tupan</textarea>
           meuPreco: (it.nossoPreco != null && it.nossoPreco > 0) ? it.nossoPreco : null,
           data: firebase.firestore.FieldValue.serverTimestamp(),
           resultados: resultados,
-          origemPedido: loteNomePedido || null
+          origemPedido: loteNomePedido || null,
+          // O id é a chave confiável do botão "Pesquisas salvas" do
+          // histórico: o nome do pedido se repete entre cotações do
+          // mesmo fornecedor no mesmo dia.
+          origemPedidoId: loteDocId || null
         }));
       }));
-      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem na aba Concorrentes, em "Comparações salvas".';
+      // O pedido ganhou pesquisas novas: a próxima abertura do painel no
+      // histórico busca de novo, em vez de mostrar o cache anterior.
+      if(loteDocId) delete pesquisasPorPedido[loteDocId];
+      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
       carregarHistoricoConcorrentes();
     }catch(e){
       console.error(e);
@@ -2962,10 +3059,16 @@ Tupan</textarea>
   // ==================== HISTÓRICO DE COMPARAÇÕES COM CONCORRENTES ====================
   let concorrentesHistColapsados = new Set();
 
+  // Os documentos ficam em memória, como no histórico de cotações.
+  // Antes, abrir ou fechar UMA comparação chamava a carga inteira de
+  // novo: 50 leituras no Firestore por clique, sem nenhum dado novo.
+  let concorrentesDocsCache = null;
+
   async function carregarHistoricoConcorrentes(){
     const lista = $('concorrentesHistLista');
     const msg = $('concorrentesHistMsg');
     if(!firestoreDb){
+      concorrentesDocsCache = null;
       lista.innerHTML = '';
       msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver comparações salvas.';
       msg.style.display = 'block';
@@ -2975,98 +3078,202 @@ Tupan</textarea>
     msg.style.display = 'block';
     try{
       const snap = await App.comAuth(()=> firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get());
-      if(snap.empty){
-        lista.innerHTML = '';
-        msg.textContent = 'Nenhuma comparação salva ainda.';
-        return;
-      }
-      msg.style.display = 'none';
-      lista.innerHTML = '';
-      snap.forEach(doc=>{
-        const d = doc.data();
-        const resultados = d.resultados || [];
-        let menorPreco = null;
-        resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
-
-        const aberto = concorrentesHistColapsados.has(doc.id);
-        const item = document.createElement('div');
-        item.className = 'historico-item';
-
-        const header = document.createElement('button');
-        header.type = 'button';
-        header.className = 'historico-header';
-        header.setAttribute('aria-expanded', String(!!aberto));
-        header.innerHTML =
-          '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
-          '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
-          '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
-          '<span class="h-count">'+resultados.length+' loja(s)</span>'+
-          (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
-          (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
-        header.addEventListener('click', ()=>{
-          if(concorrentesHistColapsados.has(doc.id)) concorrentesHistColapsados.delete(doc.id);
-          else concorrentesHistColapsados.add(doc.id);
-          carregarHistoricoConcorrentes();
-        });
-        item.appendChild(header);
-
-        if(aberto){
-          const body = document.createElement('div');
-          body.className = 'historico-body';
-          let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
-          resultados.forEach(r=>{
-            tabela += '<tr><td>'+(safeUrl(r.url)?('<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
-              + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
-              + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
-          });
-          tabela += '</tbody></table>';
-          if(d.meuPreco != null){
-            tabela += '<div class="empty-note" style="display:block; margin-top:8px;">Seu preço na época: <strong>'+brl(d.meuPreco)+'</strong></div>';
-          }
-          body.innerHTML = tabela;
-
-          const acoes = document.createElement('div');
-          acoes.className = 'actions-mini';
-          acoes.style.marginTop = '10px';
-          const excluirBtn = document.createElement('button');
-          excluirBtn.type = 'button';
-          excluirBtn.className = 'del';
-          excluirBtn.textContent = 'Excluir';
-          excluirBtn.addEventListener('click', async ()=>{
-            const ok = await App.confirmar({
-              titulo: 'Excluir comparação',
-              mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
-              confirmar: 'Excluir',
-              perigo: true
-            });
-            if(!ok) return;
-            try{
-              await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(doc.id).delete());
-              App.toast('Comparação excluída.', 'ok');
-              carregarHistoricoConcorrentes();
-            }catch(e){
-              App.toastErro('Erro ao excluir', e);
-            }
-          });
-          acoes.appendChild(excluirBtn);
-          body.appendChild(acoes);
-
-          item.appendChild(body);
-        }
-
-        lista.appendChild(item);
-      });
+      concorrentesDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      renderHistoricoConcorrentes();
     }catch(e){
       console.error(e);
+      concorrentesDocsCache = null;
       lista.innerHTML = '';
       msg.textContent = 'Erro ao carregar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
       msg.style.display = 'block';
     }
   }
 
+  function renderHistoricoConcorrentes(){
+    const lista = $('concorrentesHistLista');
+    const msg = $('concorrentesHistMsg');
+    const docs = concorrentesDocsCache || [];
+    if(!docs.length){
+      lista.innerHTML = '';
+      msg.textContent = 'Nenhuma comparação salva ainda.';
+      msg.style.display = 'block';
+      return;
+    }
+    msg.style.display = 'none';
+    lista.innerHTML = '';
+    docs.forEach(d=>{
+      const resultados = d.resultados || [];
+      let menorPreco = null;
+      resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
+
+      const aberto = concorrentesHistColapsados.has(d.id);
+      const item = document.createElement('div');
+      item.className = 'historico-item';
+
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'historico-header';
+      header.setAttribute('aria-expanded', String(!!aberto));
+      header.innerHTML =
+        '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
+        '<span class="h-fornecedor">'+escapeHtml(d.produto||'Produto não informado')+'</span>'+
+        '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
+        '<span class="h-count">'+resultados.length+' loja(s)</span>'+
+        (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
+        (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
+      header.addEventListener('click', ()=>{
+        if(concorrentesHistColapsados.has(d.id)) concorrentesHistColapsados.delete(d.id);
+        else concorrentesHistColapsados.add(d.id);
+        renderHistoricoConcorrentes(); // só redesenha — nada de reler o banco
+      });
+      item.appendChild(header);
+
+      if(aberto){
+        const body = document.createElement('div');
+        body.className = 'historico-body';
+        let tabela = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th></tr></thead><tbody>';
+        resultados.forEach(r=>{
+          tabela += '<tr><td>'+(safeUrl(r.url)?('<a href="'+escapeHtml(safeUrl(r.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(r.loja||'-')+'</a>'):escapeHtml(r.loja||'-'))+'</td>'
+            + '<td>'+escapeHtml(r.produto||'-')+'</td><td>'+escapeHtml(r.marca||'-')+'</td>'
+            + '<td>'+(r.preco!=null?brl(r.preco):'<span class="empty-note" style="display:inline;">'+escapeHtml(r.mensagemErro||'não encontrado')+'</span>')+'</td></tr>';
+        });
+        tabela += '</tbody></table>';
+        if(d.meuPreco != null){
+          tabela += '<div class="empty-note" style="display:block; margin-top:8px;">Seu preço na época: <strong>'+brl(d.meuPreco)+'</strong></div>';
+        }
+        body.innerHTML = tabela;
+
+        const acoes = document.createElement('div');
+        acoes.className = 'actions-mini';
+        acoes.style.marginTop = '10px';
+        const excluirBtn = document.createElement('button');
+        excluirBtn.type = 'button';
+        excluirBtn.className = 'del';
+        excluirBtn.textContent = 'Excluir';
+        excluirBtn.addEventListener('click', async ()=>{
+          const ok = await App.confirmar({
+            titulo: 'Excluir comparação',
+            mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
+            confirmar: 'Excluir',
+            perigo: true
+          });
+          if(!ok) return;
+          try{
+            await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(d.id).delete());
+            App.toast('Comparação excluída.', 'ok');
+            // Tira do cache e redesenha, em vez de reler a coleção.
+            concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== d.id);
+            concorrentesHistColapsados.delete(d.id);
+            renderHistoricoConcorrentes();
+          }catch(e){
+            App.toastErro('Erro ao excluir', e);
+          }
+        });
+        acoes.appendChild(excluirBtn);
+        body.appendChild(acoes);
+
+        item.appendChild(body);
+      }
+
+      lista.appendChild(item);
+    });
+  }
+
   // ==================== HISTÓRICO DE COTAÇÕES ====================
   let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
   let historicoDocsCache = [];
+
+  // ─── Pesquisas de concorrentes salvas a partir de um pedido ───
+  // Ficam na coleção "concorrentes", uma por produto, marcadas com o
+  // pedido de origem. O botão no histórico traz elas de volta sem
+  // obrigar ninguém a caçar produto por produto na aba Concorrentes.
+  const pesquisasSalvasAbertas = new Set();
+  const pesquisasPorPedido = Object.create(null); // docId -> {carregando|erro|lista}
+
+  async function carregarPesquisasDoPedido(d){
+    pesquisasPorPedido[d.id] = { carregando: true };
+    renderHistorico();
+    try{
+      const col = () => exigirDb().collection('concorrentes');
+      // Pelo id primeiro. As pesquisas salvas antes deste campo existir
+      // só têm o nome do pedido: elas entram pela segunda consulta.
+      let docs = (await App.comAuth(()=> col().where('origemPedidoId','==',d.id).get())).docs;
+      if(!docs.length){
+        const nome = d.nomeCotacao || d.fornecedor || '';
+        if(nome) docs = (await App.comAuth(()=> col().where('origemPedido','==',nome).get())).docs;
+      }
+      const lista = docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      lista.sort((a,b)=> String(a.produto||'').localeCompare(String(b.produto||''), 'pt-BR'));
+      pesquisasPorPedido[d.id] = { lista };
+    }catch(e){
+      console.error('Erro ao carregar pesquisas do pedido:', e);
+      pesquisasPorPedido[d.id] = { erro: App.erroDe(e) };
+    }
+    renderHistorico();
+  }
+
+  function htmlPesquisasDoPedido(d){
+    const estado = pesquisasPorPedido[d.id];
+    if(!estado || estado.carregando){
+      return '<div class="empty-note" style="display:block;">Carregando pesquisas salvas...</div>';
+    }
+    if(estado.erro){
+      return '<div class="empty-note" style="display:block; color:var(--loss);">Erro ao carregar: ' +
+        escapeHtml(estado.erro) + '</div>';
+    }
+    if(!estado.lista.length){
+      return '<div class="empty-note" style="display:block;">Nenhuma pesquisa de concorrentes salva para este pedido. ' +
+        'Use "🏪 Pesquisar concorrentes" e, ao terminar, "💾 Salvar estas pesquisas".</div>';
+    }
+
+    let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Produto</th><th scope="col">Nosso preço</th>' +
+      '<th scope="col">Menor concorrente</th><th scope="col">Loja</th>' +
+      '<th scope="col">Diferença</th><th scope="col">Lojas</th>' +
+      '<th scope="col">Pesquisado em</th></tr></thead><tbody>';
+
+    estado.lista.forEach(p=>{
+      const resultados = p.resultados || [];
+      const comPreco = resultados.filter(r => r && r.preco != null);
+      let menor = null;
+      comPreco.forEach(r => { if(menor === null || r.preco < menor.preco) menor = r; });
+
+      // Nosso preço acima do menor concorrente = estamos mais caros.
+      let difHtml = '-';
+      if(menor && p.meuPreco != null && p.meuPreco > 0){
+        const dif = p.meuPreco - menor.preco;
+        const difPct = (dif / p.meuPreco) * 100;
+        const caro = dif > 0;
+        difHtml = '<span style="color:' + (caro ? 'var(--loss)' : 'var(--profit)') + '; font-weight:700;">' +
+          (caro ? '+' : '−') + brl(Math.abs(dif)) +
+          ' (' + (caro ? '+' : '−') + Math.abs(difPct).toFixed(1).replace('.',',') + '%)</span>' +
+          '<div style="font-size:10px; color:var(--ink-soft);">' +
+          (caro ? 'estamos mais caros' : 'estamos mais baratos') + '</div>';
+      }
+
+      const lojaHtml = menor
+        ? (safeUrl(menor.url)
+            ? '<a href="'+escapeHtml(safeUrl(menor.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(menor.loja||'-')+'</a>'
+            : escapeHtml(menor.loja||'-'))
+        : '-';
+
+      html += '<tr>' +
+        '<td>'+escapeHtml(p.produto||'-')+'</td>' +
+        '<td>'+(p.meuPreco != null ? brl(p.meuPreco) : '<span class="empty-note" style="display:inline;">sem preço de venda</span>')+'</td>' +
+        '<td>'+(menor ? '<strong>'+brl(menor.preco)+'</strong>' : '<span class="empty-note" style="display:inline;">não encontrado</span>')+'</td>' +
+        '<td>'+lojaHtml+'</td>' +
+        '<td>'+difHtml+'</td>' +
+        '<td>'+comPreco.length+' de '+resultados.length+'</td>' +
+        '<td>'+formatarDataFirestore(p.data)+'</td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table></div>' +
+      '<div class="empty-note" style="display:block; margin-top:6px;">' +
+      estado.lista.length + ' produto(s) pesquisado(s). A comparação completa, loja por loja, ' +
+      'está na aba Concorrentes em "Comparações salvas".</div>';
+    return html;
+  }
 
   const formatarDataFirestore = App.fmtDataFirestore; // app-shared.js
 
@@ -3266,15 +3473,26 @@ Tupan</textarea>
           const precoVenda = precoVendaItem(it);
           let margemHtml = '-';
           if(precoVenda != null && it.precoRecebido != null){
-            const calc = computeCalc({
-              custoNFe: it.precoRecebido, frete: 0, pctCredFrete: 0, valorST: 0,
-              icmsCredito: 0, ipi: 0, custoFinanceiroPct: 0, avariasPct: 0,
-              bonificacao: 0, tipoBonificacao: 0, venda: precoVenda,
-              comST: 1, prejuizoContabil: 0
-            });
+            // Frete, ST, IPI e avarias saem da ficha do produto em
+            // Produtos salvos; o custo é o negociado NESTA cotação e as
+            // alíquotas são as de hoje.
+            //
+            // Zerar tudo isso, como antes, inflava a margem: um item com
+            // custo 100, frete 10 e ST 20% vendido a 173,90 aparecia
+            // aqui com 25,45% enquanto a tela da cotação mostrava 13,18%
+            // — o mesmo produto, dois números, nada dizendo qual valia.
+            const ficha = fichaDoProduto(it.produto, it.codigo);
+            const calc = computeCalc(Object.assign({}, ficha ? ficha.cfg : CFG_SO_PRODUTO, {
+              custoNFe: it.precoRecebido, venda: precoVenda, prejuizoContabil: 0
+            }));
             if(isFinite(calc.margem)){
+              // Sem ficha não há como saber frete/ST/IPI: o número sai
+              // maior que o real, e a célula avisa em vez de fingir.
+              const marca = ficha ? '' :
+                '<span title="Produto não encontrado em Produtos salvos: esta margem ' +
+                'considera só o custo do produto, sem frete, ST nem IPI — então sai maior que a real.">&nbsp;*</span>';
               margemHtml = '<span style="color:' + (calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)') +
-                '; font-weight:700;">' + pct(calc.margem) + '</span>';
+                '; font-weight:700;">' + pct(calc.margem) + marca + '</span>';
             }
           }
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
@@ -3301,6 +3519,31 @@ Tupan</textarea>
         pesquisarLoteBtn.type = 'button';
         pesquisarLoteBtn.textContent = '🏪 Pesquisar concorrentes';
         pesquisarLoteBtn.addEventListener('click', ()=>abrirPesquisaLote(d.id));
+
+        // Traz de volta o que já foi pesquisado para este pedido, sem
+        // precisar procurar produto por produto na aba Concorrentes.
+        const pesquisasAberto = pesquisasSalvasAbertas.has(d.id);
+        const verPesquisasBtn = document.createElement('button');
+        verPesquisasBtn.type = 'button';
+        verPesquisasBtn.setAttribute('aria-expanded', String(pesquisasAberto));
+        verPesquisasBtn.textContent = (pesquisasAberto ? '▼' : '🔎') + ' Pesquisas salvas';
+        verPesquisasBtn.addEventListener('click', ()=>{
+          if(pesquisasSalvasAbertas.has(d.id)){
+            pesquisasSalvasAbertas.delete(d.id);
+            renderHistorico();
+            return;
+          }
+          pesquisasSalvasAbertas.add(d.id);
+          if(!firestoreDb){
+            pesquisasPorPedido[d.id] = { erro: 'Firebase não conectado (aba Sincronização).' };
+            renderHistorico();
+            return;
+          }
+          // Só consulta uma vez por pedido; reabrir usa o que já veio.
+          if(pesquisasPorPedido[d.id] && !pesquisasPorPedido[d.id].erro) renderHistorico();
+          else carregarPesquisasDoPedido(d);
+        });
+
         const excluirBtn = document.createElement('button');
         excluirBtn.type = 'button';
         excluirBtn.className = 'del';
@@ -3309,8 +3552,18 @@ Tupan</textarea>
         acoes.appendChild(editarBtn);
         acoes.appendChild(compararBtn);
         acoes.appendChild(pesquisarLoteBtn);
+        acoes.appendChild(verPesquisasBtn);
         acoes.appendChild(excluirBtn);
         body.appendChild(acoes);
+
+        if(pesquisasAberto){
+          const painel = document.createElement('div');
+          painel.style.cssText = 'margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);';
+          painel.innerHTML = '<div style="font-family:var(--font-mono); font-size:11px; ' +
+            'letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); ' +
+            'margin-bottom:6px;">Pesquisas de concorrentes salvas</div>' + htmlPesquisasDoPedido(d);
+          body.appendChild(painel);
+        }
 
         item.appendChild(body);
       }
@@ -4193,8 +4446,36 @@ Tupan</textarea>
   });
 
   // ---- Modo em lote ----
+  // Um campo escondido não pode entrar na conta.
+  //
+  // Os selects de "credita ICMS sobre o frete?" e "produto com ST?"
+  // escondem o campo abaixo deles, mas o valor digitado continuava lá:
+  // quem punha 12% de crédito e depois voltava para "Não" seguia com o
+  // crédito na conta. Com custo 100 / frete 50 / ST 20%, o sugerido saía
+  // R$ 216,90 em vez de R$ 225,90, e a margem exibida (13,03%) discordava
+  // da que a Calculadora mostrava depois de salvar o produto (11,20%).
+  //
+  // Os listeners também limpam o campo, para o usuário VER que ele saiu.
+  // Quem garante o resultado é esta função, valha qual for o caminho que
+  // preencheu a tela.
+  // Só o custo do produto: nem frete, nem ST, nem IPI, nem avarias.
+  // Último recurso do histórico, quando o produto não está em Produtos
+  // salvos e não há de onde tirar a configuração real.
+  const CFG_SO_PRODUTO = {
+    frete:0, pctCredFrete:0, valorST:0, icmsCredito:0, ipi:0,
+    custoFinanceiroPct:0, avariasPct:0, bonificacao:0,
+    tipoBonificacao:0, comST:1
+  };
+
+  function normalizarCfg(cfg){
+    if(!cfg.credIcmsFrete) cfg.pctCredFrete = '0';
+    if(cfg.comST) cfg.icmsCredito = '0';
+    else cfg.valorST = '0';
+    return cfg;
+  }
+
   function coletarConfigLote(){
-    return {
+    return normalizarCfg({
       frete: $('loteFrete').value || '0',
       pctCredFrete: $('lotePctCredFrete').value || '0',
       valorST: $('loteValorST').value || '0',
@@ -4206,7 +4487,7 @@ Tupan</textarea>
       tipoBonificacao: parseInt($('loteTipoBonificacao').value,10),
       comST: parseInt($('loteComST').value,10),
       credIcmsFrete: parseInt($('loteCredIcmsFrete').value,10)
-    };
+    });
   }
 
   // Preço com a margem sugerida (a meta "Ideal"), arredondado para ,90
@@ -4220,9 +4501,15 @@ Tupan</textarea>
   const precoSugerido = Calculo.precoSugerido;
   $('indSugeridoRotulo').textContent = 'margem de ' + ROTULO_MARGEM_SUGERIDA;
 
+  // Lista que a tabela do lote está mostrando AGORA. O índice dela é a
+  // chave usada no DOM, então quem lê uma linha (margem, botão salvar)
+  // precisa olhar para a mesma lista que gerou o HTML — e não refiltrar
+  // ultimosResultados, que pode ter mudado no meio.
+  let linhasLote = [];
+
   function renderListaLote(){
     const container = $('loteListaProdutos');
-    const itens = itensValidosParaSalvar();
+    const itens = linhasLote = itensValidosParaSalvar();
     if(itens.length === 0){
       container.innerHTML = '<div class="empty-note" style="display:block;">Nenhum produto com preço reconhecido pra adicionar.</div>';
       return;
@@ -4231,9 +4518,8 @@ Tupan</textarea>
       + '<th scope="col">Código</th><th scope="col">Produto</th><th scope="col">Custo NF-e</th>'
       + '<th scope="col">Sugerido <span style="font-weight:400; text-transform:none;">(' + ROTULO_MARGEM_SUGERIDA + ')</span></th>'
       + '<th scope="col">Venda</th><th scope="col">Margem</th></tr></thead><tbody>';
-    itens.forEach(r=>{
+    itens.forEach((r, idx)=>{
       const jaSalvo = produtosCotacaoSalvos.has(r.produtoEsperado);
-      const chave = escapeHtml(r.produtoEsperado);
       // Selo de onde veio o preço: por código é casamento seguro; por
       // nome é palpite, e o comprador precisa saber a diferença antes
       // de confiar na margem que aparece ao lado.
@@ -4248,12 +4534,12 @@ Tupan</textarea>
         + '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(r.codigo||'-')+'</td>'
         + '<td>'+escapeHtml(r.produtoEsperado)+(jaSalvo?' <span class="status-badge down">✓ salvo</span>':'')+origem+'</td>'
         + '<td>'+brl(r.precoRecebido)+'</td>'
-        + '<td class="lote-sugerido" data-produto="'+chave+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
+        + '<td class="lote-sugerido" data-idx="'+idx+'" style="color:var(--copper); font-weight:700; cursor:pointer;" '
         + 'title="Clique para usar este preço">--</td>'
         + '<td><div class="input-row" style="max-width:150px;"><span class="prefix">R$</span>'
-        + '<input type="number" step="0.01" class="lote-venda-input no-spin" data-produto="'+chave+'" '
+        + '<input type="number" step="0.01" class="lote-venda-input no-spin" data-idx="'+idx+'" '
         + 'value="'+(r.precoVenda != null ? r.precoVenda : '')+'" placeholder="0"></div></td>'
-        + '<td class="lote-margem-preview" data-produto="'+chave+'">--</td>'
+        + '<td class="lote-margem-preview" data-idx="'+idx+'">--</td>'
         + '</tr>';
     });
     html += '</tbody></table></div>';
@@ -4261,13 +4547,22 @@ Tupan</textarea>
     atualizarTodasMargensLote();
   }
 
-  function atualizarMargemLote(produtoNome){
-    const cfg = coletarConfigLote();
-    const r = ultimosResultados.find(x=>x.produtoEsperado===produtoNome);
-    const seletor = '[data-produto="'+CSS.escape(produtoNome)+'"]';
-    const previewEl = $('loteListaProdutos').querySelector('.lote-margem-preview'+seletor);
-    const sugeridoEl = $('loteListaProdutos').querySelector('.lote-sugerido'+seletor);
-    const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input'+seletor);
+  // Chaveada pelo ÍNDICE da linha, não pelo nome do produto. Numa
+  // cotação com dois itens de mesmo nome, a chave por nome fazia as
+  // duas linhas apontarem para a mesma célula e para o mesmo objeto: a
+  // segunda nunca recebia margem, e digitar nela alterava a primeira.
+  //
+  // A cfg vem de fora quando a chamada é em lote: coletarConfigLote()
+  // lê onze campos do DOM, e refazer isso por linha tornava a
+  // atualização quadrática numa cotação grande.
+  function atualizarMargemLote(idx, cfgPronta){
+    const cfg = cfgPronta || coletarConfigLote();
+    const r = linhasLote[idx];
+    const seletor = '[data-idx="'+idx+'"]';
+    const container = $('loteListaProdutos');
+    const previewEl = container.querySelector('.lote-margem-preview'+seletor);
+    const sugeridoEl = container.querySelector('.lote-sugerido'+seletor);
+    const vendaInput = container.querySelector('.lote-venda-input'+seletor);
     if(!r || !previewEl || !vendaInput) return;
 
     // Sugestão de preço: mesma conta da calculadora, na margem ideal.
@@ -4283,24 +4578,21 @@ Tupan</textarea>
     r.precoVenda = venda > 0 ? venda : null;
 
     if(venda <= 0){ previewEl.textContent = '--'; previewEl.style.color=''; return; }
-    const calc = computeCalc({
-      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
-      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
-      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
-      bonificacao: toNum(cfg.bonificacao), tipoBonificacao: cfg.tipoBonificacao, venda, comST: cfg.comST, prejuizoContabil: 0
-    });
+    const calc = computeCalc(valoresParaCalculo(r.precoRecebido, cfg, venda));
     previewEl.textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
     previewEl.style.color = calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)';
     previewEl.style.fontWeight = '700';
   }
 
   function atualizarTodasMargensLote(){
-    document.querySelectorAll('.lote-venda-input').forEach(inp=>atualizarMargemLote(inp.dataset.produto));
+    const cfg = coletarConfigLote(); // uma leitura do DOM para todas as linhas
+    $('loteListaProdutos').querySelectorAll('.lote-venda-input')
+      .forEach(inp=>atualizarMargemLote(Number(inp.dataset.idx), cfg));
   }
 
   // Delegação registrada uma vez (a tabela é reconstruída a cada render).
   App.delegar($('loteListaProdutos'), 'input', '.lote-venda-input', (inp)=>{
-    atualizarMargemLote(inp.dataset.produto);
+    atualizarMargemLote(Number(inp.dataset.idx));
   });
 
   // Clicar no preço sugerido joga ele para o campo de venda — poupa o
@@ -4308,23 +4600,28 @@ Tupan</textarea>
   App.delegar($('loteListaProdutos'), 'click', '.lote-sugerido', (celula)=>{
     const valor = celula.dataset.valor;
     if(!valor) return;
-    const inp = $('loteListaProdutos')
-      .querySelector('.lote-venda-input[data-produto="'+CSS.escape(celula.dataset.produto)+'"]');
+    const idx = Number(celula.dataset.idx);
+    const inp = $('loteListaProdutos').querySelector('.lote-venda-input[data-idx="'+idx+'"]');
     if(!inp) return;
     inp.value = valor;
-    atualizarMargemLote(celula.dataset.produto);
+    atualizarMargemLote(idx);
   });
   ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteIpi','loteCustoFinanceiroPct','loteAvariasPct','loteBonificacao'].forEach(id=>{
     $(id).addEventListener('input', atualizarTodasMargensLote);
   });
+  // Limpar o campo escondido é o que o usuário vê; quem garante que ele
+  // não entra na conta é normalizarCfg.
   $('loteCredIcmsFrete').addEventListener('change', ()=>{
-    $('lotePctCredFreteSub').style.display = $('loteCredIcmsFrete').value === '1' ? 'block' : 'none';
+    const credita = $('loteCredIcmsFrete').value === '1';
+    $('lotePctCredFreteSub').style.display = credita ? 'block' : 'none';
+    if(!credita) $('lotePctCredFrete').value = '';
     atualizarTodasMargensLote();
   });
   $('loteComST').addEventListener('change', ()=>{
     const v = $('loteComST').value === '1';
     $('loteStSub').style.display = v ? 'block' : 'none';
     $('loteIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    if(v) $('loteIcmsCredito').value = ''; else $('loteValorST').value = '';
     atualizarTodasMargensLote();
   });
   $('loteTipoBonificacao').addEventListener('change', ()=>{
@@ -4335,10 +4632,10 @@ Tupan</textarea>
   $('salvarLoteBtn').addEventListener('click', async ()=>{
     const cfg = coletarConfigLote();
     const fornecedor = $('fornecedorProdutos').value.trim();
-    const itens = itensValidosParaSalvar();
     let salvos = 0;
-    for(const r of itens){
-      const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-produto="'+CSS.escape(r.produtoEsperado)+'"]');
+    for(let idx = 0; idx < linhasLote.length; idx++){
+      const r = linhasLote[idx];
+      const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-idx="'+idx+'"]');
       const venda = vendaInput ? vendaInput.value : '';
       if(!venda || toNum(venda) <= 0) continue;
       const dados = registroProdutoLote(r, cfg, fornecedor, venda);
@@ -4377,14 +4674,15 @@ Tupan</textarea>
   }
 
   function configIndividual(){
-    return {
+    return normalizarCfg({
       frete: $('indFrete').value, pctCredFrete: $('indPctCredFrete').value,
       valorST: $('indValorST').value, icmsCredito: $('indIcmsCredito').value,
       ipi: $('indIpi').value, custoFinanceiroPct: $('indCustoFinanceiroPct').value,
       avariasPct: $('indAvariasPct').value, bonificacao: $('indBonificacao').value,
       tipoBonificacao: parseInt($('indTipoBonificacao').value,10),
-      comST: parseInt($('indComST').value,10)
-    };
+      comST: parseInt($('indComST').value,10),
+      credIcmsFrete: parseInt($('indCredIcmsFrete').value,10)
+    });
   }
 
   function atualizarMargemIndividual(){
@@ -4404,13 +4702,7 @@ Tupan</textarea>
     r.precoVenda = venda > 0 ? venda : null;
 
     if(venda <= 0){ $('indMargemPreview').textContent = '--'; $('indMargemPreview').className='hero-value'; return; }
-    const calc = computeCalc({
-      custoNFe: r.precoRecebido, frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
-      valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito), ipi: toNum(cfg.ipi),
-      custoFinanceiroPct: toNum(cfg.custoFinanceiroPct), avariasPct: toNum(cfg.avariasPct),
-      bonificacao: toNum(cfg.bonificacao), tipoBonificacao: cfg.tipoBonificacao, venda,
-      comST: cfg.comST, prejuizoContabil: 0
-    });
+    const calc = computeCalc(valoresParaCalculo(r.precoRecebido, cfg, venda));
     $('indMargemPreview').textContent = isFinite(calc.margem) ? pct(calc.margem) : '--';
     $('indMargemPreview').className = 'hero-value ' + (calc.lucro >= 0 ? 'profit' : 'loss');
   }
@@ -4445,13 +4737,16 @@ Tupan</textarea>
     $(id).addEventListener('input', atualizarMargemIndividual);
   });
   $('indCredIcmsFrete').addEventListener('change', ()=>{
-    $('indPctCredFreteSub').style.display = $('indCredIcmsFrete').value === '1' ? 'block' : 'none';
+    const credita = $('indCredIcmsFrete').value === '1';
+    $('indPctCredFreteSub').style.display = credita ? 'block' : 'none';
+    if(!credita) $('indPctCredFrete').value = '';
     atualizarMargemIndividual();
   });
   $('indComST').addEventListener('change', ()=>{
     const v = $('indComST').value === '1';
     $('indStSub').style.display = v ? 'block' : 'none';
     $('indIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    if(v) $('indIcmsCredito').value = ''; else $('indValorST').value = '';
     atualizarMargemIndividual();
   });
   $('indTipoBonificacao').addEventListener('change', ()=>{

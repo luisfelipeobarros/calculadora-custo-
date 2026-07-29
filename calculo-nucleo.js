@@ -194,20 +194,33 @@
     return candidato;
   }
 
-  // Preco da coluna "Sugerido" da cotacao: a margem sugerida,
-  // arredondada para ,90 — o mesmo numero que a calculadora mostra
-  // naquele nivel. O cfg vem da tela, com tudo em texto.
-  function precoSugerido(custoNFe, cfg){
-    if(!(custoNFe > 0)) return null;
-    return arredondarNovanta(precoParaMargem({
-      custoNFe,
+  // Converte uma "cfg" de tela (tudo em texto, como sai dos campos) nos
+  // numeros que computeCalc/precoParaMargem esperam.
+  //
+  // Esta e' a UNICA ponte entre a tela e a formula. O mapeamento estava
+  // copiado em quatro lugares — aqui, na margem do lote, na do modo
+  // individual e na coluna do historico. Bastava um deles esquecer um
+  // campo para aquela tela mostrar uma margem diferente das outras, sem
+  // erro nenhum.
+  function valoresParaCalculo(custoNFe, cfg, venda){
+    return {
+      custoNFe: custoNFe,
       frete: toNum(cfg.frete), pctCredFrete: toNum(cfg.pctCredFrete),
       valorST: toNum(cfg.valorST), icmsCredito: toNum(cfg.icmsCredito),
       ipi: toNum(cfg.ipi), custoFinanceiroPct: toNum(cfg.custoFinanceiroPct),
       avariasPct: toNum(cfg.avariasPct), bonificacao: toNum(cfg.bonificacao),
-      tipoBonificacao: cfg.tipoBonificacao, venda: 0,
+      tipoBonificacao: cfg.tipoBonificacao, venda: venda,
       comST: cfg.comST, prejuizoContabil: 0
-    }, MARGEM_SUGERIDA));
+    };
+  }
+
+  // Preco da coluna "Sugerido" da cotacao: a margem sugerida,
+  // arredondada para ,90 — o mesmo numero que a calculadora mostra
+  // naquele nivel.
+  function precoSugerido(custoNFe, cfg){
+    if(!(custoNFe > 0)) return null;
+    return arredondarNovanta(
+      precoParaMargem(valoresParaCalculo(custoNFe, cfg, 0), MARGEM_SUGERIDA));
   }
 
   var api = {
@@ -219,6 +232,7 @@
     computeCalc: computeCalc,
     precoParaMargem: precoParaMargem,
     arredondarNovanta: arredondarNovanta,
+    valoresParaCalculo: valoresParaCalculo,
     precoSugerido: precoSugerido
   };
 
