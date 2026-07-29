@@ -2698,10 +2698,17 @@ Tupan</textarea>
           meuPreco: (it.nossoPreco != null && it.nossoPreco > 0) ? it.nossoPreco : null,
           data: firebase.firestore.FieldValue.serverTimestamp(),
           resultados: resultados,
-          origemPedido: loteNomePedido || null
+          origemPedido: loteNomePedido || null,
+          // O id é a chave confiável do botão "Pesquisas salvas" do
+          // histórico: o nome do pedido se repete entre cotações do
+          // mesmo fornecedor no mesmo dia.
+          origemPedidoId: loteDocId || null
         }));
       }));
-      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem na aba Concorrentes, em "Comparações salvas".';
+      // O pedido ganhou pesquisas novas: a próxima abertura do painel no
+      // histórico busca de novo, em vez de mostrar o cache anterior.
+      if(loteDocId) delete pesquisasPorPedido[loteDocId];
+      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
       carregarHistoricoConcorrentes();
     }catch(e){
       console.error(e);
@@ -3166,6 +3173,98 @@ Tupan</textarea>
   let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
   let historicoDocsCache = [];
 
+  // ─── Pesquisas de concorrentes salvas a partir de um pedido ───
+  // Ficam na coleção "concorrentes", uma por produto, marcadas com o
+  // pedido de origem. O botão no histórico traz elas de volta sem
+  // obrigar ninguém a caçar produto por produto na aba Concorrentes.
+  const pesquisasSalvasAbertas = new Set();
+  const pesquisasPorPedido = Object.create(null); // docId -> {carregando|erro|lista}
+
+  async function carregarPesquisasDoPedido(d){
+    pesquisasPorPedido[d.id] = { carregando: true };
+    renderHistorico();
+    try{
+      const col = () => exigirDb().collection('concorrentes');
+      // Pelo id primeiro. As pesquisas salvas antes deste campo existir
+      // só têm o nome do pedido: elas entram pela segunda consulta.
+      let docs = (await App.comAuth(()=> col().where('origemPedidoId','==',d.id).get())).docs;
+      if(!docs.length){
+        const nome = d.nomeCotacao || d.fornecedor || '';
+        if(nome) docs = (await App.comAuth(()=> col().where('origemPedido','==',nome).get())).docs;
+      }
+      const lista = docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      lista.sort((a,b)=> String(a.produto||'').localeCompare(String(b.produto||''), 'pt-BR'));
+      pesquisasPorPedido[d.id] = { lista };
+    }catch(e){
+      console.error('Erro ao carregar pesquisas do pedido:', e);
+      pesquisasPorPedido[d.id] = { erro: App.erroDe(e) };
+    }
+    renderHistorico();
+  }
+
+  function htmlPesquisasDoPedido(d){
+    const estado = pesquisasPorPedido[d.id];
+    if(!estado || estado.carregando){
+      return '<div class="empty-note" style="display:block;">Carregando pesquisas salvas...</div>';
+    }
+    if(estado.erro){
+      return '<div class="empty-note" style="display:block; color:var(--loss);">Erro ao carregar: ' +
+        escapeHtml(estado.erro) + '</div>';
+    }
+    if(!estado.lista.length){
+      return '<div class="empty-note" style="display:block;">Nenhuma pesquisa de concorrentes salva para este pedido. ' +
+        'Use "🏪 Pesquisar concorrentes" e, ao terminar, "💾 Salvar estas pesquisas".</div>';
+    }
+
+    let html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Produto</th><th scope="col">Nosso preço</th>' +
+      '<th scope="col">Menor concorrente</th><th scope="col">Loja</th>' +
+      '<th scope="col">Diferença</th><th scope="col">Lojas</th>' +
+      '<th scope="col">Pesquisado em</th></tr></thead><tbody>';
+
+    estado.lista.forEach(p=>{
+      const resultados = p.resultados || [];
+      const comPreco = resultados.filter(r => r && r.preco != null);
+      let menor = null;
+      comPreco.forEach(r => { if(menor === null || r.preco < menor.preco) menor = r; });
+
+      // Nosso preço acima do menor concorrente = estamos mais caros.
+      let difHtml = '-';
+      if(menor && p.meuPreco != null && p.meuPreco > 0){
+        const dif = p.meuPreco - menor.preco;
+        const difPct = (dif / p.meuPreco) * 100;
+        const caro = dif > 0;
+        difHtml = '<span style="color:' + (caro ? 'var(--loss)' : 'var(--profit)') + '; font-weight:700;">' +
+          (caro ? '+' : '−') + brl(Math.abs(dif)) +
+          ' (' + (caro ? '+' : '−') + Math.abs(difPct).toFixed(1).replace('.',',') + '%)</span>' +
+          '<div style="font-size:10px; color:var(--ink-soft);">' +
+          (caro ? 'estamos mais caros' : 'estamos mais baratos') + '</div>';
+      }
+
+      const lojaHtml = menor
+        ? (safeUrl(menor.url)
+            ? '<a href="'+escapeHtml(safeUrl(menor.url))+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(menor.loja||'-')+'</a>'
+            : escapeHtml(menor.loja||'-'))
+        : '-';
+
+      html += '<tr>' +
+        '<td>'+escapeHtml(p.produto||'-')+'</td>' +
+        '<td>'+(p.meuPreco != null ? brl(p.meuPreco) : '<span class="empty-note" style="display:inline;">sem preço de venda</span>')+'</td>' +
+        '<td>'+(menor ? '<strong>'+brl(menor.preco)+'</strong>' : '<span class="empty-note" style="display:inline;">não encontrado</span>')+'</td>' +
+        '<td>'+lojaHtml+'</td>' +
+        '<td>'+difHtml+'</td>' +
+        '<td>'+comPreco.length+' de '+resultados.length+'</td>' +
+        '<td>'+formatarDataFirestore(p.data)+'</td>' +
+        '</tr>';
+    });
+
+    html += '</tbody></table></div>' +
+      '<div class="empty-note" style="display:block; margin-top:6px;">' +
+      estado.lista.length + ' produto(s) pesquisado(s). A comparação completa, loja por loja, ' +
+      'está na aba Concorrentes em "Comparações salvas".</div>';
+    return html;
+  }
+
   const formatarDataFirestore = App.fmtDataFirestore; // app-shared.js
 
   function gerarNomeCotacao(fornecedor, dataObj){
@@ -3410,6 +3509,31 @@ Tupan</textarea>
         pesquisarLoteBtn.type = 'button';
         pesquisarLoteBtn.textContent = '🏪 Pesquisar concorrentes';
         pesquisarLoteBtn.addEventListener('click', ()=>abrirPesquisaLote(d.id));
+
+        // Traz de volta o que já foi pesquisado para este pedido, sem
+        // precisar procurar produto por produto na aba Concorrentes.
+        const pesquisasAberto = pesquisasSalvasAbertas.has(d.id);
+        const verPesquisasBtn = document.createElement('button');
+        verPesquisasBtn.type = 'button';
+        verPesquisasBtn.setAttribute('aria-expanded', String(pesquisasAberto));
+        verPesquisasBtn.textContent = (pesquisasAberto ? '▼' : '🔎') + ' Pesquisas salvas';
+        verPesquisasBtn.addEventListener('click', ()=>{
+          if(pesquisasSalvasAbertas.has(d.id)){
+            pesquisasSalvasAbertas.delete(d.id);
+            renderHistorico();
+            return;
+          }
+          pesquisasSalvasAbertas.add(d.id);
+          if(!firestoreDb){
+            pesquisasPorPedido[d.id] = { erro: 'Firebase não conectado (aba Sincronização).' };
+            renderHistorico();
+            return;
+          }
+          // Só consulta uma vez por pedido; reabrir usa o que já veio.
+          if(pesquisasPorPedido[d.id] && !pesquisasPorPedido[d.id].erro) renderHistorico();
+          else carregarPesquisasDoPedido(d);
+        });
+
         const excluirBtn = document.createElement('button');
         excluirBtn.type = 'button';
         excluirBtn.className = 'del';
@@ -3418,8 +3542,18 @@ Tupan</textarea>
         acoes.appendChild(editarBtn);
         acoes.appendChild(compararBtn);
         acoes.appendChild(pesquisarLoteBtn);
+        acoes.appendChild(verPesquisasBtn);
         acoes.appendChild(excluirBtn);
         body.appendChild(acoes);
+
+        if(pesquisasAberto){
+          const painel = document.createElement('div');
+          painel.style.cssText = 'margin-top:12px; padding-top:12px; border-top:1px dashed var(--line);';
+          painel.innerHTML = '<div style="font-family:var(--font-mono); font-size:11px; ' +
+            'letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); ' +
+            'margin-bottom:6px;">Pesquisas de concorrentes salvas</div>' + htmlPesquisasDoPedido(d);
+          body.appendChild(painel);
+        }
 
         item.appendChild(body);
       }
