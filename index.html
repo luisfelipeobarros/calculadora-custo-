@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=8"></script>
+<script src="app-shared.js?v=9"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -2771,6 +2771,43 @@ Tupan</textarea>
     limiteNotas[suf] = PAGINA_NOTAS;
   }
 
+  // ─── Vencimentos de uma NF-e ───
+  // A Calculadora não carrega a coleção "duplicatas" (quem vive dela é o
+  // Controle de Notas). Consultar tudo aqui só para mostrar o vencimento
+  // de uma nota que talvez ninguém abra seria pagar leitura à toa —
+  // então é uma consulta por nota, no clique, guardada em cache depois.
+  const vencAbertos = {};
+  const vencCache = {};
+
+  function htmlVencimentosNota(chave, dataEmissao){
+    const c = vencCache[chave];
+    if(!c || c.carregando){
+      return '<div class="empty-note" style="display:block;">Carregando vencimentos...</div>';
+    }
+    if(c.erro){
+      return '<div class="empty-note" style="display:block; color:var(--loss);">Erro ao carregar: ' +
+        escapeHtml(c.erro) + '</div>';
+    }
+    return App.tabelaVencimentos(c.lista, { dataEmissao });
+  }
+
+  function alternarVencimentos(chave, suf){
+    if(vencAbertos[chave]){
+      vencAbertos[chave] = false;
+      renderListaNotas(suf);
+      return;
+    }
+    vencAbertos[chave] = true;
+    if(vencCache[chave] && !vencCache[chave].erro){ renderListaNotas(suf); return; }
+
+    vencCache[chave] = { carregando: true };
+    renderListaNotas(suf);
+    App.comAuth(()=> exigirDb().collection('duplicatas').where('chaveAcesso','==',chave).get())
+      .then(snap => { vencCache[chave] = { lista: snap.docs.map(d => d.data()) }; })
+      .catch(e => { console.error('Erro ao carregar vencimentos:', e); vencCache[chave] = { erro: App.erroDe(e) }; })
+      .then(()=> renderListaNotas(suf));
+  }
+
   function setNotasMsg(txt){
     if($('notasMsg')) $('notasMsg').textContent = txt;
     if($('notasMsgCmp')) $('notasMsgCmp').textContent = txt;
@@ -2854,6 +2891,7 @@ Tupan</textarea>
     let html = '';
     visiveis.forEach(n=>{
       const aberta = !!notasAbertas[n.chave];
+      const vencAberto = !!vencAbertos[n.chave];
       const qtdItens = (n.itens||[]).length;
       html += '<div style="margin-bottom:8px;">';
       html += '<div class="historico-header" data-nota="'+escapeHtml(n.chave)+'">' +
@@ -2862,7 +2900,16 @@ Tupan</textarea>
         '<span class="h-fornecedor">'+escapeHtml(n.nomeEmitente||'-')+'</span>' +
         '<span class="h-count">NF '+escapeHtml(n.numero||'-')+' · '+qtdItens+' item(ns)</span>' +
         '<span class="h-total" style="font-family:var(--font-mono); font-weight:700;">'+brl(n.valorTotal||0)+'</span>' +
+        // Botão próprio: clicar nele NÃO pode abrir os itens junto, por
+        // isso o handler dele para a propagação para o cabeçalho.
+        '<button type="button" class="btn secondary mini" data-venc="'+escapeHtml(n.chave)+'" ' +
+        'aria-expanded="'+(vencAberto?'true':'false')+'" title="Ver vencimentos desta nota">' +
+        (vencAberto?'📅 ▼':'📅')+'</button>' +
         '</div>';
+      if(vencAberto){
+        html += '<div style="border:1px solid var(--line); border-top:none; padding:10px; background:var(--stripe2);">' +
+          htmlVencimentosNota(n.chave, n.dataEmissao) + '</div>';
+      }
       if(aberta){
         html += '<div style="border:1px solid var(--line); border-top:none; border-radius:0 0 5px 5px; padding:10px; background:var(--card); overflow-x:auto;">';
         html += '<table class="quote-table" style="min-width:900px;"><thead><tr>' +
@@ -2902,6 +2949,12 @@ Tupan</textarea>
     $('listaNotasEmitidas'+suf).querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
       renderListaNotas(suf);
+    }));
+    // O botão de vencimentos vive DENTRO do cabeçalho clicável; sem o
+    // stopPropagation, um clique nele abriria também a lista de itens.
+    $('listaNotasEmitidas'+suf).querySelectorAll('[data-venc]').forEach(b=>b.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      alternarVencimentos(b.dataset.venc, suf);
     }));
   }
   $('verSyncBtn').addEventListener('click', mostrarViewSync);

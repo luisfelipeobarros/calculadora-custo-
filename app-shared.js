@@ -833,6 +833,87 @@
   }
 
   /* ============================================================
+     9b. Vencimentos (duplicatas) de uma nota
+     ============================================================
+
+     Usada pelos dois apps. O Controle de Notas ja' tem as duplicatas
+     em memoria (onSnapshot) e so' filtra; a Calculadora nao carrega a
+     colecao e consulta por nota, quando alguem abre a linha. Quem
+     desenha e' esta funcao nos dois casos, para o quadro ser o mesmo.
+
+     dups: [{ vencimento, valor, parcela, pago, dataPagamento }]
+     opcoes: { dataEmissao }  — necessaria para calcular o prazo
+  */
+  function tabelaVencimentos(dups, opcoes) {
+    var o = opcoes || {};
+    var lista = (dups || []).slice().sort(function (a, b) {
+      return String(a.vencimento || '9999').localeCompare(String(b.vencimento || '9999'));
+    });
+    if (!lista.length) {
+      return '<p class="empty-note" style="display:block;">Esta nota nao tem duplicatas registradas.</p>';
+    }
+
+    var hoje = hojeISO();
+    var emissao = o.dataEmissao || '';
+    var total = 0, somaPonderada = 0, comPrazo = 0;
+    var prazos = [];
+
+    var linhas = lista.map(function (d) {
+      var valor = d.valor || 0;
+      total += valor;
+
+      // Prazo = dias entre a emissao da nota e o vencimento da parcela.
+      // Sem data de emissao (ou de vencimento) nao da' para calcular:
+      // a celula fica com "—" em vez de um numero inventado.
+      var dias = null;
+      if (emissao && d.vencimento) {
+        dias = diasEntre(emissao, d.vencimento);
+        prazos.push(dias);
+        somaPonderada += dias * valor;
+        comPrazo += valor;
+      }
+
+      var sit, classe;
+      if (d.pago === true) {
+        sit = 'PAGO' + (d.dataPagamento ? ' em ' + fmtData(d.dataPagamento) : '');
+        classe = 'pago';
+      } else if (d.vencimento && d.vencimento < hoje) {
+        sit = 'ATRASADO'; classe = 'atrasado';
+      } else {
+        sit = 'A VENCER'; classe = 'avencer';
+      }
+
+      return '<tr>' +
+        '<td>' + escapeHtml(d.parcela || '-') + '</td>' +
+        '<td>' + fmtData(d.vencimento) + '</td>' +
+        '<td>' + (dias != null ? dias + ' dias' : '—') + '</td>' +
+        '<td>' + brl(valor) + '</td>' +
+        '<td><span class="badge ' + classe + '">' + escapeHtml(sit) + '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Parc.</th><th scope="col">Vencimento</th><th scope="col">Prazo</th>' +
+      '<th scope="col">Valor</th><th scope="col">Situacao</th></tr></thead><tbody>' +
+      linhas + '</tbody></table></div>';
+
+    // Resumo. O prazo medio e' PONDERADO PELO VALOR, nao a media simples
+    // dos dias: uma parcela de R$ 9.000 em 90 dias e outra de R$ 1.000
+    // em 30 pesam diferente no caixa. Com parcelas iguais os dois dao o
+    // mesmo numero, que e' o caso de 30/60/90.
+    var resumo = [];
+    if (prazos.length) resumo.push('prazo ' + prazos.join('/'));
+    if (comPrazo > 0) {
+      resumo.push('prazo médio ' + Math.round(somaPonderada / comPrazo) + ' dias');
+    }
+    resumo.push('total ' + brl(total));
+
+    html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);">' +
+      escapeHtml(resumo.join(' · ')) + '</div>';
+    return html;
+  }
+
+  /* ============================================================
      10. Rede de seguranca
      ============================================================ */
 
@@ -958,6 +1039,7 @@
 
     criarRouter: criarRouter,
     tabelaItensNota: tabelaItensNota,
+    tabelaVencimentos: tabelaVencimentos,
     instalarErroGlobal: instalarErroGlobal
   };
 
