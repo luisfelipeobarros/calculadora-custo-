@@ -264,7 +264,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=8"></script>
+<script src="app-shared.js?v=9"></script>
 <script>
 (function(){
   'use strict';
@@ -730,6 +730,23 @@
       .then(aoTerminar);
   }
 
+  // Vencimentos: as duplicatas JA' estao em memoria (onSnapshot), entao
+  // abrir a linha nao custa leitura nenhuma — e' so' filtrar pela chave.
+  // Por isso aqui nao ha' cache nem estado de "carregando".
+  var vencAbertos = Object.create(null);
+
+  function alternarVencimentos(chave, aoTerminar){
+    vencAbertos[chave] = !vencAbertos[chave];
+    aoTerminar();
+  }
+
+  function htmlVencimentos(chave, colunas){
+    var n = notasPorChave[chave];
+    var dups = duplicatas.filter(function(d){ return d.chaveAcesso === chave; });
+    return '<tr><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' +
+      App.tabelaVencimentos(dups, { dataEmissao: n ? n.dataEmissao : '' }) + '</td></tr>';
+  }
+
   function htmlItens(chave, colunas){
     var d = itensCache[chave];
     var inner;
@@ -840,14 +857,18 @@
 
     visiveis.forEach(function(n){
       var aberta = !!itensAbertos[n.id];
+      var vencAberto = !!vencAbertos[n.id];
       var previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hoje;
       var link = safeUrl(n.linkXml);
 
       html += '<tr' + (previsaoVencida ? ' class="linha-atrasada"' : '') + '>' +
-        '<td>' + (ehNfse(n) ? '' :
+        '<td style="white-space:nowrap;">' + (ehNfse(n) ? '' :
           '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
           'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
-          (aberta ? '▼' : '▶') + '</button>') + '</td>' +
+          (aberta ? '▼' : '▶') + '</button>') +
+          ' <button type="button" class="acao-mini" data-venc="' + escapeHtml(n.id) + '" ' +
+          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota">' +
+          (vencAberto ? '📅▼' : '📅') + '</button></td>' +
         '<td>' + escapeHtml(n.numero || '-') + '</td>' +
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
         '<td>' + escapeHtml(n.nomeEmitente || '-') +
@@ -867,6 +888,7 @@
         '</tr>';
 
       if(aberta) html += htmlItens(n.id, COLUNAS_IMPORTAR);
+      if(vencAberto) html += htmlVencimentos(n.id, COLUNAS_IMPORTAR);
     });
 
     $('tabelaImportar').innerHTML = html + '</tbody></table></div>';
@@ -881,6 +903,10 @@
   // do futuro. Antes cada render reanexava um listener por botao.
   App.delegar($('tabelaImportar'), 'click', '[data-itens]', function(b){
     alternarItens(b.dataset.itens, renderImportar);
+  });
+
+  App.delegar($('tabelaImportar'), 'click', '[data-venc]', function(b){
+    alternarVencimentos(b.dataset.venc, renderImportar);
   });
 
   App.delegar($('tabelaImportar'), 'click', '[data-cancelar]', function(b){
