@@ -27,13 +27,13 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=11">
+<link rel="stylesheet" href="app-shared.css?v=12">
 <script src="app-shared.js?v=8"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número nos dois
-HTML.** Trocar `?v=11` por `?v=12` faz cada navegador baixar a versão nova
+HTML.** Trocar `?v=12` por `?v=13` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
 reclama se a referência estiver sem `?v=`.
 

@@ -138,7 +138,11 @@
        o botao para uma segunda linha e ele acaba aparecendo embaixo, a'
        esquerda. */
     header.top .title-block{ flex:1 1 0; min-width:0; }
-    .menu-btn{ display:flex; flex:0 0 auto; margin-left:auto; }
+    /* Canto superior ESQUERDO: e' onde a convencao poe o menu e onde a
+       pessoa procura por habito. O "order" tira ele da ordem do markup
+       (onde vem depois do titulo, para o leitor de tela anunciar o app
+       antes do menu) e o coloca visualmente antes. */
+    .menu-btn{ display:flex; flex:0 0 auto; order:-1; margin-right:12px; }
 
     /* O menu fechado nao ocupa espaco nenhum; aberto, empilha as
        telas em coluna, cada uma ocupando a largura toda para virar
