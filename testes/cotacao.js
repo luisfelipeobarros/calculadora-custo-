@@ -87,7 +87,63 @@ if(/credIcmsFrete: parseInt\(\$\('indCredIcmsFrete'\)\.value,10\)/.test(compacto
 });
 
 // ============================================================
-// 2) Barra de conta e escutas: nada se multiplica
+// 2) A margem do historico e' a mesma da cotacao
+// ============================================================
+
+// O historico so' conhece o custo negociado; frete, ST, IPI e avarias
+// vem da ficha em Produtos salvos. Zerando tudo isso, como antes, um
+// item de custo 100 / frete 10 / ST 20% vendido a 173,90 aparecia com
+// 25,45% aqui e 13,18% na cotacao.
+const nucleo = require(path.join(raiz, 'calculo-nucleo.js'));
+const fichaExemplo = {
+  custoNFe:100, frete:10, pctCredFrete:0, valorST:20, icmsCredito:0, ipi:0.65,
+  custoFinanceiroPct:0, avariasPct:1.5, bonificacao:0, tipoBonificacao:0,
+  comST:1, prejuizoContabil:0, venda:0
+};
+const vendaExemplo = nucleo.arredondarNovanta(nucleo.precoParaMargem(fichaExemplo, 0.13));
+const margemCotacao = nucleo.computeCalc(Object.assign({}, fichaExemplo, { venda: vendaExemplo })).margem;
+const margemComFicha = nucleo.computeCalc(Object.assign({}, fichaExemplo, {
+  custoNFe: 100, venda: vendaExemplo, prejuizoContabil: 0
+})).margem;
+const margemSemFicha = nucleo.computeCalc({
+  custoNFe:100, frete:0, pctCredFrete:0, valorST:0, icmsCredito:0, ipi:0,
+  custoFinanceiroPct:0, avariasPct:0, bonificacao:0, tipoBonificacao:0,
+  venda: vendaExemplo, comST:1, prejuizoContabil:0
+}).margem;
+
+if(Math.abs(margemCotacao - margemComFicha) < 1e-12){
+  ok('com a ficha, a margem do historico e a mesma da cotacao (' +
+     (margemCotacao * 100).toFixed(2) + '%)');
+} else {
+  erro('a margem diverge: cotacao ' + margemCotacao + ' vs historico ' + margemComFicha);
+}
+if(margemSemFicha > margemComFicha + 0.05){
+  ok('sem ficha o numero sai bem maior — por isso a celula marca com "*"');
+} else {
+  erro('o exemplo perdeu o efeito: sem ficha deu ' + margemSemFicha + ', com ficha ' + margemComFicha);
+}
+
+// E a tela precisa mesmo LER a ficha, nao so' chamar computeCalc.
+if(/const ficha = fichaDoProduto\(it\.produto, it\.codigo\);/.test(compacto)){
+  ok('o historico busca a ficha do produto');
+} else {
+  erro('o historico nao busca a ficha (fichaDoProduto)');
+}
+if(/computeCalc\(Object\.assign\(\{\}, ficha \? ficha\.cfg : CFG_SO_PRODUTO, \{ custoNFe: it\.precoRecebido, venda: precoVenda/.test(compacto)){
+  ok('o historico aplica a cfg da ficha sobre o custo desta cotacao');
+} else {
+  erro('o historico nao aplica a cfg da ficha — a margem volta a sair inflada');
+}
+// Os indices precisam carregar a cfg junto, senao ficha.cfg vem vazia.
+if(/vendaPorProduto = new Map\(comVenda\.map\(p => \[p\.nome, \{ venda: p\.r\.venda, cfg: p\.cfg \}\]\)\)/.test(compacto) &&
+   /vendaPorCodigo\.set\(cod, \{ venda: p\.r\.venda, cfg: p\.cfg \}\)/.test(compacto)){
+  ok('os indices de Produtos salvos carregam a cfg da ficha');
+} else {
+  erro('os indices guardam so o preco — ficha.cfg chegaria indefinida');
+}
+
+// ============================================================
+// 3) Barra de conta e escutas: nada se multiplica
 // ============================================================
 
 if(/container\.dataset\.contaMontada/.test(shared.replace(/\s+/g, ' '))){

@@ -1526,8 +1526,10 @@ Tupan</textarea>
   // casar por texto erra justamente nos produtos que mais aparecem.
   // O nome fica como segunda tentativa, para os produtos salvos antes
   // de existir campo de código.
-  let vendaPorProduto = new Map(); // nome do produto        -> preço de venda (> 0)
-  let vendaPorCodigo  = new Map(); // código interno (normal.) -> preço de venda (> 0)
+  // Guardam a FICHA inteira, não só o preço: o histórico precisa também
+  // do frete, do ST e do IPI dela para recalcular a margem de verdade.
+  let vendaPorProduto = new Map(); // nome do produto        -> ficha (venda > 0)
+  let vendaPorCodigo  = new Map(); // código interno (normal.) -> ficha (venda > 0)
 
   // Código é identificador, não texto corrido: espaço e caixa não
   // podem separar "aab1010012" de "AAB1010012". Acento não é mexido
@@ -1536,17 +1538,25 @@ Tupan</textarea>
     return String(codigo == null ? '' : codigo).trim().toUpperCase();
   }
 
-  function precoVendaDoProduto(nome, codigo){
+  // Ficha do produto em Produtos salvos: { venda, cfg }. Mesma ordem de
+  // busca de sempre — código interno primeiro, nome como segunda
+  // tentativa.
+  function fichaDoProduto(nome, codigo){
     const cod = normalizarCodigo(codigo);
     if(cod){
       const porCodigo = vendaPorCodigo.get(cod);
-      if(porCodigo > 0) return porCodigo;
+      if(porCodigo) return porCodigo;
     }
     if(nome){
       const porNome = vendaPorProduto.get(nome);
-      if(porNome > 0) return porNome;
+      if(porNome) return porNome;
     }
     return null;
+  }
+
+  function precoVendaDoProduto(nome, codigo){
+    const ficha = fichaDoProduto(nome, codigo);
+    return (ficha && ficha.venda > 0) ? ficha.venda : null;
   }
 
   // Preço de venda de um item de cotação. As cotações gravadas antes
@@ -1650,6 +1660,7 @@ Tupan</textarea>
       produtosCache = itens.map(({ key, value })=>{
         const nome = decodeURIComponent(key.replace('calc:',''));
         let r = null;
+        let cfg = null;
         let fornecedor = '';
         let codigo = '';
         let codigoFornecedor = '';
@@ -1658,15 +1669,18 @@ Tupan</textarea>
           fornecedor = (data.fornecedor || '').toString().trim();
           codigo = (data.codigo || '').toString().trim();
           codigoFornecedor = (data.codigoFornecedor || '').toString().trim();
-          r = computeCalc(dadosParaCalculo(data));
+          // cfg guardada: é ela que leva frete, ST, IPI e avarias ao
+          // histórico, que só conhece o custo negociado na cotação.
+          cfg = dadosParaCalculo(data);
+          r = computeCalc(cfg);
         }catch(e){ /* segue sem previa se o registro estiver corrompido */ }
-        return { nome, fornecedor: fornecedor || 'Sem fornecedor', codigo, codigoFornecedor, r };
+        return { nome, fornecedor: fornecedor || 'Sem fornecedor', codigo, codigoFornecedor, r, cfg };
       });
 
       // Índices consultados pela cotação, pelo histórico e pela pesquisa
-      // de concorrentes — todos leem o preço de venda daqui.
+      // de concorrentes — todos leem a ficha daqui.
       const comVenda = produtosCache.filter(p => p.r && p.r.venda > 0);
-      vendaPorProduto = new Map(comVenda.map(p => [p.nome, p.r.venda]));
+      vendaPorProduto = new Map(comVenda.map(p => [p.nome, { venda: p.r.venda, cfg: p.cfg }]));
       vendaPorCodigo  = new Map();
       comVenda.forEach(p => {
         const cod = normalizarCodigo(p.codigo);
@@ -1678,7 +1692,7 @@ Tupan</textarea>
           console.warn('Código interno repetido em Produtos salvos: "' + cod + '". Ignorando "' + p.nome + '".');
           return;
         }
-        vendaPorCodigo.set(cod, p.r.venda);
+        vendaPorCodigo.set(cod, { venda: p.r.venda, cfg: p.cfg });
       });
       renderListaSalvos();
     }catch(e){
@@ -3284,15 +3298,26 @@ Tupan</textarea>
           const precoVenda = precoVendaItem(it);
           let margemHtml = '-';
           if(precoVenda != null && it.precoRecebido != null){
-            const calc = computeCalc({
-              custoNFe: it.precoRecebido, frete: 0, pctCredFrete: 0, valorST: 0,
-              icmsCredito: 0, ipi: 0, custoFinanceiroPct: 0, avariasPct: 0,
-              bonificacao: 0, tipoBonificacao: 0, venda: precoVenda,
-              comST: 1, prejuizoContabil: 0
-            });
+            // Frete, ST, IPI e avarias saem da ficha do produto em
+            // Produtos salvos; o custo é o negociado NESTA cotação e as
+            // alíquotas são as de hoje.
+            //
+            // Zerar tudo isso, como antes, inflava a margem: um item com
+            // custo 100, frete 10 e ST 20% vendido a 173,90 aparecia
+            // aqui com 25,45% enquanto a tela da cotação mostrava 13,18%
+            // — o mesmo produto, dois números, nada dizendo qual valia.
+            const ficha = fichaDoProduto(it.produto, it.codigo);
+            const calc = computeCalc(Object.assign({}, ficha ? ficha.cfg : CFG_SO_PRODUTO, {
+              custoNFe: it.precoRecebido, venda: precoVenda, prejuizoContabil: 0
+            }));
             if(isFinite(calc.margem)){
+              // Sem ficha não há como saber frete/ST/IPI: o número sai
+              // maior que o real, e a célula avisa em vez de fingir.
+              const marca = ficha ? '' :
+                '<span title="Produto não encontrado em Produtos salvos: esta margem ' +
+                'considera só o custo do produto, sem frete, ST nem IPI — então sai maior que a real.">&nbsp;*</span>';
               margemHtml = '<span style="color:' + (calc.lucro >= 0 ? 'var(--profit)' : 'var(--loss)') +
-                '; font-weight:700;">' + pct(calc.margem) + '</span>';
+                '; font-weight:700;">' + pct(calc.margem) + marca + '</span>';
             }
           }
           tabela += '<tr><td>'+escapeHtml(it.codigo||'-')+'</td><td>'+escapeHtml(it.produto||'-')+'</td><td>'+formatarQtdColuna(it.quantidadeEsperada, it.quantidadeRecebida)+'</td><td>'+(it.precoEsperado!=null?brl(it.precoEsperado):'-')+
@@ -4223,6 +4248,15 @@ Tupan</textarea>
   // Os listeners também limpam o campo, para o usuário VER que ele saiu.
   // Quem garante o resultado é esta função, valha qual for o caminho que
   // preencheu a tela.
+  // Só o custo do produto: nem frete, nem ST, nem IPI, nem avarias.
+  // Último recurso do histórico, quando o produto não está em Produtos
+  // salvos e não há de onde tirar a configuração real.
+  const CFG_SO_PRODUTO = {
+    frete:0, pctCredFrete:0, valorST:0, icmsCredito:0, ipi:0,
+    custoFinanceiroPct:0, avariasPct:0, bonificacao:0,
+    tipoBonificacao:0, comST:1
+  };
+
   function normalizarCfg(cfg){
     if(!cfg.credIcmsFrete) cfg.pctCredFrete = '0';
     if(cfg.comST) cfg.icmsCredito = '0';
