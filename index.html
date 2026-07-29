@@ -729,7 +729,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=6"></script>
+<script src="app-shared.js?v=7"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=6"></script>
 <script>
@@ -4193,8 +4193,27 @@ Tupan</textarea>
   });
 
   // ---- Modo em lote ----
+  // Um campo escondido não pode entrar na conta.
+  //
+  // Os selects de "credita ICMS sobre o frete?" e "produto com ST?"
+  // escondem o campo abaixo deles, mas o valor digitado continuava lá:
+  // quem punha 12% de crédito e depois voltava para "Não" seguia com o
+  // crédito na conta. Com custo 100 / frete 50 / ST 20%, o sugerido saía
+  // R$ 216,90 em vez de R$ 225,90, e a margem exibida (13,03%) discordava
+  // da que a Calculadora mostrava depois de salvar o produto (11,20%).
+  //
+  // Os listeners também limpam o campo, para o usuário VER que ele saiu.
+  // Quem garante o resultado é esta função, valha qual for o caminho que
+  // preencheu a tela.
+  function normalizarCfg(cfg){
+    if(!cfg.credIcmsFrete) cfg.pctCredFrete = '0';
+    if(cfg.comST) cfg.icmsCredito = '0';
+    else cfg.valorST = '0';
+    return cfg;
+  }
+
   function coletarConfigLote(){
-    return {
+    return normalizarCfg({
       frete: $('loteFrete').value || '0',
       pctCredFrete: $('lotePctCredFrete').value || '0',
       valorST: $('loteValorST').value || '0',
@@ -4206,7 +4225,7 @@ Tupan</textarea>
       tipoBonificacao: parseInt($('loteTipoBonificacao').value,10),
       comST: parseInt($('loteComST').value,10),
       credIcmsFrete: parseInt($('loteCredIcmsFrete').value,10)
-    };
+    });
   }
 
   // Preço com a margem sugerida (a meta "Ideal"), arredondado para ,90
@@ -4317,14 +4336,19 @@ Tupan</textarea>
   ['loteFrete','lotePctCredFrete','loteValorST','loteIcmsCredito','loteIpi','loteCustoFinanceiroPct','loteAvariasPct','loteBonificacao'].forEach(id=>{
     $(id).addEventListener('input', atualizarTodasMargensLote);
   });
+  // Limpar o campo escondido é o que o usuário vê; quem garante que ele
+  // não entra na conta é normalizarCfg.
   $('loteCredIcmsFrete').addEventListener('change', ()=>{
-    $('lotePctCredFreteSub').style.display = $('loteCredIcmsFrete').value === '1' ? 'block' : 'none';
+    const credita = $('loteCredIcmsFrete').value === '1';
+    $('lotePctCredFreteSub').style.display = credita ? 'block' : 'none';
+    if(!credita) $('lotePctCredFrete').value = '';
     atualizarTodasMargensLote();
   });
   $('loteComST').addEventListener('change', ()=>{
     const v = $('loteComST').value === '1';
     $('loteStSub').style.display = v ? 'block' : 'none';
     $('loteIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    if(v) $('loteIcmsCredito').value = ''; else $('loteValorST').value = '';
     atualizarTodasMargensLote();
   });
   $('loteTipoBonificacao').addEventListener('change', ()=>{
@@ -4377,14 +4401,15 @@ Tupan</textarea>
   }
 
   function configIndividual(){
-    return {
+    return normalizarCfg({
       frete: $('indFrete').value, pctCredFrete: $('indPctCredFrete').value,
       valorST: $('indValorST').value, icmsCredito: $('indIcmsCredito').value,
       ipi: $('indIpi').value, custoFinanceiroPct: $('indCustoFinanceiroPct').value,
       avariasPct: $('indAvariasPct').value, bonificacao: $('indBonificacao').value,
       tipoBonificacao: parseInt($('indTipoBonificacao').value,10),
-      comST: parseInt($('indComST').value,10)
-    };
+      comST: parseInt($('indComST').value,10),
+      credIcmsFrete: parseInt($('indCredIcmsFrete').value,10)
+    });
   }
 
   function atualizarMargemIndividual(){
@@ -4445,13 +4470,16 @@ Tupan</textarea>
     $(id).addEventListener('input', atualizarMargemIndividual);
   });
   $('indCredIcmsFrete').addEventListener('change', ()=>{
-    $('indPctCredFreteSub').style.display = $('indCredIcmsFrete').value === '1' ? 'block' : 'none';
+    const credita = $('indCredIcmsFrete').value === '1';
+    $('indPctCredFreteSub').style.display = credita ? 'block' : 'none';
+    if(!credita) $('indPctCredFrete').value = '';
     atualizarMargemIndividual();
   });
   $('indComST').addEventListener('change', ()=>{
     const v = $('indComST').value === '1';
     $('indStSub').style.display = v ? 'block' : 'none';
     $('indIcmsCreditoSub').style.display = v ? 'none' : 'block';
+    if(v) $('indIcmsCredito').value = ''; else $('indValorST').value = '';
     atualizarMargemIndividual();
   });
   $('indTipoBonificacao').addEventListener('change', ()=>{
