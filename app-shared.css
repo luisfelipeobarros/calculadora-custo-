@@ -133,12 +133,21 @@
 
   @media (max-width:880px){
     header.top{ align-items:center; }
-    .menu-btn{ display:flex; }
+    /* Titulo e botao dividem a primeira linha, com o ☰ encostado na
+       direita. Sem o flex:1 no titulo ele ocupa a largura toda, empurra
+       o botao para uma segunda linha e ele acaba aparecendo embaixo, a'
+       esquerda. */
+    header.top .title-block{ flex:1 1 0; min-width:0; }
+    .menu-btn{ display:flex; flex:0 0 auto; margin-left:auto; }
 
     /* O menu fechado nao ocupa espaco nenhum; aberto, empilha as
        telas em coluna, cada uma ocupando a largura toda para virar
-       alvo de toque confortavel. */
-    nav.telas{
+       alvo de toque confortavel.
+       O seletor comeca em header.top de proposito: os dois HTML tem um
+       "nav.telas{display:flex}" no <style> deles, que vem DEPOIS deste
+       arquivo. Com a mesma especificidade o de la' ganharia, e o menu
+       ficaria sempre aberto no celular. */
+    header.top nav.telas{
       display:none;
       order:3;                  /* cai abaixo do titulo e do botao */
       width:100%;
@@ -149,10 +158,10 @@
       margin-top:4px;
       border-top:1px solid var(--line);
     }
-    nav.telas.aberto{ display:flex; }
-    nav.telas .btn{ width:100%; text-align:left; padding:11px 14px; }
-    nav.telas .stamp{ display:none; }   /* selo decorativo, nao cabe */
-    .conta-barra{ justify-content:space-between; width:100%; }
+    header.top nav.telas.aberto{ display:flex; }
+    header.top nav.telas .btn{ width:100%; text-align:left; padding:11px 14px; }
+    header.top nav.telas .stamp{ display:none; }   /* selo decorativo, nao cabe */
+    header.top .conta-barra{ justify-content:space-between; width:100%; }
   }
 
   .card{
