@@ -52,9 +52,20 @@ service cloud.firestore {
     match /duplicatas/{id} {
       allow read: if autenticado();
       allow create, delete: if false;
+      // Alem de marcar como paga, a tela registra COMO foi pago (banco
+      // ou outra forma), uma observacao livre e a data efetiva — que
+      // nem sempre e' hoje, quando o lancamento e' feito depois.
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote']);
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote',
+                       'formaPagamento', 'observacao']);
+    }
+
+    // Formas de pagamento (bancos e afins): so' o nome. Cadastradas
+    // pela propria tela de Pagamentos, entao aqui o navegador cria e
+    // apaga — diferente das colecoes que o Apps Script alimenta.
+    match /formasPagamento/{id} {
+      allow read, write: if autenticado();
     }
 
     match /itensNotas/{chaveAcesso} {

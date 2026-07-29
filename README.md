@@ -105,9 +105,16 @@ sozinho a operação que falhou.
   `noSistema`…). Criar e apagar nota fica proibido pelo navegador. O
   Apps Script usa conta de serviço e ignora estas regras, então a
   importação de XML continua igual.
-- `produtos`, `cotacoes`, `concorrentes` — leitura e escrita livres para
-  quem está autenticado.
+- `produtos`, `cotacoes`, `concorrentes`, `formasPagamento` — leitura e
+  escrita livres para quem está autenticado.
 - Qualquer outra coleção: bloqueada.
+
+> **Se você já publicou as regras alguma vez, precisa publicar de novo.**
+> A versão nova acrescenta dois campos que a tela de Pagamentos grava na
+> duplicata (`formaPagamento` e `observacao`) e libera a coleção
+> `formasPagamento`, onde ficam os bancos. Com as regras antigas no ar,
+> gravar a forma de pagamento falha com "permissão negada" — e o
+> cadastro de bancos nem carrega.
 
 ---
 
