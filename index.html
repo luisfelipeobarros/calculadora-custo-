@@ -2957,17 +2957,27 @@ Tupan</textarea>
       html += '</div>';
     });
     $('listaNotasEmitidas'+suf).innerHTML = html;
-    $('listaNotasEmitidas'+suf).querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
+  }
+
+  // Delegação registrada UMA vez por container, em vez de reanexar dois
+  // listeners por nota a cada desenho — e esta lista se redesenha a cada
+  // nota aberta ou fechada.
+  ['', 'Cmp'].forEach(suf=>{
+    const container = $('listaNotasEmitidas'+suf);
+    // O botão de vencimentos vive DENTRO do cabeçalho clicável, e os
+    // dois handlers agora estão no MESMO elemento (o container). Aqui
+    // stopPropagation não serviria de nada: ele impede a subida para
+    // outros elementos, não a execução do outro listener deste. Quem
+    // resolve é o cabeçalho ignorar cliques que nasceram no botão.
+    App.delegar(container, 'click', '[data-nota]', (h, ev)=>{
+      if(ev.target.closest && ev.target.closest('[data-venc]')) return;
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
       renderListaNotas(suf);
-    }));
-    // O botão de vencimentos vive DENTRO do cabeçalho clicável; sem o
-    // stopPropagation, um clique nele abriria também a lista de itens.
-    $('listaNotasEmitidas'+suf).querySelectorAll('[data-venc]').forEach(b=>b.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
+    });
+    App.delegar(container, 'click', '[data-venc]', (b)=>{
       alternarVencimentos(b.dataset.venc, suf);
-    }));
-  }
+    });
+  });
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
@@ -3049,7 +3059,20 @@ Tupan</textarea>
     html += '</tbody></table>';
     el.innerHTML = html;
 
-    el.querySelectorAll('[data-refazerconc]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    // Repõe o que estava sendo digitado (a tabela se redesenha a cada
+    // loja que responde). Os listeners ficam na delegação abaixo.
+    el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
+      if(valoresDigitados[inp.dataset.idx] != null) inp.value = valoresDigitados[inp.dataset.idx];
+    });
+  }
+
+  // Delegação registrada UMA vez no container estável, em vez de dois
+  // listeners por loja a cada desenho — e esta tabela se redesenha a
+  // cada loja que termina de responder.
+  {
+    const el = $('resultadoConcorrentes');
+
+    App.delegar(el, 'click', '[data-refazerconc]', async (btn)=>{
       const idx = parseInt(btn.dataset.refazerconc, 10);
       const c = ultimosConcorrentes[idx];
       const descricao = ($('descricaoProdutoBusca').value||'').trim();
@@ -3066,19 +3089,16 @@ Tupan</textarea>
           mensagemErro: e && e.message ? e.message : String(e) };
       }
       renderResultadoConcorrentes();
-    }));
+    });
 
-    el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
-      if(valoresDigitados[inp.dataset.idx] != null) inp.value = valoresDigitados[inp.dataset.idx];
-      inp.addEventListener('change', ()=>{
-        const idx = parseInt(inp.dataset.idx,10);
-        const v = toNum(inp.value);
-        if(v > 0){
-          ultimosConcorrentes[idx].preco = v;
-          ultimosConcorrentes[idx].erro = false;
-          renderResultadoConcorrentes();
-        }
-      });
+    App.delegar(el, 'change', '.preco-concorrente-input', (inp)=>{
+      const idx = parseInt(inp.dataset.idx,10);
+      const v = toNum(inp.value);
+      if(v > 0 && ultimosConcorrentes[idx]){
+        ultimosConcorrentes[idx].preco = v;
+        ultimosConcorrentes[idx].erro = false;
+        renderResultadoConcorrentes();
+      }
     });
   }
 
