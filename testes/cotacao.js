@@ -202,7 +202,10 @@ else erro(copias + ' copia(s) do mapeamento cfg -> nucleo sobraram no index.html
 // Numa cotacao com dois itens de mesmo nome, a chave por nome fazia as
 // duas linhas apontarem para a mesma celula e para o mesmo objeto: a
 // segunda nunca recebia margem, e digitar nela alterava a primeira.
-if(!/data-produto=/.test(compacto) && !/dataset\.produto/.test(compacto)){
+// Precisa mirar SO' o card da cotacao. "data-produto-acao" e
+// "dataset.produtoNome" sao da lista de Produtos salvos, onde chavear
+// pelo nome e' o certo — ali o nome E' a chave do registro.
+if(!/data-produto=/.test(compacto) && !/dataset\.produto\b/.test(compacto)){
   ok('as linhas do card de produtos sao chaveadas por indice');
 } else {
   erro('ainda ha celula do card de produtos chaveada pelo nome do produto');

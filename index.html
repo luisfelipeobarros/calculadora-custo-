@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=9"></script>
+<script src="app-shared.js?v=10"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -1081,6 +1081,13 @@ Tupan</textarea>
   // 3) localStorage: guarda PERMANENTEMENTE neste computador/navegador, atrelado a este arquivo
   // 4) memória: último recurso, só dura enquanto a aba estiver aberta.
   const LS_KEY = 'calculadora_custo_produtos_v1';
+
+  // A chave de um produto é 'calc:' + o nome codificado. Estes dois
+  // conversores estavam escritos à mão em cinco lugares; se um deles
+  // mudasse de ideia sobre o prefixo, os outros quatro continuariam
+  // procurando no lugar antigo.
+  const chaveDoProduto = nome => chaveDoProduto(nome);
+  const nomeDaChave = chave => decodeURIComponent(String(chave).replace('calc:', ''));
   const FIREBASE_CONFIG_KEY = 'calculadora_custo_firebase_config';
   const FIREBASE_CONFIG_PADRAO = App.FIREBASE_CONFIG; // definida uma vez em app-shared.js
   const memoryStore = {};
@@ -1106,6 +1113,9 @@ Tupan</textarea>
     }catch(e){ return FIREBASE_CONFIG_PADRAO; }
   }
   function setFirebaseConfigSalva(config){
+    // Engolir e' de proposito: isto e' preferencia de maquina, nao dado.
+    // Em aba anonima ou com a cota estourada, gravar falha — e o app
+    // segue funcionando com a config padrao, que e' o comportamento certo.
     try{ localStorage.setItem(FIREBASE_CONFIG_KEY, config ? JSON.stringify(config) : 'null'); }catch(e){}
   }
 
@@ -1120,6 +1130,7 @@ Tupan</textarea>
     }catch(e){ return RECAPTCHA_SITE_KEY_PADRAO; }
   }
   function setRecaptchaSiteKeySalva(v){
+    // Idem: preferencia de maquina. Falhar aqui nao pode interromper nada.
     try{ localStorage.setItem(RECAPTCHA_KEY, v || ''); }catch(e){}
   }
 
@@ -1233,7 +1244,7 @@ Tupan</textarea>
   async function storageSet(key, value){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         await firebaseSalvar(nome, JSON.parse(value));
         return { key, value, shared:false };
       }catch(e){ console.error('Erro Firebase (salvar):', e); rebaixarBackend(); }
@@ -1260,7 +1271,7 @@ Tupan</textarea>
   async function storageGet(key){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         const dados = await firebaseObter(nome);
         if(dados) return { key, value: JSON.stringify(dados), shared:false };
         return null;
@@ -1287,7 +1298,7 @@ Tupan</textarea>
   async function storageDelete(key){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         await firebaseExcluir(nome);
         return { key, deleted:true, shared:false };
       }catch(e){ console.error('Erro Firebase (excluir):', e); rebaixarBackend(); }
@@ -1311,7 +1322,7 @@ Tupan</textarea>
     if(storageBackend === 'firebase'){
       try{
         const produtos = await firebaseListar();
-        const keys = Object.keys(produtos).map(nome => 'calc:' + encodeURIComponent(nome)).filter(k=>k.startsWith(prefix));
+        const keys = Object.keys(produtos).map(nome => chaveDoProduto(nome)).filter(k=>k.startsWith(prefix));
         return { keys, prefix, shared:false };
       }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
     }
@@ -1339,7 +1350,7 @@ Tupan</textarea>
       try{
         const produtos = await firebaseListar();
         return Object.keys(produtos)
-          .map(nome => ({ key: 'calc:' + encodeURIComponent(nome), value: JSON.stringify(produtos[nome]) }))
+          .map(nome => ({ key: chaveDoProduto(nome), value: JSON.stringify(produtos[nome]) }))
           .filter(p => p.key.startsWith(prefix));
       }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
     }
@@ -1617,7 +1628,7 @@ Tupan</textarea>
     // Usar o nome da planilha como chave criaria um segundo registro
     // do mesmo produto, e aí o preço voltaria a existir em dois lugares.
     const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
-    const key = 'calc:' + encodeURIComponent(nomeDestino);
+    const key = chaveDoProduto(nomeDestino);
     let dados = null;
     try{
       const res = await storageGet(key);
@@ -1678,7 +1689,7 @@ Tupan</textarea>
       if(countEl) countEl.textContent = itens.length > 0 ? '(' + itens.length + ')' : '';
 
       produtosCache = itens.map(({ key, value })=>{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         let r = null;
         let cfg = null;
         let fornecedor = '';
@@ -1770,18 +1781,38 @@ Tupan</textarea>
     const loadBtn = document.createElement('button');
     loadBtn.type = 'button';
     loadBtn.textContent = 'Carregar';
-    loadBtn.addEventListener('click', ()=>carregarProduto(nome));
+    loadBtn.dataset.produtoAcao = 'carregar';
+    loadBtn.dataset.produtoNome = nome;
     const delBtn = document.createElement('button');
     delBtn.type = 'button';
     delBtn.className = 'del';
     delBtn.textContent = 'Excluir';
-    delBtn.addEventListener('click', ()=>excluirProduto(nome));
+    delBtn.dataset.produtoAcao = 'excluir';
+    delBtn.dataset.produtoNome = nome;
     actions.appendChild(loadBtn);
     actions.appendChild(delBtn);
     item.appendChild(actions);
 
     return item;
   }
+
+  // Delegação única para Produtos salvos: antes eram dois listeners por
+  // produto mais um por grupo de fornecedor, a cada redesenho — e a
+  // lista se redesenha a cada tecla nos campos de busca.
+  App.delegar($('savedList'), 'click', '[data-produto-acao]', (btn)=>{
+    const nome = btn.dataset.produtoNome;
+    if(btn.dataset.produtoAcao === 'carregar') carregarProduto(nome);
+    else excluirProduto(nome);
+  });
+
+  // Sem guarda contra os botões de produto: eles ficam em .supplier-items,
+  // irmão do cabeçalho — não descendem dele, então nunca chegam aqui.
+  App.delegar($('savedList'), 'click', '[data-grupo]', (h)=>{
+    const nome = h.dataset.grupo;
+    if(gruposExpandidos.has(nome)) gruposExpandidos.delete(nome);
+    else gruposExpandidos.add(nome);
+    renderListaSalvos();
+  });
 
   function renderListaSalvos(){
     const listEl = $('savedList');
@@ -1867,11 +1898,7 @@ Tupan</textarea>
       // estado aberto/fechado.
       headerEl.type = 'button';
       headerEl.setAttribute('aria-expanded', String(!colapsado));
-      headerEl.addEventListener('click', ()=>{
-        if(gruposExpandidos.has(nomeGrupo)) gruposExpandidos.delete(nomeGrupo);
-        else gruposExpandidos.add(nomeGrupo);
-        renderListaSalvos();
-      });
+      headerEl.dataset.grupo = nomeGrupo;
       grupoEl.appendChild(headerEl);
 
       if(!colapsado){
@@ -1926,7 +1953,7 @@ Tupan</textarea>
       }
     }
 
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     const payload = JSON.stringify(coletarInputs());
     try{
       await storageSet(key, payload);
@@ -1943,7 +1970,7 @@ Tupan</textarea>
   }
 
   async function carregarProduto(nome){
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     try{
       const res = await storageGet(key);
       if(res && res.value){
@@ -1967,7 +1994,7 @@ Tupan</textarea>
     });
     if(!ok) return;
 
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     try{
       await storageDelete(key);
       await atualizarListaSalvos();
@@ -1983,7 +2010,7 @@ Tupan</textarea>
       const itens = await storageLerTudo('calc:');
       const produtos = {};
       itens.forEach(({ key, value })=>{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         try{ produtos[nome] = JSON.parse(value); }
         catch(e){ console.warn('registro corrompido ignorado no backup:', nome); }
       });
@@ -2041,7 +2068,7 @@ Tupan</textarea>
     const falhas = [];
     for(const nome of nomes){
       try{
-        await storageSet('calc:' + encodeURIComponent(nome), JSON.stringify(produtos[nome]));
+        await storageSet(chaveDoProduto(nome), JSON.stringify(produtos[nome]));
         importados++;
       }catch(e){
         console.error('falha ao importar ' + nome, e);
@@ -2946,17 +2973,27 @@ Tupan</textarea>
       html += '</div>';
     });
     $('listaNotasEmitidas'+suf).innerHTML = html;
-    $('listaNotasEmitidas'+suf).querySelectorAll('[data-nota]').forEach(h=>h.addEventListener('click', ()=>{
+  }
+
+  // Delegação registrada UMA vez por container, em vez de reanexar dois
+  // listeners por nota a cada desenho — e esta lista se redesenha a cada
+  // nota aberta ou fechada.
+  ['', 'Cmp'].forEach(suf=>{
+    const container = $('listaNotasEmitidas'+suf);
+    // O botão de vencimentos vive DENTRO do cabeçalho clicável, e os
+    // dois handlers agora estão no MESMO elemento (o container). Aqui
+    // stopPropagation não serviria de nada: ele impede a subida para
+    // outros elementos, não a execução do outro listener deste. Quem
+    // resolve é o cabeçalho ignorar cliques que nasceram no botão.
+    App.delegar(container, 'click', '[data-nota]', (h, ev)=>{
+      if(ev.target.closest && ev.target.closest('[data-venc]')) return;
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
       renderListaNotas(suf);
-    }));
-    // O botão de vencimentos vive DENTRO do cabeçalho clicável; sem o
-    // stopPropagation, um clique nele abriria também a lista de itens.
-    $('listaNotasEmitidas'+suf).querySelectorAll('[data-venc]').forEach(b=>b.addEventListener('click', (ev)=>{
-      ev.stopPropagation();
+    });
+    App.delegar(container, 'click', '[data-venc]', (b)=>{
       alternarVencimentos(b.dataset.venc, suf);
-    }));
-  }
+    });
+  });
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
@@ -3038,7 +3075,20 @@ Tupan</textarea>
     html += '</tbody></table>';
     el.innerHTML = html;
 
-    el.querySelectorAll('[data-refazerconc]').forEach(btn=>btn.addEventListener('click', async ()=>{
+    // Repõe o que estava sendo digitado (a tabela se redesenha a cada
+    // loja que responde). Os listeners ficam na delegação abaixo.
+    el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
+      if(valoresDigitados[inp.dataset.idx] != null) inp.value = valoresDigitados[inp.dataset.idx];
+    });
+  }
+
+  // Delegação registrada UMA vez no container estável, em vez de dois
+  // listeners por loja a cada desenho — e esta tabela se redesenha a
+  // cada loja que termina de responder.
+  {
+    const el = $('resultadoConcorrentes');
+
+    App.delegar(el, 'click', '[data-refazerconc]', async (btn)=>{
       const idx = parseInt(btn.dataset.refazerconc, 10);
       const c = ultimosConcorrentes[idx];
       const descricao = ($('descricaoProdutoBusca').value||'').trim();
@@ -3055,19 +3105,16 @@ Tupan</textarea>
           mensagemErro: e && e.message ? e.message : String(e) };
       }
       renderResultadoConcorrentes();
-    }));
+    });
 
-    el.querySelectorAll('.preco-concorrente-input').forEach(inp=>{
-      if(valoresDigitados[inp.dataset.idx] != null) inp.value = valoresDigitados[inp.dataset.idx];
-      inp.addEventListener('change', ()=>{
-        const idx = parseInt(inp.dataset.idx,10);
-        const v = toNum(inp.value);
-        if(v > 0){
-          ultimosConcorrentes[idx].preco = v;
-          ultimosConcorrentes[idx].erro = false;
-          renderResultadoConcorrentes();
-        }
-      });
+    App.delegar(el, 'change', '.preco-concorrente-input', (inp)=>{
+      const idx = parseInt(inp.dataset.idx,10);
+      const v = toNum(inp.value);
+      if(v > 0 && ultimosConcorrentes[idx]){
+        ultimosConcorrentes[idx].preco = v;
+        ultimosConcorrentes[idx].erro = false;
+        renderResultadoConcorrentes();
+      }
     });
   }
 
@@ -3188,6 +3235,37 @@ Tupan</textarea>
     }
   }
 
+  // Delegação única para as comparações salvas: antes eram dois
+  // listeners por comparação, reanexados a cada abrir/fechar.
+  App.delegar($('concorrentesHistLista'), 'click', '[data-conc-header]', (h, ev)=>{
+    if(ev.target.closest && ev.target.closest('[data-conc-excluir]')) return;
+    const id = h.dataset.concHeader;
+    if(concorrentesHistColapsados.has(id)) concorrentesHistColapsados.delete(id);
+    else concorrentesHistColapsados.add(id);
+    renderHistoricoConcorrentes(); // só redesenha — nada de reler o banco
+  });
+
+  App.delegar($('concorrentesHistLista'), 'click', '[data-conc-excluir]', async (btn)=>{
+    const id = btn.dataset.concExcluir;
+    const ok = await App.confirmar({
+      titulo: 'Excluir comparação',
+      mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
+      confirmar: 'Excluir',
+      perigo: true
+    });
+    if(!ok) return;
+    try{
+      await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(id).delete());
+      App.toast('Comparação excluída.', 'ok');
+      // Tira do cache e redesenha, em vez de reler a coleção.
+      concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== id);
+      concorrentesHistColapsados.delete(id);
+      renderHistoricoConcorrentes();
+    }catch(e){
+      App.toastErro('Erro ao excluir', e);
+    }
+  });
+
   function renderHistoricoConcorrentes(){
     const lista = $('concorrentesHistLista');
     const msg = $('concorrentesHistMsg');
@@ -3220,11 +3298,7 @@ Tupan</textarea>
         '<span class="h-count">'+resultados.length+' loja(s)</span>'+
         (d.origemPedido ? '<span style="font-family:var(--font-mono); font-size:9.5px; padding:2px 7px; border:1px solid var(--line); border-radius:10px; color:var(--ink-soft); white-space:nowrap;">pedido: '+escapeHtml(d.origemPedido)+'</span>' : '')+
         (menorPreco!=null ? '<span class="status-badge down">menor: '+brl(menorPreco)+'</span>' : '');
-      header.addEventListener('click', ()=>{
-        if(concorrentesHistColapsados.has(d.id)) concorrentesHistColapsados.delete(d.id);
-        else concorrentesHistColapsados.add(d.id);
-        renderHistoricoConcorrentes(); // só redesenha — nada de reler o banco
-      });
+      header.dataset.concHeader = d.id;
       item.appendChild(header);
 
       if(aberto){
@@ -3249,25 +3323,7 @@ Tupan</textarea>
         excluirBtn.type = 'button';
         excluirBtn.className = 'del';
         excluirBtn.textContent = 'Excluir';
-        excluirBtn.addEventListener('click', async ()=>{
-          const ok = await App.confirmar({
-            titulo: 'Excluir comparação',
-            mensagem: 'Excluir esta comparação do histórico? Essa ação não pode ser desfeita.',
-            confirmar: 'Excluir',
-            perigo: true
-          });
-          if(!ok) return;
-          try{
-            await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(d.id).delete());
-            App.toast('Comparação excluída.', 'ok');
-            // Tira do cache e redesenha, em vez de reler a coleção.
-            concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== d.id);
-            concorrentesHistColapsados.delete(d.id);
-            renderHistoricoConcorrentes();
-          }catch(e){
-            App.toastErro('Erro ao excluir', e);
-          }
-        });
+        excluirBtn.dataset.concExcluir = d.id;
         acoes.appendChild(excluirBtn);
         body.appendChild(acoes);
 
@@ -3324,10 +3380,47 @@ Tupan</textarea>
   }
 
   // Delegação registrada uma vez: o histórico inteiro é redesenhado a
-  // cada abrir/fechar, e os botões de data nascem dentro dele.
+  // cada abrir/fechar, e os botões nascem dentro dele.
   App.delegar($('historicoLista'), 'click', '[data-abrirpesq]', (btn)=>{
     const [pedidoId, chaveDia] = btn.dataset.abrirpesq.split('|');
     abrirPesquisaSalva(pedidoId, chaveDia);
+  });
+
+  App.delegar($('historicoLista'), 'click', '[data-cotacao-header]', (h, ev)=>{
+    // Os botões de ação ficam no corpo, não no cabeçalho, mas o
+    // cabeçalho é um <button> — um clique em qualquer coisa dentro dele
+    // chega aqui, e é isso mesmo que queremos.
+    if(ev.target.closest && ev.target.closest('[data-acao]')) return;
+    const id = h.dataset.cotacaoHeader;
+    if(historicoColapsados.has(id)) historicoColapsados.delete(id);
+    else historicoColapsados.add(id);
+    renderHistorico();
+  });
+
+  App.delegar($('historicoLista'), 'click', '[data-acao]', (btn)=>{
+    const id = btn.dataset.cotacao;
+    const acao = btn.dataset.acao;
+    if(acao === 'editar')    return carregarCotacaoParaEdicao(id);
+    if(acao === 'comparar')  return abrirComparacao(id);
+    if(acao === 'pesquisar') return abrirPesquisaLote(id);
+    if(acao === 'excluir')   return excluirCotacaoHistorico(id);
+    if(acao === 'pesquisas'){
+      if(pesquisasSalvasAbertas.has(id)){
+        pesquisasSalvasAbertas.delete(id);
+        renderHistorico();
+        return;
+      }
+      pesquisasSalvasAbertas.add(id);
+      if(!firestoreDb){
+        pesquisasPorPedido[id] = { erro: 'Firebase não conectado (aba Sincronização).' };
+        renderHistorico();
+        return;
+      }
+      // Só consulta uma vez por pedido; reabrir usa o que já veio.
+      if(pesquisasPorPedido[id] && !pesquisasPorPedido[id].erro){ renderHistorico(); return; }
+      const d = historicoDocsCache.find(x => x.id === id);
+      if(d) carregarPesquisasDoPedido(d);
+    }
   });
 
   function htmlPesquisasDoPedido(d){
@@ -3624,11 +3717,7 @@ Tupan</textarea>
         '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
         '<span class="h-count">'+contagem+'</span>'+
         '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
-      header.addEventListener('click', ()=>{
-        if(historicoColapsados.has(d.id)) historicoColapsados.delete(d.id);
-        else historicoColapsados.add(d.id);
-        renderHistorico();
-      });
+      header.dataset.cotacaoHeader = d.id;
       item.appendChild(header);
 
       if(aberto){
@@ -3681,51 +3770,33 @@ Tupan</textarea>
         tabela += '</tbody></table></div>';
         body.innerHTML = tabela;
 
+        // Os botões só carregam o id da cotação; quem escuta é a
+        // delegação registrada uma vez em #historicoLista. Antes eram
+        // seis listeners por cotação, reanexados a cada abrir/fechar.
         const acoes = document.createElement('div');
         acoes.className = 'actions-mini';
         acoes.style.marginTop = '10px';
-        const editarBtn = document.createElement('button');
-        editarBtn.type = 'button';
-        editarBtn.textContent = '✏️ Editar / continuar negociação';
-        editarBtn.addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
-        const compararBtn = document.createElement('button');
-        compararBtn.type = 'button';
-        compararBtn.textContent = '⚖️ Comparar com NF-e';
-        compararBtn.addEventListener('click', ()=>abrirComparacao(d.id));
-        const pesquisarLoteBtn = document.createElement('button');
-        pesquisarLoteBtn.type = 'button';
-        pesquisarLoteBtn.textContent = '🏪 Pesquisar concorrentes';
-        pesquisarLoteBtn.addEventListener('click', ()=>abrirPesquisaLote(d.id));
+        const botaoAcao = (acao, texto)=>{
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.dataset.acao = acao;
+          b.dataset.cotacao = d.id;
+          b.textContent = texto;
+          return b;
+        };
+        const editarBtn = botaoAcao('editar', '✏️ Editar / continuar negociação');
+        const compararBtn = botaoAcao('comparar', '⚖️ Comparar com NF-e');
+        const pesquisarLoteBtn = botaoAcao('pesquisar', '🏪 Pesquisar concorrentes');
 
         // Traz de volta o que já foi pesquisado para este pedido, sem
         // precisar procurar produto por produto na aba Concorrentes.
         const pesquisasAberto = pesquisasSalvasAbertas.has(d.id);
-        const verPesquisasBtn = document.createElement('button');
-        verPesquisasBtn.type = 'button';
+        const verPesquisasBtn = botaoAcao('pesquisas',
+          (pesquisasAberto ? '▼' : '🔎') + ' Pesquisas salvas');
         verPesquisasBtn.setAttribute('aria-expanded', String(pesquisasAberto));
-        verPesquisasBtn.textContent = (pesquisasAberto ? '▼' : '🔎') + ' Pesquisas salvas';
-        verPesquisasBtn.addEventListener('click', ()=>{
-          if(pesquisasSalvasAbertas.has(d.id)){
-            pesquisasSalvasAbertas.delete(d.id);
-            renderHistorico();
-            return;
-          }
-          pesquisasSalvasAbertas.add(d.id);
-          if(!firestoreDb){
-            pesquisasPorPedido[d.id] = { erro: 'Firebase não conectado (aba Sincronização).' };
-            renderHistorico();
-            return;
-          }
-          // Só consulta uma vez por pedido; reabrir usa o que já veio.
-          if(pesquisasPorPedido[d.id] && !pesquisasPorPedido[d.id].erro) renderHistorico();
-          else carregarPesquisasDoPedido(d);
-        });
 
-        const excluirBtn = document.createElement('button');
-        excluirBtn.type = 'button';
+        const excluirBtn = botaoAcao('excluir', 'Excluir');
         excluirBtn.className = 'del';
-        excluirBtn.textContent = 'Excluir';
-        excluirBtn.addEventListener('click', ()=>excluirCotacaoHistorico(d.id));
         acoes.appendChild(editarBtn);
         acoes.appendChild(compararBtn);
         acoes.appendChild(pesquisarLoteBtn);
@@ -4378,7 +4449,10 @@ Tupan</textarea>
       el.innerHTML = '<div class="empty-note" style="display:block;">Nenhuma divergência — tudo dentro do esperado.</div>';
     } else {
       el.innerHTML = sugestoes.map(s=>
-        '<div class="suggestion-item '+s.tipo+'"><div class="sg-title">'+escapeHtml(s.titulo)+'</div><div class="sg-detail">'+escapeHtml(s.detalhe)+'</div></div>'
+        // s.tipo só recebe literais de gerarSugestoes hoje, mas era o
+        // único valor do projeto indo para dentro de um atributo sem
+        // passar por escapeHtml — a exceção custava mais que a regra.
+        '<div class="suggestion-item '+escapeHtml(s.tipo)+'"><div class="sg-title">'+escapeHtml(s.titulo)+'</div><div class="sg-detail">'+escapeHtml(s.detalhe)+'</div></div>'
       ).join('');
     }
     card.style.display = 'block';
@@ -4823,7 +4897,7 @@ Tupan</textarea>
       const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
       dados.produto = nomeDestino;
       try{
-        await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
+        await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
         produtosCotacaoSalvos.add(r.produtoEsperado);
         salvos++;
       }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
@@ -4961,7 +5035,7 @@ Tupan</textarea>
       toggles: { credIcmsFrete: parseInt($('indCredIcmsFrete').value,10), comST: parseInt($('indComST').value,10), prejuizoContabil: 0, tipoBonificacao: parseInt($('indTipoBonificacao').value,10) }
     };
     try{
-      await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
+      await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
       produtosCotacaoSalvos.add(r.produtoEsperado);
       await atualizarListaSalvos(); // reindexa preço de venda e códigos
       $('individualMsg').textContent = '✓ ' + nomeDestino + ' salvo com sucesso.';
