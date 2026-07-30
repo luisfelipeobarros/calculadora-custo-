@@ -637,7 +637,16 @@
     var fimMes = hoje.substring(0,8) + String(ultimoDiaMes).padStart(2,'0');
     var ateFimMes = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= fimMes; });
 
+    // Enquanto as duplicatas nao chegaram, estes quatro cartoes mostram
+    // "--" em vez de R$ 0,00. Zero e' uma AFIRMACAO — em conexao lenta,
+    // "Duplicatas atrasadas R$ 0,00" se le como "nao ha' nada atrasado",
+    // que e' justamente o contrario do que o painel existe para dizer.
     function preencher(idQtd, idValor, lista, sufixo){
+      if(!carregouDuplicatas){
+        $(idQtd).textContent = 'carregando...';
+        $(idValor).textContent = '--';
+        return;
+      }
       $(idQtd).textContent = lista.length + ' ' + (sufixo || 'duplicata(s)');
       $(idValor).textContent = brl(lista.reduce(function(s,d){ return s + (d.valor||0); }, 0));
     }
@@ -666,6 +675,9 @@
         .sort(function(a,b){ return b.total - a.total; });
     }
     function htmlTop(grupos){
+      // Mesmo motivo dos cartoes: "Nada aqui 🎉" e' uma afirmacao, e
+      // ainda nao ha' o que afirmar enquanto as duplicatas carregam.
+      if(!carregouDuplicatas) return '<p class="nota-explicativa" style="margin:0;">Carregando...</p>';
       if(!grupos.length) return '<p class="nota-explicativa" style="margin:0;">Nada aqui. 🎉</p>';
       return grupos.map(function(g){
         return '<div class="top-forn-row"><div><div class="top-forn-nome">' + escapeHtml(g.nome) + '</div>' +
@@ -742,9 +754,38 @@
 
   function htmlVencimentos(chave, colunas){
     var n = notasPorChave[chave];
-    var dups = duplicatas.filter(function(d){ return d.chaveAcesso === chave; });
+    var inner;
+
+    // Lista vazia tem TRES causas, e so' uma delas e' "nao tem
+    // duplicata". As outras duas nao podem ser afirmadas como fato:
+    //
+    //  1. as duplicatas ainda nao chegaram — sao duas consultas
+    //     onSnapshot independentes, e a tela redesenha quando qualquer
+    //     uma termina (ver a guarda em renderAtual);
+    //  2. elas existem, mas vencem fora da janela de MESES_HISTORICO,
+    //     entao nunca foram baixadas.
+    //
+    // E' o mesmo cuidado que a coluna "Recebido" ja' toma ao mostrar
+    // "—" em vez de "NAO" quando a nota de origem esta' fora do corte.
+    if(!carregouDuplicatas){
+      inner = '<span class="nota-explicativa">Carregando duplicatas...</span>';
+    } else {
+      var dups = duplicatas.filter(function(d){ return d.chaveAcesso === chave; });
+      if(dups.length){
+        inner = App.tabelaVencimentos(dups, { dataEmissao: n ? n.dataEmissao : '' });
+      } else if(carregarTudo){
+        // Sem corte de janela, vazio quer dizer vazio mesmo.
+        inner = '<span class="nota-explicativa">Esta nota não tem duplicatas registradas.</span>';
+      } else {
+        inner = '<span class="nota-explicativa">Nenhuma duplicata desta nota vence dentro da ' +
+          'janela carregada (últimos ' + MESES_HISTORICO + ' meses). Ela pode não ter duplicatas, ' +
+          'ou elas podem ser mais antigas — use "carregar histórico completo" na barra de cima ' +
+          'para ter certeza.</span>';
+      }
+    }
+
     return '<tr><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' +
-      App.tabelaVencimentos(dups, { dataEmissao: n ? n.dataEmissao : '' }) + '</td></tr>';
+      inner + '</td></tr>';
   }
 
   function htmlItens(chave, colunas){
