@@ -425,6 +425,10 @@
     catch (e) { return true; }
   }
   function setManterConectado(v) {
+    // Engolir e' de proposito: e' preferencia de maquina, nao dado. Se
+    // localStorage nao estiver disponivel (aba anonima, cota estourada),
+    // a caixa de login volta marcada no proximo acesso — incomodo
+    // pequeno, longe de justificar interromper o login por causa disso.
     try { localStorage.setItem(CHAVE_MANTER, v ? '1' : '0'); } catch (e) {}
   }
 
@@ -487,7 +491,12 @@
 
   function aoMudarUsuario(fn) {
     _ouvintesUsuario.push(fn);
-    if (_usuario !== undefined) { try { fn(_usuario); } catch (e) {} }
+    // Mesmo tratamento do disparo em iniciarAuth: um ouvinte que estoura
+    // nao pode derrubar quem chamou, mas tambem nao pode sumir sem deixar
+    // rastro no console.
+    if (_usuario !== undefined) {
+      try { fn(_usuario); } catch (e) { console.error('ouvinte de auth:', e); }
+    }
   }
 
   // Abre a caixa de login. Chamadas simultaneas compartilham a mesma
@@ -986,6 +995,12 @@
      Exporta
      ============================================================ */
 
+  // So' entra aqui o que algum dos dois apps (ou os testes) realmente
+  // usa. num, abrirModal, iniciarAuth, authPronto, sair, usuario e
+  // aoMudarUsuario existem e sao usados INTERNAMENTE — por
+  // tabelaItensNota, confirmar/avisar/pedirLogin, iniciarFirebase,
+  // exigirLogin e montarBarraConta. Estavam exportados sem nenhum
+  // consumidor de fora; se um dia algum app precisar, e' so' devolver.
   global.App = {
     FIREBASE_CONFIG: FIREBASE_CONFIG,
     DEBOUNCE_BUSCA: DEBOUNCE_BUSCA,
@@ -1000,7 +1015,6 @@
     centavos: centavos,
     brl: brl,
     pct: pct,
-    num: num,
     parseNumeroBR: parseNumeroBR,
 
     iso: iso,
@@ -1020,17 +1034,11 @@
     erroDe: erroDe,
     confirmar: confirmar,
     avisar: avisar,
-    abrirModal: abrirModal,
 
     iniciarFirebase: iniciarFirebase,
-    iniciarAuth: iniciarAuth,
     pedirLogin: pedirLogin,
     exigirLogin: exigirLogin,
-    authPronto: authPronto,
     comAuth: comAuth,
-    sair: sair,
-    usuario: usuario,
-    aoMudarUsuario: aoMudarUsuario,
     ehPermissaoNegada: ehPermissaoNegada,
     montarBarraConta: montarBarraConta,
     DOMINIO_LOGIN: DOMINIO_LOGIN,

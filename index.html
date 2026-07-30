@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=9"></script>
+<script src="app-shared.js?v=10"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -1081,6 +1081,13 @@ Tupan</textarea>
   // 3) localStorage: guarda PERMANENTEMENTE neste computador/navegador, atrelado a este arquivo
   // 4) memória: último recurso, só dura enquanto a aba estiver aberta.
   const LS_KEY = 'calculadora_custo_produtos_v1';
+
+  // A chave de um produto é 'calc:' + o nome codificado. Estes dois
+  // conversores estavam escritos à mão em cinco lugares; se um deles
+  // mudasse de ideia sobre o prefixo, os outros quatro continuariam
+  // procurando no lugar antigo.
+  const chaveDoProduto = nome => chaveDoProduto(nome);
+  const nomeDaChave = chave => decodeURIComponent(String(chave).replace('calc:', ''));
   const FIREBASE_CONFIG_KEY = 'calculadora_custo_firebase_config';
   const FIREBASE_CONFIG_PADRAO = App.FIREBASE_CONFIG; // definida uma vez em app-shared.js
   const memoryStore = {};
@@ -1106,6 +1113,9 @@ Tupan</textarea>
     }catch(e){ return FIREBASE_CONFIG_PADRAO; }
   }
   function setFirebaseConfigSalva(config){
+    // Engolir e' de proposito: isto e' preferencia de maquina, nao dado.
+    // Em aba anonima ou com a cota estourada, gravar falha — e o app
+    // segue funcionando com a config padrao, que e' o comportamento certo.
     try{ localStorage.setItem(FIREBASE_CONFIG_KEY, config ? JSON.stringify(config) : 'null'); }catch(e){}
   }
 
@@ -1120,6 +1130,7 @@ Tupan</textarea>
     }catch(e){ return RECAPTCHA_SITE_KEY_PADRAO; }
   }
   function setRecaptchaSiteKeySalva(v){
+    // Idem: preferencia de maquina. Falhar aqui nao pode interromper nada.
     try{ localStorage.setItem(RECAPTCHA_KEY, v || ''); }catch(e){}
   }
 
@@ -1233,7 +1244,7 @@ Tupan</textarea>
   async function storageSet(key, value){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         await firebaseSalvar(nome, JSON.parse(value));
         return { key, value, shared:false };
       }catch(e){ console.error('Erro Firebase (salvar):', e); rebaixarBackend(); }
@@ -1260,7 +1271,7 @@ Tupan</textarea>
   async function storageGet(key){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         const dados = await firebaseObter(nome);
         if(dados) return { key, value: JSON.stringify(dados), shared:false };
         return null;
@@ -1287,7 +1298,7 @@ Tupan</textarea>
   async function storageDelete(key){
     if(storageBackend === 'firebase'){
       try{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         await firebaseExcluir(nome);
         return { key, deleted:true, shared:false };
       }catch(e){ console.error('Erro Firebase (excluir):', e); rebaixarBackend(); }
@@ -1311,7 +1322,7 @@ Tupan</textarea>
     if(storageBackend === 'firebase'){
       try{
         const produtos = await firebaseListar();
-        const keys = Object.keys(produtos).map(nome => 'calc:' + encodeURIComponent(nome)).filter(k=>k.startsWith(prefix));
+        const keys = Object.keys(produtos).map(nome => chaveDoProduto(nome)).filter(k=>k.startsWith(prefix));
         return { keys, prefix, shared:false };
       }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
     }
@@ -1339,7 +1350,7 @@ Tupan</textarea>
       try{
         const produtos = await firebaseListar();
         return Object.keys(produtos)
-          .map(nome => ({ key: 'calc:' + encodeURIComponent(nome), value: JSON.stringify(produtos[nome]) }))
+          .map(nome => ({ key: chaveDoProduto(nome), value: JSON.stringify(produtos[nome]) }))
           .filter(p => p.key.startsWith(prefix));
       }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
     }
@@ -1617,7 +1628,7 @@ Tupan</textarea>
     // Usar o nome da planilha como chave criaria um segundo registro
     // do mesmo produto, e aí o preço voltaria a existir em dois lugares.
     const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
-    const key = 'calc:' + encodeURIComponent(nomeDestino);
+    const key = chaveDoProduto(nomeDestino);
     let dados = null;
     try{
       const res = await storageGet(key);
@@ -1678,7 +1689,7 @@ Tupan</textarea>
       if(countEl) countEl.textContent = itens.length > 0 ? '(' + itens.length + ')' : '';
 
       produtosCache = itens.map(({ key, value })=>{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         let r = null;
         let cfg = null;
         let fornecedor = '';
@@ -1926,7 +1937,7 @@ Tupan</textarea>
       }
     }
 
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     const payload = JSON.stringify(coletarInputs());
     try{
       await storageSet(key, payload);
@@ -1943,7 +1954,7 @@ Tupan</textarea>
   }
 
   async function carregarProduto(nome){
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     try{
       const res = await storageGet(key);
       if(res && res.value){
@@ -1967,7 +1978,7 @@ Tupan</textarea>
     });
     if(!ok) return;
 
-    const key = 'calc:' + encodeURIComponent(nome);
+    const key = chaveDoProduto(nome);
     try{
       await storageDelete(key);
       await atualizarListaSalvos();
@@ -1983,7 +1994,7 @@ Tupan</textarea>
       const itens = await storageLerTudo('calc:');
       const produtos = {};
       itens.forEach(({ key, value })=>{
-        const nome = decodeURIComponent(key.replace('calc:',''));
+        const nome = nomeDaChave(key);
         try{ produtos[nome] = JSON.parse(value); }
         catch(e){ console.warn('registro corrompido ignorado no backup:', nome); }
       });
@@ -2041,7 +2052,7 @@ Tupan</textarea>
     const falhas = [];
     for(const nome of nomes){
       try{
-        await storageSet('calc:' + encodeURIComponent(nome), JSON.stringify(produtos[nome]));
+        await storageSet(chaveDoProduto(nome), JSON.stringify(produtos[nome]));
         importados++;
       }catch(e){
         console.error('falha ao importar ' + nome, e);
@@ -4378,7 +4389,10 @@ Tupan</textarea>
       el.innerHTML = '<div class="empty-note" style="display:block;">Nenhuma divergência — tudo dentro do esperado.</div>';
     } else {
       el.innerHTML = sugestoes.map(s=>
-        '<div class="suggestion-item '+s.tipo+'"><div class="sg-title">'+escapeHtml(s.titulo)+'</div><div class="sg-detail">'+escapeHtml(s.detalhe)+'</div></div>'
+        // s.tipo só recebe literais de gerarSugestoes hoje, mas era o
+        // único valor do projeto indo para dentro de um atributo sem
+        // passar por escapeHtml — a exceção custava mais que a regra.
+        '<div class="suggestion-item '+escapeHtml(s.tipo)+'"><div class="sg-title">'+escapeHtml(s.titulo)+'</div><div class="sg-detail">'+escapeHtml(s.detalhe)+'</div></div>'
       ).join('');
     }
     card.style.display = 'block';
@@ -4823,7 +4837,7 @@ Tupan</textarea>
       const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
       dados.produto = nomeDestino;
       try{
-        await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
+        await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
         produtosCotacaoSalvos.add(r.produtoEsperado);
         salvos++;
       }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
@@ -4961,7 +4975,7 @@ Tupan</textarea>
       toggles: { credIcmsFrete: parseInt($('indCredIcmsFrete').value,10), comST: parseInt($('indComST').value,10), prejuizoContabil: 0, tipoBonificacao: parseInt($('indTipoBonificacao').value,10) }
     };
     try{
-      await storageSet('calc:' + encodeURIComponent(nomeDestino), JSON.stringify(dados));
+      await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
       produtosCotacaoSalvos.add(r.produtoEsperado);
       await atualizarListaSalvos(); // reindexa preço de venda e códigos
       $('individualMsg').textContent = '✓ ' + nomeDestino + ' salvo com sucesso.';
