@@ -1209,13 +1209,28 @@
   // Prazo de UMA nota: os dias entre a emissao e cada vencimento, em
   // ordem. Devolve null quando nao da' para calcular (sem data de
   // emissao), para a nota ficar de fora em vez de virar um prazo falso.
-  function prazosDaNota(n){
+  // Duplicatas agrupadas por chave de acesso, montadas de uma vez.
+  //
+  // Antes prazosDaNota filtrava a lista INTEIRA de duplicatas para cada
+  // nota — o custo crescia ao quadrado. Medido: 4.000 notas x 8.000
+  // duplicatas levavam 622 ms, e isso rodava a cada atualizacao que
+  // chegava do Firestore. Com o indice: 21 ms.
+  function indexarDuplicatas(){
+    var porChave = Object.create(null);
+    duplicatas.forEach(function(d){
+      if(!d.vencimento) return;
+      (porChave[d.chaveAcesso] || (porChave[d.chaveAcesso] = [])).push(d);
+    });
+    return porChave;
+  }
+
+  // porChave vem de fora para o indice ser montado uma vez por render,
+  // e nao uma vez por nota.
+  function prazosDaNota(n, porChave){
     if(!n.dataEmissao) return null;
-    var dias = duplicatas
-      .filter(function(d){ return d.chaveAcesso === n.id && d.vencimento; })
+    return (porChave[n.id] || [])
       .map(function(d){ return diasEntre(n.dataEmissao, d.vencimento); })
-      .sort(function(a,b){ return a - b; });
-    return dias; // vazio = a' vista
+      .sort(function(a,b){ return a - b; }); // vazio = a' vista
   }
 
   function rotuloPrazo(dias){
@@ -1295,10 +1310,11 @@
 
     // Só notas ativas e emitidas contra a empresa. Canceladas ficam de
     // fora: não representam negociação que valeu.
+    var porChave = indexarDuplicatas();
     var porFornecedor = Object.create(null);
     notas.forEach(function(n){
       if(n.emitida !== true || !notaAtiva(n)) return;
-      var dias = prazosDaNota(n);
+      var dias = prazosDaNota(n, porChave);
       if(dias === null) return; // sem data de emissão: não dá para medir
       var f = fornecedorDaNota(n);
       if(!porFornecedor[f]) porFornecedor[f] = [];

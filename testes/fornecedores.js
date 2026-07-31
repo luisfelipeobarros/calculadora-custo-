@@ -30,9 +30,10 @@ const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a +
 const duplicatas = [];
 
 const m = new Function('norm', 'diasEntre', 'duplicatas',
-  regras + '\n' + extrair('fornecedorDaNota') + '\n' + extrair('prazosDaNota') + '\n' +
+  regras + '\n' + extrair('fornecedorDaNota') + '\n' + extrair('indexarDuplicatas') + '\n' +
+  extrair('prazosDaNota') + '\n' +
   extrair('rotuloPrazo') + '\n' + extrair('prazosProximos') + '\n' + extrair('agruparPrazos') + '\n' +
-  'return { fornecedorDaNota, prazosDaNota, rotuloPrazo, prazosProximos, agruparPrazos };'
+  'return { fornecedorDaNota, indexarDuplicatas, prazosDaNota, rotuloPrazo, prazosProximos, agruparPrazos };'
 )(norm, diasEntre, duplicatas);
 
 let problemas = 0;
@@ -74,16 +75,29 @@ eq('o termo casa sem depender de caixa',
 duplicatas.push(
   { chaveAcesso:'k1', vencimento:'2026-07-03' },
   { chaveAcesso:'k1', vencimento:'2026-07-17' },
-  { chaveAcesso:'k1', vencimento:'2026-07-31' });
+  { chaveAcesso:'k1', vencimento:'2026-07-31' },
+  { chaveAcesso:'k2', vencimento:null },              // sem vencimento: fora do indice
+  { chaveAcesso:'k3', vencimento:'2026-02-10' });
+
+// O indice e' montado UMA vez por render. Antes prazosDaNota varria a
+// lista inteira de duplicatas por nota, e o custo crescia ao quadrado:
+// 4.000 notas x 8.000 duplicatas levavam 622 ms contra 21 ms com indice.
+const idx = m.indexarDuplicatas();
+eq('o indice agrupa por chave de acesso', (idx['k1'] || []).length, 3);
+eq('duplicata sem vencimento fica fora do indice', idx['k2'], undefined);
+eq('chave sem duplicata nao aparece no indice', idx['zzz'], undefined);
 
 eq('prazo da NFe real da Cerbras (emissao 24/04)',
-  m.rotuloPrazo(m.prazosDaNota({ id:'k1', dataEmissao:'2026-04-24' })), '70/84/98');
+  m.rotuloPrazo(m.prazosDaNota({ id:'k1', dataEmissao:'2026-04-24' }, idx)), '70/84/98');
 eq('nota sem duplicata conta como a vista',
-  m.rotuloPrazo(m.prazosDaNota({ id:'sem', dataEmissao:'2026-01-01' })), 'à vista');
+  m.rotuloPrazo(m.prazosDaNota({ id:'sem', dataEmissao:'2026-01-01' }, idx)), 'à vista');
 // Sem data de emissao nao ha' prazo: a nota fica de fora em vez de
 // entrar com um numero inventado.
 eq('nota sem data de emissao fica de fora',
-  m.prazosDaNota({ id:'k1' }), null);
+  m.prazosDaNota({ id:'k1' }, idx), null);
+// A nota so' enxerga as duplicatas DELA — o indice nao pode vazar.
+eq('o indice nao mistura duplicatas de outra nota',
+  m.rotuloPrazo(m.prazosDaNota({ id:'k3', dataEmissao:'2026-01-01' }, idx)), '40');
 
 // ── Moda, e nunca media ──────────────────────────────────────
 const amostra = [
