@@ -114,6 +114,7 @@
       <button class="btn secondary" id="navPainel">📊 Painel</button>
       <button class="btn secondary" id="navImportar">📥 A importar <span id="countImportar"></span></button>
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
+      <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
       <!-- Caminho de volta para o outro aplicativo. -->
       <a class="btn secondary" href="index.html">🧮 Calculadora de Custo</a>
@@ -235,6 +236,29 @@
       <div style="text-align:center; margin-top:10px;">
         <button type="button" class="btn secondary" id="maisPagBtn" style="display:none;">Mostrar mais</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ FORNECEDORES ═══════════ -->
+  <div id="viewFornecedores" style="display:none;">
+    <div class="card">
+      <h2>Fornecedores e prazos</h2>
+      <p class="nota-explicativa">
+        O prazo que <strong>mais se repete</strong> em cada fornecedor — contagem, não média.
+        Ao lado, os outros prazos encontrados: é neles que aparecem as negociações fora do padrão.
+        Clique no fornecedor para ver nota por nota.
+      </p>
+      <div class="filtros">
+        <label class="sr-only" for="buscaForn">Buscar fornecedor</label>
+        <input type="search" id="buscaForn" placeholder="Buscar fornecedor...">
+        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;"
+               title="Vencimento que cai em fim de semana costuma ser empurrado 1 ou 2 dias. Sem agrupar, isso vira um padrão diferente e a contagem se pulveriza.">
+          <input type="checkbox" id="tolerarPrazo" style="width:15px; height:15px; cursor:pointer;">
+          agrupar prazos próximos (±3 dias)
+        </label>
+      </div>
+      <div id="tabelaForn"></div>
+      <div class="rodape-total" id="totalForn" role="status" aria-live="polite"></div>
     </div>
   </div>
 
@@ -558,17 +582,20 @@
   // ─── Navegacao ──────────────────────────────────────────────
 
   var router = App.criarRouter({
-    views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos', Canceladas:'viewCanceladas' },
+    views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
+             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas' },
     padrao: 'Painel',
     aoEntrar: {
       Painel: renderPainel,
       Importar: renderImportar,
       Pagamentos: renderPagamentos,
+      Fornecedores: renderFornecedores,
       Canceladas: renderCanceladas
     },
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
-       ['Pagamentos','navPagamentos'], ['Canceladas','navCanceladas']].forEach(function(par){
+       ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
+       ['Canceladas','navCanceladas']].forEach(function(par){
         var b = $(par[1]);
         if(par[0] === nome) b.setAttribute('aria-current', 'page');
         else b.removeAttribute('aria-current');
@@ -581,6 +608,7 @@
   $('navPainel').addEventListener('click', function(){ router.ir('Painel'); });
   $('navImportar').addEventListener('click', function(){ router.ir('Importar'); });
   $('navPagamentos').addEventListener('click', function(){ router.ir('Pagamentos'); });
+  $('navFornecedores').addEventListener('click', function(){ router.ir('Fornecedores'); });
   $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
 
   $('kpiImportar').addEventListener('click', function(){ router.ir('Importar'); });
@@ -598,7 +626,8 @@
     var chaveFoco = (ativo && ativo.dataset) ? ativo.dataset.previsao : null;
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
-               Pagamentos:renderPagamentos, Canceladas:renderCanceladas }[router.atual()];
+               Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
+               Canceladas:renderCanceladas }[router.atual()];
     if(fn) fn();
     atualizarContadores();
 
@@ -1153,6 +1182,191 @@
       })
       .then(function(){ cb.disabled = false; });
   });
+
+  // ─── Fornecedores e prazos ──────────────────────────────────
+
+  // Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
+  // vende duas linhas por aqui, e o que separa uma da outra e' o
+  // produto — nao ha' campo na nota que diga isso.
+  //
+  // Para acrescentar outra separacao, e' so' juntar uma regra: o
+  // "termo" e' procurado nos produtos da nota (produtosResumo, o mesmo
+  // campo do filtro por produto da tela "A importar").
+  var REGRAS_FORNECEDOR = [
+    { fornecedor: 'vetrus', termo: '46x46', comTermo: 'Vetrus (Severo)', semTermo: 'Vetrus (Pamesa)' }
+  ];
+
+  function fornecedorDaNota(n){
+    var nome = (n.nomeEmitente || 'Sem nome').trim();
+    var alvo = norm(nome);
+    for(var i = 0; i < REGRAS_FORNECEDOR.length; i++){
+      var r = REGRAS_FORNECEDOR[i];
+      if(alvo.indexOf(norm(r.fornecedor)) === -1) continue;
+      var tem = (n.produtosResumo || []).some(function(p){
+        return norm(p).indexOf(norm(r.termo)) !== -1;
+      });
+      return tem ? r.comTermo : r.semTermo;
+    }
+    return nome;
+  }
+
+  // Prazo de UMA nota: os dias entre a emissao e cada vencimento, em
+  // ordem. Devolve null quando nao da' para calcular (sem data de
+  // emissao), para a nota ficar de fora em vez de virar um prazo falso.
+  function prazosDaNota(n){
+    if(!n.dataEmissao) return null;
+    var dias = duplicatas
+      .filter(function(d){ return d.chaveAcesso === n.id && d.vencimento; })
+      .map(function(d){ return diasEntre(n.dataEmissao, d.vencimento); })
+      .sort(function(a,b){ return a - b; });
+    return dias; // vazio = a' vista
+  }
+
+  function rotuloPrazo(dias){
+    if(!dias || !dias.length) return 'à vista';
+    return dias.join('/');
+  }
+
+  // Dois prazos "proximos": mesma quantidade de parcelas e cada uma
+  // dentro da tolerancia. Vencimento que cai em fim de semana costuma
+  // ser empurrado 1 ou 2 dias, e sem isso 70/84/98 e 70/84/99 contariam
+  // como negociacoes diferentes.
+  function prazosProximos(a, b, tol){
+    if(a.length !== b.length) return false;
+    for(var i = 0; i < a.length; i++){
+      if(Math.abs(a[i] - b[i]) > tol) return false;
+    }
+    return true;
+  }
+
+  // Agrupa os prazos de um fornecedor e devolve os grupos ordenados do
+  // mais frequente para o menos. Com tol = 0 o agrupamento e' exato.
+  function agruparPrazos(listaDeDias, tol){
+    var grupos = [];
+    listaDeDias.forEach(function(dias){
+      for(var i = 0; i < grupos.length; i++){
+        if(prazosProximos(grupos[i].ref, dias, tol)){
+          grupos[i].qtd++;
+          grupos[i].variantes[rotuloPrazo(dias)] = (grupos[i].variantes[rotuloPrazo(dias)] || 0) + 1;
+          return;
+        }
+      }
+      var v = {};
+      v[rotuloPrazo(dias)] = 1;
+      grupos.push({ ref: dias, qtd: 1, variantes: v });
+    });
+
+    // O rotulo do grupo e' a variante exata mais comum dentro dele —
+    // nao uma media, nem o primeiro que apareceu.
+    grupos.forEach(function(g){
+      var melhor = null, melhorQtd = -1;
+      Object.keys(g.variantes).forEach(function(k){
+        if(g.variantes[k] > melhorQtd){ melhorQtd = g.variantes[k]; melhor = k; }
+      });
+      g.rotulo = melhor;
+    });
+    return grupos.sort(function(a,b){ return b.qtd - a.qtd; });
+  }
+
+  var fornAbertos = Object.create(null);
+
+  $('buscaForn').addEventListener('input', App.debounce(renderFornecedores));
+  $('tolerarPrazo').addEventListener('change', renderFornecedores);
+
+  App.delegar($('tabelaForn'), 'click', '[data-forn]', function(b){
+    var k = b.dataset.forn;
+    fornAbertos[k] = !fornAbertos[k];
+    renderFornecedores();
+  });
+
+  function renderFornecedores(){
+    if(!carregouNotas || !carregouDuplicatas){
+      $('tabelaForn').innerHTML = '<p class="nota-explicativa">Carregando notas e duplicatas...</p>';
+      $('totalForn').textContent = '';
+      return;
+    }
+
+    var termo = norm($('buscaForn').value);
+    var tol = $('tolerarPrazo').checked ? 3 : 0;
+
+    // Só notas ativas e emitidas contra a empresa. Canceladas ficam de
+    // fora: não representam negociação que valeu.
+    var porFornecedor = Object.create(null);
+    notas.forEach(function(n){
+      if(n.emitida !== true || !notaAtiva(n)) return;
+      var dias = prazosDaNota(n);
+      if(dias === null) return; // sem data de emissão: não dá para medir
+      var f = fornecedorDaNota(n);
+      if(!porFornecedor[f]) porFornecedor[f] = [];
+      porFornecedor[f].push({ nota: n, dias: dias });
+    });
+
+    var linhas = Object.keys(porFornecedor).map(function(f){
+      var itens = porFornecedor[f];
+      var grupos = agruparPrazos(itens.map(function(x){ return x.dias; }), tol);
+      return { fornecedor: f, itens: itens, grupos: grupos };
+    });
+
+    if(termo) linhas = linhas.filter(function(l){ return norm(l.fornecedor).indexOf(termo) !== -1; });
+    // Mais notas primeiro: quem você mais compra aparece no topo.
+    linhas.sort(function(a,b){ return b.itens.length - a.itens.length; });
+
+    if(!linhas.length){
+      $('tabelaForn').innerHTML = '<p class="nota-explicativa">' +
+        (termo ? 'Nenhum fornecedor com esse nome.' : 'Nenhuma nota com data de emissão no período carregado.') + '</p>';
+      $('totalForn').textContent = '';
+      return;
+    }
+
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Fornecedor</th><th scope="col">Prazo padrão</th>' +
+      '<th scope="col">Notas</th><th scope="col">Outros prazos encontrados</th>' +
+      '</tr></thead><tbody>';
+
+    linhas.forEach(function(l){
+      var aberto = !!fornAbertos[l.fornecedor];
+      var principal = l.grupos[0];
+      var outros = l.grupos.slice(1);
+      var pct = Math.round(principal.qtd / l.itens.length * 100);
+
+      html += '<tr>' +
+        '<td><button type="button" class="acao-mini" data-forn="' + escapeHtml(l.fornecedor) + '" ' +
+          'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
+          escapeHtml(l.fornecedor) + '</td>' +
+        '<td><strong style="font-size:14px;">' + escapeHtml(principal.rotulo) + '</strong>' +
+          '<div style="font-size:10px; color:var(--ink-soft);">' + principal.qtd + ' de ' +
+          l.itens.length + ' nota(s) · ' + pct + '%</div></td>' +
+        '<td>' + l.itens.length + '</td>' +
+        '<td style="font-size:11.5px;">' + (outros.length
+          ? outros.map(function(g){ return escapeHtml(g.rotulo) + ' <span style="color:var(--ink-soft);">(' + g.qtd + ')</span>'; }).join(' · ')
+          : '<span class="nota-explicativa" style="margin:0;">sempre o mesmo</span>') + '</td>' +
+        '</tr>';
+
+      if(aberto){
+        html += '<tr><td colspan="4" style="background:var(--stripe2); padding:10px;">' +
+          '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+          '<th scope="col">Emissão</th><th scope="col">Nº</th><th scope="col">Valor</th>' +
+          '<th scope="col">Prazo</th></tr></thead><tbody>' +
+          l.itens.slice().sort(function(a,b){
+            return (b.nota.dataEmissao || '').localeCompare(a.nota.dataEmissao || '');
+          }).map(function(x){
+            var r = rotuloPrazo(x.dias);
+            var foraDoPadrao = r !== principal.rotulo;
+            return '<tr><td>' + fmtData(x.nota.dataEmissao) + '</td>' +
+              '<td>' + escapeHtml(x.nota.numero || '-') + '</td>' +
+              '<td>' + brl(x.nota.valorTotal) + '</td>' +
+              '<td' + (foraDoPadrao ? ' style="color:var(--brick); font-weight:700;"' : '') + '>' +
+              escapeHtml(r) + '</td></tr>';
+          }).join('') +
+          '</tbody></table></div></td></tr>';
+      }
+    });
+
+    $('tabelaForn').innerHTML = html + '</tbody></table></div>';
+    $('totalForn').textContent = linhas.length + ' fornecedor(es) · ' +
+      linhas.reduce(function(s,l){ return s + l.itens.length; }, 0) + ' nota(s) analisada(s)' +
+      (carregarTudo ? '' : ' · só o que está na janela de ' + MESES_HISTORICO + ' meses');
+  }
 
   // ─── Canceladas ─────────────────────────────────────────────
 

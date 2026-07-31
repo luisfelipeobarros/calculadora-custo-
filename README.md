@@ -186,7 +186,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São oito etapas, em seis frentes:
+Não precisa instalar nada. São nove etapas, em sete frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
