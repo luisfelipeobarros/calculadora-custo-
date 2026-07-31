@@ -186,7 +186,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São oito etapas, em seis frentes:
+Não precisa instalar nada. São nove etapas, em sete frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -208,6 +208,10 @@ Não precisa instalar nada. São oito etapas, em seis frentes:
 6. **Regras da tela de cotação** — campo escondido não entra na conta,
    a margem do histórico bate com a da cotação, e nada (barra de conta,
    escutas do Firestore) se multiplica a cada reconexão.
+7. **Fornecedores e prazos** — 17 verificações: a separação da Vetrus
+   por produto, e a moda dos prazos com e sem a tolerância de ±3 dias.
+   Trava o principal: o prazo mostrado é sempre um que **existiu de
+   verdade** numa nota, nunca uma média.
 
 Rode antes de publicar qualquer alteração.
 
