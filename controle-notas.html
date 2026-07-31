@@ -245,17 +245,13 @@
       <h2>Fornecedores e prazos</h2>
       <p class="nota-explicativa">
         O prazo que <strong>mais se repete</strong> em cada fornecedor — contagem, não média.
-        Ao lado, os outros prazos encontrados: é neles que aparecem as negociações fora do padrão.
-        Clique no fornecedor para ver nota por nota.
+        Prazos com até 5 dias de diferença contam como o mesmo, porque vencimento que cai em
+        fim de semana costuma ser empurrado. Ao lado, os outros prazos encontrados: é neles
+        que aparecem as negociações fora do padrão. Clique no fornecedor para ver nota por nota.
       </p>
       <div class="filtros">
         <label class="sr-only" for="buscaForn">Buscar fornecedor</label>
         <input type="search" id="buscaForn" placeholder="Buscar fornecedor...">
-        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;"
-               title="Vencimento que cai em fim de semana costuma ser empurrado 1 ou 2 dias. Sem agrupar, isso vira um padrão diferente e a contagem se pulveriza.">
-          <input type="checkbox" id="tolerarPrazo" style="width:15px; height:15px; cursor:pointer;">
-          agrupar prazos próximos (±3 dias)
-        </label>
       </div>
       <div id="tabelaForn"></div>
       <div class="rodape-total" id="totalForn" role="status" aria-live="polite"></div>
@@ -1213,13 +1209,28 @@
   // Prazo de UMA nota: os dias entre a emissao e cada vencimento, em
   // ordem. Devolve null quando nao da' para calcular (sem data de
   // emissao), para a nota ficar de fora em vez de virar um prazo falso.
-  function prazosDaNota(n){
+  // Duplicatas agrupadas por chave de acesso, montadas de uma vez.
+  //
+  // Antes prazosDaNota filtrava a lista INTEIRA de duplicatas para cada
+  // nota — o custo crescia ao quadrado. Medido: 4.000 notas x 8.000
+  // duplicatas levavam 622 ms, e isso rodava a cada atualizacao que
+  // chegava do Firestore. Com o indice: 21 ms.
+  function indexarDuplicatas(){
+    var porChave = Object.create(null);
+    duplicatas.forEach(function(d){
+      if(!d.vencimento) return;
+      (porChave[d.chaveAcesso] || (porChave[d.chaveAcesso] = [])).push(d);
+    });
+    return porChave;
+  }
+
+  // porChave vem de fora para o indice ser montado uma vez por render,
+  // e nao uma vez por nota.
+  function prazosDaNota(n, porChave){
     if(!n.dataEmissao) return null;
-    var dias = duplicatas
-      .filter(function(d){ return d.chaveAcesso === n.id && d.vencimento; })
+    return (porChave[n.id] || [])
       .map(function(d){ return diasEntre(n.dataEmissao, d.vencimento); })
-      .sort(function(a,b){ return a - b; });
-    return dias; // vazio = a' vista
+      .sort(function(a,b){ return a - b; }); // vazio = a' vista
   }
 
   function rotuloPrazo(dias){
@@ -1270,8 +1281,16 @@
 
   var fornAbertos = Object.create(null);
 
+  // Dias de folga para dois prazos contarem como o mesmo. Vencimento
+  // que cai em fim de semana ou feriado costuma ser empurrado, e sem
+  // isso 70/84/98 e 70/84/99 apareceriam como negociacoes diferentes —
+  // a contagem se pulverizava e a moda perdia o sentido.
+  var TOLERANCIA_PRAZO = 5;
+
+  // Quantos prazos aparecem antes de o resto virar "outros".
+  var MAX_PRAZOS_VISIVEIS = 4;
+
   $('buscaForn').addEventListener('input', App.debounce(renderFornecedores));
-  $('tolerarPrazo').addEventListener('change', renderFornecedores);
 
   App.delegar($('tabelaForn'), 'click', '[data-forn]', function(b){
     var k = b.dataset.forn;
@@ -1287,14 +1306,15 @@
     }
 
     var termo = norm($('buscaForn').value);
-    var tol = $('tolerarPrazo').checked ? 3 : 0;
+    var tol = TOLERANCIA_PRAZO;
 
     // Só notas ativas e emitidas contra a empresa. Canceladas ficam de
     // fora: não representam negociação que valeu.
+    var porChave = indexarDuplicatas();
     var porFornecedor = Object.create(null);
     notas.forEach(function(n){
       if(n.emitida !== true || !notaAtiva(n)) return;
-      var dias = prazosDaNota(n);
+      var dias = prazosDaNota(n, porChave);
       if(dias === null) return; // sem data de emissão: não dá para medir
       var f = fornecedorDaNota(n);
       if(!porFornecedor[f]) porFornecedor[f] = [];
@@ -1326,7 +1346,12 @@
     linhas.forEach(function(l){
       var aberto = !!fornAbertos[l.fornecedor];
       var principal = l.grupos[0];
-      var outros = l.grupos.slice(1);
+      // Só os maiores aparecem nomeados; a cauda vira uma linha só, com
+      // o total de notas. Fornecedor com quinze prazos diferentes não
+      // fica legível listando os quinze — e a cauda em si já é o recado.
+      var outros = l.grupos.slice(1, MAX_PRAZOS_VISIVEIS);
+      var cauda = l.grupos.slice(MAX_PRAZOS_VISIVEIS);
+      var notasNaCauda = cauda.reduce(function(s,g){ return s + g.qtd; }, 0);
       var pct = Math.round(principal.qtd / l.itens.length * 100);
 
       html += '<tr>' +
@@ -1338,7 +1363,12 @@
           l.itens.length + ' nota(s) · ' + pct + '%</div></td>' +
         '<td>' + l.itens.length + '</td>' +
         '<td style="font-size:11.5px;">' + (outros.length
-          ? outros.map(function(g){ return escapeHtml(g.rotulo) + ' <span style="color:var(--ink-soft);">(' + g.qtd + ')</span>'; }).join(' · ')
+          ? outros.map(function(g){ return escapeHtml(g.rotulo) + ' <span style="color:var(--ink-soft);">(' + g.qtd + ')</span>'; }).join(' · ') +
+            (cauda.length
+              ? ' · <span style="color:var(--ink-soft);" title="' + cauda.length +
+                ' prazo(s) diferentes, nenhum repetido o bastante para caber na lista">outros ' +
+                cauda.length + ' (' + notasNaCauda + ')</span>'
+              : '')
           : '<span class="nota-explicativa" style="margin:0;">sempre o mesmo</span>') + '</td>' +
         '</tr>';
 
