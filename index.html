@@ -1086,7 +1086,7 @@ Tupan</textarea>
   // conversores estavam escritos à mão em cinco lugares; se um deles
   // mudasse de ideia sobre o prefixo, os outros quatro continuariam
   // procurando no lugar antigo.
-  const chaveDoProduto = nome => chaveDoProduto(nome);
+  const chaveDoProduto = nome => 'calc:' + encodeURIComponent(nome);
   const nomeDaChave = chave => decodeURIComponent(String(chave).replace('calc:', ''));
   const FIREBASE_CONFIG_KEY = 'calculadora_custo_firebase_config';
   const FIREBASE_CONFIG_PADRAO = App.FIREBASE_CONFIG; // definida uma vez em app-shared.js

@@ -143,6 +143,56 @@ if(/vendaPorProduto = new Map\(comVenda\.map\(p => \[p\.nome, \{ venda: p\.r\.ve
 }
 
 // ============================================================
+// 2b) A chave do produto: ida e volta
+// ============================================================
+
+// Estas duas viraram funcao numa limpeza, e a substituicao por texto
+// trocou o corpo da propria definicao pelo nome dela — chaveDoProduto
+// passou a chamar a si mesma, e todo "Salvar produto" estourava a pilha.
+//
+// Nenhum teste pegou porque nenhum teste CHAMAVA a funcao: a carga em
+// DOM so' executa o arquivo, e executar a definicao de uma arrow
+// function nao dispara a recursao. Nao basta o codigo carregar: tem que
+// rodar com dado de verdade.
+const defsChave = ['chaveDoProduto', 'nomeDaChave'].map(n => {
+  const m = html.match(new RegExp('const ' + n + ' = [^\\n]+'));
+  if(!m) throw new Error('nao achei a definicao de ' + n);
+  return m[0];
+});
+const chaves = new Function(defsChave.join('\n') + '\nreturn { chaveDoProduto, nomeDaChave };')();
+
+[
+  'Porcelanato Onyx 60x60',
+  'TELHA 2,44M x 1,10',
+  'Produto com / barra e % porcento',
+  'Acentuacao: ACAO',
+  'aspas "duplas" e \'simples\''
+].forEach(nome => {
+  let chave, volta, estourou = null;
+  try {
+    chave = chaves.chaveDoProduto(nome);
+    volta = chaves.nomeDaChave(chave);
+  } catch(e) { estourou = e.message; }
+
+  if(estourou){
+    erro('chaveDoProduto/nomeDaChave estourou em "' + nome + '": ' + estourou);
+  } else if(!chave.startsWith('calc:')){
+    erro('a chave nao comeca com o prefixo: ' + chave);
+  } else if(volta !== nome){
+    erro('ida e volta perdeu o nome: "' + nome + '" -> "' + chave + '" -> "' + volta + '"');
+  } else {
+    ok('chave ida e volta: "' + nome.slice(0, 28) + (nome.length > 28 ? '...' : '') + '"');
+  }
+});
+
+// A chave vira id de documento no Firestore: "/" separaria caminho.
+if(chaves.chaveDoProduto('a/b').indexOf('/') === -1){
+  ok('a barra e codificada — id de documento valido no Firestore');
+} else {
+  erro('a chave manteve "/", que o Firestore leria como caminho');
+}
+
+// ============================================================
 // 3) A ficha gravada tambem e' normalizada na LEITURA
 // ============================================================
 
