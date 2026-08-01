@@ -28,13 +28,17 @@ if(!regras) throw new Error('nao achei REGRAS_FORNECEDOR');
 const norm = s => String(s == null ? '' : s).toLowerCase();
 const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
 const duplicatas = [];
+const notasPorChave = Object.create(null);
 
-const m = new Function('norm', 'diasEntre', 'duplicatas',
-  regras + '\n' + extrair('fornecedorDaNota') + '\n' + extrair('indexarDuplicatas') + '\n' +
+const m = new Function('norm', 'diasEntre', 'duplicatas', 'notasPorChave',
+  regras + '\n' + extrair('rotularFornecedor') + '\n' + extrair('fornecedorDaNota') + '\n' +
+  extrair('notaDaDup') + '\n' + extrair('fornecedorDaDuplicata') + '\n' +
+  extrair('indexarDuplicatas') + '\n' +
   extrair('prazosDaNota') + '\n' +
   extrair('rotuloPrazo') + '\n' + extrair('prazosProximos') + '\n' + extrair('agruparPrazos') + '\n' +
-  'return { fornecedorDaNota, indexarDuplicatas, prazosDaNota, rotuloPrazo, prazosProximos, agruparPrazos };'
-)(norm, diasEntre, duplicatas);
+  'return { fornecedorDaNota, fornecedorDaDuplicata, indexarDuplicatas, prazosDaNota,' +
+  ' rotuloPrazo, prazosProximos, agruparPrazos };'
+)(norm, diasEntre, duplicatas, notasPorChave);
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);
@@ -70,6 +74,51 @@ eq('46x46 em outro fornecedor nao aplica a regra',
 eq('o termo casa sem depender de caixa',
   m.fornecedorDaNota({ nomeEmitente:'vetrus', produtosResumo:['piso 46x46 branco'] }),
   'Vetrus (Severo)');
+
+// ── A mesma separacao no Painel ──────────────────────────────
+// O Painel agrupa DUPLICATAS, e duplicata nao carrega produto: os
+// produtos estao na nota de origem. Se as duas telas nao usassem a
+// mesma regra, a Vetrus apareceria separada numa e junta na outra.
+notasPorChave['nfe-severo'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PISO 46X46 STELA'] };
+notasPorChave['nfe-pamesa'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PORCELANATO 62x62'] };
+notasPorChave['nfe-semprod'] = { nomeEmitente:'VETRUS S/A' };
+notasPorChave['nfe-outro']  = { nomeEmitente:'CERAMICA BRASILEIRA CERBRAS LTDA', produtosResumo:['PISO 46x46'] };
+
+eq('duplicata da nota com 46x46 -> Severo',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-severo', nomeEmitente:'VETRUS S/A' }),
+  'Vetrus (Severo)');
+eq('duplicata da nota sem 46x46 -> Pamesa',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-pamesa', nomeEmitente:'VETRUS S/A' }),
+  'Vetrus (Pamesa)');
+eq('nota carregada sem lista de produtos cai no padrao, igual a aba Fornecedores',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-semprod', nomeEmitente:'VETRUS S/A' }),
+  'Vetrus (Pamesa)');
+// Sem a nota de origem carregada nao da' para olhar produto nenhum. O
+// app tem que ficar calado em vez de afirmar "Pamesa" sobre uma nota
+// que nao leu — por isso sobra o nome cru, sem parenteses.
+eq('sem a nota de origem, fica o nome cru em vez de um chute',
+  m.fornecedorDaDuplicata({ chaveAcesso:'fora-da-janela', nomeEmitente:'VETRUS S/A' }),
+  'VETRUS S/A');
+// E quem nao tem regra nao muda de nome por falta de nota.
+eq('fornecedor sem regra nao depende da nota',
+  m.fornecedorDaDuplicata({ chaveAcesso:'fora-da-janela', nomeEmitente:'CARMELO FIOR RN LTDA.' }),
+  'CARMELO FIOR RN LTDA.');
+eq('46x46 de outro fornecedor continua sem separacao no Painel',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-outro', nomeEmitente:'CERAMICA BRASILEIRA CERBRAS LTDA' }),
+  'CERAMICA BRASILEIRA CERBRAS LTDA');
+eq('duplicata sem nome nao vira string vazia',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nada' }), 'Sem nome');
+
+// As duas telas tem que concordar sobre a MESMA nota.
+eq('Painel e aba Fornecedores dao o mesmo nome para a mesma nota',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-severo', nomeEmitente:'VETRUS S/A' }),
+  m.fornecedorDaNota(notasPorChave['nfe-severo']));
+
+// E o Painel nao pode ter ficado com uma copia da regra.
+eq('a regra da Vetrus existe em um lugar so no arquivo',
+  (html.match(/REGRAS_FORNECEDOR = \[/g) || []).length, 1);
+eq('o Painel chama a regra em vez de ler nomeEmitente direto',
+  /var nome = fornecedorDaDuplicata\(d\);/.test(html), true);
 
 // ── Prazo de uma nota ────────────────────────────────────────
 duplicatas.push(

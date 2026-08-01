@@ -382,6 +382,53 @@
     return (d.vencimento && d.vencimento < inicioJanelaHoje()) ? 'ATRASADO' : 'A VENCER';
   }
 
+  // ─── Quem e' o fornecedor ───────────────────────────────────
+  //
+  // Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
+  // vende duas linhas por aqui, e o que separa uma da outra e' o
+  // produto — nao ha' campo na nota que diga isso.
+  //
+  // Para acrescentar outra separacao, e' so' juntar uma regra: o
+  // "termo" e' procurado nos produtos da nota (produtosResumo, o mesmo
+  // campo do filtro por produto da tela "A importar").
+  var REGRAS_FORNECEDOR = [
+    { fornecedor: 'vetrus', termo: '46x46', comTermo: 'Vetrus (Severo)', semTermo: 'Vetrus (Pamesa)' }
+  ];
+
+  // A regra mora aqui e em nenhum outro lugar: a aba Fornecedores e o
+  // Painel tem que chamar o mesmo fornecedor pelo mesmo nome, senao a
+  // Vetrus aparece separada numa tela e junta na outra.
+  //
+  // produtos = null significa "nao sei quais sao os produtos". Nesse
+  // caso fica o nome cru, sem parenteses: melhor uma linha "VETRUS S/A"
+  // do que afirmar "Pamesa" sobre uma nota que o app nao leu.
+  function rotularFornecedor(nome, produtos){
+    nome = String(nome == null ? '' : nome).trim() || 'Sem nome';
+    var alvo = norm(nome);
+    for(var i = 0; i < REGRAS_FORNECEDOR.length; i++){
+      var r = REGRAS_FORNECEDOR[i];
+      if(alvo.indexOf(norm(r.fornecedor)) === -1) continue;
+      if(produtos == null) return nome;
+      var tem = produtos.some(function(p){
+        return norm(p).indexOf(norm(r.termo)) !== -1;
+      });
+      return tem ? r.comTermo : r.semTermo;
+    }
+    return nome;
+  }
+
+  function fornecedorDaNota(n){
+    return rotularFornecedor(n.nomeEmitente, n.produtosResumo || []);
+  }
+
+  // A duplicata nao carrega os produtos — eles estao na nota de origem.
+  // O nome vem da propria duplicata (e' ele que a tela de Pagamentos
+  // mostra), e a nota entra so' para decidir a separacao.
+  function fornecedorDaDuplicata(d){
+    var n = notaDaDup(d);
+    return rotularFornecedor(d.nomeEmitente, n ? (n.produtosResumo || []) : null);
+  }
+
   // Aviso de previsao vencida: toda nota desta tela ainda nao entrou no
   // ERP, entao basta a data estar preenchida e ja' ter passado.
   function avisoPrevisao(prev){
@@ -706,7 +753,9 @@
     function agrupar(lista){
       var porNome = Object.create(null);
       lista.forEach(function(d){
-        var nome = d.nomeEmitente || 'Sem nome';
+        // Mesma separacao da aba Fornecedores: a Vetrus vira Severo ou
+        // Pamesa conforme o produto da nota de origem.
+        var nome = fornecedorDaDuplicata(d);
         if(!porNome[nome]) porNome[nome] = { nome:nome, total:0, qtd:0 };
         porNome[nome].total += (d.valor||0);
         porNome[nome].qtd++;
@@ -1223,30 +1272,9 @@
 
   // ─── Fornecedores e prazos ──────────────────────────────────
 
-  // Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
-  // vende duas linhas por aqui, e o que separa uma da outra e' o
-  // produto — nao ha' campo na nota que diga isso.
-  //
-  // Para acrescentar outra separacao, e' so' juntar uma regra: o
-  // "termo" e' procurado nos produtos da nota (produtosResumo, o mesmo
-  // campo do filtro por produto da tela "A importar").
-  var REGRAS_FORNECEDOR = [
-    { fornecedor: 'vetrus', termo: '46x46', comTermo: 'Vetrus (Severo)', semTermo: 'Vetrus (Pamesa)' }
-  ];
-
-  function fornecedorDaNota(n){
-    var nome = (n.nomeEmitente || 'Sem nome').trim();
-    var alvo = norm(nome);
-    for(var i = 0; i < REGRAS_FORNECEDOR.length; i++){
-      var r = REGRAS_FORNECEDOR[i];
-      if(alvo.indexOf(norm(r.fornecedor)) === -1) continue;
-      var tem = (n.produtosResumo || []).some(function(p){
-        return norm(p).indexOf(norm(r.termo)) !== -1;
-      });
-      return tem ? r.comTermo : r.semTermo;
-    }
-    return nome;
-  }
+  // REGRAS_FORNECEDOR e fornecedorDaNota subiram para "Regras de
+  // negocio": o Painel tambem separa a Vetrus, e a regra nao pode
+  // existir em dois lugares.
 
   // Prazo de UMA nota: os dias entre a emissao e cada vencimento, em
   // ordem. Devolve null quando nao da' para calcular (sem data de
