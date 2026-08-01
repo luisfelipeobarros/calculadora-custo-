@@ -1289,6 +1289,12 @@
     return dias.join('/');
   }
 
+  function mediaPrazo(dias){
+    if(!dias || !dias.length) return null;
+    var soma = dias.reduce(function(s, d){ return s + d; }, 0);
+    return Math.round(soma / dias.length);
+  }
+
   // Dois prazos "proximos": mesma quantidade de parcelas e cada uma
   // dentro da tolerancia. Vencimento que cai em fim de semana costuma
   // ser empurrado 1 ou 2 dias, e sem isso 70/84/98 e 70/84/99 contariam
@@ -1410,6 +1416,9 @@
           'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
           escapeHtml(l.fornecedor) + '</td>' +
         '<td><strong style="font-size:14px;">' + escapeHtml(principal.rotulo) + '</strong>' +
+          (mediaPrazo(principal.ref) !== null
+            ? ' <span style="font-size:11px; color:#4A6FA5; font-weight:700;">(média ' + mediaPrazo(principal.ref) + ' dias)</span>'
+            : '') +
           '<div style="font-size:10px; color:var(--ink-soft);">' + principal.qtd + ' de ' +
           l.itens.length + ' nota(s) · ' + pct + '%</div></td>' +
         '<td>' + l.itens.length + '</td>' +
@@ -1424,10 +1433,11 @@
         '</tr>';
 
       if(aberto){
-        html += '<tr><td colspan="4" style="background:var(--stripe2); padding:10px;">' +
+        html += '<tr><td colspan="5" style="background:var(--stripe2); padding:10px;">' +
           '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
           '<th scope="col">Emissão</th><th scope="col">Nº</th><th scope="col">Valor</th>' +
-          '<th scope="col">Prazo</th></tr></thead><tbody>' +
+          '<th scope="col">Prazo</th>' +
+          '<th scope="col">Prazo médio</th></tr></thead><tbody>' +
           l.itens.slice().sort(function(a,b){
             return (b.nota.dataEmissao || '').localeCompare(a.nota.dataEmissao || '');
           }).map(function(x){
@@ -1437,7 +1447,8 @@
               '<td>' + escapeHtml(x.nota.numero || '-') + '</td>' +
               '<td>' + brl(x.nota.valorTotal) + '</td>' +
               '<td' + (foraDoPadrao ? ' style="color:var(--brick); font-weight:700;"' : '') + '>' +
-              escapeHtml(r) + '</td></tr>';
+              escapeHtml(r) + '</td>' +
+              '<td style="font-weight:700;">' + (mediaPrazo(x.dias) !== null ? mediaPrazo(x.dias) + ' dias' : '-') + '</td></tr>';
           }).join('') +
           '</tbody></table></div></td></tr>';
       }
