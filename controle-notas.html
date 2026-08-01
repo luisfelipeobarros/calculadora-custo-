@@ -84,7 +84,11 @@
   #statusConexao{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
   .barra-status{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
 
-  .top-forn-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px; }
+  /* No maximo DUAS colunas, e o resto desce. Com auto-fit as cinco
+     listas se espalhavam pela largura toda numa tela grande, cada uma
+     estreita demais para o nome do fornecedor caber sem quebrar. */
+  .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px 28px; }
+  @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
   .top-forn-titulo{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px; }
   .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
   .top-forn-row:last-child{ border-bottom:none; }
@@ -752,8 +756,19 @@
 
     $('painelTopTitulo').textContent = 'Top 5 fornecedores por período';
     $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
-    $('painelTopFimMesLabel').textContent = 'Vencendo até o final do mês (top 5)';
-    $('painelTopMesAtualLabel').textContent = 'Mês atual' + (mesNome ? ' (' + mesNome + ')' : '') + ' (top 5)';
+    // Estes dois se parecem, e no dia 1º do mês são idênticos — nada
+    // foi pago ainda, então "o que falta" e "o mês todo" coincidem. A
+    // segunda linha de cada rótulo diz o que os separa, para ninguém
+    // achar que é repetição.
+    var dica = function(texto){
+      return '<span style="display:block; text-transform:none; letter-spacing:0; font-size:10px; opacity:.75;">' +
+        texto + '</span>';
+    };
+    $('painelTopFimMesLabel').innerHTML = 'A vencer até o fim do mês (top 5)' +
+      dica('daqui em diante, só o que falta pagar');
+    $('painelTopMesAtualLabel').innerHTML =
+      escapeHtml(mesNome ? mesNome.charAt(0).toUpperCase() + mesNome.slice(1) : 'Mês atual') +
+      ' inteiro (top 5)' + dica('o mês todo, pagas e a pagar');
     $('painelTopProxMesLabel').textContent = 'Próximo mês' + (proxMesNome ? ' (' + proxMesNome + ')' : '') + ' (top 5)';
     $('painelTopAtrasadosLabel').textContent = 'Atrasados (top 5)';
 
