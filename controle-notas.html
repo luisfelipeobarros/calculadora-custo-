@@ -84,8 +84,7 @@
   #statusConexao{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
   .barra-status{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
 
-  .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px; }
-  @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
+  .top-forn-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:20px; }
   .top-forn-titulo{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:6px; }
   .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
   .top-forn-row:last-child{ border-bottom:none; }
@@ -167,15 +166,27 @@
     </div>
 
     <div class="card" style="margin-top:18px;">
-      <h2 id="painelTopTitulo">Top fornecedores — vencendo hoje / atrasados</h2>
+      <h2 id="painelTopTitulo">Top 5 fornecedores por período</h2>
       <div class="top-forn-grid">
         <div>
           <div class="top-forn-titulo" id="painelTopHojeLabel">Vencendo hoje</div>
           <div id="painelTopHoje"></div>
         </div>
-        <div id="painelTopDireitaCol">
-          <div class="top-forn-titulo" id="painelTopDireitaLabel">Atrasados</div>
-          <div id="painelTopDireita"></div>
+        <div>
+          <div class="top-forn-titulo" id="painelTopFimMesLabel">Vencendo até o fim do mês</div>
+          <div id="painelTopFimMes"></div>
+        </div>
+        <div>
+          <div class="top-forn-titulo" id="painelTopMesAtualLabel">Mês atual</div>
+          <div id="painelTopMesAtual"></div>
+        </div>
+        <div>
+          <div class="top-forn-titulo" id="painelTopProxMesLabel">Próximo mês</div>
+          <div id="painelTopProxMes"></div>
+        </div>
+        <div>
+          <div class="top-forn-titulo" id="painelTopAtrasadosLabel">Atrasados</div>
+          <div id="painelTopAtrasados"></div>
         </div>
       </div>
     </div>
@@ -711,30 +722,46 @@
       }).join('');
     }
 
+    var todasValidas = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
+
+    var inicioMes = hoje.substring(0,8) + '01';
+    var doMes = todasValidas.filter(function(d){
+      return d.vencimento && d.vencimento >= inicioMes && d.vencimento <= fimMes;
+    });
+
+    var anoAtual = Number(hoje.substring(0,4));
+    var mesAtual = Number(hoje.substring(5,7));
+    var anoProx = (mesAtual === 12) ? anoAtual + 1 : anoAtual;
+    var mesProx = (mesAtual === 12) ? 1 : mesAtual + 1;
+    var mesProxPad = String(mesProx).padStart(2, '0');
+    var inicioProxMes = anoProx + '-' + mesProxPad + '-01';
+    var ultimoDiaProxMes = new Date(anoProx, mesProx, 0).getDate();
+    var fimProxMes = anoProx + '-' + mesProxPad + '-' + String(ultimoDiaProxMes).padStart(2, '0');
+    var doProxMes = todasValidas.filter(function(d){
+      return d.vencimento && d.vencimento >= inicioProxMes && d.vencimento <= fimProxMes;
+    });
+
     var topHoje = agrupar(vHoje);
+    var topAteFimMes = agrupar(ateFimMes);
+    var topMesAtual = agrupar(doMes);
+    var topProxMes = agrupar(doProxMes);
     var topAtrasadas = agrupar(atrasadas);
 
-    if(topAtrasadas.length){
-      $('painelTopTitulo').textContent = 'Top fornecedores — vencendo hoje / atrasados';
-      $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
-      $('painelTopDireitaLabel').textContent = 'Atrasados (top 5)';
-      $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,5));
-      $('painelTopDireita').innerHTML = htmlTop(topAtrasadas.slice(0,5));
-    } else {
-      // Sem nada atrasado, a coluna da direita ficava vazia. Ela passa a
-      // mostrar o mes inteiro — o que a equipe olha para se organizar
-      // quando o dia esta' em ordem.
-      var inicioMes = hoje.substring(0,8) + '01';
-      var doMes = pendentes.filter(function(d){
-        return d.vencimento >= inicioMes && d.vencimento <= fimMes;
-      });
-      $('painelTopTitulo').textContent = 'Top 10 fornecedores — vencendo hoje / no mês';
-      $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 10)';
-      $('painelTopDireitaLabel').textContent = 'No mês de ' + nomeDoMes(hoje) + ' (top 10)';
-      $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,10));
-      $('painelTopDireita').innerHTML = htmlTop(agrupar(doMes).slice(0,10));
-    }
-    $('painelTopDireitaCol').style.display = '';
+    var mesNome = nomeDoMes(hoje);
+    var proxMesNome = nomeDoMes(inicioProxMes);
+
+    $('painelTopTitulo').textContent = 'Top 5 fornecedores por período';
+    $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
+    $('painelTopFimMesLabel').textContent = 'Vencendo até o final do mês (top 5)';
+    $('painelTopMesAtualLabel').textContent = 'Mês atual' + (mesNome ? ' (' + mesNome + ')' : '') + ' (top 5)';
+    $('painelTopProxMesLabel').textContent = 'Próximo mês' + (proxMesNome ? ' (' + proxMesNome + ')' : '') + ' (top 5)';
+    $('painelTopAtrasadosLabel').textContent = 'Atrasados (top 5)';
+
+    $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,5));
+    $('painelTopFimMes').innerHTML = htmlTop(topAteFimMes.slice(0,5));
+    $('painelTopMesAtual').innerHTML = htmlTop(topMesAtual.slice(0,5));
+    $('painelTopProxMes').innerHTML = htmlTop(topProxMes.slice(0,5));
+    $('painelTopAtrasados').innerHTML = htmlTop(topAtrasadas.slice(0,5));
   }
 
   var NOMES_MES = ['janeiro','fevereiro','março','abril','maio','junho',
