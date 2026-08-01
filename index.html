@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=10"></script>
+<script src="app-shared.js?v=11"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -2883,6 +2883,18 @@ Tupan</textarea>
     limiteNotas['Cmp'] += PAGINA_NOTAS;
     renderListaNotas('Cmp');
   });
+  // A regra da Vetrus vive em app-shared.js (secao 9c), a mesma que o
+  // Controle de Notas usa. Aqui os produtos vem em n.itens[].descricao —
+  // lá é produtosResumo, mas a regra que decide é uma só.
+  //
+  // Nota sem itens carregados = null, e aí fica o nome cru: sem ver o
+  // produto não dá para dizer se é Stela ou Pamesa.
+  function fornecedorDaNotaEmitida(n){
+    var itens = n.itens;
+    return App.rotularFornecedor(n.nomeEmitente,
+      itens ? itens.map(it => it.descricao) : null);
+  }
+
   function renderListaNotas(suf){
     if(!notasEmitidasCache) return;
     if(!$('listaNotasEmitidas'+suf)) return;
@@ -2895,7 +2907,7 @@ Tupan</textarea>
     if(dataAte) lista = lista.filter(n => (n.dataEmissao||'') <= dataAte);
     if(termo){
       lista = lista.filter(n =>
-        String(n.nomeEmitente||'').toLowerCase().includes(termo) ||
+        App.casaFornecedor(fornecedorDaNotaEmitida(n), n.nomeEmitente, termo) ||
         String(n.numero||'').toLowerCase().includes(termo) ||
         (n.itens||[]).some(it => String(it.descricao||'').toLowerCase().includes(termo) || String(it.codigo||'').toLowerCase().includes(termo))
       );
@@ -2924,7 +2936,7 @@ Tupan</textarea>
       html += '<div class="historico-header" data-nota="'+escapeHtml(n.chave)+'">' +
         '<span style="font-family:var(--font-mono); font-size:12px;">'+(aberta?'▼':'▶')+'</span>' +
         '<span class="h-data">'+fmtDataNota(n.dataEmissao)+'</span>' +
-        '<span class="h-fornecedor">'+escapeHtml(n.nomeEmitente||'-')+'</span>' +
+        '<span class="h-fornecedor">'+escapeHtml(n.nomeEmitente ? fornecedorDaNotaEmitida(n) : '-')+'</span>' +
         '<span class="h-count">NF '+escapeHtml(n.numero||'-')+' · '+qtdItens+' item(ns)</span>' +
         '<span class="h-total" style="font-family:var(--font-mono); font-weight:700;">'+brl(n.valorTotal||0)+'</span>' +
         // Botão próprio: clicar nele NÃO pode abrir os itens junto, por

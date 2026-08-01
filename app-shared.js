@@ -923,6 +923,54 @@
   }
 
   /* ============================================================
+     9c. Nome do fornecedor (usado pelos dois apps)
+     ============================================================
+
+     Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
+     vende duas linhas, e o que separa uma da outra e' o PRODUTO — nao
+     ha' campo na nota que diga isso.
+
+     A regra mora aqui porque as duas paginas mostram fornecedor:
+     Painel, Pagamentos, A importar, Canceladas e a aba Fornecedores no
+     Controle de Notas, e Notas Emitidas na Calculadora. Se cada tela
+     tivesse a sua copia, a Vetrus apareceria separada numa e junta na
+     outra.
+
+     Para acrescentar outra separacao, basta juntar uma regra: o
+     "termo" e' procurado na descricao dos produtos da nota.
+     ============================================================ */
+
+  var REGRAS_FORNECEDOR = [
+    { fornecedor: 'vetrus', termo: '46x46', comTermo: 'Vetrus (Stela)', semTermo: 'Vetrus (Pamesa)' }
+  ];
+
+  // produtos = null significa "nao sei quais sao os produtos" — a nota
+  // de origem nao esta' carregada. Nesse caso fica o nome cru, sem
+  // parenteses: melhor uma linha "VETRUS S/A" do que afirmar "Pamesa"
+  // sobre uma nota que o app nao leu.
+  function rotularFornecedor(nome, produtos) {
+    nome = String(nome == null ? '' : nome).trim() || 'Sem nome';
+    var alvo = norm(nome);
+    for (var i = 0; i < REGRAS_FORNECEDOR.length; i++) {
+      var r = REGRAS_FORNECEDOR[i];
+      if (alvo.indexOf(norm(r.fornecedor)) === -1) continue;
+      if (produtos == null) return nome;
+      var tem = produtos.some(function (p) {
+        return norm(p).indexOf(norm(r.termo)) !== -1;
+      });
+      return tem ? r.comTermo : r.semTermo;
+    }
+    return nome;
+  }
+
+  // A busca casa com o que esta' ESCRITO na tela e tambem com o nome
+  // que veio da nota: quem digita "stela" acha a linha separada, e quem
+  // digita "vetrus s/a" continua achando as duas.
+  function casaFornecedor(rotulo, nomeCru, termo) {
+    return norm(rotulo).indexOf(termo) !== -1 || norm(nomeCru).indexOf(termo) !== -1;
+  }
+
+  /* ============================================================
      10. Rede de seguranca
      ============================================================ */
 
@@ -1048,6 +1096,11 @@
     criarRouter: criarRouter,
     tabelaItensNota: tabelaItensNota,
     tabelaVencimentos: tabelaVencimentos,
+
+    REGRAS_FORNECEDOR: REGRAS_FORNECEDOR,
+    rotularFornecedor: rotularFornecedor,
+    casaFornecedor: casaFornecedor,
+
     instalarErroGlobal: instalarErroGlobal
   };
 

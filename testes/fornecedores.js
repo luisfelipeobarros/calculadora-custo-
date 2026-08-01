@@ -10,35 +10,39 @@ const fs = require('fs');
 const path = require('path');
 const raiz = path.resolve(__dirname, '..');
 const html = fs.readFileSync(path.join(raiz, 'controle-notas.html'), 'utf8');
+const calc = fs.readFileSync(path.join(raiz, 'index.html'), 'utf8');
 
-function extrair(nome){
-  const i = html.indexOf('function ' + nome + '(');
-  if(i === -1) throw new Error('nao achei ' + nome + ' em controle-notas.html');
-  let d = 0, j = html.indexOf('{', i);
-  for(; j < html.length; j++){
-    if(html[j] === '{') d++;
-    else if(html[j] === '}'){ d--; if(d === 0) break; }
+// A regra em si nao e' extraida de texto: vem do modulo de verdade, o
+// mesmo que as duas paginas carregam.
+const App = require('../app-shared.js');
+
+function extrairDe(fonte, arquivo, nome){
+  const i = fonte.indexOf('function ' + nome + '(');
+  if(i === -1) throw new Error('nao achei ' + nome + ' em ' + arquivo);
+  let d = 0, j = fonte.indexOf('{', i);
+  for(; j < fonte.length; j++){
+    if(fonte[j] === '{') d++;
+    else if(fonte[j] === '}'){ d--; if(d === 0) break; }
   }
-  return html.slice(i, j + 1);
+  return fonte.slice(i, j + 1);
 }
-
-const regras = (html.match(/var REGRAS_FORNECEDOR = \[[\s\S]*?\];/) || [])[0];
-if(!regras) throw new Error('nao achei REGRAS_FORNECEDOR');
+const extrair = nome => extrairDe(html, 'controle-notas.html', nome);
 
 const norm = s => String(s == null ? '' : s).toLowerCase();
 const diasEntre = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
 const duplicatas = [];
 const notasPorChave = Object.create(null);
 
-const m = new Function('norm', 'diasEntre', 'duplicatas', 'notasPorChave',
-  regras + '\n' + extrair('rotularFornecedor') + '\n' + extrair('fornecedorDaNota') + '\n' +
+const m = new Function('norm', 'diasEntre', 'duplicatas', 'notasPorChave', 'rotularFornecedor', 'App',
+  extrair('fornecedorDaNota') + '\n' +
   extrair('notaDaDup') + '\n' + extrair('fornecedorDaDuplicata') + '\n' +
+  extrairDe(calc, 'index.html', 'fornecedorDaNotaEmitida') + '\n' +
   extrair('indexarDuplicatas') + '\n' +
   extrair('prazosDaNota') + '\n' +
   extrair('rotuloPrazo') + '\n' + extrair('prazosProximos') + '\n' + extrair('agruparPrazos') + '\n' +
-  'return { fornecedorDaNota, fornecedorDaDuplicata, indexarDuplicatas, prazosDaNota,' +
-  ' rotuloPrazo, prazosProximos, agruparPrazos };'
-)(norm, diasEntre, duplicatas, notasPorChave);
+  'return { fornecedorDaNota, fornecedorDaDuplicata, fornecedorDaNotaEmitida,' +
+  ' indexarDuplicatas, prazosDaNota, rotuloPrazo, prazosProximos, agruparPrazos };'
+)(norm, diasEntre, duplicatas, notasPorChave, App.rotularFornecedor, App);
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);
@@ -57,9 +61,9 @@ eq('e o render usa a constante, nao um numero solto',
 
 // ── Separacao da Vetrus por produto ──────────────────────────
 // A Vetrus vende duas linhas, e nada na nota diz qual e': so' o produto.
-eq('Vetrus com 46x46 -> Severo',
+eq('Vetrus com 46x46 -> Stela',
   m.fornecedorDaNota({ nomeEmitente:'VETRUS S A', produtosResumo:['PISO 46X46 STELA','RODAPE'] }),
-  'Vetrus (Severo)');
+  'Vetrus (Stela)');
 eq('Vetrus sem 46x46 -> Pamesa',
   m.fornecedorDaNota({ nomeEmitente:'Vetrus S.A. em Recuperacao Judicial', produtosResumo:['PORCELANATO 62x62'] }),
   'Vetrus (Pamesa)');
@@ -73,20 +77,26 @@ eq('46x46 em outro fornecedor nao aplica a regra',
 // Maiuscula/minuscula do termo nao pode mudar o resultado.
 eq('o termo casa sem depender de caixa',
   m.fornecedorDaNota({ nomeEmitente:'vetrus', produtosResumo:['piso 46x46 branco'] }),
-  'Vetrus (Severo)');
+  'Vetrus (Stela)');
+// O nome que aparece na tela e' este, nao "Severo": trocar de rotulo e'
+// decisao de negocio e nao pode acontecer sem alguem perceber.
+eq('o rotulo com 46x46 e "Vetrus (Stela)"', App.REGRAS_FORNECEDOR[0].comTermo, 'Vetrus (Stela)');
+eq('e nao sobrou "Severo" em lugar nenhum',
+  /Severo/.test(html) || /Severo/.test(calc) || /Severo/.test(fs.readFileSync(path.join(raiz,'app-shared.js'),'utf8')),
+  false);
 
-// ── A mesma separacao no Painel ──────────────────────────────
-// O Painel agrupa DUPLICATAS, e duplicata nao carrega produto: os
-// produtos estao na nota de origem. Se as duas telas nao usassem a
-// mesma regra, a Vetrus apareceria separada numa e junta na outra.
-notasPorChave['nfe-severo'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PISO 46X46 STELA'] };
+// ── A mesma separacao no Painel e nos Pagamentos ─────────────
+// Estas duas telas agrupam/listam DUPLICATAS, e duplicata nao carrega
+// produto: os produtos estao na nota de origem. Se cada tela tivesse a
+// sua copia da regra, a Vetrus apareceria separada numa e junta na outra.
+notasPorChave['nfe-stela'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PISO 46X46 STELA'] };
 notasPorChave['nfe-pamesa'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PORCELANATO 62x62'] };
 notasPorChave['nfe-semprod'] = { nomeEmitente:'VETRUS S/A' };
 notasPorChave['nfe-outro']  = { nomeEmitente:'CERAMICA BRASILEIRA CERBRAS LTDA', produtosResumo:['PISO 46x46'] };
 
-eq('duplicata da nota com 46x46 -> Severo',
-  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-severo', nomeEmitente:'VETRUS S/A' }),
-  'Vetrus (Severo)');
+eq('duplicata da nota com 46x46 -> Stela',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-stela', nomeEmitente:'VETRUS S/A' }),
+  'Vetrus (Stela)');
 eq('duplicata da nota sem 46x46 -> Pamesa',
   m.fornecedorDaDuplicata({ chaveAcesso:'nfe-pamesa', nomeEmitente:'VETRUS S/A' }),
   'Vetrus (Pamesa)');
@@ -109,16 +119,66 @@ eq('46x46 de outro fornecedor continua sem separacao no Painel',
 eq('duplicata sem nome nao vira string vazia',
   m.fornecedorDaDuplicata({ chaveAcesso:'nada' }), 'Sem nome');
 
-// As duas telas tem que concordar sobre a MESMA nota.
-eq('Painel e aba Fornecedores dao o mesmo nome para a mesma nota',
-  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-severo', nomeEmitente:'VETRUS S/A' }),
-  m.fornecedorDaNota(notasPorChave['nfe-severo']));
+// ── E na Calculadora, onde o produto vem de outro campo ──────
+// Notas Emitidas guarda os itens completos (itens[].descricao), nao o
+// produtosResumo do Controle de Notas. Campos diferentes, regra igual.
+eq('Notas Emitidas: itens com 46x46 -> Stela',
+  m.fornecedorDaNotaEmitida({ nomeEmitente:'VETRUS S/A', itens:[{descricao:'PISO 46X46 STELA BEGE'}] }),
+  'Vetrus (Stela)');
+eq('Notas Emitidas: itens sem 46x46 -> Pamesa',
+  m.fornecedorDaNotaEmitida({ nomeEmitente:'VETRUS S/A', itens:[{descricao:'PORCELANATO 62x62'}] }),
+  'Vetrus (Pamesa)');
+// Nota sem itens carregados e' o mesmo caso da duplicata sem nota: nao
+// da' para ver produto nenhum, entao nao se afirma nada.
+eq('Notas Emitidas sem itens: nome cru, sem chute',
+  m.fornecedorDaNotaEmitida({ nomeEmitente:'VETRUS S/A' }), 'VETRUS S/A');
+eq('Notas Emitidas com itens vazios cai no padrao',
+  m.fornecedorDaNotaEmitida({ nomeEmitente:'VETRUS S/A', itens:[] }), 'Vetrus (Pamesa)');
 
-// E o Painel nao pode ter ficado com uma copia da regra.
-eq('a regra da Vetrus existe em um lugar so no arquivo',
-  (html.match(/REGRAS_FORNECEDOR = \[/g) || []).length, 1);
-eq('o Painel chama a regra em vez de ler nomeEmitente direto',
-  /var nome = fornecedorDaDuplicata\(d\);/.test(html), true);
+// As tres telas tem que concordar sobre a MESMA nota.
+eq('Painel e aba Fornecedores dao o mesmo nome para a mesma nota',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-stela', nomeEmitente:'VETRUS S/A' }),
+  m.fornecedorDaNota(notasPorChave['nfe-stela']));
+eq('e a Calculadora concorda com as duas',
+  m.fornecedorDaNotaEmitida({ nomeEmitente:'VETRUS S/A', itens:[{descricao:'PISO 46X46 STELA'}] }),
+  m.fornecedorDaNota(notasPorChave['nfe-stela']));
+
+// ── A busca tem que achar pelos dois nomes ───────────────────
+// Se casasse so' com o rotulo, digitar "s/a" nao acharia mais nada; se
+// casasse so' com o nome cru, digitar "stela" nao acharia a linha que
+// esta' escrita "Vetrus (Stela)" na tela.
+const casa = App.casaFornecedor;
+eq('busca por "stela" acha a linha separada', casa('Vetrus (Stela)', 'VETRUS S/A', 'stela'), true);
+eq('busca por "vetrus" continua achando as duas', casa('Vetrus (Stela)', 'VETRUS S/A', 'vetrus'), true);
+eq('busca pelo nome cru ainda funciona', casa('Vetrus (Stela)', 'VETRUS S/A', 's/a'), true);
+eq('busca por "pamesa" nao traz a Stela', casa('Vetrus (Stela)', 'VETRUS S/A', 'pamesa'), false);
+eq('e nao casa com quem nao tem nada a ver', casa('CARMELO FIOR RN LTDA.', 'CARMELO FIOR RN LTDA.', 'stela'), false);
+
+// ── A regra existe em UM lugar so ────────────────────────────
+// Ela vive em app-shared.js. Se alguem colar uma copia numa das
+// paginas, as telas voltam a discordar sem ninguem notar.
+eq('nenhuma das paginas tem copia da regra',
+  /REGRAS_FORNECEDOR = \[/.test(html) || /REGRAS_FORNECEDOR = \[/.test(calc), false);
+eq('a regra esta exportada por app-shared.js',
+  typeof App.rotularFornecedor === 'function' && Array.isArray(App.REGRAS_FORNECEDOR), true);
+
+// ── E todas as telas passam por ela ──────────────────────────
+// Estas verificacoes sao textuais de proposito: elas quebram quando
+// alguem volta a escrever nomeEmitente direto numa celula.
+const telas = [
+  ['Painel (top 5)',        html, /var nome = fornecedorDaDuplicata\(d\);/],
+  ['Pagamentos (celula)',   html, /fornecedorEmCelula\(d\.nomeEmitente, forn\)/],
+  ['Pagamentos (busca)',    html, /casaFornecedor\(fornecedorDaDuplicata\(d\), d\.nomeEmitente, termo\)/],
+  ['A importar (celula)',   html, /fornecedorEmCelula\(n\.nomeEmitente, fornecedorDaNota\(n\)\)/],
+  ['Canceladas (busca)',    html, /casaFornecedor\(fornecedorDaNota\(n\), n\.nomeEmitente, termo\) \|\| norm\(n\.numero\)/],
+  ['Notas Emitidas',        calc, /fornecedorDaNotaEmitida\(n\)/]
+];
+telas.forEach(([nome, fonte, re]) => eq('a tela ' + nome + ' usa a regra', re.test(fonte), true));
+
+// Nenhuma celula pode mais imprimir o nome cru sem passar pela regra.
+eq('nao sobrou nenhum escapeHtml(nomeEmitente) solto',
+  /escapeHtml\((?:n|d)\.nomeEmitente\s*\|\|/.test(html) || /escapeHtml\(n\.nomeEmitente\s*\|\|/.test(calc),
+  false);
 
 // ── Prazo de uma nota ────────────────────────────────────────
 duplicatas.push(

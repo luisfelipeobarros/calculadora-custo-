@@ -28,7 +28,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=12">
-<script src="app-shared.js?v=10"></script>
+<script src="app-shared.js?v=11"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -208,10 +208,12 @@ Não precisa instalar nada. São nove etapas, em sete frentes:
 6. **Regras da tela de cotação** — campo escondido não entra na conta,
    a margem do histórico bate com a da cotação, e nada (barra de conta,
    escutas do Firestore) se multiplica a cada reconexão.
-7. **Fornecedores e prazos** — 21 verificações: a separação da Vetrus
+7. **Fornecedores e prazos** — 55 verificações: a separação da Vetrus
    por produto e a moda dos prazos com a folga de ±5 dias. Trava o
    principal: o prazo mostrado é sempre um que **existiu de verdade**
-   numa nota, nunca uma média.
+   numa nota, nunca uma média. E trava que a regra da Vetrus continue
+   morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
+   mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
 
 Rode antes de publicar qualquer alteração.
 

@@ -299,7 +299,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=10"></script>
+<script src="app-shared.js?v=11"></script>
 <script>
 (function(){
   'use strict';
@@ -384,38 +384,10 @@
 
   // ─── Quem e' o fornecedor ───────────────────────────────────
   //
-  // Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
-  // vende duas linhas por aqui, e o que separa uma da outra e' o
-  // produto — nao ha' campo na nota que diga isso.
-  //
-  // Para acrescentar outra separacao, e' so' juntar uma regra: o
-  // "termo" e' procurado nos produtos da nota (produtosResumo, o mesmo
-  // campo do filtro por produto da tela "A importar").
-  var REGRAS_FORNECEDOR = [
-    { fornecedor: 'vetrus', termo: '46x46', comTermo: 'Vetrus (Severo)', semTermo: 'Vetrus (Pamesa)' }
-  ];
-
-  // A regra mora aqui e em nenhum outro lugar: a aba Fornecedores e o
-  // Painel tem que chamar o mesmo fornecedor pelo mesmo nome, senao a
-  // Vetrus aparece separada numa tela e junta na outra.
-  //
-  // produtos = null significa "nao sei quais sao os produtos". Nesse
-  // caso fica o nome cru, sem parenteses: melhor uma linha "VETRUS S/A"
-  // do que afirmar "Pamesa" sobre uma nota que o app nao leu.
-  function rotularFornecedor(nome, produtos){
-    nome = String(nome == null ? '' : nome).trim() || 'Sem nome';
-    var alvo = norm(nome);
-    for(var i = 0; i < REGRAS_FORNECEDOR.length; i++){
-      var r = REGRAS_FORNECEDOR[i];
-      if(alvo.indexOf(norm(r.fornecedor)) === -1) continue;
-      if(produtos == null) return nome;
-      var tem = produtos.some(function(p){
-        return norm(p).indexOf(norm(r.termo)) !== -1;
-      });
-      return tem ? r.comTermo : r.semTermo;
-    }
-    return nome;
-  }
+  // A regra (Vetrus separada por produto) mora em app-shared.js, secao
+  // 9c: a Calculadora tambem mostra fornecedor na tela Notas Emitidas,
+  // e as duas paginas tem que chamar o mesmo fornecedor pelo mesmo nome.
+  var rotularFornecedor = App.rotularFornecedor, casaFornecedor = App.casaFornecedor;
 
   function fornecedorDaNota(n){
     return rotularFornecedor(n.nomeEmitente, n.produtosResumo || []);
@@ -423,11 +395,16 @@
 
   // A duplicata nao carrega os produtos — eles estao na nota de origem.
   // O nome vem da propria duplicata (e' ele que a tela de Pagamentos
-  // mostra), e a nota entra so' para decidir a separacao.
+  // mostra), e a nota entra so' para decidir a separacao. Sem a nota
+  // carregada vai null, e ai' o rotulo fica sendo o nome cru.
   function fornecedorDaDuplicata(d){
     var n = notaDaDup(d);
     return rotularFornecedor(d.nomeEmitente, n ? (n.produtosResumo || []) : null);
   }
+
+  // Nas tabelas, sem nome vale um traco: "Sem nome" numa celula chama
+  // mais atencao do que o dado merece.
+  function fornecedorEmCelula(nomeCru, rotulo){ return nomeCru ? rotulo : '-'; }
 
   // Aviso de previsao vencida: toda nota desta tela ainda nao entrou no
   // ERP, entao basta a data estar preenchida e ja' ter passado.
@@ -753,7 +730,7 @@
     function agrupar(lista){
       var porNome = Object.create(null);
       lista.forEach(function(d){
-        // Mesma separacao da aba Fornecedores: a Vetrus vira Severo ou
+        // Mesma separacao das outras telas: a Vetrus vira Stela ou
         // Pamesa conforme o produto da nota de origem.
         var nome = fornecedorDaDuplicata(d);
         if(!porNome[nome]) porNome[nome] = { nome:nome, total:0, qtd:0 };
@@ -978,7 +955,8 @@
       : function(n){ return !ehNfse(n); });
 
     if(termo) lista = lista.filter(function(n){
-      return norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo) || norm(n.id).includes(termo);
+      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
+        norm(n.numero).includes(termo) || norm(n.id).includes(termo);
     });
     if(termoProduto) lista = lista.filter(function(n){
       var contem = (n.produtosResumo || []).some(function(p){ return norm(p).includes(termoProduto); });
@@ -1028,7 +1006,7 @@
           (vencAberto ? '📅▼' : '📅') + '</button></td>' +
         '<td>' + escapeHtml(n.numero || '-') + '</td>' +
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
-        '<td>' + escapeHtml(n.nomeEmitente || '-') +
+        '<td>' + escapeHtml(fornecedorEmCelula(n.nomeEmitente, fornecedorDaNota(n))) +
           (ehNfse(n) ? ' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>' : '') +
           '<div style="font-size:10px; color:var(--ink-soft);">' + escapeHtml(n.id) + '</div></td>' +
         '<td>' + brl(n.valorTotal) + '</td>' +
@@ -1071,7 +1049,8 @@
     var n = notasPorChave[chave];
     App.confirmar({
       titulo: 'Marcar como cancelada',
-      mensagem: 'Marcar a nota ' + ((n && n.numero) || '') + ' de ' + ((n && n.nomeEmitente) || '') + ' como CANCELADA?\n\n' +
+      mensagem: 'Marcar a nota ' + ((n && n.numero) || '') + ' de ' +
+        (n && n.nomeEmitente ? fornecedorDaNota(n) : '') + ' como CANCELADA?\n\n' +
         'Ela sai da lista de importação e as duplicatas dela deixam de contar nos pagamentos.',
       confirmar: 'Marcar como cancelada',
       perigo: true
@@ -1204,7 +1183,8 @@
     else if(filtroPag === 'pagas') lista = lista.filter(function(d){ return d.pago === true; });
 
     if(termo) lista = lista.filter(function(d){
-      return norm(d.nomeEmitente).includes(termo) || norm(d.numeroNota).includes(termo);
+      return casaFornecedor(fornecedorDaDuplicata(d), d.nomeEmitente, termo) ||
+        norm(d.numeroNota).includes(termo);
     });
 
     lista.sort(function(a,b){ return (a.vencimento || '9999').localeCompare(b.vencimento || '9999'); });
@@ -1231,6 +1211,7 @@
       var sit = situacaoDup(d);
       var cls = d.pago === true ? ' class="linha-paga"' : (sit === 'ATRASADO' ? ' class="linha-atrasada"' : '');
       var receb = dupRecebida(d);
+      var forn = fornecedorDaDuplicata(d);
       // null = a nota de origem e' anterior ao corte de carga, entao nao
       // da' para afirmar nem SIM nem NAO.
       var badgeReceb = receb === null
@@ -1240,9 +1221,9 @@
       html += '<tr' + cls + '>' +
         '<td><input type="checkbox" class="pago-check" data-dup="' + escapeHtml(d.id) + '"' +
           (d.pago === true ? ' checked' : '') +
-          ' aria-label="Marcar duplicata de ' + escapeHtml(d.nomeEmitente || '') + ' como paga"></td>' +
+          ' aria-label="Marcar duplicata de ' + escapeHtml(d.nomeEmitente ? forn : '') + ' como paga"></td>' +
         '<td>' + fmtData(d.vencimento) + '</td>' +
-        '<td>' + escapeHtml(d.nomeEmitente || '-') + '</td>' +
+        '<td>' + escapeHtml(fornecedorEmCelula(d.nomeEmitente, forn)) + '</td>' +
         '<td>' + escapeHtml(d.numeroNota || '-') + '</td>' +
         '<td>' + escapeHtml(d.parcela || '-') + '</td>' +
         '<td>' + brl(d.valor) + '</td>' +
@@ -1488,7 +1469,7 @@
     var termo = norm($('buscaCanc').value);
     var lista = notas.filter(function(n){ return !notaAtiva(n); });
     if(termo) lista = lista.filter(function(n){
-      return norm(n.nomeEmitente).includes(termo) || norm(n.numero).includes(termo);
+      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) || norm(n.numero).includes(termo);
     });
     lista.sort(function(a,b){
       return (b.canceladaEm || b.dataEmissao || '').localeCompare(a.canceladaEm || a.dataEmissao || '');
@@ -1522,7 +1503,7 @@
           (aberta ? '▼' : '▶') + '</button>') + '</td>' +
         '<td>' + escapeHtml(n.numero || '-') + '</td>' +
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
-        '<td>' + escapeHtml(n.nomeEmitente || '-') + '</td>' +
+        '<td>' + escapeHtml(fornecedorEmCelula(n.nomeEmitente, fornecedorDaNota(n))) + '</td>' +
         '<td>' + brl(n.valorTotal) + '</td>' +
         '<td>' + fmtData(n.canceladaEm) + '</td>' +
         '<td><button type="button" class="acao-mini" data-reativar="' + escapeHtml(n.id) + '">↩ Reativar</button></td>' +
