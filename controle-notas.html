@@ -97,7 +97,25 @@
   .top-forn-valor{ font-family:var(--font-mono); font-size:13px; font-weight:700; white-space:nowrap; }
 
   nav.telas{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  nav.telas .btn[aria-current="page"]{ background:var(--ink); color:var(--paper); }
+  .escopo-bar{ display:flex; gap:6px; margin-bottom:14px; padding-bottom:10px; border-bottom:1.5px solid var(--line); }
+  .escopo-btn{ font-family:var(--font-mono); font-size:12px; padding:7px 14px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink-soft); cursor:pointer; font-weight:500; }
+  .escopo-btn[aria-pressed="true"]{ background:#4A6FA5; border-color:#4A6FA5; color:#fff; font-weight:700; }
+  .badge.cat-impostos{ background:#FFF3E0; color:#E65100; border-color:#E65100; }
+  .badge.cat-folha{ background:#E8EAF6; color:#283593; border-color:#283593; }
+  .badge.cat-emprestimo{ background:#FCE4EC; color:#880E4F; border-color:#880E4F; }
+  .badge.cat-outro{ background:var(--stripe2); color:var(--ink-soft); }
+  .badge.cat-fornecedor{ background:var(--stripe); color:var(--ink); }
+  .form-pgto{ background:var(--stripe2); border:1.5px solid var(--line); border-radius:6px; padding:16px; margin-bottom:14px; }
+  .form-pgto .campo{ display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
+  .form-pgto .campo label{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+  .form-pgto .campo input, .form-pgto .campo select{ padding:7px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px; }
+  .form-pgto .campo-inline{ display:flex; gap:12px; flex-wrap:wrap; }
+  .form-pgto .campo-inline .campo{ flex:1; min-width:150px; }
+  .recorrencia-opcoes{ margin-left:24px; margin-top:6px; display:flex; flex-direction:column; gap:6px; }
+  .recorrencia-opcoes label{ font-family:var(--font-body); font-size:12.5px; color:var(--ink); display:flex; align-items:center; gap:6px; }
+  .barra-selecao{ display:flex; gap:10px; align-items:center; padding:8px 12px; background:#EDF1F7; border:1.5px solid #4A6FA5; border-radius:6px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px; color:var(--ink); }
+  .barra-selecao .contador{ font-weight:700; }
+  .sel-check{ width:16px; height:16px; accent-color:#4A6FA5; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -235,17 +253,42 @@
   <div id="viewPagamentos" style="display:none;">
     <div class="card">
       <h2>Controle de pagamentos</h2>
+
+      <!-- Sub-abas de escopo -->
+      <div class="escopo-bar" id="escopoBar">
+        <button type="button" class="escopo-btn" data-escopo="fornecedores" aria-pressed="true">Fornecedores</button>
+        <button type="button" class="escopo-btn" data-escopo="interno" aria-pressed="false">Pgto Interno</button>
+        <button type="button" class="escopo-btn" data-escopo="todos" aria-pressed="false">Todos</button>
+      </div>
+
+      <!-- Botao novo pagamento (so no escopo interno) -->
+      <div id="btnNovoPgtoWrap" style="display:none; margin-bottom:12px;">
+        <button type="button" class="btn" id="btnNovoPgto">+ Novo pagamento</button>
+      </div>
+
+      <!-- Formulario de cadastro de pagamento interno -->
+      <div id="formPgtoWrap" style="display:none;"></div>
+
+      <!-- Filtros -->
       <div class="filtros">
-        <label class="sr-only" for="buscaPag">Buscar duplicata</label>
-        <input type="search" id="buscaPag" placeholder="Buscar por emitente ou nota...">
+        <label class="sr-only" for="buscaPag">Buscar</label>
+        <input type="search" id="buscaPag" placeholder="Buscar por emitente, descrição ou nota...">
         <button type="button" class="chip-filtro" data-f="pendentes" aria-pressed="true">Pendentes</button>
         <button type="button" class="chip-filtro" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
         <button type="button" class="chip-filtro" data-f="hoje" aria-pressed="false">Hoje</button>
         <button type="button" class="chip-filtro" data-f="7dias" aria-pressed="false">Próx. 7 dias</button>
         <button type="button" class="chip-filtro" data-f="pagas" aria-pressed="false">Pagas</button>
         <button type="button" class="chip-filtro" data-f="todas" aria-pressed="false">Todas</button>
-        <button type="button" class="btn" id="pagarLoteBtn" style="display:none; margin-left:auto;">✓ Pagar filtradas em lote</button>
       </div>
+
+      <!-- Barra de selecao em massa (aparece quando ha selecao) -->
+      <div id="barraSelecao" class="barra-selecao" style="display:none;">
+        <span class="contador" id="selContador">0 selecionada(s)</span>
+        <span id="selTotal"></span>
+        <button type="button" class="btn" id="selPagarBtn">✓ Marcar como pagas</button>
+        <button type="button" class="btn secondary" id="selProrrogarBtn">📅 Prorrogar vencimento</button>
+      </div>
+
       <div id="tabelaPag"></div>
       <div class="rodape-total" id="totalPag" role="status" aria-live="polite"></div>
       <div style="text-align:center; margin-top:10px;">
@@ -313,8 +356,9 @@
   var db = null;
   var notas = [];        // [{id(chave), ...campos}]
   var duplicatas = [];   // [{id, ...campos}]
+  var pagamentosInternos = [];
   var notasPorChave = Object.create(null);
-  var carregouNotas = false, carregouDuplicatas = false;
+  var carregouNotas = false, carregouDuplicatas = false, carregouPgtosInternos = false;
   var assinaturas = []; // funcoes de cancelamento dos onSnapshot ativos
 
   function pararEscutas(){
@@ -541,6 +585,26 @@
         colDup.where('vencimento', '==', null)
               .onSnapshot(receberDupEm(mapaDupSemData), aoFalhar('duplicatas sem vencimento')));
     }
+
+    // Pagamentos internos: vem tudo, sem corte de janela.
+    var mapaPgtoInt = Object.create(null);
+    function aplicarPgtosInternos(){
+      pagamentosInternos = Object.keys(mapaPgtoInt).map(function(k){ return mapaPgtoInt[k]; });
+      carregouPgtosInternos = true;
+      renderAtual();
+    }
+    assinaturas.push(
+      db.collection('pagamentosInternos').onSnapshot(function(snap){
+        snap.docChanges().forEach(function(ch){
+          var id = ch.doc.id;
+          if(ch.type === 'removed'){ delete mapaPgtoInt[id]; return; }
+          var dados = ch.doc.data();
+          dados.id = id;
+          mapaPgtoInt[id] = dados;
+        });
+        aplicarPgtosInternos();
+      }, aoFalhar('pagamentos internos'))
+    );
   }
 
   // Deixa explicito na tela que ha' um recorte, para ninguem achar que
@@ -692,7 +756,8 @@
     $('kImportarQtd').textContent = aImportar.length;
     $('kImportarValor').textContent = brl(aImportar.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
 
-    var pendentes = duplicatas.filter(function(d){ return d.pago !== true && !dupDaNotaCancelada(d); });
+    var pendentes = duplicatas.filter(function(d){ return d.pago !== true && !dupDaNotaCancelada(d); })
+      .concat(pagamentosInternos.filter(function(p){ return p.pago !== true; }));
     var atrasadas = pendentes.filter(function(d){ return d.vencimento && d.vencimento < inicioHoje; });
     var vHoje = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= hoje; });
     var em7 = pendentes.filter(function(d){ return d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
@@ -706,12 +771,12 @@
     // "Duplicatas atrasadas R$ 0,00" se le como "nao ha' nada atrasado",
     // que e' justamente o contrario do que o painel existe para dizer.
     function preencher(idQtd, idValor, lista, sufixo){
-      if(!carregouDuplicatas){
+      if(!carregouDuplicatas || !carregouPgtosInternos){
         $(idQtd).textContent = 'carregando...';
         $(idValor).textContent = '--';
         return;
       }
-      $(idQtd).textContent = lista.length + ' ' + (sufixo || 'duplicata(s)');
+      $(idQtd).textContent = lista.length + ' ' + (sufixo || 'item(ns)');
       $(idValor).textContent = brl(lista.reduce(function(s,d){ return s + (d.valor||0); }, 0));
     }
     preencher('kAtrasadasQtd', 'kAtrasadasValor', atrasadas);
@@ -733,6 +798,8 @@
         // Mesma separacao das outras telas: a Vetrus vira Stela ou
         // Pamesa conforme o produto da nota de origem.
         var nome = fornecedorDaDuplicata(d);
+        if(d.descricao !== undefined && d.chaveAcesso === undefined) nome = d.descricao || 'Pgto Interno';
+        
         if(!porNome[nome]) porNome[nome] = { nome:nome, total:0, qtd:0 };
         porNome[nome].total += (d.valor||0);
         porNome[nome].qtd++;
@@ -743,16 +810,17 @@
     function htmlTop(grupos){
       // Mesmo motivo dos cartoes: "Nada aqui 🎉" e' uma afirmacao, e
       // ainda nao ha' o que afirmar enquanto as duplicatas carregam.
-      if(!carregouDuplicatas) return '<p class="nota-explicativa" style="margin:0;">Carregando...</p>';
+      if(!carregouDuplicatas || !carregouPgtosInternos) return '<p class="nota-explicativa" style="margin:0;">Carregando...</p>';
       if(!grupos.length) return '<p class="nota-explicativa" style="margin:0;">Nada aqui. 🎉</p>';
       return grupos.map(function(g){
         return '<div class="top-forn-row"><div><div class="top-forn-nome">' + escapeHtml(g.nome) + '</div>' +
-          '<div class="top-forn-qtd">' + g.qtd + ' duplicata(s)</div></div>' +
+          '<div class="top-forn-qtd">' + g.qtd + ' item(ns)</div></div>' +
           '<div class="top-forn-valor">' + brl(g.total) + '</div></div>';
       }).join('');
     }
 
-    var todasValidas = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
+    var todasValidas = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); })
+      .concat(pagamentosInternos);
 
     var inicioMes = hoje.substring(0,8) + '01';
     var doMes = todasValidas.filter(function(d){
@@ -1100,55 +1168,396 @@
   // ─── Pagamentos ─────────────────────────────────────────────
 
   var filtroPag = 'pendentes';
+  var escopoPag = 'fornecedores';
   var limitePag = 200;
   var ultimaListaPag = [];
+  var selecionados = Object.create(null); // id -> true
+  var editandoPgtoId = null; // null = novo, string = editando
+
+  var CATEGORIAS = [
+    { valor: 'impostos',    rotulo: 'Impostos',            classe: 'cat-impostos' },
+    { valor: 'folha',       rotulo: 'Folha de Pagamento',  classe: 'cat-folha' },
+    { valor: 'emprestimo',  rotulo: 'Empréstimo',          classe: 'cat-emprestimo' },
+    { valor: 'outro',       rotulo: 'Outro',               classe: 'cat-outro' }
+  ];
+
+  function categoriaPorValor(v){
+    for(var i = 0; i < CATEGORIAS.length; i++){
+      if(CATEGORIAS[i].valor === v) return CATEGORIAS[i];
+    }
+    return CATEGORIAS[3]; // 'outro'
+  }
+
+  function setEscopoPag(e){
+    escopoPag = e;
+    limitePag = 200;
+    selecionados = Object.create(null);
+    $('escopoBar').querySelectorAll('.escopo-btn').forEach(function(b){
+      b.setAttribute('aria-pressed', String(b.dataset.escopo === e));
+    });
+    $('btnNovoPgtoWrap').style.display = (e === 'interno' || e === 'todos') ? '' : 'none';
+    fecharFormPgto();
+    renderPagamentos();
+  }
 
   function setFiltroPag(f){
     filtroPag = f;
     limitePag = 200;
+    selecionados = Object.create(null);
     $('viewPagamentos').querySelectorAll('.chip-filtro[data-f]').forEach(function(x){
       x.setAttribute('aria-pressed', String(x.dataset.f === f));
     });
     renderPagamentos();
   }
 
+  App.delegar($('escopoBar'), 'click', '.escopo-btn', function(btn){
+    setEscopoPag(btn.dataset.escopo);
+  });
   App.delegar($('viewPagamentos'), 'click', '.chip-filtro[data-f]', function(chip){
     setFiltroPag(chip.dataset.f);
   });
   $('buscaPag').addEventListener('input', App.debounce(function(){ limitePag = 200; renderPagamentos(); }));
   $('maisPagBtn').addEventListener('click', function(){ limitePag += 300; renderPagamentos(); });
 
-  // Pagamento em lote: marca como pagas TODAS as duplicatas do filtro
-  // atual (nao so' as visiveis), em blocos de ate' 450 gravacoes.
-  $('pagarLoteBtn').addEventListener('click', function(){
-    var alvo = ultimaListaPag.filter(function(d){ return d.pago !== true; });
-    if(!alvo.length) return;
-    var total = alvo.reduce(function(s,d){ return s + (d.valor||0); }, 0);
+  // ─── Formulario de pagamento interno ────────────────────────
+
+  function abrirFormPgto(pgto){
+    editandoPgtoId = pgto ? pgto.id : null;
+    var p = pgto || {};
+    var diaFixo = p.diaFixo || '';
+    var regraVal = p.regra || 'diaFixo';
+
+    var optsCat = CATEGORIAS.map(function(c){
+      return '<option value="' + c.valor + '"' + (p.categoria === c.valor ? ' selected' : '') + '>' + escapeHtml(c.rotulo) + '</option>';
+    }).join('');
+
+    $('formPgtoWrap').style.display = '';
+    $('formPgtoWrap').innerHTML =
+      '<div class="form-pgto">' +
+        '<h3 style="margin:0 0 12px; font-size:15px;">' + (editandoPgtoId ? 'Editar pagamento' : 'Novo pagamento interno') + '</h3>' +
+        '<div class="campo">' +
+          '<label for="pgtoDescricao">Descrição</label>' +
+          '<input type="text" id="pgtoDescricao" value="' + escapeHtml(p.descricao || '') + '" placeholder="Ex: ICMS Julho/2026">' +
+        '</div>' +
+        '<div class="campo-inline">' +
+          '<div class="campo">' +
+            '<label for="pgtoCategoria">Categoria</label>' +
+            '<select id="pgtoCategoria">' + optsCat + '</select>' +
+          '</div>' +
+          '<div class="campo">' +
+            '<label for="pgtoValor">Valor (R$)</label>' +
+            '<input type="number" id="pgtoValor" step="0.01" min="0" value="' + (p.valor || '') + '">' +
+          '</div>' +
+          '<div class="campo">' +
+            '<label for="pgtoVencimento">Data de vencimento</label>' +
+            '<input type="date" id="pgtoVencimento" value="' + (p.vencimento || '') + '">' +
+          '</div>' +
+        '</div>' +
+        '<div class="campo" style="flex-direction:row; align-items:center; gap:8px;">' +
+          '<input type="checkbox" id="pgtoRecorrente"' + (p.recorrente ? ' checked' : '') + '>' +
+          '<label for="pgtoRecorrente" style="text-transform:none; font-size:13px; color:var(--ink);">Recorrente (repete todo mês)</label>' +
+        '</div>' +
+        '<div id="pgtoRecorrenciaOpcoes" class="recorrencia-opcoes" style="' + (p.recorrente ? '' : 'display:none;') + '">' +
+          '<label><input type="radio" name="pgtoRegra" value="diaFixo"' + (regraVal === 'diaFixo' ? ' checked' : '') + '> Dia fixo do mês: ' +
+            '<input type="number" id="pgtoDiaFixo" min="1" max="31" style="width:50px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + diaFixo + '"></label>' +
+          '<label><input type="radio" name="pgtoRegra" value="ultimoDia"' + (regraVal === 'ultimoDia' ? ' checked' : '') + '> Último dia do mês</label>' +
+        '</div>' +
+        '<div style="display:flex; gap:8px; margin-top:14px;">' +
+          '<button type="button" class="btn" id="pgtoSalvarBtn">Salvar</button>' +
+          '<button type="button" class="btn secondary" id="pgtoCancelarBtn">Cancelar</button>' +
+        '</div>' +
+      '</div>';
+
+    // Auto-preencher dia fixo com o dia da data de vencimento
+    $('pgtoVencimento').addEventListener('change', function(){
+      var v = this.value;
+      if(v && $('pgtoDiaFixo') && !$('pgtoDiaFixo').value){
+        $('pgtoDiaFixo').value = Number(v.substring(8,10));
+      }
+    });
+
+    $('pgtoRecorrente').addEventListener('change', function(){
+      $('pgtoRecorrenciaOpcoes').style.display = this.checked ? '' : 'none';
+    });
+
+    $('pgtoSalvarBtn').addEventListener('click', salvarPgtoInterno);
+    $('pgtoCancelarBtn').addEventListener('click', fecharFormPgto);
+  }
+
+  function fecharFormPgto(){
+    editandoPgtoId = null;
+    $('formPgtoWrap').style.display = 'none';
+    $('formPgtoWrap').innerHTML = '';
+  }
+
+  function salvarPgtoInterno(){
+    var descricao = ($('pgtoDescricao').value || '').trim();
+    var categoria = $('pgtoCategoria').value;
+    var valorStr = $('pgtoValor').value;
+    var vencimento = $('pgtoVencimento').value;
+    var recorrente = $('pgtoRecorrente').checked;
+    var regra = null, diaFixo = null;
+
+    if(!descricao){ App.toast('Preencha a descrição.', 'erro'); return; }
+    if(!valorStr || Number(valorStr) <= 0){ App.toast('Preencha o valor.', 'erro'); return; }
+    if(!vencimento){ App.toast('Preencha a data de vencimento.', 'erro'); return; }
+
+    if(recorrente){
+      var radios = document.querySelectorAll('input[name="pgtoRegra"]');
+      for(var i = 0; i < radios.length; i++){
+        if(radios[i].checked) regra = radios[i].value;
+      }
+      if(regra === 'diaFixo'){
+        diaFixo = Number($('pgtoDiaFixo').value);
+        if(!diaFixo || diaFixo < 1 || diaFixo > 31){
+          App.toast('Informe o dia fixo (1 a 31).', 'erro');
+          return;
+        }
+      }
+    }
+
+    var dados = {
+      descricao: descricao,
+      categoria: categoria,
+      valor: Number(valorStr),
+      vencimento: vencimento,
+      recorrente: recorrente,
+      regra: regra,
+      diaFixo: diaFixo,
+      pago: false,
+      dataPagamento: null,
+      origemId: null
+    };
+
+    var btn = $('pgtoSalvarBtn');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    var p;
+    if(editandoPgtoId){
+      // Ao editar, nao zera pago/dataPagamento
+      delete dados.pago;
+      delete dados.dataPagamento;
+      delete dados.origemId;
+      p = App.comAuth(function(){
+        return db.collection('pagamentosInternos').doc(editandoPgtoId).set(dados, { merge: true });
+      });
+    } else {
+      p = App.comAuth(function(){
+        return db.collection('pagamentosInternos').add(dados);
+      });
+    }
+
+    p.then(function(){
+      App.toast(editandoPgtoId ? 'Pagamento atualizado.' : 'Pagamento cadastrado.', 'ok');
+      fecharFormPgto();
+    }).catch(function(e){
+      App.toastErro('Erro ao salvar pagamento', e);
+    }).then(function(){
+      btn.disabled = false;
+      btn.textContent = 'Salvar';
+    });
+  }
+
+  $('btnNovoPgto').addEventListener('click', function(){ abrirFormPgto(null); });
+
+  // ─── Recorrencia ────────────────────────────────────────────
+
+  function calcularProximoVencimento(pgto){
+    var ano = Number(pgto.vencimento.substring(0,4));
+    var mes = Number(pgto.vencimento.substring(5,7));
+    var proxMes = (mes === 12) ? 1 : mes + 1;
+    var proxAno = (mes === 12) ? ano + 1 : ano;
+
+    if(pgto.regra === 'ultimoDia'){
+      var ultimo = new Date(proxAno, proxMes, 0).getDate();
+      return proxAno + '-' + String(proxMes).padStart(2,'0') + '-' + String(ultimo).padStart(2,'0');
+    }
+    // diaFixo
+    var dia = pgto.diaFixo || Number(pgto.vencimento.substring(8,10));
+    var maxDia = new Date(proxAno, proxMes, 0).getDate();
+    if(dia > maxDia) dia = maxDia;
+    return proxAno + '-' + String(proxMes).padStart(2,'0') + '-' + String(dia).padStart(2,'0');
+  }
+
+  function criarProximoRecorrente(pgto){
+    var proxVenc = calcularProximoVencimento(pgto);
+    // Verifica se ja' existe lancamento para o proximo mes com mesma origem
+    var jaExiste = pagamentosInternos.some(function(p){
+      return p.origemId === pgto.id && p.vencimento === proxVenc;
+    });
+    if(jaExiste) return Promise.resolve(null);
+
+    var novo = {
+      descricao: pgto.descricao,
+      categoria: pgto.categoria,
+      valor: pgto.valor,
+      vencimento: proxVenc,
+      recorrente: true,
+      regra: pgto.regra,
+      diaFixo: pgto.diaFixo,
+      pago: false,
+      dataPagamento: null,
+      origemId: pgto.id
+    };
+
+    return App.comAuth(function(){
+      return db.collection('pagamentosInternos').add(novo);
+    }).then(function(){
+      return proxVenc;
+    });
+  }
+
+  // ─── Selecao em massa ───────────────────────────────────────
+
+  function atualizarBarraSelecao(){
+    var ids = Object.keys(selecionados);
+    if(!ids.length){
+      $('barraSelecao').style.display = 'none';
+      return;
+    }
+    $('barraSelecao').style.display = '';
+    var soma = 0;
+    ids.forEach(function(id){
+      var d = ultimaListaPag.find(function(x){ return x.id === id; });
+      if(d) soma += (d.valor || 0);
+    });
+    $('selContador').textContent = ids.length + ' selecionada(s)';
+    $('selTotal').textContent = '· ' + brl(soma);
+    // Prorrogar so' aparece no escopo fornecedores
+    $('selProrrogarBtn').style.display = (escopoPag === 'fornecedores') ? '' : 'none';
+  }
+
+  App.delegar($('tabelaPag'), 'change', '.sel-check', function(cb){
+    if(cb.checked) selecionados[cb.dataset.id] = true;
+    else delete selecionados[cb.dataset.id];
+    // Atualizar checkbox do cabecalho
+    var head = $('tabelaPag').querySelector('.sel-check-all');
+    if(head){
+      var todas = $('tabelaPag').querySelectorAll('.sel-check:not(.sel-check-all)');
+      var marcadas = $('tabelaPag').querySelectorAll('.sel-check:checked:not(.sel-check-all)');
+      head.checked = todas.length > 0 && marcadas.length === todas.length;
+      head.indeterminate = marcadas.length > 0 && marcadas.length < todas.length;
+    }
+    atualizarBarraSelecao();
+  });
+
+  App.delegar($('tabelaPag'), 'change', '.sel-check-all', function(cb){
+    var checks = $('tabelaPag').querySelectorAll('.sel-check:not(.sel-check-all)');
+    checks.forEach(function(c){
+      c.checked = cb.checked;
+      if(cb.checked) selecionados[c.dataset.id] = true;
+      else delete selecionados[c.dataset.id];
+    });
+    atualizarBarraSelecao();
+  });
+
+  // Pagar selecionadas
+  $('selPagarBtn').addEventListener('click', function(){
+    var ids = Object.keys(selecionados);
+    if(!ids.length) return;
+    var soma = 0;
+    ids.forEach(function(id){
+      var d = ultimaListaPag.find(function(x){ return x.id === id; });
+      if(d) soma += (d.valor || 0);
+    });
 
     App.confirmar({
-      titulo: 'Pagar em lote',
-      mensagem: 'Marcar ' + alvo.length + ' duplicata(s) como PAGAS?\n\n' +
-        'Total: ' + brl(total) + '\n' +
-        'Filtro atual: ' + filtroPag + ($('buscaPag').value ? ' + busca "' + $('buscaPag').value + '"' : '') + '\n\n' +
-        'Vale para TODAS as duplicatas do filtro, não só as visíveis na tela.',
+      titulo: 'Marcar como pagas',
+      mensagem: 'Marcar ' + ids.length + ' item(ns) como PAGOS?\n\nTotal: ' + brl(soma),
       confirmar: 'Marcar como pagas',
       perigo: true
     }).then(function(ok){
       if(!ok) return;
-      var btn = $('pagarLoteBtn');
+      var btn = $('selPagarBtn');
       btn.disabled = true;
       var dataPgto = hojeISO();
       var gravadas = 0;
+      var recorrenciasCriadas = [];
 
       function bloco(i){
-        if(i >= alvo.length) return Promise.resolve();
-        var pedaco = alvo.slice(i, i + 450);
-        btn.textContent = 'Gravando... ' + Math.min(i + 450, alvo.length) + '/' + alvo.length;
+        if(i >= ids.length) return Promise.resolve();
+        var pedaco = ids.slice(i, i + 450);
+        btn.textContent = 'Gravando... ' + Math.min(i + 450, ids.length) + '/' + ids.length;
         return App.comAuth(function(){
           var batch = db.batch();
-          pedaco.forEach(function(d){
-            batch.set(db.collection('duplicatas').doc(d.id),
-              { pago:true, dataPagamento:dataPgto, pagoEmLote:true }, { merge:true });
+          pedaco.forEach(function(id){
+            // Verifica se e' duplicata ou pagamento interno
+            var item = ultimaListaPag.find(function(x){ return x.id === id; });
+            if(item && item._tipo === 'interno'){
+              batch.set(db.collection('pagamentosInternos').doc(id),
+                { pago:true, dataPagamento:dataPgto }, { merge:true });
+            } else {
+              batch.set(db.collection('duplicatas').doc(id),
+                { pago:true, dataPagamento:dataPgto, pagoEmLote:true }, { merge:true });
+            }
+          });
+          return batch.commit();
+        }).then(function(){
+          // Criar recorrencias para pagamentos internos
+          var promessas = pedaco.map(function(id){
+            var item = ultimaListaPag.find(function(x){ return x.id === id; });
+            if(item && item._tipo === 'interno' && item.recorrente){
+              return criarProximoRecorrente(item).then(function(proxVenc){
+                if(proxVenc) recorrenciasCriadas.push(proxVenc);
+              });
+            }
+            return Promise.resolve();
+          });
+          return Promise.all(promessas);
+        }).then(function(){
+          gravadas += pedaco.length;
+          return bloco(i + 450);
+        });
+      }
+
+      bloco(0).then(function(){
+        var msg = gravadas + ' item(ns) marcado(s) como pago(s).';
+        if(recorrenciasCriadas.length){
+          msg += ' ' + recorrenciasCriadas.length + ' lançamento(s) recorrente(s) criado(s).';
+        }
+        App.toast(msg, 'ok');
+        selecionados = Object.create(null);
+        atualizarBarraSelecao();
+      }).catch(function(e){
+        App.toastErro('Erro no pagamento — ' + gravadas + ' de ' + ids.length +
+          ' já gravados. Confira e repita se necessário.', e);
+      }).then(function(){
+        btn.disabled = false;
+        btn.textContent = '✓ Marcar como pagas';
+      });
+    });
+  });
+
+  // Prorrogar vencimento
+  $('selProrrogarBtn').addEventListener('click', function(){
+    var ids = Object.keys(selecionados);
+    if(!ids.length) return;
+
+    App.confirmar({
+      titulo: 'Prorrogar vencimento',
+      mensagem: 'Nova data de vencimento para ' + ids.length + ' duplicata(s):',
+      confirmar: 'Prorrogar',
+      perigo: false,
+      inputDate: true
+    }).then(function(resultado){
+      if(!resultado) return;
+      var novaData = resultado;
+      if(!novaData || novaData.length !== 10) return;
+
+      var btn = $('selProrrogarBtn');
+      btn.disabled = true;
+      var gravadas = 0;
+
+      function bloco(i){
+        if(i >= ids.length) return Promise.resolve();
+        var pedaco = ids.slice(i, i + 450);
+        btn.textContent = 'Prorrogando... ' + Math.min(i + 450, ids.length) + '/' + ids.length;
+        return App.comAuth(function(){
+          var batch = db.batch();
+          pedaco.forEach(function(id){
+            batch.set(db.collection('duplicatas').doc(id),
+              { vencimento: novaData }, { merge:true });
           });
           return batch.commit();
         }).then(function(){
@@ -1158,85 +1567,218 @@
       }
 
       bloco(0).then(function(){
-        App.toast(gravadas + ' duplicata(s) marcadas como pagas.', 'ok');
+        App.toast(gravadas + ' duplicata(s) prorrogada(s) para ' + fmtData(novaData) + '.', 'ok');
+        selecionados = Object.create(null);
+        atualizarBarraSelecao();
       }).catch(function(e){
-        App.toastErro('Erro no pagamento em lote — ' + gravadas + ' de ' + alvo.length +
-          ' já gravadas. Confira a lista e repita se necessário', e);
+        App.toastErro('Erro na prorrogação — ' + gravadas + ' de ' + ids.length + ' já gravadas.', e);
       }).then(function(){
         btn.disabled = false;
-        btn.textContent = '✓ Pagar filtradas em lote';
+        btn.textContent = '📅 Prorrogar vencimento';
       });
     });
   });
+
+  // ─── Renderizacao ───────────────────────────────────────────
 
   function renderPagamentos(){
     var hoje = hojeISO();
     var inicioHoje = inicioJanelaHoje();
     var termo = norm($('buscaPag').value);
 
-    var lista = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
+    // Monta lista conforme escopo
+    var lista = [];
 
-    if(filtroPag === 'pendentes') lista = lista.filter(function(d){ return d.pago !== true; });
-    else if(filtroPag === 'atrasadas') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento && d.vencimento < inicioHoje; });
-    else if(filtroPag === 'hoje') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento >= inicioHoje && d.vencimento <= hoje; });
-    else if(filtroPag === '7dias') lista = lista.filter(function(d){ return d.pago !== true && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
-    else if(filtroPag === 'pagas') lista = lista.filter(function(d){ return d.pago === true; });
+    if(escopoPag === 'fornecedores' || escopoPag === 'todos'){
+      var dups = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
+      dups.forEach(function(d){
+        lista.push({
+          id: d.id,
+          _tipo: 'fornecedor',
+          descricao: fornecedorDaDuplicata(d),
+          _nomeCru: d.nomeEmitente,
+          nomeEmitente: d.nomeEmitente,
+          chaveAcesso: d.chaveAcesso,
+          categoria: 'fornecedor',
+          valor: d.valor || 0,
+          vencimento: d.vencimento,
+          pago: d.pago === true,
+          dataPagamento: d.dataPagamento,
+          parcela: d.parcela,
+          numeroNota: d.numeroNota,
+          _recebido: dupRecebida(d),
+          recorrente: false
+        });
+      });
+    }
 
+    if(escopoPag === 'interno' || escopoPag === 'todos'){
+      pagamentosInternos.forEach(function(p){
+        lista.push({
+          id: p.id,
+          _tipo: 'interno',
+          descricao: p.descricao || 'Sem descrição',
+          _nomeCru: null,
+          categoria: p.categoria || 'outro',
+          valor: p.valor || 0,
+          vencimento: p.vencimento,
+          pago: p.pago === true,
+          dataPagamento: p.dataPagamento,
+          parcela: null,
+          numeroNota: null,
+          _recebido: null,
+          recorrente: p.recorrente || false,
+          regra: p.regra,
+          diaFixo: p.diaFixo,
+          origemId: p.origemId
+        });
+      });
+    }
+
+    // Filtros
+    if(filtroPag === 'pendentes') lista = lista.filter(function(d){ return !d.pago; });
+    else if(filtroPag === 'atrasadas') lista = lista.filter(function(d){ return !d.pago && d.vencimento && d.vencimento < inicioHoje; });
+    else if(filtroPag === 'hoje') lista = lista.filter(function(d){ return !d.pago && d.vencimento >= inicioHoje && d.vencimento <= hoje; });
+    else if(filtroPag === '7dias') lista = lista.filter(function(d){ return !d.pago && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
+    else if(filtroPag === 'pagas') lista = lista.filter(function(d){ return d.pago; });
+
+    // Busca
     if(termo) lista = lista.filter(function(d){
-      return casaFornecedor(fornecedorDaDuplicata(d), d.nomeEmitente, termo) ||
-        norm(d.numeroNota).includes(termo);
+      if(d._tipo === 'fornecedor'){
+        return casaFornecedor(fornecedorDaDuplicata(d), d.nomeEmitente, termo) ||
+          norm(d.numeroNota).includes(termo);
+      }
+      return norm(d.descricao).indexOf(termo) !== -1 ||
+        norm(categoriaPorValor(d.categoria).rotulo).indexOf(termo) !== -1;
     });
 
     lista.sort(function(a,b){ return (a.vencimento || '9999').localeCompare(b.vencimento || '9999'); });
     ultimaListaPag = lista;
-    $('pagarLoteBtn').style.display = (filtroPag !== 'pagas' && lista.length > 0) ? 'inline-block' : 'none';
 
     var totalFiltrado = lista.length;
-    var somaFiltrada = lista.reduce(function(s,d){ return s + (d.valor||0); }, 0);
+    var somaFiltrada = lista.reduce(function(s,d){ return s + d.valor; }, 0);
     var visiveis = lista.slice(0, limitePag);
     $('maisPagBtn').style.display = totalFiltrado > limitePag ? 'inline-block' : 'none';
 
+    // Limpa selecao de itens que sairam da lista
+    Object.keys(selecionados).forEach(function(id){
+      if(!lista.some(function(d){ return d.id === id; })) delete selecionados[id];
+    });
+    atualizarBarraSelecao();
+
     if(!visiveis.length){
-      $('tabelaPag').innerHTML = '<p class="nota-explicativa">Nenhuma duplicata nesse filtro.</p>';
+      $('tabelaPag').innerHTML = '<p class="nota-explicativa">Nenhum item nesse filtro.</p>';
       $('totalPag').textContent = '';
       return;
     }
 
-    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
-      '<th scope="col">Pago</th><th scope="col">Venc.</th><th scope="col">Emitente</th>' +
-      '<th scope="col">Nota</th><th scope="col">Parc.</th><th scope="col">Valor</th>' +
-      '<th scope="col">Situação</th><th scope="col">Recebido</th></tr></thead><tbody>';
+    // Cabecalho depende do escopo
+    var mostraSelecao = (escopoPag === 'fornecedores');
+    var mostraCategoria = (escopoPag !== 'fornecedores');
+    var mostraNota = (escopoPag !== 'interno');
+    var mostraRecebido = (escopoPag === 'fornecedores');
+
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>';
+    if(mostraSelecao) html += '<th scope="col"><input type="checkbox" class="sel-check-all sel-check" aria-label="Selecionar todas"></th>';
+    html += '<th scope="col">Pago</th><th scope="col">Venc.</th>';
+    html += '<th scope="col">' + (escopoPag === 'interno' ? 'Descrição' : 'Emitente / Descrição') + '</th>';
+    if(mostraCategoria) html += '<th scope="col">Categoria</th>';
+    if(mostraNota) html += '<th scope="col">Nota</th><th scope="col">Parc.</th>';
+    html += '<th scope="col">Valor</th><th scope="col">Situação</th>';
+    if(mostraRecebido) html += '<th scope="col">Recebido</th>';
+    if(escopoPag === 'interno') html += '<th scope="col">Ações</th>';
+    html += '</tr></thead><tbody>';
 
     visiveis.forEach(function(d){
-      var sit = situacaoDup(d);
-      var cls = d.pago === true ? ' class="linha-paga"' : (sit === 'ATRASADO' ? ' class="linha-atrasada"' : '');
-      var receb = dupRecebida(d);
-      var forn = fornecedorDaDuplicata(d);
-      // null = a nota de origem e' anterior ao corte de carga, entao nao
-      // da' para afirmar nem SIM nem NAO.
-      var badgeReceb = receb === null
-        ? '<span class="badge desconhecido" title="Nota anterior ao período carregado">—</span>'
-        : '<span class="badge ' + (receb ? 'sim' : 'nao') + '">' + (receb ? 'SIM' : 'NÃO') + '</span>';
+      var sit, cls;
+      if(d.pago){ sit = 'PAGO'; cls = ' class="linha-paga"'; }
+      else if(d.vencimento && d.vencimento < inicioHoje){ sit = 'ATRASADO'; cls = ' class="linha-atrasada"'; }
+      else { sit = 'A VENCER'; cls = ''; }
 
-      html += '<tr' + cls + '>' +
-        '<td><input type="checkbox" class="pago-check" data-dup="' + escapeHtml(d.id) + '"' +
-          (d.pago === true ? ' checked' : '') +
-          ' aria-label="Marcar duplicata de ' + escapeHtml(d.nomeEmitente ? forn : '') + ' como paga"></td>' +
-        '<td>' + fmtData(d.vencimento) + '</td>' +
-        '<td>' + escapeHtml(fornecedorEmCelula(d.nomeEmitente, forn)) + '</td>' +
-        '<td>' + escapeHtml(d.numeroNota || '-') + '</td>' +
-        '<td>' + escapeHtml(d.parcela || '-') + '</td>' +
-        '<td>' + brl(d.valor) + '</td>' +
-        '<td><span class="badge ' + (sit === 'PAGO' ? 'pago' : (sit === 'ATRASADO' ? 'atrasado' : 'avencer')) + '">' + sit + '</span></td>' +
-        '<td>' + badgeReceb + '</td>' +
-        '</tr>';
+      var badgeSit = '<span class="badge ' + (sit === 'PAGO' ? 'pago' : (sit === 'ATRASADO' ? 'atrasado' : 'avencer')) + '">' + sit + '</span>';
+
+      html += '<tr' + cls + '>';
+
+      // Checkbox de selecao (so fornecedores)
+      if(mostraSelecao){
+        html += '<td><input type="checkbox" class="sel-check" data-id="' + escapeHtml(d.id) + '"' +
+          (selecionados[d.id] ? ' checked' : '') +
+          ' aria-label="Selecionar"></td>';
+      }
+
+      // Pago
+      if(d._tipo === 'fornecedor'){
+        html += '<td><input type="checkbox" class="pago-check" data-dup="' + escapeHtml(d.id) + '"' +
+          (d.pago ? ' checked' : '') + ' aria-label="Marcar como paga"></td>';
+      } else {
+        html += '<td><input type="checkbox" class="pago-check-int" data-pgto="' + escapeHtml(d.id) + '"' +
+          (d.pago ? ' checked' : '') + ' aria-label="Marcar como pago"></td>';
+      }
+
+      // Vencimento
+      html += '<td>' + fmtData(d.vencimento) + '</td>';
+
+      // Descricao / Emitente
+      var forn = d.descricao;
+      if (d._tipo === 'fornecedor') {
+        html += '<td>' + escapeHtml(fornecedorEmCelula(d.nomeEmitente, forn)) +
+          (d.recorrente ? ' <span style="font-size:10px; color:var(--ink-soft);">🔄</span>' : '') +
+          '</td>';
+      } else {
+        html += '<td>' + escapeHtml(d.descricao) +
+          (d.recorrente ? ' <span style="font-size:10px; color:var(--ink-soft);">🔄</span>' : '') +
+          '</td>';
+      }
+
+      // Categoria (interno e todos)
+      if(mostraCategoria){
+        var cat = categoriaPorValor(d.categoria);
+        html += '<td><span class="badge ' + cat.classe + '">' + escapeHtml(cat.rotulo) + '</span></td>';
+      }
+
+      // Nota e parcela (fornecedores e todos)
+      if(mostraNota){
+        html += '<td>' + escapeHtml(d.numeroNota || '-') + '</td>';
+        html += '<td>' + escapeHtml(d.parcela || '-') + '</td>';
+      }
+
+      // Valor
+      html += '<td>' + brl(d.valor) + '</td>';
+
+      // Situacao
+      html += '<td>' + badgeSit + '</td>';
+
+      // Recebido (so fornecedores)
+      if(mostraRecebido){
+        if(d._tipo === 'fornecedor'){
+          var badgeReceb = d._recebido === null
+            ? '<span class="badge desconhecido" title="Nota anterior ao período carregado">—</span>'
+            : '<span class="badge ' + (d._recebido ? 'sim' : 'nao') + '">' + (d._recebido ? 'SIM' : 'NÃO') + '</span>';
+          html += '<td>' + badgeReceb + '</td>';
+        } else {
+          html += '<td>-</td>';
+        }
+      }
+
+      // Acoes (so pgto interno)
+      if(escopoPag === 'interno'){
+        html += '<td>' +
+          '<button type="button" class="acao-mini editar-pgto" data-pgto="' + escapeHtml(d.id) + '" title="Editar">✏️</button> ' +
+          '<button type="button" class="acao-mini perigo excluir-pgto" data-pgto="' + escapeHtml(d.id) + '" title="Excluir">🗑️</button>' +
+          '</td>';
+      }
+
+      html += '</tr>';
     });
 
     $('tabelaPag').innerHTML = html + '</tbody></table></div>';
-    $('totalPag').textContent = totalFiltrado + ' duplicata(s) · total ' + brl(somaFiltrada) +
+    $('totalPag').textContent = totalFiltrado + ' item(ns) · total ' + brl(somaFiltrada) +
       (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
   }
 
+  // ─── Eventos de pagamento individual ────────────────────────
+
+  // Duplicata de fornecedor: checkbox pago
   App.delegar($('tabelaPag'), 'change', '.pago-check', function(cb){
     var id = cb.dataset.dup;
     var marcado = cb.checked;
@@ -1249,6 +1791,65 @@
         cb.checked = !marcado;
       })
       .then(function(){ cb.disabled = false; });
+  });
+
+  // Pagamento interno: checkbox pago (com recorrencia)
+  App.delegar($('tabelaPag'), 'change', '.pago-check-int', function(cb){
+    var id = cb.dataset.pgto;
+    var marcado = cb.checked;
+    cb.disabled = true;
+
+    var campos = marcado
+      ? { pago:true, dataPagamento: hojeISO() }
+      : { pago:false, dataPagamento: null };
+
+    App.comAuth(function(){
+      return db.collection('pagamentosInternos').doc(id).set(campos, { merge: true });
+    }).then(function(){
+      if(!marcado) return;
+      // Se recorrente, cria proximo lancamento
+      var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+      if(pgto && pgto.recorrente){
+        return criarProximoRecorrente(pgto).then(function(proxVenc){
+          if(proxVenc){
+            App.toast('Pago. Próximo lançamento criado para ' + fmtData(proxVenc) + '.', 'ok');
+          }
+        });
+      }
+    }).catch(function(e){
+      App.toastErro('Erro ao gravar o pagamento', e);
+      cb.checked = !marcado;
+    }).then(function(){ cb.disabled = false; });
+  });
+
+  // Editar pagamento interno
+  App.delegar($('tabelaPag'), 'click', '.editar-pgto', function(btn){
+    var id = btn.dataset.pgto;
+    var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+    if(pgto) abrirFormPgto(pgto);
+  });
+
+  // Excluir pagamento interno
+  App.delegar($('tabelaPag'), 'click', '.excluir-pgto', function(btn){
+    var id = btn.dataset.pgto;
+    var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+    if(!pgto) return;
+
+    App.confirmar({
+      titulo: 'Excluir pagamento',
+      mensagem: 'Excluir "' + (pgto.descricao || '') + '"?\nValor: ' + brl(pgto.valor) + '\n\nEssa ação não pode ser desfeita.',
+      confirmar: 'Excluir',
+      perigo: true
+    }).then(function(ok){
+      if(!ok) return;
+      App.comAuth(function(){
+        return db.collection('pagamentosInternos').doc(id).delete();
+      }).then(function(){
+        App.toast('Pagamento excluído.', 'ok');
+      }).catch(function(e){
+        App.toastErro('Erro ao excluir', e);
+      });
+    });
   });
 
   // ─── Fornecedores e prazos ──────────────────────────────────

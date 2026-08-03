@@ -337,6 +337,15 @@
       h.textContent = o.titulo || 'Confirmar';
       var p = document.createElement('p');
       p.textContent = o.mensagem || '';
+      
+      var dt;
+      if (o.inputDate) {
+        dt = document.createElement('input');
+        dt.type = 'date';
+        dt.style.cssText = 'display:block; margin-top:12px; padding:6px; border:1px solid var(--line); border-radius:4px; font-family:var(--font-mono); width:100%; box-sizing:border-box;';
+        p.appendChild(dt);
+      }
+
       var acoes = document.createElement('div');
       acoes.className = 'modal-acoes';
 
@@ -350,7 +359,9 @@
       ok.type = 'button';
       ok.className = 'btn' + (o.perigo ? ' perigo' : '');
       ok.textContent = o.confirmar || 'Confirmar';
-      ok.addEventListener('click', function () { fechar(true); });
+      ok.addEventListener('click', function () {
+        fechar(o.inputDate ? dt.value : true);
+      });
 
       acoes.appendChild(cancelar);
       acoes.appendChild(ok);

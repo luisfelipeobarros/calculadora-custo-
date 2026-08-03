@@ -54,7 +54,7 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote']);
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento']);
     }
 
     match /itensNotas/{chaveAcesso} {
@@ -75,6 +75,10 @@ service cloud.firestore {
     }
 
     match /concorrentes/{id} {
+      allow read, write: if autenticado();
+    }
+
+    match /pagamentosInternos/{id} {
       allow read, write: if autenticado();
     }
 
