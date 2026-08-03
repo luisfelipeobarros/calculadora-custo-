@@ -1175,17 +1175,41 @@
   var editandoPgtoId = null; // null = novo, string = editando
 
   var CATEGORIAS = [
-    { valor: 'impostos',    rotulo: 'Impostos',            classe: 'cat-impostos' },
-    { valor: 'folha',       rotulo: 'Folha de Pagamento',  classe: 'cat-folha' },
-    { valor: 'emprestimo',  rotulo: 'Empréstimo',          classe: 'cat-emprestimo' },
-    { valor: 'outro',       rotulo: 'Outro',               classe: 'cat-outro' }
+    { valor: 'advogada', rotulo: 'Advogada', classe: 'cat-outro' },
+    { valor: 'a-lf-pa', rotulo: 'A LF PA', classe: 'cat-outro' },
+    { valor: 'agencia-t1-mkt', rotulo: 'Agência T1 MKT', classe: 'cat-outro' },
+    { valor: 'almocos', rotulo: 'Almoços', classe: 'cat-outro' },
+    { valor: 'contador', rotulo: 'Contador', classe: 'cat-outro' },
+    { valor: 'diarias', rotulo: 'Diárias', classe: 'cat-outro' },
+    { valor: 'diego', rotulo: 'Diego', classe: 'cat-outro' },
+    { valor: 'empilhadeiras', rotulo: 'Empilhadeiras', classe: 'cat-outro' },
+    { valor: 'emprestimos', rotulo: 'Empréstimos', classe: 'cat-emprestimo' },
+    { valor: 'energia', rotulo: 'Energia', classe: 'cat-outro' },
+    { valor: 'estacionamentos', rotulo: 'Estacionamentos', classe: 'cat-outro' },
+    { valor: 'folha', rotulo: 'Folha de Pagamento', classe: 'cat-folha' },
+    { valor: 'gilson', rotulo: 'Gilson', classe: 'cat-outro' },
+    { valor: 'imposto-mensal', rotulo: 'Imposto Mensal', classe: 'cat-impostos' },
+    { valor: 'impostos-folha', rotulo: 'Impostos Folha', classe: 'cat-impostos' },
+    { valor: 'parcelamentos-imposto', rotulo: 'Parcelamentos Imposto', classe: 'cat-impostos' },
+    { valor: 'moab', rotulo: 'Moab', classe: 'cat-outro' },
+    { valor: 'passagens', rotulo: 'Passagens', classe: 'cat-outro' },
+    { valor: 'policiais', rotulo: 'Policiais', classe: 'cat-outro' },
+    { valor: 'seguranca', rotulo: 'Segurança', classe: 'cat-outro' },
+    { valor: 'trafego-pago', rotulo: 'Tráfego Pago', classe: 'cat-outro' },
+    { valor: 'vem', rotulo: 'VEM', classe: 'cat-outro' },
+    { valor: 'vr', rotulo: 'VR', classe: 'cat-outro' },
+    { valor: 'outro', rotulo: 'Outros', classe: 'cat-outro' }
   ];
 
   function categoriaPorValor(v){
+    // Map older values if any exist
+    if (v === 'impostos') v = 'imposto-mensal';
+    if (v === 'emprestimo') v = 'emprestimos';
+    
     for(var i = 0; i < CATEGORIAS.length; i++){
       if(CATEGORIAS[i].valor === v) return CATEGORIAS[i];
     }
-    return CATEGORIAS[3]; // 'outro'
+    return CATEGORIAS[CATEGORIAS.length - 1]; // 'outro'
   }
 
   function setEscopoPag(e){
