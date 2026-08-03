@@ -34,7 +34,7 @@ const duplicatas = [];
 const notasPorChave = Object.create(null);
 
 const m = new Function('norm', 'diasEntre', 'duplicatas', 'notasPorChave', 'rotularFornecedor', 'App',
-  extrair('fornecedorDaNota') + '\n' +
+  extrair('produtosDaNota') + '\n' + extrair('fornecedorDaNota') + '\n' +
   extrair('notaDaDup') + '\n' + extrair('fornecedorDaDuplicata') + '\n' +
   extrairDe(calc, 'index.html', 'fornecedorDaNotaEmitida') + '\n' +
   extrair('indexarDuplicatas') + '\n' +
@@ -67,9 +67,20 @@ eq('Vetrus com 46x46 -> Stela',
 eq('Vetrus sem 46x46 -> Pamesa',
   m.fornecedorDaNota({ nomeEmitente:'Vetrus S.A. em Recuperacao Judicial', produtosResumo:['PORCELANATO 62x62'] }),
   'Vetrus (Pamesa)');
-eq('Vetrus sem produtos -> Pamesa (o padrao)',
+// Lista vazia e' uma resposta: o app leu os produtos e nao ha' 46x46.
+eq('Vetrus com lista de produtos vazia -> Pamesa (o padrao)',
   m.fornecedorDaNota({ nomeEmitente:'VETRUS', produtosResumo:[] }),
   'Vetrus (Pamesa)');
+// Campo AUSENTE nao e' resposta nenhuma. So' a funcao 1 do Apps Script
+// grava produtosResumo; a funcao 2 (pasta do que ja' entrou no ERP) cria
+// o documento sem ele, e NFS-e nunca tem produto. Enquanto a funcao 1
+// nao passa naquela nota, dizer "Pamesa" seria inventar.
+eq('Vetrus sem o campo produtosResumo -> nome cru, sem chute',
+  m.fornecedorDaNota({ nomeEmitente:'VETRUS S/A' }),
+  'VETRUS S/A');
+eq('e produtosResumo com lixo no lugar da lista tambem nao vira chute',
+  m.fornecedorDaNota({ nomeEmitente:'VETRUS S/A', produtosResumo:null }),
+  'VETRUS S/A');
 // A regra vale SO' para o fornecedor dela: 46x46 de outro nao muda nada.
 eq('46x46 em outro fornecedor nao aplica a regra',
   m.fornecedorDaNota({ nomeEmitente:'CERAMICA BRASILEIRA CERBRAS LTDA', produtosResumo:['PISO 46x46'] }),
@@ -91,7 +102,8 @@ eq('e nao sobrou "Severo" em lugar nenhum',
 // sua copia da regra, a Vetrus apareceria separada numa e junta na outra.
 notasPorChave['nfe-stela'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PISO 46X46 STELA'] };
 notasPorChave['nfe-pamesa'] = { nomeEmitente:'VETRUS S/A', produtosResumo:['PORCELANATO 62x62'] };
-notasPorChave['nfe-semprod'] = { nomeEmitente:'VETRUS S/A' };
+notasPorChave['nfe-semprod'] = { nomeEmitente:'VETRUS S/A' };            // funcao 2: sem o campo
+notasPorChave['nfe-vazia']   = { nomeEmitente:'VETRUS S/A', produtosResumo:[] };
 notasPorChave['nfe-outro']  = { nomeEmitente:'CERAMICA BRASILEIRA CERBRAS LTDA', produtosResumo:['PISO 46x46'] };
 
 eq('duplicata da nota com 46x46 -> Stela',
@@ -100,8 +112,14 @@ eq('duplicata da nota com 46x46 -> Stela',
 eq('duplicata da nota sem 46x46 -> Pamesa',
   m.fornecedorDaDuplicata({ chaveAcesso:'nfe-pamesa', nomeEmitente:'VETRUS S/A' }),
   'Vetrus (Pamesa)');
-eq('nota carregada sem lista de produtos cai no padrao, igual a aba Fornecedores',
+// A nota existe, mas foi criada pela funcao 2 do Apps Script, que nao
+// grava produtosResumo. E' o intervalo entre a nota entrar no ERP e a
+// funcao 1 passar por ela: o app tem a nota e NAO tem os produtos.
+eq('nota sem o campo produtosResumo: nome cru, igual a aba Fornecedores',
   m.fornecedorDaDuplicata({ chaveAcesso:'nfe-semprod', nomeEmitente:'VETRUS S/A' }),
+  'VETRUS S/A');
+eq('mas nota com lista vazia cai no padrao',
+  m.fornecedorDaDuplicata({ chaveAcesso:'nfe-vazia', nomeEmitente:'VETRUS S/A' }),
   'Vetrus (Pamesa)');
 // Sem a nota de origem carregada nao da' para olhar produto nenhum. O
 // app tem que ficar calado em vez de afirmar "Pamesa" sobre uma nota

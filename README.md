@@ -102,9 +102,18 @@ sozinho a operação que falhou.
 
 - `notas`, `duplicatas`, `itensNotas` — o navegador **lê**, mas só pode
   alterar os campos de controle (`pago`, `status`, `previsaoEntrega`,
-  `noSistema`…). Criar e apagar nota fica proibido pelo navegador. O
-  Apps Script usa conta de serviço e ignora estas regras, então a
-  importação de XML continua igual.
+  `noSistema`, `vencimento`…). Criar e apagar nota fica proibido pelo
+  navegador. O Apps Script usa conta de serviço e ignora estas regras,
+  então a importação de XML continua igual.
+
+  **A prorrogação de vencimento não é desfeita pelo Apps Script.** Ele
+  grava duplicata com a precondição `currentDocument: { exists: false }`
+  — se o documento já existe, a gravação é recusada (`FAILED_PRECONDITION`,
+  contada no log como "já existiam") e nada é sobrescrito. É a mesma
+  precondição que protege o `pago`, e vale até se você limpar os
+  checkpoints e reprocessar a pasta inteira. O outro lado da moeda: se
+  uma NF-e for reemitida com vencimentos diferentes, as duplicatas
+  antigas **não** são atualizadas — corrigir isso é na mão, pelo app.
 - `produtos`, `cotacoes`, `concorrentes` — leitura e escrita livres para
   quem está autenticado.
 - Qualquer outra coleção: bloqueada.

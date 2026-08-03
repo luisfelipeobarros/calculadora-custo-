@@ -427,8 +427,23 @@
   // e as duas paginas tem que chamar o mesmo fornecedor pelo mesmo nome.
   var rotularFornecedor = App.rotularFornecedor, casaFornecedor = App.casaFornecedor;
 
+  // produtosResumo AUSENTE nao e' o mesmo que lista vazia.
+  //
+  // Quem grava esse campo e' so' a funcao 1 do Apps Script (a pasta das
+  // notas emitidas contra a empresa). A funcao 2 — a pasta do que ja'
+  // entrou no ERP — cria o documento sem ele, e NFS-e nunca tem produto
+  // nenhum. Enquanto a funcao 1 nao passa por aquela nota, o campo
+  // simplesmente nao existe.
+  //
+  // Tratar isso como "[] logo nao tem 46x46" faria o app afirmar
+  // "Pamesa" sobre uma nota cujos produtos ele nunca leu. Lista vazia de
+  // verdade continua valendo como resposta: ai' ele leu, e nao ha' nada.
+  function produtosDaNota(n){
+    return Array.isArray(n.produtosResumo) ? n.produtosResumo : null;
+  }
+
   function fornecedorDaNota(n){
-    return rotularFornecedor(n.nomeEmitente, n.produtosResumo || []);
+    return rotularFornecedor(n.nomeEmitente, produtosDaNota(n));
   }
 
   // A duplicata nao carrega os produtos — eles estao na nota de origem.
@@ -437,7 +452,7 @@
   // carregada vai null, e ai' o rotulo fica sendo o nome cru.
   function fornecedorDaDuplicata(d){
     var n = notaDaDup(d);
-    return rotularFornecedor(d.nomeEmitente, n ? (n.produtosResumo || []) : null);
+    return rotularFornecedor(d.nomeEmitente, n ? produtosDaNota(n) : null);
   }
 
   // Nas tabelas, sem nome vale um traco: "Sem nome" numa celula chama
