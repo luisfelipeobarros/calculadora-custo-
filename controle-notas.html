@@ -1424,11 +1424,11 @@
     });
     $('selContador').textContent = ids.length + ' selecionada(s)';
     $('selTotal').textContent = '· ' + brl(soma);
-    // Prorrogar so' aparece no escopo fornecedores
-    $('selProrrogarBtn').style.display = (escopoPag === 'fornecedores') ? '' : 'none';
+    $('selProrrogarBtn').style.display = '';
   }
 
   App.delegar($('tabelaPag'), 'change', '.sel-check', function(cb){
+    if(cb.classList.contains('sel-check-all')) return;
     if(cb.checked) selecionados[cb.dataset.id] = true;
     else delete selecionados[cb.dataset.id];
     // Atualizar checkbox do cabecalho
@@ -1536,7 +1536,7 @@
 
     App.confirmar({
       titulo: 'Prorrogar vencimento',
-      mensagem: 'Nova data de vencimento para ' + ids.length + ' duplicata(s):',
+      mensagem: 'Nova data de vencimento para ' + ids.length + ' item(ns):',
       confirmar: 'Prorrogar',
       perigo: false,
       inputDate: true
@@ -1556,8 +1556,14 @@
         return App.comAuth(function(){
           var batch = db.batch();
           pedaco.forEach(function(id){
-            batch.set(db.collection('duplicatas').doc(id),
-              { vencimento: novaData }, { merge:true });
+            var item = ultimaListaPag.find(function(x){ return x.id === id; });
+            if(item && item._tipo === 'interno'){
+              batch.set(db.collection('pagamentosInternos').doc(id),
+                { vencimento: novaData }, { merge:true });
+            } else {
+              batch.set(db.collection('duplicatas').doc(id),
+                { vencimento: novaData }, { merge:true });
+            }
           });
           return batch.commit();
         }).then(function(){
@@ -1567,7 +1573,7 @@
       }
 
       bloco(0).then(function(){
-        App.toast(gravadas + ' duplicata(s) prorrogada(s) para ' + fmtData(novaData) + '.', 'ok');
+        App.toast(gravadas + ' item(ns) prorrogado(s) para ' + fmtData(novaData) + '.', 'ok');
         selecionados = Object.create(null);
         atualizarBarraSelecao();
       }).catch(function(e){
@@ -1673,7 +1679,7 @@
     }
 
     // Cabecalho depende do escopo
-    var mostraSelecao = (escopoPag === 'fornecedores');
+    var mostraSelecao = true;
     var mostraCategoria = (escopoPag !== 'fornecedores');
     var mostraNota = (escopoPag !== 'interno');
     var mostraRecebido = (escopoPag === 'fornecedores');
