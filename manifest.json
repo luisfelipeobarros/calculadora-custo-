@@ -1,9 +1,11 @@
 {
   "name": "Calculadora de Custo",
   "short_name": "Calc. Custo",
+  "description": "Custo, impostos, frete, margem de venda e cotacoes.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
+  "lang": "pt-BR",
   "background_color": "#F6F3E7",
   "theme_color": "#A8462B",
   "icons": [

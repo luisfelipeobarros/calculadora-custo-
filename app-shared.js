@@ -1050,8 +1050,12 @@
   // A busca casa com o que esta' ESCRITO na tela e tambem com o nome
   // que veio da nota: quem digita "stela" acha a linha separada, e quem
   // digita "vetrus s/a" continua achando as duas.
+  //
+  // Sem acento dos dois lados: "ceramica" tem que achar "CERÂMICA",
+  // como ja' acontecia nas buscas de Produtos salvos e do Historico.
   function casaFornecedor(rotulo, nomeCru, termo) {
-    return norm(rotulo).indexOf(termo) !== -1 || norm(nomeCru).indexOf(termo) !== -1;
+    var t = normalizarTexto(termo);
+    return normalizarTexto(rotulo).indexOf(t) !== -1 || normalizarTexto(nomeCru).indexOf(t) !== -1;
   }
 
   /* ============================================================
@@ -1128,11 +1132,12 @@
      ============================================================ */
 
   // So' entra aqui o que algum dos dois apps (ou os testes) realmente
-  // usa. num, abrirModal, iniciarAuth, authPronto, sair, usuario e
+  // usa. num, norm, abrirModal, iniciarAuth, authPronto, sair, usuario e
   // aoMudarUsuario existem e sao usados INTERNAMENTE — por
-  // tabelaItensNota, confirmar/avisar/pedirLogin, iniciarFirebase,
-  // exigirLogin e montarBarraConta. Estavam exportados sem nenhum
-  // consumidor de fora; se um dia algum app precisar, e' so' devolver.
+  // tabelaItensNota, rotularFornecedor, confirmar/avisar/pedirLogin,
+  // iniciarFirebase, exigirLogin e montarBarraConta. Estavam exportados
+  // sem nenhum consumidor de fora; se um dia algum app precisar, e' so'
+  // devolver.
   global.App = {
     FIREBASE_CONFIG: FIREBASE_CONFIG,
     DEBOUNCE_BUSCA: DEBOUNCE_BUSCA,
@@ -1141,7 +1146,6 @@
     escapeHtml: escapeHtml,
     safeUrl: safeUrl,
     normalizarTexto: normalizarTexto,
-    norm: norm,
 
     toNum: toNum,
     centavos: centavos,

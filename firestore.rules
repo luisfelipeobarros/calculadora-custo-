@@ -31,6 +31,26 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Validacao de tipo dos campos de controle que o navegador grava.
+    // A allowlist de campos ja' impede tocar no que nao deve; isto
+    // impede gravar lixo NOS campos permitidos (ex: pago = "banana",
+    // vencimento sem formato de data) — o front confia nesses valores.
+    //
+    // So' o campo ALTERADO e' validado: um documento antigo com valor
+    // legado num campo que a gravacao nem tocou nao pode travar o update.
+    function mudou(campo) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasAny([campo]);
+    }
+    function boolValido(campo) {
+      return !mudou(campo) || request.resource.data[campo] is bool;
+    }
+    function dataISOValida(campo) {
+      return !mudou(campo)
+        || request.resource.data.get(campo, null) == null
+        || (request.resource.data[campo] is string
+            && request.resource.data[campo].matches('\\d{4}-\\d{2}-\\d{2}'));
+    }
+
     // ------------------------------------------------------------
     // Colecoes alimentadas pelo Apps Script (importacao de XML).
     // O navegador so' precisa LER e marcar alguns campos de controle;
@@ -46,7 +66,12 @@ service cloud.firestore {
       // codigo nao consegue sobrescrever valor, emitente ou chave.
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual', 'previsaoEntrega']);
+             .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual', 'previsaoEntrega'])
+        && (!mudou('status') || request.resource.data.status in ['ativa', 'cancelada'])
+        && boolValido('noSistema')
+        && boolValido('noSistemaManual')
+        && dataISOValida('canceladaEm')
+        && dataISOValida('previsaoEntrega');
     }
 
     match /duplicatas/{id} {
@@ -54,7 +79,11 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento']);
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento'])
+        && boolValido('pago')
+        && boolValido('pagoEmLote')
+        && dataISOValida('dataPagamento')
+        && dataISOValida('vencimento');
     }
 
     match /itensNotas/{chaveAcesso} {

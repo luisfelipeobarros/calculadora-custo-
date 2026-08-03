@@ -646,7 +646,7 @@
     background:transparent;
     color:var(--ink);
   }
-  .btn:focus-visible, .chip button:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
+  .btn:focus-visible{outline:2px solid var(--copper); outline-offset:2px;}
 
   .actions{
     display:flex;

@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=13">
+<link rel="stylesheet" href="app-shared.css?v=14">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -189,7 +189,7 @@
         <div class="field">
           <label for="loteCredIcmsFrete">Credita ICMS sobre o frete?</label>
           <div class="input-row">
-            <select id="loteCredIcmsFrete" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+            <select id="loteCredIcmsFrete" class="select-embutido">
               <option value="0" selected>Não</option><option value="1">Sim</option>
             </select>
           </div>
@@ -201,7 +201,7 @@
         <div class="field">
           <label for="loteComST">Produto com ST?</label>
           <div class="input-row">
-            <select id="loteComST" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+            <select id="loteComST" class="select-embutido">
               <option value="1" selected>Sim</option><option value="0">Não</option>
             </select>
           </div>
@@ -248,7 +248,7 @@
         <div class="field">
           <label for="individualSelect">Escolha o produto</label>
           <div class="input-row">
-            <select id="individualSelect" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+            <select id="individualSelect" class="select-embutido">
               <option value="">— Selecione um produto —</option>
             </select>
           </div>
@@ -272,7 +272,7 @@
           <div class="field">
             <label for="indCredIcmsFrete">Credita ICMS sobre o frete?</label>
             <div class="input-row">
-              <select id="indCredIcmsFrete" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+              <select id="indCredIcmsFrete" class="select-embutido">
                 <option value="0" selected>Não</option><option value="1">Sim</option>
               </select>
             </div>
@@ -284,7 +284,7 @@
           <div class="field">
             <label for="indComST">Produto com ST?</label>
             <div class="input-row">
-              <select id="indComST" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink);">
+              <select id="indComST" class="select-embutido">
                 <option value="1" selected>Sim</option><option value="0">Não</option>
               </select>
             </div>
@@ -354,7 +354,7 @@
         <div class="field" style="max-width:260px; margin-bottom:14px; flex:1; min-width:200px;">
           <label for="filtroMesHistorico">Filtrar por mês</label>
           <div class="input-row">
-            <select id="filtroMesHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
+            <select id="filtroMesHistorico" class="select-embutido" style="font-size:13px;">
               <option value="">Todos os meses</option>
             </select>
           </div>
@@ -362,7 +362,7 @@
         <div class="field" style="max-width:260px; margin-bottom:14px; flex:1; min-width:200px;">
           <label for="filtroStatusHistorico">Filtrar por status</label>
           <div class="input-row">
-            <select id="filtroStatusHistorico" style="border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:13px; width:100%; background:transparent; color:var(--ink);">
+            <select id="filtroStatusHistorico" class="select-embutido" style="font-size:13px;">
               <option value="">Todos os status</option>
               <option value="negociacao">Em negociação</option>
               <option value="pedido">Em carteira (pedido)</option>
@@ -394,13 +394,13 @@
         Notas emitidas contra a empresa (pasta de XML), com os produtos, CFOP e impostos de cada uma. Clique numa nota para abrir os itens.
       </p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-        <input type="search" id="buscaNotas" placeholder="Buscar por emitente, nº da nota ou produto..." style="flex:1; min-width:200px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px;">
-        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">De <input type="date" id="notasDataDe" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
-        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">Até <input type="date" id="notasDataAte" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
+        <input type="search" id="buscaNotas" class="campo-busca" placeholder="Buscar por emitente, nº da nota ou produto...">
+        <label class="rotulo-mono">De <input type="date" id="notasDataDe" class="campo-data"></label>
+        <label class="rotulo-mono">Até <input type="date" id="notasDataAte" class="campo-data"></label>
         <button class="btn secondary" id="limparDatasNotasBtn" style="display:none;">✕ Limpar datas</button>
         <button class="btn secondary" id="recarregarNotasBtn">⟳ Recarregar</button>
       </div>
-      <div id="notasMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
+      <div id="notasMsg" class="msg-mono"></div>
       <div id="listaNotasEmitidas"></div>
       <div style="text-align:center; margin-top:10px;">
         <button type="button" class="btn secondary" id="maisNotasBtn" style="display:none;">Mostrar mais</button>
@@ -418,12 +418,12 @@
       <div class="card">
         <h2>NF-e Emitidas — últimos 60 dias</h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-          <input type="search" id="buscaNotasCmp" placeholder="Buscar por emitente, nº ou produto..." style="flex:1; min-width:170px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px;">
-          <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">De <input type="date" id="notasDataDeCmp" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
-          <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft);">Até <input type="date" id="notasDataAteCmp" style="padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px;"></label>
+          <input type="search" id="buscaNotasCmp" class="campo-busca" placeholder="Buscar por emitente, nº ou produto..." style="min-width:170px;">
+          <label class="rotulo-mono">De <input type="date" id="notasDataDeCmp" class="campo-data"></label>
+          <label class="rotulo-mono">Até <input type="date" id="notasDataAteCmp" class="campo-data"></label>
           <button class="btn secondary" id="limparDatasNotasBtnCmp" style="display:none;">✕ Limpar</button>
         </div>
-        <div id="notasMsgCmp" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px;"></div>
+        <div id="notasMsgCmp" class="msg-mono"></div>
         <div id="listaNotasEmitidasCmp"></div>
         <div style="text-align:center; margin-top:10px;">
           <button type="button" class="btn secondary" id="maisNotasBtnCmp" style="display:none;">Mostrar mais</button>
@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=12"></script>
+<script src="app-shared.js?v=13"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -1316,26 +1316,6 @@ Tupan</textarea>
     }
     delete memoryStore[key];
     return { key, deleted:true, shared:false };
-  }
-
-  async function storageList(prefix){
-    if(storageBackend === 'firebase'){
-      try{
-        const produtos = await firebaseListar();
-        const keys = Object.keys(produtos).map(nome => chaveDoProduto(nome)).filter(k=>k.startsWith(prefix));
-        return { keys, prefix, shared:false };
-      }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
-    }
-    if(storageBackend === 'claude'){
-      try{
-        return await window.storage.list(prefix, false);
-      }catch(e){ rebaixarBackend(); }
-    }
-    if(storageBackend === 'local'){
-      const all = lsLerTudo();
-      return { keys: Object.keys(all).filter(k=>k.startsWith(prefix)), prefix, shared:false };
-    }
-    return { keys: Object.keys(memoryStore).filter(k=>k.startsWith(prefix)), prefix, shared:false };
   }
 
   // Le TUDO de uma vez: devolve [{key, value}].
@@ -2898,7 +2878,8 @@ Tupan</textarea>
   function renderListaNotas(suf){
     if(!notasEmitidasCache) return;
     if(!$('listaNotasEmitidas'+suf)) return;
-    const termo = ($('buscaNotas'+suf).value||'').toLowerCase();
+    // Sem acento, como nas buscas de Produtos salvos: "ceramica" acha "CERÂMICA".
+    const termo = normalizarTexto($('buscaNotas'+suf).value);
     const dataDe = $('notasDataDe'+suf).value;   // formato aaaa-mm-dd, igual ao dataEmissao
     const dataAte = $('notasDataAte'+suf).value;
     $('limparDatasNotasBtn'+suf).style.display = (dataDe || dataAte) ? 'inline-block' : 'none';
@@ -2908,8 +2889,8 @@ Tupan</textarea>
     if(termo){
       lista = lista.filter(n =>
         App.casaFornecedor(fornecedorDaNotaEmitida(n), n.nomeEmitente, termo) ||
-        String(n.numero||'').toLowerCase().includes(termo) ||
-        (n.itens||[]).some(it => String(it.descricao||'').toLowerCase().includes(termo) || String(it.codigo||'').toLowerCase().includes(termo))
+        normalizarTexto(n.numero).includes(termo) ||
+        (n.itens||[]).some(it => normalizarTexto(it.descricao).includes(termo) || normalizarTexto(it.codigo).includes(termo))
       );
     }
     if(!lista.length){
@@ -2950,37 +2931,11 @@ Tupan</textarea>
           htmlVencimentosNota(n.chave, n.dataEmissao) + '</div>';
       }
       if(aberta){
-        html += '<div style="border:1px solid var(--line); border-top:none; border-radius:0 0 5px 5px; padding:10px; background:var(--card); overflow-x:auto;">';
-        html += '<table class="quote-table" style="min-width:900px;"><thead><tr>' +
-          '<th>Cód · Produto</th><th>NCM · CFOP</th><th>Qtd</th><th>V. Unit.</th><th>V. Total</th>' +
-          '<th>ICMS</th><th>IPI</th><th>PIS+COFINS</th></tr></thead><tbody>';
-        (n.itens||[]).slice().sort((a,b)=>(a.n||0)-(b.n||0)).forEach(it=>{
-          let icms = it.icmsValor ? ('CST '+escapeHtml(it.icmsCst||'-')+' · '+(it.icmsAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.icmsValor)) : ('CST '+escapeHtml(it.icmsCst||'-'));
-          if(it.icmsStValor > 0){
-            const pctSt = (it.vTotal > 0) ? (it.icmsStValor / it.vTotal * 100) : 0;
-            icms += '<br><span style="color:var(--brick); font-weight:600;">ST: '+brl(it.icmsStValor)+' · '+pctSt.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'%</span>';
-          }
-          const ipi = it.ipiValor ? ((it.ipiAliq||0).toLocaleString('pt-BR')+'% · '+brl(it.ipiValor)) : '—';
-          const piscof = (it.pisValor||it.cofinsValor) ? (((it.pisAliq||0)+(it.cofinsAliq||0)).toLocaleString('pt-BR')+'% · '+brl((it.pisValor||0)+(it.cofinsValor||0))) : '—';
-          html += '<tr>' +
-            '<td><span style="font-family:var(--font-mono); font-size:11px; color:var(--ink-soft);">'+escapeHtml(it.codigo||'-')+'</span><br>'+escapeHtml(it.descricao||'-')+'</td>' +
-            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(it.ncm||'-')+'<br>CFOP '+escapeHtml(it.cfop||'-')+'</td>' +
-            '<td style="font-family:var(--font-mono);">'+(it.qtd||0).toLocaleString('pt-BR')+' '+escapeHtml(it.un||'')+'</td>' +
-            '<td style="font-family:var(--font-mono);">'+brl(it.vUnit||0)+'</td>' +
-            '<td style="font-family:var(--font-mono);">'+brl(it.vTotal||0)+'</td>' +
-            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+icms+'</td>' +
-            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+ipi+'</td>' +
-            '<td style="font-family:var(--font-mono); font-size:11.5px;">'+piscof+'</td>' +
-            '</tr>';
-        });
-        html += '</tbody></table>';
-        if((n.stTotal||0) > 0){
-          const baseProd = n.valorProdutos || (n.itens||[]).reduce((s,it)=>s+(it.vTotal||0),0);
-          const pctStNota = baseProd > 0 ? (n.stTotal / baseProd * 100) : 0;
-          html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12.5px; color:var(--brick); font-weight:600;">ST total da nota: '+brl(n.stTotal)+' · '+pctStNota.toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2})+'% sobre o valor dos produtos ('+brl(baseProd)+')</div>';
-        }
-        if(safeUrl(n.linkXml)) html += '<div style="margin-top:8px;"><a class="btn secondary" style="text-decoration:none; font-size:12px; padding:6px 12px;" href="'+escapeHtml(safeUrl(n.linkXml))+'" target="_blank" rel="noopener noreferrer">⬇ Baixar XML</a></div>';
-        html += '</div>';
+        // Mesma tabela de itens dos dois apps (app-shared.js, secao 9);
+        // aqui com a coluna PIS+COFINS, que so' esta tela mostra. Ela
+        // ja' cuida do ST total da nota e do link do XML.
+        html += '<div style="border:1px solid var(--line); border-top:none; border-radius:0 0 5px 5px; padding:10px; background:var(--card);">' +
+          App.tabelaItensNota(n, { comPisCofins: true, larguraMinima: '900px' }) + '</div>';
       }
       html += '</div>';
     });
@@ -4470,32 +4425,47 @@ Tupan</textarea>
     card.style.display = 'block';
   }
 
+  // Token de geracao: trocar de arquivo com a leitura anterior ainda em
+  // andamento descarta o resultado dela. Sem isto, o parse mais lento
+  // "vencia" e o preview ficava mostrando o arquivo errado.
+  let tokenExcel = 0;
   $('arquivoExcel').addEventListener('change', async (ev)=>{
     const file = ev.target.files[0];
     if(!file) return;
+    const meuToken = ++tokenExcel;
     $('previewExcel').innerHTML = '<div class="empty-note" style="display:block;">Lendo planilha...</div>';
     try{
-      ultimosEsperados = await parseExcelCotacao(file);
+      const itens = await parseExcelCotacao(file);
+      if(meuToken !== tokenExcel) return;
+      ultimosEsperados = itens;
       renderPreviewExcel(ultimosEsperados);
     }catch(e){
+      if(meuToken !== tokenExcel) return;
       console.error(e);
       ultimosEsperados = [];
       $('previewExcel').innerHTML = '<div class="empty-note" style="display:block; color:var(--loss);">'+escapeHtml(e.message)+'</div>';
     }
   });
 
+  // Mesmo token de geracao do Excel: o Gemini pode levar varios segundos,
+  // tempo de sobra para o usuario trocar de arquivo no meio.
+  let tokenPdf = 0;
   $('arquivoPdf').addEventListener('change', async (ev)=>{
     const file = ev.target.files[0];
     if(!file) return;
+    const meuToken = ++tokenPdf;
 
     let erroGemini = null;
     if(window.__geminiPronto){
       $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">Lendo PDF com IA (Gemini)...</div>';
       try{
-        ultimosRecebidos = await window.geminiExtrairPdf(file);
+        const itens = await window.geminiExtrairPdf(file);
+        if(meuToken !== tokenPdf) return;
+        ultimosRecebidos = itens;
         renderPreviewPdf(ultimosRecebidos, true);
         return;
       }catch(e){
+        if(meuToken !== tokenPdf) return;
         console.error('Gemini falhou, caindo para o modo automático:', e);
         erroGemini = (e && e.message) ? e.message : String(e);
         $('previewPdf').innerHTML = '<div class="empty-note" style="display:block;">IA falhou, tentando modo automático...</div>';
@@ -4503,9 +4473,12 @@ Tupan</textarea>
     }
 
     try{
-      ultimosRecebidos = await parsePdfFornecedor(file);
+      const itens = await parsePdfFornecedor(file);
+      if(meuToken !== tokenPdf) return;
+      ultimosRecebidos = itens;
       renderPreviewPdf(ultimosRecebidos, false, erroGemini);
     }catch(e){
+      if(meuToken !== tokenPdf) return;
       console.error(e);
       ultimosRecebidos = [];
       const prefixoIA = erroGemini ? ('IA (Gemini) falhou: ' + escapeHtml(erroGemini) + '<br>Modo automático também falhou: ') : '';
@@ -4677,13 +4650,12 @@ Tupan</textarea>
         App.toast('Cotação atualizada no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       } else {
         const agora = new Date();
-        const docRef = await App.comAuth(()=> firestoreDb.collection('cotacoes').add({
+        await App.comAuth(()=> firestoreDb.collection('cotacoes').add({
           fornecedor,
           nomeCotacao: gerarNomeCotacao(fornecedor, agora),
           data: firebase.firestore.FieldValue.serverTimestamp(),
           itens
         }));
-        cotacaoEditandoId = docRef.id; // se clicar em salvar de novo agora, atualiza em vez de duplicar
         App.toast('Cotação salva no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       }
       resetCotacao();
@@ -4788,7 +4760,8 @@ Tupan</textarea>
       // de confiar na margem que aparece ao lado.
       let origem = '';
       if(r.precoVenda > 0){
-        const porCodigo = r.codigo && vendaPorCodigo.get(normalizarCodigo(r.codigo)) > 0;
+        const fichaCod = r.codigo ? vendaPorCodigo.get(normalizarCodigo(r.codigo)) : null;
+        const porCodigo = !!(fichaCod && fichaCod.venda > 0);
         origem = porCodigo
           ? ' <span class="status-badge down" title="Preço achado pelo código interno">✓ por código</span>'
           : ' <span class="status-badge qty" title="Sem código casando: preço achado pelo nome do produto. Confira antes de salvar.">≈ por nome</span>';

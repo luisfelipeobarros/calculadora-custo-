@@ -4,18 +4,21 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao quatro etapas:
+  Nao precisa instalar nada — so' o Node. Sao dez etapas, em oito
+  frentes (a lista canonica, com o que cada uma cobre, esta' no README,
+  secao "Rodando os testes"):
 
-  1. calculo.js         — compara o nucleo de calculo atual com a formula
-                          original, em 200 mil casos aleatorios. E' a rede
-                          de seguranca contra mexer nas aliquotas sem querer.
-  2. validar-html.js    — sintaxe dos <script>, tags balanceadas, ids
-                          duplicados, $() apontando para ids inexistentes,
-                          labels orfas, arquivos referenciados que sumiram.
-  3. carregar-em-dom.js — executa app-shared.js + o script de cada pagina
-                          num DOM simulado, pegando referencia quebrada e
-                          erro em tempo de carga.
-  4. helpers            — testes diretos das funcoes de app-shared.js.
+  - calculo.js         — nucleo de calculo vs formula original (200 mil
+                         casos) + a ligacao index.html <-> nucleo.
+  - validar-html.js    — estrutura dos dois HTML: sintaxe dos <script>,
+                         tags, ids, labels, arquivos referenciados, ?v=.
+  - carregar-em-dom.js — executa os scripts de cada pagina num DOM
+                         simulado, pegando erro em tempo de carga.
+  - helpers.js         — funcoes de app-shared.js, uma a uma.
+  - router.js          — roteador de telas (#Tela).
+  - cotacao.js         — regras da tela de cotacao e travas de origem.
+  - fornecedores.js    — separacao da Vetrus e moda dos prazos.
+  - pagamentos.js      — categorias, recorrencia e filtro de periodo.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
