@@ -72,7 +72,7 @@ ok('refs locais: ' + refs.join(', '));
   if (semVersao.test(html)) erro(nome + ' referenciado sem ?v= (quebra de cache)');
 });
 
-// 7) href com dado dinamico precisa passar por safeUrl
+// 8) href com dado dinamico precisa passar por safeUrl
 const hrefsDinamicos = [...html.matchAll(/href='\s*\+\s*([A-Za-z0-9_.()]+)/g)].map(m => m[1]);
 hrefsDinamicos.forEach(h => {
   if (!/safeUrl|escapeHtml\(link\)|escapeHtml\(url/.test(h)) {
@@ -80,7 +80,7 @@ hrefsDinamicos.forEach(h => {
   }
 });
 
-// 8) alert/confirm nativos nao devem sobrar
+// 9) alert/confirm nativos nao devem sobrar
 const nativos = (html.match(/(?<![.\w])(alert|confirm)\s*\(/g) || []);
 if (nativos.length) erro('ainda usa ' + nativos.length + ' alert()/confirm() nativo(s)');
 else ok('sem alert()/confirm() nativos');

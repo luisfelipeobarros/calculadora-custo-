@@ -27,8 +27,8 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=13">
-<script src="app-shared.js?v=12"></script>
+<link rel="stylesheet" href="app-shared.css?v=14">
+<script src="app-shared.js?v=13"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -211,8 +211,9 @@ Não precisa instalar nada. São dez etapas, em oito frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 65 verificações em `app-shared.js` (escape de HTML,
-   bloqueio de `javascript:`, aritmética de datas, arredondamento). As
+4. **Helpers** — 69 verificações em `app-shared.js` (escape de HTML,
+   bloqueio de `javascript:`, aritmética de datas, arredondamento,
+   busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
    conferir o valor que a Promise devolve — foi assim que apareceu um
    "Prorrogar vencimento" que não fazia nada.

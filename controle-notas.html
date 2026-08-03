@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=13">
+<link rel="stylesheet" href="app-shared.css?v=14">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -58,7 +58,6 @@
   .badge.atrasado{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
   .badge.avencer{ background:var(--stripe); color:var(--ink); }
   .badge.pago{ background:#E1EFE6; color:var(--profit); border-color:var(--profit); }
-  .badge.cancelada{ background:#EEE; color:var(--ink-soft); }
   .badge.sim{ background:#E1EFE6; color:var(--profit); }
   .badge.nao{ background:#F7E2DF; color:var(--loss); }
   .badge.desconhecido{ background:var(--stripe2); color:var(--ink-soft); }
@@ -342,14 +341,16 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=12"></script>
+<script src="app-shared.js?v=13"></script>
 <script>
 (function(){
   'use strict';
 
   var $ = App.$, escapeHtml = App.escapeHtml, brl = App.brl, fmtData = App.fmtData;
   var hojeISO = App.hojeISO, somarDias = App.somarDias, diasEntre = App.diasEntre;
-  var norm = App.norm, safeUrl = App.safeUrl;
+  // Busca sem acento em todas as telas, igual a' Calculadora:
+  // "ceramica" tem que achar "CERÂMICA" aqui tambem.
+  var normalizarTexto = App.normalizarTexto, safeUrl = App.safeUrl;
 
   App.instalarErroGlobal();
 
@@ -661,9 +662,9 @@
   // duas assinaturas para a mesma colecao.
   App.delegar($('avisoJanela'), 'click', '#btnHistoricoCompleto', function(){
     carregarTudo = true;
-    notas = []; duplicatas = [];
+    notas = []; duplicatas = []; pagamentosInternos = [];
     notasPorChave = Object.create(null);
-    carregouNotas = false; carregouDuplicatas = false;
+    carregouNotas = false; carregouDuplicatas = false; carregouPgtosInternos = false;
     setStatus('Carregando histórico completo...');
     atualizarAvisoJanela();
     escutarColecoes();
@@ -776,9 +777,14 @@
     var aImportar = notas.filter(notaAImportar);
     $('countImportar').textContent = aImportar.length ? '(' + aImportar.length + ')' : '';
     var inicioHoje = inicioJanelaHoje();
+    // Mesma conta do cartao "Duplicatas atrasadas" do Painel: duplicatas
+    // de fornecedor + pagamentos internos. Sem os internos, o menu dizia
+    // um numero e o Painel outro para a mesma coisa.
     var atrasadas = duplicatas.filter(function(d){
       return d.pago !== true && !dupDaNotaCancelada(d) && d.vencimento && d.vencimento < inicioHoje;
-    });
+    }).concat(pagamentosInternos.filter(function(p){
+      return p.pago !== true && p.vencimento && p.vencimento < inicioHoje;
+    }));
     $('countAtrasadas').textContent = atrasadas.length ? '(' + atrasadas.length + ')' : '';
   }
 
@@ -1057,8 +1063,8 @@
   var COLUNAS_IMPORTAR = 8;
 
   function renderImportar(){
-    var termo = norm($('buscaImportar').value);
-    var termoProduto = norm($('buscaProdutoImportar').value);
+    var termo = normalizarTexto($('buscaImportar').value);
+    var termoProduto = normalizarTexto($('buscaProdutoImportar').value);
     var excluirProduto = $('excluirProdutoImportar').checked;
 
     var pendentes = notas.filter(notaAImportar);
@@ -1077,10 +1083,10 @@
 
     if(termo) lista = lista.filter(function(n){
       return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
-        norm(n.numero).includes(termo) || norm(n.id).includes(termo);
+        normalizarTexto(n.numero).includes(termo) || normalizarTexto(n.id).includes(termo);
     });
     if(termoProduto) lista = lista.filter(function(n){
-      var contem = (n.produtosResumo || []).some(function(p){ return norm(p).includes(termoProduto); });
+      var contem = (n.produtosResumo || []).some(function(p){ return normalizarTexto(p).includes(termoProduto); });
       return excluirProduto ? !contem : contem;
     });
 
@@ -1338,11 +1344,11 @@
           '</div>' +
           '<div class="campo">' +
             '<label for="pgtoValor">Valor (R$)</label>' +
-            '<input type="number" id="pgtoValor" step="0.01" min="0" value="' + (p.valor || '') + '">' +
+            '<input type="number" id="pgtoValor" step="0.01" min="0" value="' + escapeHtml(p.valor || '') + '">' +
           '</div>' +
           '<div class="campo">' +
             '<label for="pgtoVencimento">Data de vencimento</label>' +
-            '<input type="date" id="pgtoVencimento" value="' + (p.vencimento || '') + '">' +
+            '<input type="date" id="pgtoVencimento" value="' + escapeHtml(p.vencimento || '') + '">' +
           '</div>' +
         '</div>' +
         '<div class="campo" style="flex-direction:row; align-items:center; gap:8px;">' +
@@ -1351,13 +1357,13 @@
         '</div>' +
         '<div id="pgtoRecorrenciaOpcoes" class="recorrencia-opcoes" style="' + (p.recorrente ? '' : 'display:none;') + '">' +
           '<label><input type="radio" name="pgtoRegra" value="diaFixo"' + (regraVal === 'diaFixo' ? ' checked' : '') + '> Dia fixo do mês: ' +
-            '<input type="number" id="pgtoDiaFixo" min="1" max="31" style="width:50px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + diaFixo + '"></label>' +
+            '<input type="number" id="pgtoDiaFixo" min="1" max="31" style="width:50px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + escapeHtml(diaFixo) + '"></label>' +
           '<label><input type="radio" name="pgtoRegra" value="ultimoDia"' + (regraVal === 'ultimoDia' ? ' checked' : '') + '> Último dia do mês</label>' +
           '<div style="margin-top:8px; display:flex; gap:12px; align-items:center;">' +
             '<label for="pgtoParcelaAtual" style="font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Parcela atual:</label>' +
-            '<input type="number" id="pgtoParcelaAtual" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + (p.parcelaAtual || 1) + '">' +
+            '<input type="number" id="pgtoParcelaAtual" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + escapeHtml(p.parcelaAtual || 1) + '">' +
             '<label for="pgtoParcelasTotal" style="font-size:11px; text-transform:uppercase; color:var(--ink-soft);">De um total de:</label>' +
-            '<input type="number" id="pgtoParcelasTotal" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + (p.parcelasTotal || '') + '" placeholder="∞">' +
+            '<input type="number" id="pgtoParcelasTotal" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + escapeHtml(p.parcelasTotal || '') + '" placeholder="∞">' +
           '</div>' +
         '</div>' +
         '<div style="display:flex; gap:8px; margin-top:14px;">' +
@@ -1521,7 +1527,11 @@
     };
 
     return App.comAuth(function(){
-      return db.collection('pagamentosInternos').add(novo);
+      // Id deterministico (origem + vencimento): se duas maquinas
+      // marcarem o mesmo pagamento como pago quase juntas, as duas
+      // gravam o MESMO documento, em vez de cada uma criar um
+      // lancamento duplicado do proximo mes.
+      return db.collection('pagamentosInternos').doc(pgto.id + '_' + proxVenc).set(novo);
     }).then(function(){
       return proxVenc;
     });
@@ -1735,7 +1745,7 @@
 
     var hoje = hojeISO();
     var inicioHoje = inicioJanelaHoje();
-    var termo = norm($('buscaPag').value);
+    var termo = normalizarTexto($('buscaPag').value);
 
     // Monta lista conforme escopo
     var lista = [];
@@ -1746,7 +1756,7 @@
         var pago = d.pago === true;
         if(!passaFiltroPag(pago, d.vencimento, hoje, inicioHoje)) return;
         var rotulo = fornecedorDaDuplicata(d);
-        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) || norm(d.numeroNota).includes(termo))) return;
+        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) || normalizarTexto(d.numeroNota).includes(termo))) return;
         lista.push({
           id: d.id,
           _tipo: 'fornecedor',
@@ -1770,8 +1780,8 @@
         if(!passaFiltroPag(pago, p.vencimento, hoje, inicioHoje)) return;
         var descricao = p.descricao || 'Sem descrição';
         var categoria = p.categoria || 'outro';
-        if(termo && norm(descricao).indexOf(termo) === -1 &&
-           norm(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1) return;
+        if(termo && normalizarTexto(descricao).indexOf(termo) === -1 &&
+           normalizarTexto(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1) return;
         lista.push({
           id: p.id,
           _tipo: 'interno',
@@ -2115,7 +2125,7 @@
       return;
     }
 
-    var termo = norm($('buscaForn').value);
+    var termo = normalizarTexto($('buscaForn').value);
     var tol = TOLERANCIA_PRAZO;
 
     // Só notas ativas e emitidas contra a empresa. Canceladas ficam de
@@ -2137,7 +2147,7 @@
       return { fornecedor: f, itens: itens, grupos: grupos };
     });
 
-    if(termo) linhas = linhas.filter(function(l){ return norm(l.fornecedor).indexOf(termo) !== -1; });
+    if(termo) linhas = linhas.filter(function(l){ return normalizarTexto(l.fornecedor).indexOf(termo) !== -1; });
     // Mais notas primeiro: quem você mais compra aparece no topo.
     linhas.sort(function(a,b){ return b.itens.length - a.itens.length; });
 
@@ -2234,10 +2244,10 @@
   var COLUNAS_CANCELADAS = 7;
 
   function renderCanceladas(){
-    var termo = norm($('buscaCanc').value);
+    var termo = normalizarTexto($('buscaCanc').value);
     var lista = notas.filter(function(n){ return !notaAtiva(n); });
     if(termo) lista = lista.filter(function(n){
-      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) || norm(n.numero).includes(termo);
+      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) || normalizarTexto(n.numero).includes(termo);
     });
     lista.sort(function(a,b){
       return (b.canceladaEm || b.dataEmissao || '').localeCompare(a.canceladaEm || a.dataEmissao || '');

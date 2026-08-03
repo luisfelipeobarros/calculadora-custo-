@@ -142,6 +142,15 @@ if(/vendaPorProduto = new Map\(comVenda\.map\(p => \[p\.nome, \{ venda: p\.r\.ve
   erro('os indices guardam so o preco — ficha.cfg chegaria indefinida');
 }
 
+// O selo "✓ por código" le a ficha do indice — que guarda um OBJETO
+// { venda, cfg }. Comparar o objeto com "> 0" dava sempre false: o selo
+// nunca aparecia e todo casamento seguro era rebaixado a "≈ por nome".
+if(!/vendaPorCodigo\.get\([^)]*\) > 0/.test(compacto)){
+  ok('o selo "por código" nao compara a ficha (objeto) com numero');
+} else {
+  erro('vendaPorCodigo.get(...) > 0 voltou — o selo "por código" nunca aparece');
+}
+
 // ============================================================
 // 2b) A chave do produto: ida e volta
 // ============================================================
