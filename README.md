@@ -276,18 +276,26 @@ var MESES_HISTORICO       = 12;           // janela padrão de carga
 var MESES_FOLGA_NOTAS     = 6;            // notas vêm com folga extra
 ```
 
-O app baixa as duplicatas que vencem nos últimos 12 meses, e as notas
-dos últimos 18. A folga existe porque a nota é emitida **antes** de a
-parcela vencer: sem ela, o app não saberia dizer se a duplicata foi
-recebida ou se a nota foi cancelada. Quando mesmo assim a nota de origem
-está fora da janela, a coluna "Recebido" mostra `—` em vez de afirmar
-"NÃO" sem ter como saber.
+O app baixa as duplicatas e os pagamentos internos que vencem nos
+últimos 12 meses, e as notas dos últimos 18. A folga existe porque a
+nota é emitida **antes** de a parcela vencer: sem ela, o app não saberia
+dizer se a duplicata foi recebida ou se a nota foi cancelada. Quando
+mesmo assim a nota de origem está fora da janela, a coluna "Recebido"
+mostra `—` em vez de afirmar "NÃO" sem ter como saber.
 
-Duas coisas nunca são cortadas pela janela, porque some justamente o que
+Os pagamentos internos entraram na janela pelo mesmo motivo: cada
+pagamento recorrente cria **um documento por mês**, então sem corte a
+coleção só cresce e toda abertura do app paga por ela inteira.
+
+Três coisas nunca são cortadas pela janela, porque some justamente o que
 importa:
 
 - **Notas canceladas** de qualquer época (consulta própria).
 - **Duplicatas sem data de vencimento** — as que ninguém acha depois.
+- **Pagamentos internos ainda em aberto**, de qualquer época. Um imposto
+  de 14 meses atrás que ninguém pagou é exatamente o que não pode sumir
+  da tela. O corte existe para não pagar leitura por histórico velho — e
+  histórico velho é o que já **foi** pago.
 
 O selo **"últimos 12 meses"** aparece na barra de cima, ao lado do
 contador, junto com o botão **"carregar histórico completo"**, que refaz

@@ -141,5 +141,33 @@ eq('a selecao usa o indice por id', /pagPorId\.get\(id\)/.test(html), true);
 // A lista solta que as acoes varriam nao existe mais.
 eq('nao sobrou a lista varrida por .find', /ultimaListaPag/.test(html), false);
 
+// ── Janela de carga dos pagamentos internos ──────────────────
+// Cada recorrente cria um documento por mes: sem corte, a colecao so'
+// cresce e toda abertura do app paga por ela inteira.
+eq('pagamentos internos respeitam MESES_HISTORICO',
+  /colPgto\s*\n?\s*\.where\('vencimento', '>=', cortePorMeses\(MESES_HISTORICO\)\)/.test(html), true);
+// Mas o que esta' EM ABERTO vem de qualquer epoca — some justamente o
+// que importa. Mesmo principio das notas canceladas.
+eq('o que esta em aberto vem de qualquer epoca',
+  /colPgto\s*\n?\s*\.where\('pago', '==', false\)/.test(html), true);
+// O botao "carregar historico completo" tem que valer para eles tambem.
+eq('historico completo tambem traz os pagamentos internos',
+  /if\(carregarTudo\)\{\s*\n\s*assinaturas\.push\(colPgto\.onSnapshot\(/.test(html), true);
+// Duas consultas, dois mapas, unidos por id: sem isso o pendente que
+// cai nas duas apareceria duplicado na tela.
+eq('as duas consultas se unem por id, sem duplicar',
+  /\[mapaPgtoJanela, mapaPgtoEmAberto\]\.forEach/.test(html), true);
+// E nao pode voltar a ser uma escuta unica na colecao inteira.
+eq('nao ha mais escuta na colecao inteira',
+  /db\.collection\('pagamentosInternos'\)\.onSnapshot/.test(html), false);
+
+// O filtro por `pago` so' funciona se o campo existir SEMPRE. Todo
+// caminho que grava um pagamento interno tem que defini-lo.
+const gravaPagoFalse = (html.match(/pago: false,/g) || []).length;
+eq('todo pagamento nasce com pago definido', gravaPagoFalse >= 2, true);
+// E a edicao nao pode reescrever o campo: quem edita um pagamento ja'
+// pago nao o torna pendente de novo.
+eq('editar nao mexe em pago', /delete dados\.pago;/.test(html), true);
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

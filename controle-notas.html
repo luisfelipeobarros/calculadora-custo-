@@ -580,25 +580,52 @@
               .onSnapshot(receberDupEm(mapaDupSemData), aoFalhar('duplicatas sem vencimento')));
     }
 
-    // Pagamentos internos: vem tudo, sem corte de janela.
-    var mapaPgtoInt = Object.create(null);
+    // Pagamentos internos: mesma janela das duplicatas. Cada recorrente
+    // cria um documento por mes, entao sem corte a colecao so' cresce e
+    // toda abertura do app paga por ela inteira.
+    var colPgto = db.collection('pagamentosInternos');
+    var mapaPgtoJanela = Object.create(null);
+    var mapaPgtoEmAberto = Object.create(null);
+
     function aplicarPgtosInternos(){
-      pagamentosInternos = Object.keys(mapaPgtoInt).map(function(k){ return mapaPgtoInt[k]; });
+      var porId = Object.create(null);
+      [mapaPgtoJanela, mapaPgtoEmAberto].forEach(function(mapa){
+        Object.keys(mapa).forEach(function(id){ porId[id] = mapa[id]; });
+      });
+      pagamentosInternos = Object.keys(porId).map(function(k){ return porId[k]; });
       carregouPgtosInternos = true;
       renderAtual();
     }
-    assinaturas.push(
-      db.collection('pagamentosInternos').onSnapshot(function(snap){
+
+    function receberPgtoEm(mapa){
+      return function(snap){
         snap.docChanges().forEach(function(ch){
           var id = ch.doc.id;
-          if(ch.type === 'removed'){ delete mapaPgtoInt[id]; return; }
+          if(ch.type === 'removed'){ delete mapa[id]; return; }
           var dados = ch.doc.data();
           dados.id = id;
-          mapaPgtoInt[id] = dados;
+          mapa[id] = dados;
         });
         aplicarPgtosInternos();
-      }, aoFalhar('pagamentos internos'))
-    );
+      };
+    }
+
+    if(carregarTudo){
+      assinaturas.push(colPgto.onSnapshot(receberPgtoEm(mapaPgtoJanela), aoFalhar('pagamentos internos')));
+    } else {
+      assinaturas.push(
+        colPgto.where('vencimento', '>=', cortePorMeses(MESES_HISTORICO))
+               .onSnapshot(receberPgtoEm(mapaPgtoJanela), aoFalhar('pagamentos internos')));
+      // Mesmo motivo das notas canceladas virem de qualquer epoca: um
+      // imposto de 14 meses atras que ninguem pagou e' exatamente o que
+      // nao pode sumir da tela. O corte por data existe para nao pagar
+      // leitura por historico velho — e historico velho e' o que ja'
+      // FOI pago. Sao poucos documentos: os pendentes de uma empresa
+      // cabem em dezenas, nao em milhares.
+      assinaturas.push(
+        colPgto.where('pago', '==', false)
+               .onSnapshot(receberPgtoEm(mapaPgtoEmAberto), aoFalhar('pagamentos internos em aberto')));
+    }
   }
 
   // Deixa explicito na tela que ha' um recorte, para ninguem achar que
