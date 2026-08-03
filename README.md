@@ -27,8 +27,8 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=12">
-<script src="app-shared.js?v=11"></script>
+<link rel="stylesheet" href="app-shared.css?v=13">
+<script src="app-shared.js?v=12"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -186,7 +186,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São nove etapas, em sete frentes:
+Não precisa instalar nada. São dez etapas, em oito frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -202,8 +202,11 @@ Não precisa instalar nada. São nove etapas, em sete frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 58 verificações em `app-shared.js` (escape de HTML,
-   bloqueio de `javascript:`, aritmética de datas, arredondamento).
+4. **Helpers** — 65 verificações em `app-shared.js` (escape de HTML,
+   bloqueio de `javascript:`, aritmética de datas, arredondamento). As
+   últimas abrem os modais de verdade e **apertam o botão**, para
+   conferir o valor que a Promise devolve — foi assim que apareceu um
+   "Prorrogar vencimento" que não fazia nada.
 5. **Roteador de telas** — 12 verificações no endereço `#Tela`.
 6. **Regras da tela de cotação** — campo escondido não entra na conta,
    a margem do histórico bate com a da cotação, e nada (barra de conta,
@@ -214,6 +217,11 @@ Não precisa instalar nada. São nove etapas, em sete frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
+8. **Pagamentos e recorrência** — 38 verificações: categorias (toda
+   categoria precisa ter cor no CSS), o cálculo do próximo vencimento
+   (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
+   de período. Trava também que a tela espere as duas coleções antes de
+   dizer "nenhum item" — zero é uma afirmação.
 
 Rode antes de publicar qualquer alteração.
 

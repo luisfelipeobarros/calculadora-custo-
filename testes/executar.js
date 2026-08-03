@@ -32,7 +32,8 @@ const etapas = [
   ['Helpers de app-shared.js', 'helpers.js', []],
   ['Roteador de telas', 'router.js', []],
   ['Regras da tela de cotacao', 'cotacao.js', ['index.html']],
-  ['Fornecedores e prazos', 'fornecedores.js', []]
+  ['Fornecedores e prazos', 'fornecedores.js', []],
+  ['Pagamentos e recorrencia', 'pagamentos.js', []]
 ];
 
 let falhou = 0;

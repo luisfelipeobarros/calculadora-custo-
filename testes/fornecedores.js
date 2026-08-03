@@ -166,9 +166,9 @@ eq('a regra esta exportada por app-shared.js',
 // Estas verificacoes sao textuais de proposito: elas quebram quando
 // alguem volta a escrever nomeEmitente direto numa celula.
 const telas = [
-  ['Painel (top 5)',        html, /var nome = fornecedorDaDuplicata\(d\);/],
-  ['Pagamentos (celula)',   html, /fornecedorEmCelula\(d\.nomeEmitente, forn\)/],
-  ['Pagamentos (busca)',    html, /casaFornecedor\(fornecedorDaDuplicata\(d\), d\.nomeEmitente, termo\)/],
+  ['Painel (top 5)',        html, /: fornecedorDaDuplicata\(d\);/],
+  ['Pagamentos (celula)',   html, /fornecedorEmCelula\(d\.nomeEmitente, d\.descricao\)/],
+  ['Pagamentos (busca)',    html, /casaFornecedor\(rotulo, d\.nomeEmitente, termo\)/],
   ['A importar (celula)',   html, /fornecedorEmCelula\(n\.nomeEmitente, fornecedorDaNota\(n\)\)/],
   ['Canceladas (busca)',    html, /casaFornecedor\(fornecedorDaNota\(n\), n\.nomeEmitente, termo\) \|\| norm\(n\.numero\)/],
   ['Notas Emitidas',        calc, /fornecedorDaNotaEmitida\(n\)/]

@@ -19,8 +19,17 @@ function criarElemento(tag, id) {
     dataset: {},
     children: [],
     classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
-    appendChild(c) { this.children.push(c); return c; },
-    removeChild() {},
+    // parentNode/removeChild de verdade: sem eles o modal era criado e
+    // nunca saia do body, entao o segundo modal do teste encontrava o
+    // primeiro (ja' fechado) e a Promise nunca resolvia.
+    parentNode: null,
+    appendChild(c) { this.children.push(c); if (c) c.parentNode = this; return c; },
+    removeChild(c) {
+      const i = this.children.indexOf(c);
+      if (i !== -1) this.children.splice(i, 1);
+      if (c) c.parentNode = null;
+      return c;
+    },
     setAttribute(k, v) { if (k === 'id') this.id = v; this['attr_' + k] = v; },
     getAttribute(k) { return this['attr_' + k]; },
     removeAttribute() {},
@@ -35,7 +44,39 @@ function criarElemento(tag, id) {
     insertBefore() {},
     remove() {}
   };
+  // Os ouvintes ficam guardados para o teste poder DISPARAR o clique.
+  // Sem isso da' para conferir que o modal foi montado, mas nao o que
+  // ele devolve quando alguem aperta o botao — que e' justamente onde
+  // o inputDate do App.confirmar quebrava.
+  el._ouvintes = {};
+  el.addEventListener = function (tipo, fn) {
+    (this._ouvintes[tipo] || (this._ouvintes[tipo] = [])).push(fn);
+  };
+  el.disparar = function (tipo, ev) {
+    (this._ouvintes[tipo] || []).forEach(fn => fn.call(this, ev || { target: this }));
+  };
   return el;
+}
+
+// Procura o primeiro descendente que satisfaz `teste`, em largura.
+function achar(raiz, teste) {
+  const fila = [raiz];
+  while (fila.length) {
+    const el = fila.shift();
+    if (el !== raiz && teste(el)) return el;
+    (el.children || []).forEach(c => fila.push(c));
+  }
+  return null;
+}
+
+function acharTodos(raiz, teste) {
+  const fora = [], fila = [raiz];
+  while (fila.length) {
+    const el = fila.shift();
+    if (el !== raiz && teste(el)) fora.push(el);
+    (el.children || []).forEach(c => fila.push(c));
+  }
+  return fora;
 }
 
 function instalar(ids) {
@@ -60,6 +101,7 @@ function instalar(ids) {
       return [];
     },
     addEventListener() {},
+    removeEventListener() {},
     body: criarElemento('body'),
     documentElement: criarElemento('html'),
     activeElement: null
@@ -122,4 +164,4 @@ function criarFirebaseFalso() {
   return fb;
 }
 
-module.exports = { instalar, criarElemento };
+module.exports = { instalar, criarElemento, achar, acharTodos };
