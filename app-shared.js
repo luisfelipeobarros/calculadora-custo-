@@ -337,15 +337,6 @@
       h.textContent = o.titulo || 'Confirmar';
       var p = document.createElement('p');
       p.textContent = o.mensagem || '';
-      
-      var dt;
-      if (o.inputDate) {
-        dt = document.createElement('input');
-        dt.type = 'date';
-        dt.style.cssText = 'display:block; margin-top:12px; padding:6px; border:1px solid var(--line); border-radius:4px; font-family:var(--font-mono); width:100%; box-sizing:border-box;';
-        p.appendChild(dt);
-      }
-
       var acoes = document.createElement('div');
       acoes.className = 'modal-acoes';
 
@@ -359,9 +350,7 @@
       ok.type = 'button';
       ok.className = 'btn' + (o.perigo ? ' perigo' : '');
       ok.textContent = o.confirmar || 'Confirmar';
-      ok.addEventListener('click', function () {
-        fechar(o.inputDate ? dt.value : true);
-      });
+      ok.addEventListener('click', function () { fechar(true); });
 
       acoes.appendChild(cancelar);
       acoes.appendChild(ok);
@@ -372,6 +361,90 @@
       // Foco comeca no Cancelar: acao destrutiva nao deve sair no Enter reflexo.
       setTimeout(function () { cancelar.focus(); }, 0);
     }).then(function (v) { return v === true; });
+  }
+
+  // Pede UMA data ao usuario. Devolve a data em aaaa-mm-dd, ou null se
+  // a pessoa cancelou / fechou / nao escolheu nada.
+  //
+  // E' uma funcao separada de proposito: confirmar() promete um booleano
+  // (13 chamadas dependem disso, e o `.then(v => v === true)` no fim
+  // dela transformaria qualquer data escolhida em `false`). Quem precisa
+  // de um valor de volta usa esta.
+  //
+  // opcoes: {titulo, mensagem, confirmar, cancelar, minimo}
+  function pedirData(opcoes) {
+    var o = opcoes || {};
+    return abrirModal(function (caixa, fechar) {
+      var h = document.createElement('h2');
+      h.textContent = o.titulo || 'Escolher data';
+
+      var p = document.createElement('p');
+      p.textContent = o.mensagem || '';
+
+      var campo = document.createElement('input');
+      campo.type = 'date';
+      campo.className = 'modal-data';
+      campo.id = 'modalDataCampo';
+      if (o.minimo) campo.min = o.minimo;
+
+      var rotulo = document.createElement('label');
+      rotulo.className = 'sr-only';
+      rotulo.setAttribute('for', campo.id);
+      rotulo.textContent = o.mensagem || 'Data';
+
+      var erro = document.createElement('p');
+      erro.className = 'modal-erro';
+      erro.setAttribute('role', 'alert');
+      erro.style.display = 'none';
+
+      var acoes = document.createElement('div');
+      acoes.className = 'modal-acoes';
+
+      var cancelar = document.createElement('button');
+      cancelar.type = 'button';
+      cancelar.className = 'btn secondary';
+      cancelar.textContent = o.cancelar || 'Cancelar';
+      cancelar.addEventListener('click', function () { fechar(null); });
+
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn';
+      ok.textContent = o.confirmar || 'Confirmar';
+
+      // Sair sem data escolhida seria gravar `''` no vencimento. Em vez
+      // de fechar calado, o modal diz o que falta e continua aberto.
+      function confirmarData() {
+        var v = campo.value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+          erro.textContent = 'Escolha uma data.';
+          erro.style.display = '';
+          campo.focus();
+          return;
+        }
+        if (o.minimo && v < o.minimo) {
+          erro.textContent = 'A data não pode ser anterior a ' + fmtData(o.minimo) + '.';
+          erro.style.display = '';
+          campo.focus();
+          return;
+        }
+        fechar(v);
+      }
+      ok.addEventListener('click', confirmarData);
+      campo.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); confirmarData(); }
+      });
+
+      acoes.appendChild(cancelar);
+      acoes.appendChild(ok);
+      caixa.appendChild(h);
+      caixa.appendChild(p);
+      caixa.appendChild(rotulo);
+      caixa.appendChild(campo);
+      caixa.appendChild(erro);
+      caixa.appendChild(acoes);
+      caixa.setAttribute('aria-label', o.titulo || 'Escolher data');
+      setTimeout(function () { campo.focus(); }, 0);
+    }).then(function (v) { return typeof v === 'string' ? v : null; });
   }
 
   // Substitui alert().
@@ -1092,6 +1165,7 @@
     toastErro: toastErro,
     erroDe: erroDe,
     confirmar: confirmar,
+    pedirData: pedirData,
     avisar: avisar,
 
     iniciarFirebase: iniciarFirebase,

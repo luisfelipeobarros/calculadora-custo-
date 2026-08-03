@@ -27,8 +27,8 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=12">
-<script src="app-shared.js?v=11"></script>
+<link rel="stylesheet" href="app-shared.css?v=13">
+<script src="app-shared.js?v=12"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -102,9 +102,18 @@ sozinho a operação que falhou.
 
 - `notas`, `duplicatas`, `itensNotas` — o navegador **lê**, mas só pode
   alterar os campos de controle (`pago`, `status`, `previsaoEntrega`,
-  `noSistema`…). Criar e apagar nota fica proibido pelo navegador. O
-  Apps Script usa conta de serviço e ignora estas regras, então a
-  importação de XML continua igual.
+  `noSistema`, `vencimento`…). Criar e apagar nota fica proibido pelo
+  navegador. O Apps Script usa conta de serviço e ignora estas regras,
+  então a importação de XML continua igual.
+
+  **A prorrogação de vencimento não é desfeita pelo Apps Script.** Ele
+  grava duplicata com a precondição `currentDocument: { exists: false }`
+  — se o documento já existe, a gravação é recusada (`FAILED_PRECONDITION`,
+  contada no log como "já existiam") e nada é sobrescrito. É a mesma
+  precondição que protege o `pago`, e vale até se você limpar os
+  checkpoints e reprocessar a pasta inteira. O outro lado da moeda: se
+  uma NF-e for reemitida com vencimentos diferentes, as duplicatas
+  antigas **não** são atualizadas — corrigir isso é na mão, pelo app.
 - `produtos`, `cotacoes`, `concorrentes` — leitura e escrita livres para
   quem está autenticado.
 - Qualquer outra coleção: bloqueada.
@@ -186,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São nove etapas, em sete frentes:
+Não precisa instalar nada. São dez etapas, em oito frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -202,8 +211,11 @@ Não precisa instalar nada. São nove etapas, em sete frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 58 verificações em `app-shared.js` (escape de HTML,
-   bloqueio de `javascript:`, aritmética de datas, arredondamento).
+4. **Helpers** — 65 verificações em `app-shared.js` (escape de HTML,
+   bloqueio de `javascript:`, aritmética de datas, arredondamento). As
+   últimas abrem os modais de verdade e **apertam o botão**, para
+   conferir o valor que a Promise devolve — foi assim que apareceu um
+   "Prorrogar vencimento" que não fazia nada.
 5. **Roteador de telas** — 12 verificações no endereço `#Tela`.
 6. **Regras da tela de cotação** — campo escondido não entra na conta,
    a margem do histórico bate com a da cotação, e nada (barra de conta,
@@ -214,6 +226,11 @@ Não precisa instalar nada. São nove etapas, em sete frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
+8. **Pagamentos e recorrência** — 38 verificações: categorias (toda
+   categoria precisa ter cor no CSS), o cálculo do próximo vencimento
+   (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
+   de período. Trava também que a tela espere as duas coleções antes de
+   dizer "nenhum item" — zero é uma afirmação.
 
 Rode antes de publicar qualquer alteração.
 
@@ -268,18 +285,26 @@ var MESES_HISTORICO       = 12;           // janela padrão de carga
 var MESES_FOLGA_NOTAS     = 6;            // notas vêm com folga extra
 ```
 
-O app baixa as duplicatas que vencem nos últimos 12 meses, e as notas
-dos últimos 18. A folga existe porque a nota é emitida **antes** de a
-parcela vencer: sem ela, o app não saberia dizer se a duplicata foi
-recebida ou se a nota foi cancelada. Quando mesmo assim a nota de origem
-está fora da janela, a coluna "Recebido" mostra `—` em vez de afirmar
-"NÃO" sem ter como saber.
+O app baixa as duplicatas e os pagamentos internos que vencem nos
+últimos 12 meses, e as notas dos últimos 18. A folga existe porque a
+nota é emitida **antes** de a parcela vencer: sem ela, o app não saberia
+dizer se a duplicata foi recebida ou se a nota foi cancelada. Quando
+mesmo assim a nota de origem está fora da janela, a coluna "Recebido"
+mostra `—` em vez de afirmar "NÃO" sem ter como saber.
 
-Duas coisas nunca são cortadas pela janela, porque some justamente o que
+Os pagamentos internos entraram na janela pelo mesmo motivo: cada
+pagamento recorrente cria **um documento por mês**, então sem corte a
+coleção só cresce e toda abertura do app paga por ela inteira.
+
+Três coisas nunca são cortadas pela janela, porque some justamente o que
 importa:
 
 - **Notas canceladas** de qualquer época (consulta própria).
 - **Duplicatas sem data de vencimento** — as que ninguém acha depois.
+- **Pagamentos internos ainda em aberto**, de qualquer época. Um imposto
+  de 14 meses atrás que ninguém pagou é exatamente o que não pode sumir
+  da tela. O corte existe para não pagar leitura por histórico velho — e
+  histórico velho é o que já **foi** pago.
 
 O selo **"últimos 12 meses"** aparece na barra de cima, ao lado do
 contador, junto com o botão **"carregar histórico completo"**, que refaz

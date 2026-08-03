@@ -120,6 +120,83 @@ conferir('permissao negada por mensagem',
 conferir('erro de rede nao e permissao', App.ehPermissaoNegada({ code: 'unavailable' }), false);
 conferir('nulo nao e permissao', App.ehPermissaoNegada(null), false);
 
-console.log('  ' + ok + ' verificacoes passaram' + (falhas ? ', ' + falhas + ' falharam' : ''));
-if (falhas) { console.log('  >>> ' + falhas + ' FALHA(S)'); process.exitCode = 1; }
-else console.log('  >>> tudo certo');
+// --- confirmar / pedirData: o que a Promise devolve -----------
+//
+// Estes testes existem por causa de um bug real: alguem acrescentou uma
+// opcao `inputDate` ao confirmar() para reaproveita-lo como seletor de
+// data. So' que confirmar() termina em `.then(v => v === true)`, entao a
+// data escolhida virava `false` e o "Prorrogar vencimento" nao fazia
+// NADA — sem erro no console, sem aviso. Nao basta o modal abrir: o
+// teste tem que apertar o botao e olhar o valor que volta.
+const { achar, acharTodos } = require('./dom-falso.js');
+
+function modalAberto() {
+  return achar(window.document.body, el => el.className === 'modal-caixa');
+}
+function botaoDoModal(texto) {
+  return acharTodos(modalAberto(), el => el.tagName === 'BUTTON')
+    .find(b => b.textContent === texto);
+}
+function campoDataDoModal() {
+  return achar(modalAberto(), el => el.type === 'date');
+}
+
+const pendentes = [];
+function assincrono(nome, executar) { pendentes.push({ nome, executar }); }
+
+assincrono('confirmar devolve true no Confirmar', () => {
+  const p = App.confirmar({ titulo: 'x', mensagem: 'y' });
+  botaoDoModal('Confirmar').disparar('click');
+  return p.then(v => conferir('confirmar devolve true no Confirmar', v, true));
+});
+
+assincrono('confirmar devolve false no Cancelar', () => {
+  const p = App.confirmar({ titulo: 'x', mensagem: 'y' });
+  botaoDoModal('Cancelar').disparar('click');
+  return p.then(v => conferir('confirmar devolve false no Cancelar', v, false));
+});
+
+assincrono('pedirData devolve a data escolhida', () => {
+  const p = App.pedirData({ titulo: 'Prorrogar', mensagem: 'Nova data:', confirmar: 'Prorrogar' });
+  campoDataDoModal().value = '2026-09-15';
+  botaoDoModal('Prorrogar').disparar('click');
+  return p.then(v => conferir('pedirData devolve a data escolhida', v, '2026-09-15'));
+});
+
+assincrono('pedirData devolve null no Cancelar', () => {
+  const p = App.pedirData({ titulo: 'Prorrogar', mensagem: 'Nova data:' });
+  botaoDoModal('Cancelar').disparar('click');
+  return p.then(v => conferir('pedirData devolve null no Cancelar', v, null));
+});
+
+// Sem data escolhida o modal NAO fecha: fechar aqui gravaria '' no
+// vencimento de todo mundo que estivesse selecionado.
+assincrono('pedirData nao fecha com o campo vazio', () => {
+  let resolveu = false;
+  const p = App.pedirData({ titulo: 'Prorrogar', mensagem: 'Nova data:' });
+  p.then(() => { resolveu = true; });
+  const caixa = modalAberto();
+  botaoDoModal('Confirmar').disparar('click');
+  return Promise.resolve().then(() => {
+    conferir('pedirData nao fecha com o campo vazio', resolveu, false);
+    conferir('e avisa o que falta',
+      achar(caixa, el => el.className === 'modal-erro').textContent, 'Escolha uma data.');
+    botaoDoModal('Cancelar').disparar('click');
+    return p;
+  });
+});
+
+// E o confirmar nao pode voltar a aceitar inputDate por engano.
+conferir('confirmar nao tem mais inputDate',
+  /inputDate/.test(fs.readFileSync(path.resolve(__dirname, '..', 'app-shared.js'), 'utf8')), false);
+
+pendentes
+  .reduce((fila, t) => fila.then(t.executar).catch(e => {
+    falhas++;
+    console.log('  [X] ' + t.nome + ' — explodiu: ' + (e && e.message));
+  }), Promise.resolve())
+  .then(() => {
+    console.log('  ' + ok + ' verificacoes passaram' + (falhas ? ', ' + falhas + ' falharam' : ''));
+    if (falhas) { console.log('  >>> ' + falhas + ' FALHA(S)'); process.exitCode = 1; }
+    else console.log('  >>> tudo certo');
+  });

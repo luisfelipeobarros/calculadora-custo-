@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=12">
+<link rel="stylesheet" href="app-shared.css?v=13">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -67,7 +67,7 @@
   tr.linha-paga td{ opacity:.62; }
 
   .filtros{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
-  .filtros input[type=search]{ flex:1; min-width:180px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px; }
+  .filtros input[type=search]{ flex:1; min-width:180px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-body); font-size:13px; }
   .chip-filtro{ font-family:var(--font-mono); font-size:11.5px; padding:6px 12px; border:1.5px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink-soft); cursor:pointer; }
   .chip-filtro[aria-pressed="true"]{ background:var(--brick); border-color:var(--brick); color:#fff; }
 
@@ -89,7 +89,7 @@
      estreita demais para o nome do fornecedor caber sem quebrar. */
   .top-forn-grid{ display:grid; grid-template-columns:1fr; gap:20px 28px; }
   @media(min-width:800px){ .top-forn-grid{ grid-template-columns:1fr 1fr; } }
-  .top-forn-titulo{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink); font-weight:700; margin-bottom:8px; padding:6px 10px; background:#EDF1F7; border-bottom:2.5px solid #4A6FA5; border-radius:3px 3px 0 0; }
+  .top-forn-titulo{ font-family:var(--font-mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink); font-weight:700; margin-bottom:8px; padding:6px 10px; background:var(--azul-fundo); border-bottom:2.5px solid var(--azul); border-radius:3px 3px 0 0; }
   .top-forn-row{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
   .top-forn-row:last-child{ border-bottom:none; }
   .top-forn-nome{ font-size:13px; }
@@ -99,7 +99,7 @@
   nav.telas{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .escopo-bar{ display:flex; gap:6px; margin-bottom:14px; padding-bottom:10px; border-bottom:1.5px solid var(--line); }
   .escopo-btn{ font-family:var(--font-mono); font-size:12px; padding:7px 14px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink-soft); cursor:pointer; font-weight:500; }
-  .escopo-btn[aria-pressed="true"]{ background:#4A6FA5; border-color:#4A6FA5; color:#fff; font-weight:700; }
+  .escopo-btn[aria-pressed="true"]{ background:var(--azul); border-color:var(--azul); color:#fff; font-weight:700; }
   .badge.cat-impostos{ background:#FFF3E0; color:#E65100; border-color:#E65100; }
   .badge.cat-folha{ background:#E8EAF6; color:#283593; border-color:#283593; }
   .badge.cat-emprestimo{ background:#FCE4EC; color:#880E4F; border-color:#880E4F; }
@@ -113,9 +113,9 @@
   .form-pgto .campo-inline .campo{ flex:1; min-width:150px; }
   .recorrencia-opcoes{ margin-left:24px; margin-top:6px; display:flex; flex-direction:column; gap:6px; }
   .recorrencia-opcoes label{ font-family:var(--font-body); font-size:12.5px; color:var(--ink); display:flex; align-items:center; gap:6px; }
-  .barra-selecao{ display:flex; gap:10px; align-items:center; padding:8px 12px; background:#EDF1F7; border:1.5px solid #4A6FA5; border-radius:6px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px; color:var(--ink); }
+  .barra-selecao{ display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--azul-fundo); border:1.5px solid var(--azul); border-radius:6px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px; color:var(--ink); }
   .barra-selecao .contador{ font-weight:700; }
-  .sel-check{ width:16px; height:16px; accent-color:#4A6FA5; cursor:pointer; }
+  .sel-check{ width:16px; height:16px; accent-color:var(--azul); cursor:pointer; }
 </style>
 </head>
 <body>
@@ -282,8 +282,8 @@
       </div>
 
       <!-- Barra de selecao em massa (aparece quando ha selecao) -->
-      <div id="barraSelecao" class="barra-selecao" style="display:none;">
-        <span class="contador" id="selContador">0 selecionada(s)</span>
+      <div id="barraSelecao" class="barra-selecao" style="display:none;" role="status" aria-live="polite">
+        <span class="contador" id="selContador">0 selecionado(s)</span>
         <span id="selTotal"></span>
         <button type="button" class="btn" id="selPagarBtn">✓ Marcar como pagas</button>
         <button type="button" class="btn secondary" id="selProrrogarBtn">📅 Prorrogar vencimento</button>
@@ -342,7 +342,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=11"></script>
+<script src="app-shared.js?v=12"></script>
 <script>
 (function(){
   'use strict';
@@ -420,12 +420,6 @@
     var n = notaDaDup(d);
     return n ? (n.noSistema === true) : null;
   }
-  function situacaoDup(d){
-    if(d.pago === true) return 'PAGO';
-    if(dupDaNotaCancelada(d)) return 'CANCELADA';
-    return (d.vencimento && d.vencimento < inicioJanelaHoje()) ? 'ATRASADO' : 'A VENCER';
-  }
-
   // ─── Quem e' o fornecedor ───────────────────────────────────
   //
   // A regra (Vetrus separada por produto) mora em app-shared.js, secao
@@ -433,8 +427,23 @@
   // e as duas paginas tem que chamar o mesmo fornecedor pelo mesmo nome.
   var rotularFornecedor = App.rotularFornecedor, casaFornecedor = App.casaFornecedor;
 
+  // produtosResumo AUSENTE nao e' o mesmo que lista vazia.
+  //
+  // Quem grava esse campo e' so' a funcao 1 do Apps Script (a pasta das
+  // notas emitidas contra a empresa). A funcao 2 — a pasta do que ja'
+  // entrou no ERP — cria o documento sem ele, e NFS-e nunca tem produto
+  // nenhum. Enquanto a funcao 1 nao passa por aquela nota, o campo
+  // simplesmente nao existe.
+  //
+  // Tratar isso como "[] logo nao tem 46x46" faria o app afirmar
+  // "Pamesa" sobre uma nota cujos produtos ele nunca leu. Lista vazia de
+  // verdade continua valendo como resposta: ai' ele leu, e nao ha' nada.
+  function produtosDaNota(n){
+    return Array.isArray(n.produtosResumo) ? n.produtosResumo : null;
+  }
+
   function fornecedorDaNota(n){
-    return rotularFornecedor(n.nomeEmitente, n.produtosResumo || []);
+    return rotularFornecedor(n.nomeEmitente, produtosDaNota(n));
   }
 
   // A duplicata nao carrega os produtos — eles estao na nota de origem.
@@ -443,7 +452,7 @@
   // carregada vai null, e ai' o rotulo fica sendo o nome cru.
   function fornecedorDaDuplicata(d){
     var n = notaDaDup(d);
-    return rotularFornecedor(d.nomeEmitente, n ? (n.produtosResumo || []) : null);
+    return rotularFornecedor(d.nomeEmitente, n ? produtosDaNota(n) : null);
   }
 
   // Nas tabelas, sem nome vale um traco: "Sem nome" numa celula chama
@@ -586,25 +595,52 @@
               .onSnapshot(receberDupEm(mapaDupSemData), aoFalhar('duplicatas sem vencimento')));
     }
 
-    // Pagamentos internos: vem tudo, sem corte de janela.
-    var mapaPgtoInt = Object.create(null);
+    // Pagamentos internos: mesma janela das duplicatas. Cada recorrente
+    // cria um documento por mes, entao sem corte a colecao so' cresce e
+    // toda abertura do app paga por ela inteira.
+    var colPgto = db.collection('pagamentosInternos');
+    var mapaPgtoJanela = Object.create(null);
+    var mapaPgtoEmAberto = Object.create(null);
+
     function aplicarPgtosInternos(){
-      pagamentosInternos = Object.keys(mapaPgtoInt).map(function(k){ return mapaPgtoInt[k]; });
+      var porId = Object.create(null);
+      [mapaPgtoJanela, mapaPgtoEmAberto].forEach(function(mapa){
+        Object.keys(mapa).forEach(function(id){ porId[id] = mapa[id]; });
+      });
+      pagamentosInternos = Object.keys(porId).map(function(k){ return porId[k]; });
       carregouPgtosInternos = true;
       renderAtual();
     }
-    assinaturas.push(
-      db.collection('pagamentosInternos').onSnapshot(function(snap){
+
+    function receberPgtoEm(mapa){
+      return function(snap){
         snap.docChanges().forEach(function(ch){
           var id = ch.doc.id;
-          if(ch.type === 'removed'){ delete mapaPgtoInt[id]; return; }
+          if(ch.type === 'removed'){ delete mapa[id]; return; }
           var dados = ch.doc.data();
           dados.id = id;
-          mapaPgtoInt[id] = dados;
+          mapa[id] = dados;
         });
         aplicarPgtosInternos();
-      }, aoFalhar('pagamentos internos'))
-    );
+      };
+    }
+
+    if(carregarTudo){
+      assinaturas.push(colPgto.onSnapshot(receberPgtoEm(mapaPgtoJanela), aoFalhar('pagamentos internos')));
+    } else {
+      assinaturas.push(
+        colPgto.where('vencimento', '>=', cortePorMeses(MESES_HISTORICO))
+               .onSnapshot(receberPgtoEm(mapaPgtoJanela), aoFalhar('pagamentos internos')));
+      // Mesmo motivo das notas canceladas virem de qualquer epoca: um
+      // imposto de 14 meses atras que ninguem pagou e' exatamente o que
+      // nao pode sumir da tela. O corte por data existe para nao pagar
+      // leitura por historico velho — e historico velho e' o que ja'
+      // FOI pago. Sao poucos documentos: os pendentes de uma empresa
+      // cabem em dezenas, nao em milhares.
+      assinaturas.push(
+        colPgto.where('pago', '==', false)
+               .onSnapshot(receberPgtoEm(mapaPgtoEmAberto), aoFalhar('pagamentos internos em aberto')));
+    }
   }
 
   // Deixa explicito na tela que ha' um recorte, para ninguem achar que
@@ -748,6 +784,22 @@
 
   // ─── Painel ─────────────────────────────────────────────────
 
+  // O Painel soma duplicatas de fornecedor e pagamentos internos na
+  // mesma lista. Os dois tem vencimento, valor e pago; o que os separa
+  // e' o _tipo, marcado aqui — e nao adivinhado depois pela presenca de
+  // um campo ou de outro.
+  function internosDoPainel(){
+    return pagamentosInternos.map(function(p){
+      return {
+        _tipo: 'interno',
+        descricao: p.descricao,
+        valor: p.valor || 0,
+        vencimento: p.vencimento,
+        pago: p.pago === true
+      };
+    });
+  }
+
   function renderPainel(){
     var hoje = hojeISO();
     var inicioHoje = inicioJanelaHoje();
@@ -757,7 +809,7 @@
     $('kImportarValor').textContent = brl(aImportar.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
 
     var pendentes = duplicatas.filter(function(d){ return d.pago !== true && !dupDaNotaCancelada(d); })
-      .concat(pagamentosInternos.filter(function(p){ return p.pago !== true; }));
+      .concat(internosDoPainel().filter(function(p){ return p.pago !== true; }));
     var atrasadas = pendentes.filter(function(d){ return d.vencimento && d.vencimento < inicioHoje; });
     var vHoje = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= hoje; });
     var em7 = pendentes.filter(function(d){ return d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
@@ -795,11 +847,12 @@
     function agrupar(lista){
       var porNome = Object.create(null);
       lista.forEach(function(d){
-        // Mesma separacao das outras telas: a Vetrus vira Stela ou
-        // Pamesa conforme o produto da nota de origem.
-        var nome = fornecedorDaDuplicata(d);
-        if(d.descricao !== undefined && d.chaveAcesso === undefined) nome = d.descricao || 'Pgto Interno';
-        
+        // Pagamento interno se agrupa pela descricao; duplicata de
+        // fornecedor pela mesma separacao das outras telas (a Vetrus
+        // vira Stela ou Pamesa conforme o produto da nota de origem).
+        var nome = d._tipo === 'interno'
+          ? (d.descricao || 'Pgto Interno')
+          : fornecedorDaDuplicata(d);
         if(!porNome[nome]) porNome[nome] = { nome:nome, total:0, qtd:0 };
         porNome[nome].total += (d.valor||0);
         porNome[nome].qtd++;
@@ -820,7 +873,7 @@
     }
 
     var todasValidas = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); })
-      .concat(pagamentosInternos);
+      .concat(internosDoPainel());
 
     var inicioMes = hoje.substring(0,8) + '01';
     var doMes = todasValidas.filter(function(d){
@@ -1170,7 +1223,12 @@
   var filtroPag = 'pendentes';
   var escopoPag = 'fornecedores';
   var limitePag = 200;
-  var ultimaListaPag = [];
+  // Indice id -> item da lista filtrada. Substituiu a lista solta que
+  // as acoes em massa varriam com .find() uma vez por item selecionado:
+  // com 200 marcados numa lista de 8.000 dava 1,6 milhao de comparacoes
+  // a cada clique, e a mesma varredura acontecia de novo na hora de
+  // gravar.
+  var pagPorId = new Map();
   var selecionados = Object.create(null); // id -> true
   var editandoPgtoId = null; // null = novo, string = editando
 
@@ -1201,11 +1259,21 @@
     { valor: 'outro', rotulo: 'Outros', classe: 'cat-outro' }
   ];
 
+  // Fora de CATEGORIAS de proposito: o <select> do formulario e' montado
+  // a partir dela, e "Fornecedor" nao e' uma opcao que alguem escolhe.
+  var CAT_FORNECEDOR = { valor: 'fornecedor', rotulo: 'Fornecedor', classe: 'cat-fornecedor' };
+
   function categoriaPorValor(v){
-    // Map older values if any exist
-    if (v === 'impostos') v = 'imposto-mensal';
-    if (v === 'emprestimo') v = 'emprestimos';
-    
+    // Duplicata de fornecedor nao e' escolhivel no formulario (ela vem
+    // da NF-e), mas na aba "Todos" ela divide a coluna Categoria com os
+    // pagamentos internos e precisa de rotulo proprio. Sem isto caia no
+    // ultimo item da lista e TODA duplicata aparecia como "Outros".
+    if(v === CAT_FORNECEDOR.valor) return CAT_FORNECEDOR;
+
+    // Valores antigos, de antes da revisao das categorias.
+    if(v === 'impostos') v = 'imposto-mensal';
+    if(v === 'emprestimo') v = 'emprestimos';
+
     for(var i = 0; i < CATEGORIAS.length; i++){
       if(CATEGORIAS[i].valor === v) return CATEGORIAS[i];
     }
@@ -1416,10 +1484,20 @@
     return proxAno + '-' + String(proxMes).padStart(2,'0') + '-' + String(dia).padStart(2,'0');
   }
 
+  // O documento como esta' no Firestore. A linha da tabela e' um resumo
+  // (a parcela vira o texto "3/12", por exemplo) e nao serve para gerar
+  // a proxima recorrencia — precisa dos campos crus.
+  function pgtoInternoPorId(id){
+    return pagamentosInternos.find(function(p){ return p.id === id; }) || null;
+  }
+
   function criarProximoRecorrente(pgto){
-    if(pgto.parcelasTotal && pgto.parcelaAtual >= pgto.parcelasTotal){
-      return Promise.resolve(null);
-    }
+    // Parcelamento com fim: a ultima parcela nao gera a proxima.
+    // parcelaAtual ausente conta como 1 — antes `undefined >= 12` dava
+    // falso e a corrente seguia para sempre.
+    var atual = Number(pgto.parcelaAtual) || 1;
+    var total = Number(pgto.parcelasTotal) || 0;
+    if(total && atual >= total) return Promise.resolve(null);
     var proxVenc = calcularProximoVencimento(pgto);
     // Verifica se ja' existe lancamento para o proximo mes com mesma origem
     var jaExiste = pagamentosInternos.some(function(p){
@@ -1435,8 +1513,8 @@
       recorrente: true,
       regra: pgto.regra,
       diaFixo: pgto.diaFixo,
-      parcelaAtual: pgto.parcelaAtual ? pgto.parcelaAtual + 1 : null,
-      parcelasTotal: pgto.parcelasTotal || null,
+      parcelaAtual: (pgto.parcelaAtual || total) ? atual + 1 : null,
+      parcelasTotal: total || null,
       pago: false,
       dataPagamento: null,
       origemId: pgto.id
@@ -1460,12 +1538,11 @@
     $('barraSelecao').style.display = '';
     var soma = 0;
     ids.forEach(function(id){
-      var d = ultimaListaPag.find(function(x){ return x.id === id; });
+      var d = pagPorId.get(id);
       if(d) soma += (d.valor || 0);
     });
-    $('selContador').textContent = ids.length + ' selecionada(s)';
+    $('selContador').textContent = ids.length + ' selecionado(s)';
     $('selTotal').textContent = '· ' + brl(soma);
-    $('selProrrogarBtn').style.display = '';
   }
 
   App.delegar($('tabelaPag'), 'change', '.sel-check', function(cb){
@@ -1493,19 +1570,59 @@
     atualizarBarraSelecao();
   });
 
+  // O batch do Firestore aceita 500 operacoes; 450 deixa folga.
+  var LOTE_FIRESTORE = 450;
+
+  function somaSelecionada(ids){
+    return ids.reduce(function(s, id){
+      var d = pagPorId.get(id);
+      return s + (d ? (d.valor || 0) : 0);
+    }, 0);
+  }
+
+  // Grava os selecionados em blocos, com o progresso no proprio botao.
+  // "Pagar" e "Prorrogar" faziam esta mesma dança duas vezes, com a
+  // unica diferenca sendo o que cada uma escreve no documento.
+  //
+  // camposDe(item) devolve os campos a gravar, ou null para pular — id
+  // sem item conhecido nao vai para colecao nenhuma. Antes o `else`
+  // mandava para `duplicatas` por padrao, o que gravaria no documento
+  // errado se a lista tivesse mudado embaixo.
+  // depoisDoBloco(pedaco) e' opcional e pode devolver Promise.
+  function gravarSelecionados(ids, botao, verbo, camposDe, depoisDoBloco){
+    var estado = { gravadas: 0 };
+
+    function bloco(i){
+      if(i >= ids.length) return Promise.resolve();
+      var pedaco = ids.slice(i, i + LOTE_FIRESTORE);
+      botao.textContent = verbo + '... ' + Math.min(i + LOTE_FIRESTORE, ids.length) + '/' + ids.length;
+      return App.comAuth(function(){
+        var batch = db.batch();
+        pedaco.forEach(function(id){
+          var c = camposDe(pagPorId.get(id));
+          if(c) batch.set(db.collection(c.colecao).doc(id), c.dados, { merge:true });
+        });
+        return batch.commit();
+      }).then(function(){
+        return depoisDoBloco ? depoisDoBloco(pedaco) : null;
+      }).then(function(){
+        estado.gravadas += pedaco.length;
+        return bloco(i + LOTE_FIRESTORE);
+      });
+    }
+
+    estado.promessa = bloco(0);
+    return estado;
+  }
+
   // Pagar selecionadas
   $('selPagarBtn').addEventListener('click', function(){
     var ids = Object.keys(selecionados);
     if(!ids.length) return;
-    var soma = 0;
-    ids.forEach(function(id){
-      var d = ultimaListaPag.find(function(x){ return x.id === id; });
-      if(d) soma += (d.valor || 0);
-    });
 
     App.confirmar({
       titulo: 'Marcar como pagas',
-      mensagem: 'Marcar ' + ids.length + ' item(ns) como PAGOS?\n\nTotal: ' + brl(soma),
+      mensagem: 'Marcar ' + ids.length + ' item(ns) como PAGOS?\n\nTotal: ' + brl(somaSelecionada(ids)),
       confirmar: 'Marcar como pagas',
       perigo: true
     }).then(function(ok){
@@ -1513,47 +1630,31 @@
       var btn = $('selPagarBtn');
       btn.disabled = true;
       var dataPgto = hojeISO();
-      var gravadas = 0;
       var recorrenciasCriadas = [];
 
-      function bloco(i){
-        if(i >= ids.length) return Promise.resolve();
-        var pedaco = ids.slice(i, i + 450);
-        btn.textContent = 'Gravando... ' + Math.min(i + 450, ids.length) + '/' + ids.length;
-        return App.comAuth(function(){
-          var batch = db.batch();
-          pedaco.forEach(function(id){
-            // Verifica se e' duplicata ou pagamento interno
-            var item = ultimaListaPag.find(function(x){ return x.id === id; });
-            if(item && item._tipo === 'interno'){
-              batch.set(db.collection('pagamentosInternos').doc(id),
-                { pago:true, dataPagamento:dataPgto }, { merge:true });
-            } else {
-              batch.set(db.collection('duplicatas').doc(id),
-                { pago:true, dataPagamento:dataPgto, pagoEmLote:true }, { merge:true });
-            }
+      var t = gravarSelecionados(ids, btn, 'Gravando', function(item){
+        if(!item) return null;
+        return item._tipo === 'interno'
+          ? { colecao:'pagamentosInternos', dados:{ pago:true, dataPagamento:dataPgto } }
+          : { colecao:'duplicatas', dados:{ pago:true, dataPagamento:dataPgto, pagoEmLote:true } };
+      }, function(pedaco){
+        // Recorrencia so' faz sentido para pagamento interno, e tem que
+        // partir do DOCUMENTO, nao da linha da tabela: a linha nao
+        // carrega parcelaAtual/parcelasTotal, entao um parcelamento
+        // 3/12 pago em lote passava do limite e perdia a contagem.
+        return Promise.all(pedaco.map(function(id){
+          var item = pagPorId.get(id);
+          if(!item || item._tipo !== 'interno' || !item.recorrente) return null;
+          var doc = pgtoInternoPorId(id);
+          if(!doc) return null;
+          return criarProximoRecorrente(doc).then(function(proxVenc){
+            if(proxVenc) recorrenciasCriadas.push(proxVenc);
           });
-          return batch.commit();
-        }).then(function(){
-          // Criar recorrencias para pagamentos internos
-          var promessas = pedaco.map(function(id){
-            var item = ultimaListaPag.find(function(x){ return x.id === id; });
-            if(item && item._tipo === 'interno' && item.recorrente){
-              return criarProximoRecorrente(item).then(function(proxVenc){
-                if(proxVenc) recorrenciasCriadas.push(proxVenc);
-              });
-            }
-            return Promise.resolve();
-          });
-          return Promise.all(promessas);
-        }).then(function(){
-          gravadas += pedaco.length;
-          return bloco(i + 450);
-        });
-      }
+        }));
+      });
 
-      bloco(0).then(function(){
-        var msg = gravadas + ' item(ns) marcado(s) como pago(s).';
+      t.promessa.then(function(){
+        var msg = t.gravadas + ' item(ns) marcado(s) como pago(s).';
         if(recorrenciasCriadas.length){
           msg += ' ' + recorrenciasCriadas.length + ' lançamento(s) recorrente(s) criado(s).';
         }
@@ -1561,7 +1662,7 @@
         selecionados = Object.create(null);
         atualizarBarraSelecao();
       }).catch(function(e){
-        App.toastErro('Erro no pagamento — ' + gravadas + ' de ' + ids.length +
+        App.toastErro('Erro no pagamento — ' + t.gravadas + ' de ' + ids.length +
           ' já gravados. Confira e repita se necessário.', e);
       }).then(function(){
         btn.disabled = false;
@@ -1575,50 +1676,32 @@
     var ids = Object.keys(selecionados);
     if(!ids.length) return;
 
-    App.confirmar({
+    // pedirData, e nao confirmar: confirmar() promete um booleano e
+    // devolveria `false` no lugar da data escolhida.
+    App.pedirData({
       titulo: 'Prorrogar vencimento',
       mensagem: 'Nova data de vencimento para ' + ids.length + ' item(ns):',
-      confirmar: 'Prorrogar',
-      perigo: false,
-      inputDate: true
-    }).then(function(resultado){
-      if(!resultado) return;
-      var novaData = resultado;
-      if(!novaData || novaData.length !== 10) return;
+      confirmar: 'Prorrogar'
+    }).then(function(novaData){
+      if(!novaData) return;
 
       var btn = $('selProrrogarBtn');
       btn.disabled = true;
-      var gravadas = 0;
 
-      function bloco(i){
-        if(i >= ids.length) return Promise.resolve();
-        var pedaco = ids.slice(i, i + 450);
-        btn.textContent = 'Prorrogando... ' + Math.min(i + 450, ids.length) + '/' + ids.length;
-        return App.comAuth(function(){
-          var batch = db.batch();
-          pedaco.forEach(function(id){
-            var item = ultimaListaPag.find(function(x){ return x.id === id; });
-            if(item && item._tipo === 'interno'){
-              batch.set(db.collection('pagamentosInternos').doc(id),
-                { vencimento: novaData }, { merge:true });
-            } else {
-              batch.set(db.collection('duplicatas').doc(id),
-                { vencimento: novaData }, { merge:true });
-            }
-          });
-          return batch.commit();
-        }).then(function(){
-          gravadas += pedaco.length;
-          return bloco(i + 450);
-        });
-      }
+      var t = gravarSelecionados(ids, btn, 'Prorrogando', function(item){
+        if(!item) return null;
+        return {
+          colecao: item._tipo === 'interno' ? 'pagamentosInternos' : 'duplicatas',
+          dados: { vencimento: novaData }
+        };
+      });
 
-      bloco(0).then(function(){
-        App.toast(gravadas + ' item(ns) prorrogado(s) para ' + fmtData(novaData) + '.', 'ok');
+      t.promessa.then(function(){
+        App.toast(t.gravadas + ' item(ns) prorrogado(s) para ' + fmtData(novaData) + '.', 'ok');
         selecionados = Object.create(null);
         atualizarBarraSelecao();
       }).catch(function(e){
-        App.toastErro('Erro na prorrogação — ' + gravadas + ' de ' + ids.length + ' já gravadas.', e);
+        App.toastErro('Erro na prorrogação — ' + t.gravadas + ' de ' + ids.length + ' já gravados.', e);
       }).then(function(){
         btn.disabled = false;
         btn.textContent = '📅 Prorrogar vencimento';
@@ -1628,7 +1711,28 @@
 
   // ─── Renderizacao ───────────────────────────────────────────
 
+  // Passa o filtro de periodo. Roda ANTES de montar a linha, para uma
+  // busca por "Hoje" nao construir 8.000 objetos e jogar 7.995 fora.
+  function passaFiltroPag(pago, vencimento, hoje, inicioHoje){
+    if(filtroPag === 'pendentes') return !pago;
+    if(filtroPag === 'atrasadas') return !pago && vencimento && vencimento < inicioHoje;
+    if(filtroPag === 'hoje')      return !pago && vencimento >= inicioHoje && vencimento <= hoje;
+    if(filtroPag === '7dias')     return !pago && vencimento > hoje && vencimento <= somarDias(hoje,7);
+    if(filtroPag === 'pagas')     return pago;
+    return true; // 'todas'
+  }
+
   function renderPagamentos(){
+    // Mesma razao dos cartoes do Painel: "Nenhum item nesse filtro" e'
+    // uma AFIRMACAO, e enquanto as duas colecoes nao chegaram nao ha' o
+    // que afirmar. Sem esta guarda a tela dizia que nao havia nada a
+    // pagar durante a carga.
+    if(!carregouDuplicatas || !carregouPgtosInternos){
+      $('tabelaPag').innerHTML = '<p class="nota-explicativa">Carregando pagamentos...</p>';
+      $('totalPag').textContent = '';
+      return;
+    }
+
     var hoje = hojeISO();
     var inicioHoje = inicioJanelaHoje();
     var termo = norm($('buscaPag').value);
@@ -1637,20 +1741,21 @@
     var lista = [];
 
     if(escopoPag === 'fornecedores' || escopoPag === 'todos'){
-      var dups = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); });
-      dups.forEach(function(d){
+      duplicatas.forEach(function(d){
+        if(dupDaNotaCancelada(d)) return;
+        var pago = d.pago === true;
+        if(!passaFiltroPag(pago, d.vencimento, hoje, inicioHoje)) return;
+        var rotulo = fornecedorDaDuplicata(d);
+        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) || norm(d.numeroNota).includes(termo))) return;
         lista.push({
           id: d.id,
           _tipo: 'fornecedor',
-          descricao: fornecedorDaDuplicata(d),
-          _nomeCru: d.nomeEmitente,
+          descricao: rotulo,
           nomeEmitente: d.nomeEmitente,
-          chaveAcesso: d.chaveAcesso,
-          categoria: 'fornecedor',
+          categoria: CAT_FORNECEDOR.valor,
           valor: d.valor || 0,
           vencimento: d.vencimento,
-          pago: d.pago === true,
-          dataPagamento: d.dataPagamento,
+          pago: pago,
           parcela: d.parcela,
           numeroNota: d.numeroNota,
           _recebido: dupRecebida(d),
@@ -1661,46 +1766,33 @@
 
     if(escopoPag === 'interno' || escopoPag === 'todos'){
       pagamentosInternos.forEach(function(p){
+        var pago = p.pago === true;
+        if(!passaFiltroPag(pago, p.vencimento, hoje, inicioHoje)) return;
+        var descricao = p.descricao || 'Sem descrição';
+        var categoria = p.categoria || 'outro';
+        if(termo && norm(descricao).indexOf(termo) === -1 &&
+           norm(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1) return;
         lista.push({
           id: p.id,
           _tipo: 'interno',
-          descricao: p.descricao || 'Sem descrição',
-          _nomeCru: null,
-          categoria: p.categoria || 'outro',
+          descricao: descricao,
+          nomeEmitente: null,
+          categoria: categoria,
           valor: p.valor || 0,
           vencimento: p.vencimento,
-          pago: p.pago === true,
-          dataPagamento: p.dataPagamento,
-          parcela: (p.parcelaAtual && p.parcelasTotal) ? p.parcelaAtual + '/' + p.parcelasTotal : (p.parcelaAtual ? String(p.parcelaAtual) : null),
+          pago: pago,
+          parcela: (p.parcelaAtual && p.parcelasTotal)
+            ? p.parcelaAtual + '/' + p.parcelasTotal
+            : (p.parcelaAtual ? String(p.parcelaAtual) : null),
           numeroNota: null,
           _recebido: null,
-          recorrente: p.recorrente || false,
-          regra: p.regra,
-          diaFixo: p.diaFixo,
-          origemId: p.origemId
+          recorrente: p.recorrente === true
         });
       });
     }
 
-    // Filtros
-    if(filtroPag === 'pendentes') lista = lista.filter(function(d){ return !d.pago; });
-    else if(filtroPag === 'atrasadas') lista = lista.filter(function(d){ return !d.pago && d.vencimento && d.vencimento < inicioHoje; });
-    else if(filtroPag === 'hoje') lista = lista.filter(function(d){ return !d.pago && d.vencimento >= inicioHoje && d.vencimento <= hoje; });
-    else if(filtroPag === '7dias') lista = lista.filter(function(d){ return !d.pago && d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
-    else if(filtroPag === 'pagas') lista = lista.filter(function(d){ return d.pago; });
-
-    // Busca
-    if(termo) lista = lista.filter(function(d){
-      if(d._tipo === 'fornecedor'){
-        return casaFornecedor(fornecedorDaDuplicata(d), d.nomeEmitente, termo) ||
-          norm(d.numeroNota).includes(termo);
-      }
-      return norm(d.descricao).indexOf(termo) !== -1 ||
-        norm(categoriaPorValor(d.categoria).rotulo).indexOf(termo) !== -1;
-    });
-
     lista.sort(function(a,b){ return (a.vencimento || '9999').localeCompare(b.vencimento || '9999'); });
-    ultimaListaPag = lista;
+    pagPorId = new Map(lista.map(function(d){ return [d.id, d]; }));
 
     var totalFiltrado = lista.length;
     var somaFiltrada = lista.reduce(function(s,d){ return s + d.valor; }, 0);
@@ -1709,7 +1801,7 @@
 
     // Limpa selecao de itens que sairam da lista
     Object.keys(selecionados).forEach(function(id){
-      if(!lista.some(function(d){ return d.id === id; })) delete selecionados[id];
+      if(!pagPorId.has(id)) delete selecionados[id];
     });
     atualizarBarraSelecao();
 
@@ -1720,13 +1812,12 @@
     }
 
     // Cabecalho depende do escopo
-    var mostraSelecao = true;
     var mostraCategoria = (escopoPag !== 'fornecedores');
     var mostraNota = (escopoPag !== 'interno');
     var mostraRecebido = (escopoPag === 'fornecedores');
 
     var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>';
-    if(mostraSelecao) html += '<th scope="col"><input type="checkbox" class="sel-check-all sel-check" aria-label="Selecionar todas"></th>';
+    html += '<th scope="col"><input type="checkbox" class="sel-check-all sel-check" aria-label="Selecionar todos os itens da página"></th>';
     html += '<th scope="col">Pago</th><th scope="col">Venc.</th>';
     html += '<th scope="col">' + (escopoPag === 'interno' ? 'Descrição' : 'Emitente / Descrição') + '</th>';
     if(mostraCategoria) html += '<th scope="col">Categoria</th>';
@@ -1746,36 +1837,38 @@
 
       html += '<tr' + cls + '>';
 
-      // Checkbox de selecao (so fornecedores)
-      if(mostraSelecao){
-        html += '<td><input type="checkbox" class="sel-check" data-id="' + escapeHtml(d.id) + '"' +
-          (selecionados[d.id] ? ' checked' : '') +
-          ' aria-label="Selecionar"></td>';
-      }
+      // O nome tambem entra no aria-label: sem ele, um leitor de tela
+      // ouve "Selecionar" trezentas vezes seguidas, sem saber o que.
+      var rotuloLinha = (d._tipo === 'fornecedor'
+        ? fornecedorEmCelula(d.nomeEmitente, d.descricao)
+        : d.descricao) + ', ' + brl(d.valor) + ', vence ' + fmtData(d.vencimento);
+
+      // Selecao
+      html += '<td><input type="checkbox" class="sel-check" data-id="' + escapeHtml(d.id) + '"' +
+        (selecionados[d.id] ? ' checked' : '') +
+        ' aria-label="Selecionar ' + escapeHtml(rotuloLinha) + '"></td>';
 
       // Pago
-      if(d._tipo === 'fornecedor'){
-        html += '<td><input type="checkbox" class="pago-check" data-dup="' + escapeHtml(d.id) + '"' +
-          (d.pago ? ' checked' : '') + ' aria-label="Marcar como paga"></td>';
-      } else {
-        html += '<td><input type="checkbox" class="pago-check-int" data-pgto="' + escapeHtml(d.id) + '"' +
-          (d.pago ? ' checked' : '') + ' aria-label="Marcar como pago"></td>';
-      }
+      html += '<td><input type="checkbox"' +
+        (d._tipo === 'fornecedor'
+          ? ' class="pago-check" data-dup="'
+          : ' class="pago-check-int" data-pgto="') + escapeHtml(d.id) + '"' +
+        (d.pago ? ' checked' : '') +
+        ' aria-label="Marcar ' + escapeHtml(rotuloLinha) + ' como pago"></td>';
 
       // Vencimento
       html += '<td>' + fmtData(d.vencimento) + '</td>';
 
       // Descricao / Emitente
-      var forn = d.descricao;
-      if (d._tipo === 'fornecedor') {
-        html += '<td>' + escapeHtml(fornecedorEmCelula(d.nomeEmitente, forn)) +
-          (d.recorrente ? ' <span style="font-size:10px; color:var(--ink-soft);">🔄</span>' : '') +
-          '</td>';
-      } else {
-        html += '<td>' + escapeHtml(d.descricao) +
-          (d.recorrente ? ' <span style="font-size:10px; color:var(--ink-soft);">🔄</span>' : '') +
-          '</td>';
-      }
+      html += '<td>' +
+        escapeHtml(d._tipo === 'fornecedor'
+          ? fornecedorEmCelula(d.nomeEmitente, d.descricao)
+          : d.descricao) +
+        (d.recorrente
+          ? ' <span style="font-size:10px; color:var(--ink-soft);" title="Pagamento recorrente"' +
+            ' role="img" aria-label="recorrente">🔄</span>'
+          : '') +
+        '</td>';
 
       // Categoria (interno e todos)
       if(mostraCategoria){
@@ -1807,11 +1900,14 @@
         }
       }
 
-      // Acoes (so pgto interno)
+      // Acoes (so pgto interno). Emoji sozinho num botao nao e' rotulo:
+      // o leitor de tela le "lapis". Dai o aria-label com a descricao.
       if(escopoPag === 'interno'){
         html += '<td>' +
-          '<button type="button" class="acao-mini editar-pgto" data-pgto="' + escapeHtml(d.id) + '" title="Editar">✏️</button> ' +
-          '<button type="button" class="acao-mini perigo excluir-pgto" data-pgto="' + escapeHtml(d.id) + '" title="Excluir">🗑️</button>' +
+          '<button type="button" class="acao-mini editar-pgto" data-pgto="' + escapeHtml(d.id) + '"' +
+            ' title="Editar" aria-label="Editar ' + escapeHtml(d.descricao) + '">✏️</button> ' +
+          '<button type="button" class="acao-mini perigo excluir-pgto" data-pgto="' + escapeHtml(d.id) + '"' +
+            ' title="Excluir" aria-label="Excluir ' + escapeHtml(d.descricao) + '">🗑️</button>' +
           '</td>';
       }
 
@@ -1855,7 +1951,7 @@
     }).then(function(){
       if(!marcado) return;
       // Se recorrente, cria proximo lancamento
-      var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+      var pgto = pgtoInternoPorId(id);
       if(pgto && pgto.recorrente){
         return criarProximoRecorrente(pgto).then(function(proxVenc){
           if(proxVenc){
@@ -1872,14 +1968,14 @@
   // Editar pagamento interno
   App.delegar($('tabelaPag'), 'click', '.editar-pgto', function(btn){
     var id = btn.dataset.pgto;
-    var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+    var pgto = pgtoInternoPorId(id);
     if(pgto) abrirFormPgto(pgto);
   });
 
   // Excluir pagamento interno
   App.delegar($('tabelaPag'), 'click', '.excluir-pgto', function(btn){
     var id = btn.dataset.pgto;
-    var pgto = pagamentosInternos.find(function(p){ return p.id === id; });
+    var pgto = pgtoInternoPorId(id);
     if(!pgto) return;
 
     App.confirmar({
@@ -1960,26 +2056,35 @@
   function agruparPrazos(listaDeDias, tol){
     var grupos = [];
     listaDeDias.forEach(function(dias){
+      var r = rotuloPrazo(dias);
       for(var i = 0; i < grupos.length; i++){
         if(prazosProximos(grupos[i].ref, dias, tol)){
           grupos[i].qtd++;
-          grupos[i].variantes[rotuloPrazo(dias)] = (grupos[i].variantes[rotuloPrazo(dias)] || 0) + 1;
+          var atual = grupos[i].variantes[r];
+          if(atual) atual.qtd++;
+          else grupos[i].variantes[r] = { qtd: 1, dias: dias };
           return;
         }
       }
       var v = {};
-      v[rotuloPrazo(dias)] = 1;
+      v[r] = { qtd: 1, dias: dias };
       grupos.push({ ref: dias, qtd: 1, variantes: v });
     });
 
     // O rotulo do grupo e' a variante exata mais comum dentro dele —
     // nao uma media, nem o primeiro que apareceu.
+    //
+    // `dias` guarda os numeros DESSA variante. Sem isso a media ao lado
+    // do rotulo saia de `ref`, que e' apenas o primeiro prazo a formar o
+    // grupo: com a folga de 5 dias, "70/84/98" podia vir acompanhado da
+    // media de 70/84/99 — um numero de outra nota.
     grupos.forEach(function(g){
       var melhor = null, melhorQtd = -1;
       Object.keys(g.variantes).forEach(function(k){
-        if(g.variantes[k] > melhorQtd){ melhorQtd = g.variantes[k]; melhor = k; }
+        if(g.variantes[k].qtd > melhorQtd){ melhorQtd = g.variantes[k].qtd; melhor = k; }
       });
       g.rotulo = melhor;
+      g.diasDoRotulo = melhor ? g.variantes[melhor].dias : [];
     });
     return grupos.sort(function(a,b){ return b.qtd - a.qtd; });
   }
@@ -2058,14 +2163,17 @@
       var cauda = l.grupos.slice(MAX_PRAZOS_VISIVEIS);
       var notasNaCauda = cauda.reduce(function(s,g){ return s + g.qtd; }, 0);
       var pct = Math.round(principal.qtd / l.itens.length * 100);
+      // Uma vez por linha: antes mediaPrazo rodava duas vezes so' para
+      // decidir se mostrava e depois imprimir o mesmo numero.
+      var mediaDoPrincipal = mediaPrazo(principal.diasDoRotulo);
 
       html += '<tr>' +
         '<td><button type="button" class="acao-mini" data-forn="' + escapeHtml(l.fornecedor) + '" ' +
           'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
           escapeHtml(l.fornecedor) + '</td>' +
         '<td><strong style="font-size:14px;">' + escapeHtml(principal.rotulo) + '</strong>' +
-          (mediaPrazo(principal.ref) !== null
-            ? ' <span style="font-size:11px; color:#4A6FA5; font-weight:700;">(média ' + mediaPrazo(principal.ref) + ' dias)</span>'
+          (mediaDoPrincipal !== null
+            ? ' <span style="font-size:11px; color:var(--azul); font-weight:700;">(média ' + mediaDoPrincipal + ' dias)</span>'
             : '') +
           '<div style="font-size:10px; color:var(--ink-soft);">' + principal.qtd + ' de ' +
           l.itens.length + ' nota(s) · ' + pct + '%</div></td>' +
@@ -2081,7 +2189,7 @@
         '</tr>';
 
       if(aberto){
-        html += '<tr><td colspan="5" style="background:var(--stripe2); padding:10px;">' +
+        html += '<tr><td colspan="4" style="background:var(--stripe2); padding:10px;">' +
           '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
           '<th scope="col">Emissão</th><th scope="col">Nº</th><th scope="col">Valor</th>' +
           '<th scope="col">Prazo</th>' +
@@ -2091,12 +2199,13 @@
           }).map(function(x){
             var r = rotuloPrazo(x.dias);
             var foraDoPadrao = r !== principal.rotulo;
+            var m = mediaPrazo(x.dias);
             return '<tr><td>' + fmtData(x.nota.dataEmissao) + '</td>' +
               '<td>' + escapeHtml(x.nota.numero || '-') + '</td>' +
               '<td>' + brl(x.nota.valorTotal) + '</td>' +
               '<td' + (foraDoPadrao ? ' style="color:var(--brick); font-weight:700;"' : '') + '>' +
               escapeHtml(r) + '</td>' +
-              '<td style="font-weight:700;">' + (mediaPrazo(x.dias) !== null ? mediaPrazo(x.dias) + ' dias' : '-') + '</td></tr>';
+              '<td style="font-weight:700;">' + (m !== null ? m + ' dias' : '-') + '</td></tr>';
           }).join('') +
           '</tbody></table></div></td></tr>';
       }
