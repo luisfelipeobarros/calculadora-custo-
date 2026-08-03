@@ -1261,6 +1261,12 @@
           '<label><input type="radio" name="pgtoRegra" value="diaFixo"' + (regraVal === 'diaFixo' ? ' checked' : '') + '> Dia fixo do mês: ' +
             '<input type="number" id="pgtoDiaFixo" min="1" max="31" style="width:50px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + diaFixo + '"></label>' +
           '<label><input type="radio" name="pgtoRegra" value="ultimoDia"' + (regraVal === 'ultimoDia' ? ' checked' : '') + '> Último dia do mês</label>' +
+          '<div style="margin-top:8px; display:flex; gap:12px; align-items:center;">' +
+            '<label for="pgtoParcelaAtual" style="font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Parcela atual:</label>' +
+            '<input type="number" id="pgtoParcelaAtual" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + (p.parcelaAtual || 1) + '">' +
+            '<label for="pgtoParcelasTotal" style="font-size:11px; text-transform:uppercase; color:var(--ink-soft);">De um total de:</label>' +
+            '<input type="number" id="pgtoParcelasTotal" min="1" style="width:60px; padding:4px 6px; border:1px solid var(--line); border-radius:3px;" value="' + (p.parcelasTotal || '') + '" placeholder="∞">' +
+          '</div>' +
         '</div>' +
         '<div style="display:flex; gap:8px; margin-top:14px;">' +
           '<button type="button" class="btn" id="pgtoSalvarBtn">Salvar</button>' +
@@ -1297,6 +1303,7 @@
     var vencimento = $('pgtoVencimento').value;
     var recorrente = $('pgtoRecorrente').checked;
     var regra = null, diaFixo = null;
+    var parcelaAtual = null, parcelasTotal = null;
 
     if(!descricao){ App.toast('Preencha a descrição.', 'erro'); return; }
     if(!valorStr || Number(valorStr) <= 0){ App.toast('Preencha o valor.', 'erro'); return; }
@@ -1314,6 +1321,9 @@
           return;
         }
       }
+      parcelaAtual = Number($('pgtoParcelaAtual').value) || 1;
+      var pt = $('pgtoParcelasTotal').value;
+      parcelasTotal = pt ? Number(pt) : null;
     }
 
     var dados = {
@@ -1324,6 +1334,8 @@
       recorrente: recorrente,
       regra: regra,
       diaFixo: diaFixo,
+      parcelaAtual: parcelaAtual,
+      parcelasTotal: parcelasTotal,
       pago: false,
       dataPagamento: null,
       origemId: null
@@ -1381,6 +1393,9 @@
   }
 
   function criarProximoRecorrente(pgto){
+    if(pgto.parcelasTotal && pgto.parcelaAtual >= pgto.parcelasTotal){
+      return Promise.resolve(null);
+    }
     var proxVenc = calcularProximoVencimento(pgto);
     // Verifica se ja' existe lancamento para o proximo mes com mesma origem
     var jaExiste = pagamentosInternos.some(function(p){
@@ -1396,6 +1411,8 @@
       recorrente: true,
       regra: pgto.regra,
       diaFixo: pgto.diaFixo,
+      parcelaAtual: pgto.parcelaAtual ? pgto.parcelaAtual + 1 : null,
+      parcelasTotal: pgto.parcelasTotal || null,
       pago: false,
       dataPagamento: null,
       origemId: pgto.id
@@ -1630,7 +1647,7 @@
           vencimento: p.vencimento,
           pago: p.pago === true,
           dataPagamento: p.dataPagamento,
-          parcela: null,
+          parcela: (p.parcelaAtual && p.parcelasTotal) ? p.parcelaAtual + '/' + p.parcelasTotal : (p.parcelaAtual ? String(p.parcelaAtual) : null),
           numeroNota: null,
           _recebido: null,
           recorrente: p.recorrente || false,
