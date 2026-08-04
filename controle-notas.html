@@ -135,14 +135,28 @@
   #viewDda summary{ cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
   #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
 
-  /* Impressao: so' o relatorio do DDA. O resumo (periodo, arquivo,
-     filtro aplicado) ja' esta' na primeira linha do resultado, entao o
-     papel se explica sozinho. */
+  .so-imprimir{ display:none; }
+
+  /* Impressao: so' o conteudo da tela aberta (DDA ou Painel), sem o
+     cabecalho e os controles do app. */
   @media print{
-    header.top, .barra-status, footer.note, .skip-link, #viewDda .filtros{ display:none !important; }
+    header.top, .barra-status, footer.note, .skip-link, #viewDda .filtros,
+    .no-print{ display:none !important; }
     .wrap{ padding:0; }
     .card{ border:none; box-shadow:none; padding:0; }
     .dda-linha{ break-inside:avoid; page-break-inside:avoid; }
+    .top-forn-grid > div, .kpi{ break-inside:avoid; page-break-inside:avoid; }
+    .so-imprimir{ display:block; font-family:var(--font-mono); font-size:12px; color:var(--ink); margin-bottom:12px; }
+    /* "A importar" no papel: a 1a coluna (botoes de expandir itens),
+       XML (6a) e Ações (7a) sao interacao, nao informacao — fora da
+       impressao. Os indices casam com o cabecalho montado em
+       renderImportar; se uma coluna entrar ou sair de la', ajuste
+       aqui junto. O :not([colspan]) preserva as linhas expandidas de
+       itens/vencimentos, que usam um td unico atravessando a tabela. */
+    #tabelaImportar th:nth-child(1), #tabelaImportar td:nth-child(1):not([colspan]),
+    #tabelaImportar th:nth-child(6), #tabelaImportar td:nth-child(6),
+    #tabelaImportar th:nth-child(7), #tabelaImportar td:nth-child(7),
+    #maisImportarBtn{ display:none; }
   }
 </style>
 </head>
@@ -185,6 +199,12 @@
   <!-- ═══════════ PAINEL ═══════════ -->
   <div id="viewPainel">
     <h2 class="sr-only">Painel</h2>
+    <!-- So' existe no papel: sem o cabecalho do app (escondido na
+         impressao), a folha precisa dizer sozinha o que e' e de quando. -->
+    <div id="cabecalhoImpressao" class="so-imprimir"></div>
+    <div class="no-print" style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+      <button type="button" class="acao-mini" id="btnImprimirPainel">🖨 Imprimir</button>
+    </div>
     <div class="kpi-grid">
       <button type="button" class="kpi" id="kpiImportar">
         <span class="k-label">Notas a importar</span>
@@ -818,6 +838,15 @@
   $('navFornecedores').addEventListener('click', function(){ router.ir('Fornecedores'); });
   $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
   $('navDda').addEventListener('click', function(){ router.ir('Dda'); });
+
+  // Imprimir o Painel: preenche a linha de contexto que so' aparece no
+  // papel (o cabecalho do app some na impressao) e chama o dialogo.
+  $('btnImprimirPainel').addEventListener('click', function(){
+    $('cabecalhoImpressao').textContent = 'Controle de Notas — Painel · ' +
+      fmtData(hojeISO()) + ' ' + App.horaAgora() +
+      (carregarTudo ? ' · histórico completo' : ' · janela de ' + MESES_HISTORICO + ' meses');
+    window.print();
+  });
 
   $('kpiImportar').addEventListener('click', function(){ router.ir('Importar'); });
   $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
