@@ -4,7 +4,7 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao onze etapas, em nove
+  Nao precisa instalar nada — so' o Node. Sao doze etapas, em dez
   frentes (a lista canonica, com o que cada uma cobre, esta' no README,
   secao "Rodando os testes"):
 
@@ -21,6 +21,8 @@
   - pagamentos.js      — categorias, recorrencia e filtro de periodo.
   - dda.js             — leitura do DDA do Bradesco (contra a camada de
                          texto real do PDF) e casamento boleto/duplicata.
+  - painel.js          — Painel de metas: dias uteis, limite de 60% e a
+                         previsao de faturamento do mes corrente.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -39,7 +41,8 @@ const etapas = [
   ['Regras da tela de cotacao', 'cotacao.js', ['index.html']],
   ['Fornecedores e prazos', 'fornecedores.js', []],
   ['Pagamentos e recorrencia', 'pagamentos.js', []],
-  ['Conferencia de DDA (Bradesco)', 'dda.js', []]
+  ['Conferencia de DDA (Bradesco)', 'dda.js', []],
+  ['Painel de metas', 'painel.js', []]
 ];
 
 let falhou = 0;

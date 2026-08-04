@@ -195,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São onze etapas, em nove frentes:
+Não precisa instalar nada. São doze etapas, em dez frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -241,6 +241,13 @@ Não precisa instalar nada. São onze etapas, em nove frentes:
    cedente), o CNPJ de 15 dígitos do Bradesco, a comparação em centavos
    inteiros e — principalmente — que boleto sem par **fora da janela de
    carga** vira ⚪ indeterminado, nunca 🔴 fraude.
+10. **Painel de metas** — 43 verificações em `painel-nucleo.js`, com os
+    números da planilha de 2026 como referência: dias de trabalho mês a
+    mês (sem domingos e feriados; sábado é dia normal; feriado no
+    domingo não desconta duas vezes), limite = 60% do objetivo, diários
+    previsto/realizado e a previsão do mês corrente — que só projeta
+    sobre os dias úteis restantes e **nunca inventa média de amostra
+    vazia**.
 
 Rode antes de publicar qualquer alteração.
 

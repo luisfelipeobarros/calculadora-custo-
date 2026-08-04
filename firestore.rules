@@ -111,6 +111,15 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
+    // Metas mensais do Painel da Calculadora (um documento por mes,
+    // id 'aaaa-mm'): objetivo de vendas, feriados e o faturamento
+    // acumulado lancado a mao. Tudo digitado pelos proprios usuarios;
+    // o id com formato fixo evita documento perdido fora do padrao.
+    match /metasMensais/{mes} {
+      allow read: if autenticado();
+      allow write: if autenticado() && mes.matches('\\d{4}-\\d{2}');
+    }
+
     // Nada mais e' acessivel pelo navegador.
     match /{document=**} {
       allow read, write: if false;

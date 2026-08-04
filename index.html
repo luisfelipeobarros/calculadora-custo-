@@ -63,6 +63,33 @@
   .rotulo-mono{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
   .msg-mono{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-bottom:8px; }
   .select-embutido{ border:0; outline:0; padding:9px 10px; font-family:var(--font-mono); font-size:14px; width:100%; background:transparent; color:var(--ink); }
+
+  /* Painel de metas (a tela inicial). */
+  .painel-prev-grid{ display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+  .painel-prev-grid .bloco{ flex:1; min-width:170px; background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:10px 12px; }
+  .painel-prev-grid .bloco .rotulo{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); display:block; }
+  .painel-prev-grid .bloco .num{ font-family:var(--font-display); font-size:21px; font-weight:700; color:var(--ink); display:block; margin-top:3px; }
+  .painel-prev-grid .bloco .sub{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:block; margin-top:2px; }
+  .painel-prev-form{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; }
+  .painel-prev-form .campo{ display:flex; flex-direction:column; gap:4px; }
+  .painel-prev-form label{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+  .painel-ano-bar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .painel-ano-bar h2{ margin:0; }
+  #anoPainel{ font-family:var(--font-mono); font-size:15px; }
+  .painel-rolagem{ overflow-x:auto; margin-top:12px; }
+  .painel-table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:1150px; }
+  .painel-table th{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); text-align:right; padding:8px 8px; border-bottom:2px solid var(--line); white-space:nowrap; }
+  .painel-table th:first-child{ text-align:left; }
+  .painel-table td{ padding:6px 8px; border-bottom:1px solid var(--line); text-align:right; font-family:var(--font-mono); white-space:nowrap; }
+  .painel-table td:first-child{ text-align:left; font-family:var(--font-body); }
+  .painel-table tr.mes-corrente td{ background:var(--azul-fundo); }
+  .painel-table tr.total td{ font-weight:700; border-top:2px solid var(--line); background:var(--stripe); }
+  .painel-table td.pos{ color:var(--profit); }
+  .painel-table td.neg{ color:var(--loss); }
+  .painel-num{ width:110px; text-align:right; padding:5px 6px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:12px; background:#fff; color:var(--ink); }
+  .feriado-chip{ display:inline-flex; align-items:center; gap:3px; font-family:var(--font-mono); font-size:10.5px; background:var(--stripe); border:1px solid var(--line); border-radius:10px; padding:1px 7px; margin-left:4px; }
+  .feriado-chip button{ border:none; background:transparent; cursor:pointer; font-size:11px; padding:0; color:var(--loss); }
+  .feriado-data{ padding:3px 4px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:11px; background:#fff; color:var(--ink); }
 </style>
 </head>
 <body>
@@ -79,6 +106,7 @@
     <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false"
             aria-controls="navTelas" aria-label="Abrir menu de telas">☰</button>
     <nav class="telas" id="navTelas" aria-label="Telas do aplicativo">
+      <button type="button" class="btn secondary" id="verPainelBtn">📈 Painel</button>
       <button type="button" class="btn secondary" id="verCalculadoraBtn">🧮 Calculadora</button>
       <button type="button" class="btn secondary" id="verFreteBtn">🚚 Calc. de Frete</button>
       <button type="button" class="btn secondary" id="verProdutosBtn">📋 Produtos salvos <span id="produtosCount"></span></button>
@@ -95,6 +123,47 @@
   </header>
 
   <main id="conteudo">
+
+  <!-- ═══════════ PAINEL (a tela inicial) ═══════════ -->
+  <div id="viewPainel">
+    <div class="card">
+      <h2 id="prevTitulo">Previsão de faturamento</h2>
+      <p class="nota-explicativa">
+        Lance o faturado acumulado do mês (normalmente até ontem). A previsão usa a média
+        por dia útil já decorrido e projeta só sobre os dias que faltam — sem domingos e
+        sem os feriados cadastrados na tabela abaixo.
+      </p>
+      <div class="painel-prev-form">
+        <div class="campo">
+          <label for="prevFaturado">Faturado acumulado (R$)</label>
+          <input id="prevFaturado" class="painel-num" style="width:150px;" type="text" inputmode="decimal" placeholder="0,00">
+        </div>
+        <div class="campo">
+          <label for="prevAte">até o dia</label>
+          <input id="prevAte" class="campo-data" type="date">
+        </div>
+        <button type="button" class="btn" id="prevSalvarBtn">Salvar</button>
+      </div>
+      <div id="prevResultado"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <div class="painel-ano-bar">
+        <h2>Metas do ano</h2>
+        <button type="button" class="acao-mini" id="anoAnteriorBtn" aria-label="Ano anterior">◀</button>
+        <strong id="anoPainel"></strong>
+        <button type="button" class="acao-mini" id="anoSeguinteBtn" aria-label="Próximo ano">▶</button>
+        <button type="button" class="acao-mini" id="recarregarPainelBtn">↻ Recarregar</button>
+      </div>
+      <p class="nota-explicativa">
+        Objetivo, vendas realizadas e feriados são digitados; o resto é calculado —
+        limite = 60% do objetivo, e "a pagar real" soma as duplicatas de fornecedor que
+        vencem no mês (pagas e a pagar), direto do Controle de Notas. Pagamentos internos
+        ficam de fora, por enquanto.
+      </p>
+      <div id="tabelaPainel" class="painel-rolagem"></div>
+    </div>
+  </div>
 
   <div id="viewFrete" style="display:none;">
 
@@ -558,7 +627,7 @@ Tupan</textarea>
     </div>
   </div>
 
-  <div id="viewCalculadora">
+  <div id="viewCalculadora" style="display:none;">
   <div class="grid">
     <!-- LEFT: FORM -->
     <div>
@@ -742,6 +811,8 @@ Tupan</textarea>
 <script src="app-shared.js?v=14"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
+<!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
+<script src="painel-nucleo.js?v=1"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2192,6 +2263,7 @@ Tupan</textarea>
   // no Historico. Agora o endereco carrega a tela (#Historico).
   const router = App.criarRouter({
     views: {
+      Painel:       'viewPainel',
       Calculadora:  'viewCalculadora',
       Frete:        'viewFrete',
       Produtos:     'viewProdutos',
@@ -2203,11 +2275,14 @@ Tupan</textarea>
       Comparar:     'viewComparar',
       PesquisaLote: 'viewPesquisaLote'
     },
-    padrao: 'Calculadora',
+    // O Painel virou a porta de entrada; quem tem #Calculadora salvo
+    // continua caindo direto nela.
+    padrao: 'Painel',
     // Estas duas dependem de um pedido selecionado no Historico:
     // restaurar direto de um link deixaria a tela vazia.
     naoRestauraveis: ['Comparar', 'PesquisaLote'],
     aoEntrar: {
+      Painel:       () => carregarPainel(),
       Produtos:     () => atualizarListaSalvos(),
       Historico:    () => carregarHistorico(),
       Concorrentes: () => carregarHistoricoConcorrentes(),
@@ -2215,7 +2290,7 @@ Tupan</textarea>
     },
     aoTrocar: (nome) => {
       const botoes = {
-        Calculadora:'verCalculadoraBtn',
+        Painel:'verPainelBtn', Calculadora:'verCalculadoraBtn',
         Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
         Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
         Notas:'verNotasBtn', Sync:'verSyncBtn'
@@ -2244,6 +2319,7 @@ Tupan</textarea>
   // cabeçalho. Antes cada view tinha o seu "← Voltar à calculadora",
   // que no mobile empurrava o conteúdo para baixo e ainda deixava o
   // caminho de volta diferente do caminho de ida.
+  $('verPainelBtn').addEventListener('click', () => router.ir('Painel'));
   $('verCalculadoraBtn').addEventListener('click', mostrarViewCalculadora);
   $('verProdutosBtn').addEventListener('click', mostrarViewProdutos);
   $('buscaProduto').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
@@ -5027,16 +5103,319 @@ Tupan</textarea>
   });
 
   // ─── Arranque ────────────────────────────────────────────────
+  // O router.iniciar() fica DEPOIS do bloco do Painel logo abaixo: a
+  // tela padrao agora e' o Painel, e o aoEntrar dele roda ja' no
+  // iniciar — antes das declaracoes `let` do bloco seria TDZ.
   onToggleChange();
   calcular();
   atualizarStatusArmazenamento();
-  router.iniciar(); // abre a tela indicada no endereço (#Historico, ...) ou a Calculadora
+
+  // ─── Painel de metas (a tela inicial) ───────────────────────
+  // Digitado: objetivo, vendas realizadas e feriados (metasMensais).
+  // Calculado: limite (60%, painel-nucleo), dias uteis, diarios e a
+  // previsao. Vindo do Firestore: "a pagar real" = SO' duplicatas de
+  // fornecedor (menos as de nota cancelada) com vencimento no mes,
+  // pagas e a pagar. Pagamentos internos ficam de fora por decisao de
+  // negocio (03/08/2026) — se um dia entrarem, e' devolver a consulta
+  // de pagamentosInternos ao Promise.all e somar como as duplicatas.
+
+  const NOMES_MES_PAINEL = ['janeiro','fevereiro','março','abril','maio','junho',
+                            'julho','agosto','setembro','outubro','novembro','dezembro'];
+
+  let painelAno = new Date().getFullYear();
+  let painelDados = null;        // { ano, metas, aPagar } | { ano, erro } | { ano, semFirebase }
+  let painelCarregandoAno = null;
+
+  const mesAtualISO = () => App.hojeISO().substring(0, 7);
+  const metaDe = (mes) => (painelDados && painelDados.metas && painelDados.metas[mes]) || {};
+  const numBR = v => v == null ? '' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pctBR = v => v == null ? '' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+
+  async function carregarPainel(forcar){
+    $('anoPainel').textContent = painelAno;
+    if(painelDados && painelDados.ano === painelAno && !painelDados.erro && !forcar){
+      renderPainel();
+      return;
+    }
+    if(painelCarregandoAno === painelAno) return;
+    painelCarregandoAno = painelAno;
+    renderPainel(); // mostra "carregando" enquanto as consultas rodam
+    try{
+      await promessaFirebase;
+      if(!firestoreDb){
+        painelDados = { ano: painelAno, semFirebase: true };
+        return;
+      }
+      const ano = painelAno;
+      const [metasSnap, dupSnap, cancSnap] = await Promise.all([
+        App.comAuth(() => firestoreDb.collection('metasMensais')
+          .where(firebase.firestore.FieldPath.documentId(), '>=', ano + '-01')
+          .where(firebase.firestore.FieldPath.documentId(), '<=', ano + '-12').get()),
+        App.comAuth(() => firestoreDb.collection('duplicatas')
+          .where('vencimento', '>=', ano + '-01-01')
+          .where('vencimento', '<=', ano + '-12-31').get()),
+        // So' as canceladas, para excluir as duplicatas delas do "a
+        // pagar" — baixar todas as notas do ano custaria muito mais
+        // leitura para usar um campo so'.
+        App.comAuth(() => firestoreDb.collection('notas')
+          .where('status', '==', 'cancelada').get())
+      ]);
+      const canceladas = Object.create(null);
+      cancSnap.forEach(doc => { canceladas[doc.id] = true; });
+      const metas = Object.create(null);
+      metasSnap.forEach(doc => { metas[doc.id] = doc.data(); });
+      const aPagar = Object.create(null);
+      const somar = (venc, valor) => {
+        if(!venc) return;
+        const mes = venc.substring(0, 7);
+        aPagar[mes] = (aPagar[mes] || 0) + (valor || 0);
+      };
+      dupSnap.forEach(doc => {
+        const d = doc.data();
+        if(!canceladas[d.chaveAcesso]) somar(d.vencimento, d.valor);
+      });
+      painelDados = { ano, metas, aPagar };
+    }catch(e){
+      painelDados = { ano: painelAno, erro: App.erroDe(e) };
+    }finally{
+      painelCarregandoAno = null;
+      renderPainel();
+    }
+  }
+
+  async function salvarMeta(mes, campos){
+    try{
+      await App.comAuth(() => exigirDb().collection('metasMensais').doc(mes).set(campos, { merge: true }));
+      if(painelDados && painelDados.metas && painelDados.ano === Number(mes.substring(0, 4))){
+        painelDados.metas[mes] = Object.assign({}, painelDados.metas[mes], campos);
+      }
+    }catch(e){
+      App.toastErro('Erro ao gravar a meta', e);
+    }
+    // Rerender nos dois casos: sucesso mostra o derivado novo; erro
+    // devolve o campo ao valor que esta' salvo de verdade.
+    renderPainel();
+  }
+
+  function renderPrevisao(){
+    const hoje = App.hojeISO();
+    const mes = mesAtualISO();
+    const anoAtual = Number(mes.substring(0, 4));
+    $('prevTitulo').textContent = 'Previsão de faturamento — ' +
+      NOMES_MES_PAINEL[Number(mes.substring(5, 7)) - 1] + ' de ' + anoAtual;
+
+    const carregado = painelDados && painelDados.ano === anoAtual && painelDados.metas;
+    const meta = carregado ? (painelDados.metas[mes] || {}) : {};
+    const fat = meta.faturamento && meta.faturamento.acumulado != null ? meta.faturamento : null;
+
+    // Nao sobrescreve o campo em que a pessoa esta' digitando.
+    if(document.activeElement !== $('prevFaturado')){
+      $('prevFaturado').value = fat ? numBR(fat.acumulado) : '';
+    }
+    if(document.activeElement !== $('prevAte')){
+      $('prevAte').value = (fat && fat.ate) ? fat.ate : App.somarDias(hoje, -1);
+    }
+
+    const alvo = $('prevResultado');
+    if(!carregado){
+      alvo.innerHTML = painelAno === anoAtual ? '' :
+        '<p class="msg-mono">A previsão é do mês corrente — volte para ' + anoAtual + ' na tabela abaixo.</p>';
+      return;
+    }
+    if(!fat){
+      alvo.innerHTML = '<p class="msg-mono">Nenhum faturamento lançado neste mês ainda.</p>';
+      return;
+    }
+
+    const r = PainelNucleo.resumoDoMes({
+      mes,
+      objetivo: meta.objetivo != null ? meta.objetivo : null,
+      feriados: meta.feriados || [],
+      faturamento: fat,
+      aPagar: null
+    }, hoje);
+    const p = r.previsao;
+    if(!p){ alvo.innerHTML = ''; return; }
+
+    const bloco = (rotulo, num, sub, classe) =>
+      '<div class="bloco"><span class="rotulo">' + rotulo + '</span>' +
+      '<span class="num' + (classe ? ' ' + classe : '') + '">' + num + '</span>' +
+      (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
+
+    const objetivo = meta.objetivo != null ? meta.objetivo : null;
+    const pctPrev = (p.prevista != null && objetivo > 0) ? p.prevista / objetivo - 1 : null;
+    alvo.innerHTML = '<div class="painel-prev-grid">' +
+      bloco('Faturado até ' + App.fmtData(fat.ate), 'R$ ' + numBR(fat.acumulado),
+        p.decorridos + ' dia(s) útil(eis) decorrido(s)') +
+      bloco('Média por dia útil', p.media != null ? 'R$ ' + numBR(p.media) : '--',
+        p.media == null ? 'sem dia útil decorrido ainda' : '') +
+      bloco('Previsão fim do mês', p.prevista != null ? 'R$ ' + numBR(p.prevista) : '--',
+        objetivo != null && pctPrev != null
+          ? pctBR(pctPrev) + ' vs objetivo de R$ ' + numBR(objetivo)
+          : 'cadastre o objetivo na tabela para comparar') +
+      bloco('Necessário por dia útil restante',
+        p.necessarioPorDia != null ? 'R$ ' + numBR(p.necessarioPorDia) : '--',
+        p.restantes + ' dia(s) útil(eis) restante(s)' +
+          (p.necessarioPorDia === 0 ? ' — objetivo já batido 🎉' : '')) +
+      '</div>';
+  }
+
+  function renderPainel(){
+    renderPrevisao();
+    $('anoPainel').textContent = painelAno;
+    const alvo = $('tabelaPainel');
+    if(!painelDados || painelDados.ano !== painelAno){
+      alvo.innerHTML = '<p class="msg-mono">Carregando...</p>';
+      return;
+    }
+    if(painelDados.semFirebase){
+      alvo.innerHTML = '<p class="msg-mono">O Painel precisa do Firebase — é de lá que vêm as duplicatas e as metas. Configure na aba Sincronização.</p>';
+      return;
+    }
+    if(painelDados.erro){
+      alvo.innerHTML = '<p class="msg-mono">Erro ao carregar: ' + escapeHtml(painelDados.erro) + '</p>';
+      return;
+    }
+
+    const hoje = App.hojeISO();
+    const mesCorrente = mesAtualISO();
+    // Total como o da planilha: objetivo e diferença somam SO' os
+    // meses com vendas lançadas (comparar objetivo do ano inteiro com
+    // vendas de meio ano diria que estamos 40% abaixo sem estarmos);
+    // "a pagar" e "disponível" somam o ano todo.
+    const tot = { objetivoComVendas: 0, vendas: 0, temVendas: false, aPagar: 0, disponivel: 0 };
+
+    let html = '<table class="painel-table"><thead><tr>' +
+      '<th scope="col">Mês</th><th scope="col">Objetivo de vendas</th>' +
+      '<th scope="col">Limite de pagamento (60%)</th><th scope="col">A pagar real</th>' +
+      '<th scope="col">Limite disponível</th><th scope="col">Vendas realizadas</th>' +
+      '<th scope="col">Dif. obj.</th><th scope="col">Diário realizado</th>' +
+      '<th scope="col">Diário previsto</th><th scope="col">Dias úteis</th>' +
+      '<th scope="col">Feriados</th></tr></thead><tbody>';
+
+    for(let m = 1; m <= 12; m++){
+      const mes = painelAno + '-' + String(m).padStart(2, '0');
+      const meta = metaDe(mes);
+      const aPagarMes = painelDados.aPagar[mes] || 0; // consulta cobre o ano todo: ausencia = zero de verdade
+      const r = PainelNucleo.resumoDoMes({
+        mes,
+        objetivo: meta.objetivo != null ? meta.objetivo : null,
+        feriados: meta.feriados || [],
+        faturamento: meta.faturamento || null,
+        aPagar: aPagarMes
+      }, hoje);
+
+      tot.aPagar += aPagarMes;
+      if(r.disponivel != null) tot.disponivel += r.disponivel;
+      if(r.vendas != null){
+        tot.vendas += r.vendas;
+        tot.temVendas = true;
+        if(meta.objetivo != null) tot.objetivoComVendas += meta.objetivo;
+      }
+
+      const feriados = (meta.feriados || []).slice().sort();
+      const nomeMes = NOMES_MES_PAINEL[m - 1];
+      html += '<tr' + (mes === mesCorrente ? ' class="mes-corrente"' : '') + '>' +
+        '<td>' + nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) + '</td>' +
+        '<td><input class="painel-num" type="text" inputmode="decimal" data-objetivo="' + mes + '"' +
+          ' value="' + numBR(meta.objetivo != null ? meta.objetivo : null) + '"' +
+          ' aria-label="Objetivo de vendas de ' + nomeMes + '"></td>' +
+        '<td>' + (r.limite != null ? brl(r.limite) : '') + '</td>' +
+        '<td>' + brl(aPagarMes) + '</td>' +
+        '<td class="' + (r.disponivel == null ? '' : r.disponivel < 0 ? 'neg' : 'pos') + '">' +
+          (r.disponivel != null ? brl(r.disponivel) : '') + '</td>' +
+        '<td><input class="painel-num" type="text" inputmode="decimal" data-vendas="' + mes + '"' +
+          ' value="' + numBR(r.vendas) + '"' +
+          ' aria-label="Vendas realizadas de ' + nomeMes + '"></td>' +
+        '<td class="' + (r.difPct == null ? '' : r.difPct < 0 ? 'neg' : 'pos') + '">' + pctBR(r.difPct) + '</td>' +
+        '<td>' + (r.diarioRealizado != null ? brl(r.diarioRealizado) : '') + '</td>' +
+        '<td>' + (r.diarioPrevisto != null ? brl(r.diarioPrevisto) : '') + '</td>' +
+        '<td>' + r.diasTrabalho + '</td>' +
+        '<td style="text-align:left;">' +
+          feriados.map(f =>
+            '<span class="feriado-chip">' + f.substring(8, 10) + '/' + f.substring(5, 7) +
+            '<button type="button" data-del-feriado="' + f + '" data-mes="' + mes + '"' +
+            ' aria-label="Remover feriado ' + App.fmtData(f) + '">×</button></span>').join('') +
+          ' <input type="date" class="feriado-data" data-feriado-de="' + mes + '"' +
+            ' min="' + mes + '-01" max="' + PainelNucleo.ultimoDiaDoMes(mes) + '"' +
+            ' aria-label="Novo feriado de ' + nomeMes + '">' +
+          '<button type="button" class="acao-mini" data-add-feriado="' + mes + '">+</button>' +
+        '</td></tr>';
+    }
+
+    const difTotal = (tot.temVendas && tot.objetivoComVendas > 0) ? tot.vendas / tot.objetivoComVendas - 1 : null;
+    html += '<tr class="total">' +
+      '<td>Total</td>' +
+      '<td style="text-align:right;" title="Soma só dos meses com vendas lançadas, para a diferença fazer sentido">' +
+        (tot.temVendas ? brl(tot.objetivoComVendas) : '') + '</td>' +
+      '<td></td>' +
+      '<td>' + brl(tot.aPagar) + '</td>' +
+      '<td class="' + (tot.disponivel < 0 ? 'neg' : 'pos') + '">' + brl(tot.disponivel) + '</td>' +
+      '<td style="text-align:right;">' + (tot.temVendas ? brl(tot.vendas) : '') + '</td>' +
+      '<td class="' + (difTotal == null ? '' : difTotal < 0 ? 'neg' : 'pos') + '">' + pctBR(difTotal) + '</td>' +
+      '<td></td><td></td><td></td><td></td></tr>';
+
+    alvo.innerHTML = html + '</tbody></table>';
+  }
+
+  $('prevSalvarBtn').addEventListener('click', () => {
+    const mes = mesAtualISO();
+    const v = parseNumeroBR($('prevFaturado').value);
+    const ate = $('prevAte').value;
+    if(v == null){ App.toastErro('Valor em falta', 'Informe o faturado acumulado.'); return; }
+    if(!ate || ate.substring(0, 7) !== mes){
+      App.toastErro('Data fora do mês', 'O acumulado é do mês corrente — escolha um dia deste mês.');
+      return;
+    }
+    salvarMeta(mes, { faturamento: { acumulado: v, ate } });
+  });
+
+  App.delegar($('tabelaPainel'), 'change', 'input[data-objetivo]', inp => {
+    const v = parseNumeroBR(inp.value);
+    salvarMeta(inp.dataset.objetivo, { objetivo: v });
+  });
+  App.delegar($('tabelaPainel'), 'change', 'input[data-vendas]', inp => {
+    const mes = inp.dataset.vendas;
+    const v = parseNumeroBR(inp.value);
+    if(v == null){ salvarMeta(mes, { faturamento: null }); return; }
+    // Mes fechado: o valor e' o total do mes. Mes corrente: e' o mesmo
+    // acumulado do card de previsao, valendo ate ontem.
+    const ate = mes === mesAtualISO()
+      ? App.somarDias(App.hojeISO(), -1)
+      : PainelNucleo.ultimoDiaDoMes(mes);
+    salvarMeta(mes, { faturamento: { acumulado: v, ate } });
+  });
+  App.delegar($('tabelaPainel'), 'click', 'button[data-add-feriado]', btn => {
+    const mes = btn.dataset.addFeriado;
+    const input = document.querySelector('input[data-feriado-de="' + mes + '"]');
+    const dia = input ? input.value : '';
+    if(!dia) return;
+    if(dia.substring(0, 7) !== mes){
+      App.toastErro('Feriado fora do mês', 'Escolha um dia dentro do próprio mês.');
+      return;
+    }
+    const lista = (metaDe(mes).feriados || []).slice();
+    if(lista.indexOf(dia) === -1) lista.push(dia);
+    salvarMeta(mes, { feriados: lista.sort() });
+  });
+  App.delegar($('tabelaPainel'), 'click', 'button[data-del-feriado]', btn => {
+    const mes = btn.dataset.mes;
+    const lista = (metaDe(mes).feriados || []).filter(f => f !== btn.dataset.delFeriado);
+    salvarMeta(mes, { feriados: lista });
+  });
+
+  $('anoAnteriorBtn').addEventListener('click', () => { painelAno--; carregarPainel(); });
+  $('anoSeguinteBtn').addEventListener('click', () => { painelAno++; carregarPainel(); });
+  $('recarregarPainelBtn').addEventListener('click', () => carregarPainel(true));
+
+  router.iniciar(); // abre a tela indicada no endereço (#Historico, ...) ou o Painel
 
   // Depois de entrar, recarrega o que a tela precisa.
   window.__aoEntrar = async ()=>{
     // Antes do histórico: é a lista de produtos que traz os preços de
     // venda que a coluna "Venda" e a margem mostram.
     await atualizarListaSalvos();
+    if(router.atual() === 'Painel') carregarPainel(true);
     if(router.atual() === 'Historico') carregarHistorico();
     if(router.atual() === 'Concorrentes') carregarHistoricoConcorrentes();
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
