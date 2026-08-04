@@ -89,7 +89,6 @@
     var disponivel = (limite != null && aPagar != null) ? centavos(limite - aPagar) : null;
 
     var vendas = fat ? fat.acumulado : null;
-    var difPct = (vendas != null && objetivo > 0) ? vendas / objetivo - 1 : null;
     var diarioPrevisto = (objetivo != null && diasTrabalho > 0)
       ? centavos(objetivo / diasTrabalho) : null;
 
@@ -98,6 +97,21 @@
     var ate = fat && fat.ate ? (fat.ate > fimMes ? fimMes : fat.ate) : null;
     var decorridos = (ate && ate >= iniMes) ? diasUteis(iniMes, ate, feriados) : 0;
     var mesCompleto = estado === 'fechado' || ate === fimMes;
+
+    // No mes andando, comparar as vendas parciais com o objetivo do
+    // MES INTEIRO diria "estamos 90% abaixo" todo dia 04. O objetivo
+    // COMPARAVEL e' proporcional aos dias uteis decorridos ate a data
+    // do lancamento; em mes completo, e' o proprio objetivo. Zero dia
+    // decorrido -> comparavel zero -> diferenca em branco, nunca
+    // "-100%" no primeiro dia.
+    var objetivoComparavel = null;
+    if (objetivo != null) {
+      objetivoComparavel = (mesCompleto || diasTrabalho === 0)
+        ? objetivo
+        : centavos(objetivo * decorridos / diasTrabalho);
+    }
+    var difPct = (vendas != null && objetivoComparavel > 0)
+      ? vendas / objetivoComparavel - 1 : null;
 
     var diarioRealizado = null;
     if (vendas != null) {
@@ -133,6 +147,7 @@
       limite: limite,
       disponivel: disponivel,
       vendas: vendas,
+      objetivoComparavel: objetivoComparavel,
       difPct: difPct,
       diarioPrevisto: diarioPrevisto,
       diarioRealizado: diarioRealizado,

@@ -144,6 +144,40 @@ eq('fevereiro bissexto tem os dias certos (2028)',
     App.centavos((6500000 - 100) / 26));
 }
 
+// ── Dif. obj. do mes corrente: contra o objetivo PROPORCIONAL ──
+// Comparar vendas de 2 dias com o objetivo do mes inteiro diria
+// "-91%" todo dia 04. O comparavel e' objetivo x decorridos/uteis.
+{
+  const r = P.resumoDoMes({
+    mes: '2026-08', objetivo: 6500000, feriados: [],
+    faturamento: { acumulado: 529667.57, ate: '2026-08-03' }, aPagar: 0
+  }, '2026-08-04');
+  eq('objetivo comparavel = proporcional (2 de 26 dias uteis)',
+    r.objetivoComparavel, 500000);
+  eq('dif do mes corrente vs proporcional ~ +5,93%',
+    Math.round(r.difPct * 10000), 593);
+}
+{
+  // Zero dia util decorrido: comparavel zero, diferenca em branco —
+  // nunca "-100%" no primeiro dia do mes.
+  const r = P.resumoDoMes({
+    mes: '2026-08', objetivo: 6500000, feriados: [],
+    faturamento: { acumulado: 100, ate: '2026-07-31' }, aPagar: 0
+  }, '2026-08-01');
+  eq('zero dias decorridos: objetivo comparavel zero', r.objetivoComparavel, 0);
+  eq('  ...e diferenca em branco, nunca -100%', r.difPct, null);
+}
+{
+  // Mes fechado segue comparando com o objetivo inteiro (a conta da
+  // planilha, ja' travada nos testes de janeiro/maio acima).
+  const r = P.resumoDoMes({
+    mes: '2026-01', objetivo: 6470000, feriados: ['2026-01-01'],
+    faturamento: { acumulado: 6656607.40, ate: '2026-01-31' }, aPagar: 0
+  }, '2026-08-04');
+  eq('mes fechado: objetivo comparavel = objetivo inteiro',
+    r.objetivoComparavel, 6470000);
+}
+
 // Objetivo ja' batido: necessario por dia = 0, nao negativo.
 {
   const r = P.resumoDoMes({
