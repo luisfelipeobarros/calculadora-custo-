@@ -4,7 +4,7 @@
   "description": "Custo, impostos, frete, margem de venda e cotacoes.",
   "id": "./index.html",
   "start_url": "./index.html",
-  "scope": "./",
+  "scope": "./index.html",
   "display": "standalone",
   "lang": "pt-BR",
   "background_color": "#F6F3E7",

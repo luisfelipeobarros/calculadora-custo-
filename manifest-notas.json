@@ -4,13 +4,13 @@
   "description": "NF-e, importacao, duplicatas e pagamentos.",
   "id": "./controle-notas.html",
   "start_url": "./controle-notas.html",
-  "scope": "./",
+  "scope": "./controle-notas.html",
   "display": "standalone",
   "background_color": "#F6F3E7",
   "theme_color": "#A8462B",
   "lang": "pt-BR",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-notas-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-notas-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
