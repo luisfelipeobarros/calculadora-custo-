@@ -166,8 +166,10 @@
       <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
-      <!-- Caminho de volta para o outro aplicativo. -->
-      <a class="btn secondary" href="index.html">🧮 Calculadora de Custo</a>
+      <!-- Sem link para a Calculadora: os dois rodam como apps
+           instalados separados (cada um com seu manifest), e o link
+           cruzado navegava DENTRO da janela do app errado, recarregando
+           tudo. Quem quer o outro app abre o outro app. -->
       <div id="contaBarra"></div>
       <div class="stamp">Uso interno</div>
     </nav>

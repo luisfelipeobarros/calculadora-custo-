@@ -2,6 +2,7 @@
   "name": "Controle de Notas",
   "short_name": "Notas",
   "description": "NF-e, importacao, duplicatas e pagamentos.",
+  "id": "./controle-notas.html",
   "start_url": "./controle-notas.html",
   "scope": "./",
   "display": "standalone",

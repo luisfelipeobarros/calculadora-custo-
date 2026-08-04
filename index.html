@@ -115,8 +115,10 @@
       <button type="button" class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
       <button type="button" class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
       <button type="button" class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
-      <!-- Outro aplicativo, nao outra tela deste: por isso e' um link. -->
-      <a class="btn secondary" href="controle-notas.html">🧾 Controle de Notas</a>
+      <!-- Sem link para o Controle de Notas: os dois rodam como apps
+           instalados separados (cada um com seu manifest), e o link
+           cruzado navegava DENTRO da janela do app errado, recarregando
+           tudo. Quem quer o outro app abre o outro app. -->
       <div id="contaBarra"></div>
       <div class="stamp">Uso interno</div>
     </nav>
