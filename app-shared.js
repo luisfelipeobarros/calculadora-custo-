@@ -1059,6 +1059,88 @@
   }
 
   /* ============================================================
+     Linhas posicionadas de PDF (camada de texto do pdf.js)
+
+     A ORDEM SEQUENCIAL dos itens de getTextContent() mente: o PDF
+     pode desenhar uma coluna inteira num ponto do content stream e
+     o resto da tabela em outro (o DDA do Bradesco faz isso com a
+     coluna "Situação"). A unica verdade e' a POSICAO — por isso
+     tudo aqui se ancora em x/y e nada na ordem de leitura.
+
+     Nasceu dentro do parsePdfFornecedor do index.html (cotacao) e
+     foi promovida para ca' quando a conferencia de DDA precisou da
+     mesma tecnica. As duas telas mudam so' na interpretacao das
+     linhas; o agrupamento e' este, unico.
+     ============================================================ */
+
+  // itens: [{texto, x, y}] de UMA pagina (o y reinicia a cada pagina,
+  // entao misturar paginas aqui colaria o rodape de uma no topo da
+  // outra). Devolve linhas de cima para baixo, cada uma com celulas
+  // da esquerda para a direita: [{y, celulas: [{texto, x}]}].
+  function linhasDePdf(itens, opcoes) {
+    opcoes = opcoes || {};
+    // Tolerancias herdadas da cotacao, que le PDF de fornecedor em
+    // producao: 3pt de folga vertical (meia altura de linha) e 12pt
+    // de vao horizontal para separar celulas. A largura de caractere
+    // e' uma estimativa (Helvetica ~4pt no corpo usado) — serve para
+    // medir o VAO entre itens, nao para alinhar nada.
+    var tolY = opcoes.tolY == null ? 3 : opcoes.tolY;
+    var gapCelula = opcoes.gapCelula == null ? 12 : opcoes.gapCelula;
+    var larguraChar = opcoes.larguraChar == null ? 4 : opcoes.larguraChar;
+
+    var uteis = (itens || [])
+      .filter(function (it) { return it && it.texto && String(it.texto).trim() !== ''; })
+      .slice()
+      .sort(function (a, b) { return (b.y - a.y) || (a.x - b.x); });
+
+    // Agrupa em linhas: um item entra na linha corrente se o y dele
+    // esta' a menos de tolY do PRIMEIRO item dela (ancora fixa; media
+    // movel deixaria a linha "escorregar" linha abaixo em PDFs com
+    // itens levemente desalinhados).
+    var grupos = [];
+    var atual = [], yAtual = null;
+    uteis.forEach(function (it) {
+      if (yAtual === null || Math.abs(it.y - yAtual) <= tolY) {
+        atual.push(it);
+        if (yAtual === null) yAtual = it.y;
+      } else {
+        grupos.push(atual);
+        atual = [it];
+        yAtual = it.y;
+      }
+    });
+    if (atual.length) grupos.push(atual);
+
+    // Dentro da linha, quebra em celulas onde o vao horizontal passa
+    // de gapCelula; itens proximos se juntam com espaco (ex.: "R$" e
+    // "33.383,97" viram a celula "R$ 33.383,97").
+    return grupos.map(function (linha) {
+      linha.sort(function (a, b) { return a.x - b.x; });
+      var celulas = [];
+      var texto = String(linha[0].texto);
+      var xCelula = linha[0].x;
+      var fimAnterior = linha[0].x + texto.length * larguraChar;
+      for (var i = 1; i < linha.length; i++) {
+        var t = String(linha[i].texto);
+        var gap = linha[i].x - fimAnterior;
+        if (gap > gapCelula) {
+          celulas.push({ texto: texto.trim(), x: xCelula });
+          texto = t;
+          xCelula = linha[i].x;
+        } else {
+          texto += ' ' + t;
+        }
+        fimAnterior = linha[i].x + t.length * larguraChar;
+      }
+      celulas.push({ texto: texto.trim(), x: xCelula });
+      return {
+        y: linha[0].y,
+        celulas: celulas.filter(function (c) { return c.texto !== ''; })
+      };
+    }).filter(function (l) { return l.celulas.length > 0; });
+  }
+
+  /* ============================================================
      10. Rede de seguranca
      ============================================================ */
 
@@ -1185,6 +1267,7 @@
     criarRouter: criarRouter,
     tabelaItensNota: tabelaItensNota,
     tabelaVencimentos: tabelaVencimentos,
+    linhasDePdf: linhasDePdf,
 
     REGRAS_FORNECEDOR: REGRAS_FORNECEDOR,
     rotularFornecedor: rotularFornecedor,

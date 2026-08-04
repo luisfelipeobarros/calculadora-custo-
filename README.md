@@ -195,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São dez etapas, em oito frentes:
+Não precisa instalar nada. São onze etapas, em nove frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -232,6 +232,15 @@ Não precisa instalar nada. São dez etapas, em oito frentes:
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as duas coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
+9. **Conferência de DDA** — 74 verificações em `dda-nucleo.js`. O parser
+   roda contra a **camada de texto real** de um DDA do Bradesco
+   (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
+   registros que atravessam a quebra de página e a coluna "Situação" que
+   o PDF desenha fora de ordem. Também trava as três estratégias de
+   casamento (nota+parcela, nota sem parcela, valor escopado ao
+   cedente), o CNPJ de 15 dígitos do Bradesco, a comparação em centavos
+   inteiros e — principalmente — que boleto sem par **fora da janela de
+   carga** vira ⚪ indeterminado, nunca 🔴 fraude.
 
 Rode antes de publicar qualquer alteração.
 

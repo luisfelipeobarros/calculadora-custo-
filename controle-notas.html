@@ -23,7 +23,7 @@
   /* Somente o que e' exclusivo do Controle de Notas. */
   .wrap{ padding:28px 20px 60px; }
   header.top, footer.note,
-  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas{
+  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas, #viewDda{
     max-width:1700px;
     margin-left:auto;
     margin-right:auto;
@@ -115,6 +115,24 @@
   .barra-selecao{ display:flex; gap:10px; align-items:center; padding:8px 12px; background:var(--azul-fundo); border:1.5px solid var(--azul); border-radius:6px; margin-bottom:10px; font-family:var(--font-mono); font-size:12px; color:var(--ink); }
   .barra-selecao .contador{ font-weight:700; }
   .sel-check{ width:16px; height:16px; accent-color:var(--azul); cursor:pointer; }
+
+  /* Conferencia de DDA. A gravidade fica na borda esquerda (tokens do
+     design system, sem cor literal): quem bate o olho na lista ve as
+     faixas vermelhas primeiro — que e' a ordem em que elas ja' vem. */
+  .dda-linha{ border:1px solid var(--line); border-left:4px solid var(--line); border-radius:4px; padding:10px 12px; margin-bottom:8px; background:var(--card); }
+  .dda-linha.g3{ border-left-color:var(--loss); }
+  .dda-linha.g2{ border-left-color:var(--brick); }
+  .dda-linha.g0{ border-left-color:var(--profit); }
+  .dda-cab{ display:flex; justify-content:space-between; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .dda-cab .nome{ font-weight:700; font-size:13.5px; }
+  .dda-cab .valor{ font-family:var(--font-mono); font-weight:700; white-space:nowrap; }
+  .dda-meta{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); margin-top:3px; }
+  .dda-prob{ font-size:12.5px; margin-top:6px; }
+  .dda-prob div{ padding:2px 0; }
+  .dda-ilegiveis{ border:1.5px solid var(--loss); border-radius:6px; padding:12px; margin:12px 0; }
+  .dda-ilegiveis pre{ font-family:var(--font-mono); font-size:11px; white-space:pre-wrap; background:var(--stripe2); padding:8px; border-radius:4px; margin:6px 0 0; }
+  #viewDda details{ margin-top:14px; }
+  #viewDda summary{ cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
 </style>
 </head>
 <body>
@@ -136,6 +154,7 @@
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
       <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
+      <button class="btn secondary" id="navDda">🏦 DDA</button>
       <!-- Caminho de volta para o outro aplicativo. -->
       <a class="btn secondary" href="index.html">🧮 Calculadora de Custo</a>
       <div id="contaBarra"></div>
@@ -338,6 +357,24 @@
     </div>
   </div>
 
+  <!-- ═══════════ DDA ═══════════ -->
+  <div id="viewDda" style="display:none;">
+    <div class="card">
+      <h2>Conferência de DDA (Bradesco)</h2>
+      <p class="nota-explicativa">
+        Lê o PDF do DDA aqui no navegador — nada é enviado nem gravado — e compara
+        cada boleto com as duplicatas carregadas, apontando divergências.
+        A tela só compara: marcar pagamento continua sendo na aba Pagamentos.
+      </p>
+      <div class="filtros" style="margin-top:12px;">
+        <label class="acao-mini" for="arquivoDda" style="cursor:pointer;">📄 Escolher o PDF do DDA...</label>
+        <input type="file" id="arquivoDda" accept=".pdf,application/pdf" class="sr-only">
+        <span id="statusDda" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
+      </div>
+      <div id="resultadoDda"></div>
+    </div>
+  </div>
+
   </main>
 
 </div>
@@ -345,7 +382,20 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="app-shared.js?v=13"></script>
+<!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
+     Duas copias em versoes diferentes seria fonte garantida de bug. -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="app-shared.js?v=14"></script>
+<!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
+<script src="dda-nucleo.js?v=1"></script>
+<script>
+  // Em file:// o Chrome bloqueia new Worker(), e o pdf.js cai no "fake
+  // worker" na thread principal — e' o comportamento de producao do
+  // index.html desde sempre; o aviso no console nao e' defeito.
+  if (window['pdfjsLib']) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+</script>
 <script>
 (function(){
   'use strict';
@@ -723,19 +773,20 @@
 
   var router = App.criarRouter({
     views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
-             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas' },
+             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas', Dda:'viewDda' },
     padrao: 'Painel',
     aoEntrar: {
       Painel: renderPainel,
       Importar: renderImportar,
       Pagamentos: renderPagamentos,
       Fornecedores: renderFornecedores,
-      Canceladas: renderCanceladas
+      Canceladas: renderCanceladas,
+      Dda: renderDda
     },
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
-       ['Canceladas','navCanceladas']].forEach(function(par){
+       ['Canceladas','navCanceladas'], ['Dda','navDda']].forEach(function(par){
         var b = $(par[1]);
         if(par[0] === nome) b.setAttribute('aria-current', 'page');
         else b.removeAttribute('aria-current');
@@ -750,6 +801,7 @@
   $('navPagamentos').addEventListener('click', function(){ router.ir('Pagamentos'); });
   $('navFornecedores').addEventListener('click', function(){ router.ir('Fornecedores'); });
   $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
+  $('navDda').addEventListener('click', function(){ router.ir('Dda'); });
 
   $('kpiImportar').addEventListener('click', function(){ router.ir('Importar'); });
   $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
@@ -767,7 +819,7 @@
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
-               Canceladas:renderCanceladas }[router.atual()];
+               Canceladas:renderCanceladas, Dda:renderDda }[router.atual()];
     if(fn) fn();
     atualizarContadores();
 
@@ -2370,6 +2422,152 @@
         .catch(function(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; });
     });
   });
+
+  // ─── DDA (conferencia de boletos) ───────────────────────────
+
+  // O PDF lido fica SO' em memoria: nada sobe, nada persiste. Guardar
+  // os registros (e nao o relatorio) permite reconferir de graca a
+  // cada snapshot — quem clicar em "carregar histórico completo" ve
+  // os ⚪ de fora-da-janela virarem resposta definitiva sozinhos.
+  var ddaLido = null;
+
+  $('arquivoDda').addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    this.value = ''; // reescolher o mesmo arquivo dispara change de novo
+    if(!f) return;
+    if(!window.pdfjsLib){
+      App.toastErro('Leitor de PDF', 'O pdf.js não carregou (sem internet?). Recarregue a página.');
+      return;
+    }
+    $('statusDda').textContent = 'Lendo ' + f.name + '...';
+    f.arrayBuffer().then(function(buf){
+      return pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function(pdf){
+      var ps = [];
+      for(var p = 1; p <= pdf.numPages; p++){
+        ps.push(pdf.getPage(p).then(function(page){ return page.getTextContent(); }));
+      }
+      return Promise.all(ps);
+    }).then(function(conteudos){
+      var paginas = conteudos.map(function(c){
+        return c.items.map(function(it){
+          return { texto: it.str, x: it.transform[4], y: it.transform[5] };
+        });
+      });
+      ddaLido = DdaNucleo.interpretar(paginas);
+      ddaLido.nomeArquivo = f.name;
+      $('statusDda').textContent = f.name + ' — ' + ddaLido.registros.length + ' boleto(s) lido(s)' +
+        (ddaLido.ilegiveis.length ? ' + ' + ddaLido.ilegiveis.length + ' bloco(s) ILEGÍVEL(IS)' : '');
+      renderDda();
+    }).catch(function(e){
+      $('statusDda').textContent = '';
+      App.toastErro('Não consegui ler o PDF', e);
+    });
+  });
+
+  var EMOJI_GRAV = { 3:'🔴', 2:'🟡', 1:'⚪', 0:'✅' };
+
+  function renderDda(){
+    var alvo = $('resultadoDda');
+    if(!ddaLido){
+      alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Nenhum PDF carregado ainda. ' +
+        'Baixe o DDA no internet banking do Bradesco (Boletos de Cobrança Registrados/DDA) e escolha o arquivo acima.</p>';
+      return;
+    }
+    // Mesmo principio dos cartoes do Painel: enquanto as colecoes nao
+    // chegaram, nenhum veredito — "cobranca sem nota" sobre uma base
+    // vazia seria acusar 36 boletos de fraude durante o carregamento.
+    if(!carregouDuplicatas || !carregouNotas){
+      alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Carregando as duplicatas... a conferência aparece sozinha.</p>';
+      return;
+    }
+
+    var rel = DdaNucleo.conferir(ddaLido.registros, {
+      duplicatas: duplicatas,
+      notasPorChave: notasPorChave,
+      corteJanela: carregarTudo ? null : cortePorMeses(MESES_HISTORICO),
+      periodo: ddaLido.periodo
+    });
+
+    var html = '';
+
+    // Cabecalho do resultado: o periodo considerado fica escrito para
+    // ninguem achar que a tela conferiu "tudo" — so' conferiu o
+    // intervalo que o proprio PDF diz cobrir.
+    html += '<div class="dda-meta" style="margin:14px 0 10px; font-size:12.5px;">' +
+      (rel.periodo
+        ? 'Período do DDA: <strong>' + fmtData(rel.periodo.ini) + ' a ' + fmtData(rel.periodo.fim) + '</strong>'
+        : '<strong>⚠ não achei o período no cabeçalho do PDF</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
+      ' · ' + ddaLido.registros.length + ' boleto(s) · total ' + brl(rel.resumo.totalCentavos / 100) +
+      ' · 🔴 ' + rel.resumo.vermelhos + ' · 🟡 ' + rel.resumo.amarelos +
+      ' · ⚪ ' + rel.resumo.brancos + ' · ✅ ' + rel.resumo.ok +
+      (carregarTudo ? '' : ' · janela de ' + MESES_HISTORICO + ' meses') +
+      '</div>';
+
+    // Ilegiveis PRIMEIRO e em destaque: uma cobranca fraudulenta que o
+    // parser nao entendeu e a tela engoliu seria o pior resultado
+    // possivel. Texto cru para conferir a mao.
+    if(ddaLido.ilegiveis.length){
+      html += '<div class="dda-ilegiveis"><strong>⚠ Não consegui ler ' +
+        (ddaLido.ilegiveis.length === 1 ? 'este bloco' : 'estes ' + ddaLido.ilegiveis.length + ' blocos') +
+        ' do PDF</strong> — confira à mão:' +
+        ddaLido.ilegiveis.map(function(il){
+          return '<pre>' + escapeHtml(il.motivo) + '\n' + escapeHtml(il.texto) + '</pre>';
+        }).join('') + '</div>';
+    }
+
+    rel.linhas.forEach(function(l){
+      var r = l.registro, c = l.casamento, d = c.duplicata;
+      var g = rel.gravidadeDa(l);
+      html += '<div class="dda-linha g' + g + '">' +
+        '<div class="dda-cab">' +
+          '<span class="nome">' + EMOJI_GRAV[g] + ' ' + escapeHtml(r.beneficiario) + '</span>' +
+          '<span class="valor">' + brl(r.valorCentavos / 100) + '</span>' +
+        '</div>' +
+        '<div class="dda-meta">doc ' + escapeHtml(r.documento) + ' · venc ' + fmtData(r.vencimento) +
+          ' · <span class="badge">' + escapeHtml(r.situacao || 'sem situação') + '</span>' +
+          ' · <span class="badge" title="Como este boleto foi procurado nas duplicatas">' +
+          escapeHtml(d && c.como.length ? c.como.join(' → ') : c.estrategia) + '</span>' +
+        '</div>';
+      if(d){
+        html += '<div class="dda-meta">casou com: ' + escapeHtml(fornecedorDaDuplicata(d)) +
+          ' — nota ' + escapeHtml(String(d.numeroNota || '?')) + ' parc. ' + escapeHtml(String(d.parcela || '?')) +
+          ' · nosso valor ' + brl(d.valor || 0) + ' · nosso venc. ' + fmtData(d.vencimento) +
+          (d.pago === true ? ' · <span class="badge pago">paga</span>' : '') + '</div>';
+      } else if(c.candidatas.length){
+        html += '<div class="dda-meta">candidatas: ' + c.candidatas.slice(0, 4).map(function(cd){
+          return escapeHtml(String(cd.numeroNota || '?')) + '/' + escapeHtml(String(cd.parcela || '?')) +
+            ' (' + brl(cd.valor || 0) + ', ' + fmtData(cd.vencimento) + ')';
+        }).join(' · ') + (c.candidatas.length > 4 ? ' · ...' : '') + '</div>';
+      }
+      if(l.problemas.length){
+        html += '<div class="dda-prob">' + l.problemas.map(function(p){
+          return '<div>' + EMOJI_GRAV[p.gravidade] + ' ' + escapeHtml(p.texto) +
+            (p.tipo === 'foraDaJanela' ? ' — use "carregar histórico completo" na barra de cima' : '') + '</div>';
+        }).join('') + '</div>';
+      }
+      html += '</div>';
+    });
+
+    // Check 8 por ultimo e RECOLHIDO: fornecedor que cobra por PIX ou
+    // deposito nunca aparece no DDA e cairia aqui toda santa vez;
+    // aberto junto com os vermelhos viraria ruido permanente.
+    if(rel.periodo){
+      var somaFora = rel.foraDoDda.reduce(function(s, d2){ return s + (d2.valor || 0); }, 0);
+      html += '<details><summary>⚪ ' + rel.foraDoDda.length +
+        ' título(s) nosso(s) no período sem boleto no DDA (' + brl(somaFora) + ') — normal para quem cobra fora de boleto</summary>';
+      rel.foraDoDda.forEach(function(d2){
+        html += '<div class="dda-linha" style="margin-top:8px;"><div class="dda-cab">' +
+          '<span class="nome">' + escapeHtml(fornecedorDaDuplicata(d2)) + '</span>' +
+          '<span class="valor">' + brl(d2.valor || 0) + '</span></div>' +
+          '<div class="dda-meta">nota ' + escapeHtml(String(d2.numeroNota || '?')) +
+          ' parc. ' + escapeHtml(String(d2.parcela || '?')) + ' · venc. ' + fmtData(d2.vencimento) + '</div></div>';
+      });
+      html += '</details>';
+    }
+
+    alvo.innerHTML = html;
+  }
 
   // ─── Inicio ─────────────────────────────────────────────────
   atualizarAvisoJanela();

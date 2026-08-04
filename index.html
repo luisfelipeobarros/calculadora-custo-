@@ -739,7 +739,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=13"></script>
+<script src="app-shared.js?v=14"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <script>
@@ -3984,47 +3984,20 @@ Tupan</textarea>
   async function parsePdfFornecedor(file){
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let linhasPos = [];
 
+    // O agrupamento posicional (itens -> linhas de células) mora no
+    // app-shared.js, compartilhado com a conferência de DDA do Controle
+    // de Notas. Aqui fica só a interpretação do layout de cotação, que
+    // não usa o x das células — daí o .map para células de texto puro.
+    const linhas = [];
     for(let p=1;p<=pdf.numPages;p++){
       const page = await pdf.getPage(p);
       const content = await page.getTextContent();
-      const itens = content.items
-        .map(it=>({ texto: it.str, x: it.transform[4], y: it.transform[5] }))
-        .filter(it=>it.texto && it.texto.trim() !== '');
-      itens.sort((a,b)=> (b.y - a.y) || (a.x - b.x));
-
-      let linhaAtual = [];
-      let yAtual = null;
-      const tolerancia = 3;
-      itens.forEach(it=>{
-        if(yAtual === null || Math.abs(it.y - yAtual) <= tolerancia){
-          linhaAtual.push(it);
-          if(yAtual === null) yAtual = it.y;
-        } else {
-          linhasPos.push(linhaAtual);
-          linhaAtual = [it];
-          yAtual = it.y;
-        }
+      const itens = content.items.map(it=>({ texto: it.str, x: it.transform[4], y: it.transform[5] }));
+      App.linhasDePdf(itens).forEach(l=>{
+        linhas.push({ celulas: l.celulas.map(c=>c.texto), y: l.y });
       });
-      if(linhaAtual.length) linhasPos.push(linhaAtual);
     }
-
-    // Converte cada linha (itens posicionados) em células de texto, quebrando por espaçamento horizontal
-    const linhas = linhasPos.map(linha=>{
-      linha.sort((a,b)=>a.x-b.x);
-      const celulas = [];
-      let atual = linha[0].texto;
-      let fimAnterior = linha[0].x + (linha[0].texto.length * 4);
-      for(let i=1;i<linha.length;i++){
-        const gap = linha[i].x - fimAnterior;
-        if(gap > 12){ celulas.push(atual.trim()); atual = linha[i].texto; }
-        else { atual += ' ' + linha[i].texto; }
-        fimAnterior = linha[i].x + (linha[i].texto.length * 4);
-      }
-      celulas.push(atual.trim());
-      return { celulas: celulas.filter(c=>c!==''), y: linha[0].y };
-    }).filter(l=>l.celulas.length>0);
 
     // 1ª passada: classifica cabeçalho/metadados/rodapé; expande cabeçalho pra linhas vizinhas
     // (rótulos de coluna que quebram em 2 linhas, tipo "Subtotal (sem" + "IPI/ST)")
