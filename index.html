@@ -155,13 +155,15 @@
         <button type="button" class="acao-mini" id="anoSeguinteBtn" aria-label="Próximo ano">▶</button>
         <button type="button" class="acao-mini" id="recarregarPainelBtn">↻ Recarregar</button>
       </div>
-      <p class="nota-explicativa">
-        Objetivo, vendas realizadas e feriados são digitados; o resto é calculado —
-        limite = 60% do objetivo, e "a pagar real" soma as duplicatas de fornecedor que
-        vencem no mês (pagas e a pagar), direto do Controle de Notas. Pagamentos internos
-        ficam de fora, por enquanto. No mês em andamento, a "Dif. obj." compara com o
-        objetivo proporcional aos dias úteis já decorridos, não com o mês inteiro.
-      </p>
+      <!-- Regras da tabela (tiradas da tela a pedido, 04/08/2026 — a
+           equipe ja' conhece a conta; ficam aqui para o proximo dev):
+           - objetivo, vendas realizadas e feriados sao digitados;
+           - limite = 60% do objetivo (painel-nucleo.js);
+           - "a pagar real" soma SO' duplicatas de fornecedor do mes,
+             pagas e a pagar, sem pagamentos internos;
+           - no mes em andamento a "Dif. obj." compara com o objetivo
+             proporcional aos dias uteis ja' decorridos. -->
+      <div style="margin-top:10px;"></div>
       <div id="tabelaPainel" class="painel-rolagem"></div>
     </div>
   </div>
@@ -5287,9 +5289,10 @@ Tupan</textarea>
     const mesCorrente = mesAtualISO();
     // Total como o da planilha: objetivo e diferença somam SO' os
     // meses com vendas lançadas (comparar objetivo do ano inteiro com
-    // vendas de meio ano diria que estamos 40% abaixo sem estarmos);
-    // "a pagar" e "disponível" somam o ano todo.
-    const tot = { objetivoComVendas: 0, vendas: 0, temVendas: false, aPagar: 0, disponivel: 0 };
+    // vendas de meio ano diria que estamos 40% abaixo sem estarmos).
+    // "A pagar" e "disponível" nao somam: o total anual dessas colunas
+    // nao guia decisao nenhuma e saiu da tela a pedido.
+    const tot = { objetivoComVendas: 0, vendas: 0, temVendas: false };
 
     let html = '<table class="painel-table"><thead><tr>' +
       '<th scope="col">Mês</th><th scope="col">Objetivo de vendas</th>' +
@@ -5311,8 +5314,6 @@ Tupan</textarea>
         aPagar: aPagarMes
       }, hoje);
 
-      tot.aPagar += aPagarMes;
-      if(r.disponivel != null) tot.disponivel += r.disponivel;
       if(r.vendas != null){
         tot.vendas += r.vendas;
         tot.temVendas = true;
@@ -5359,9 +5360,7 @@ Tupan</textarea>
       '<td>Total</td>' +
       '<td style="text-align:right;" title="Soma só dos meses com vendas lançadas — e, no mês em andamento, o objetivo proporcional aos dias úteis decorridos">' +
         (tot.temVendas ? brl(tot.objetivoComVendas) : '') + '</td>' +
-      '<td></td>' +
-      '<td>' + brl(tot.aPagar) + '</td>' +
-      '<td class="' + (tot.disponivel < 0 ? 'neg' : 'pos') + '">' + brl(tot.disponivel) + '</td>' +
+      '<td></td><td></td><td></td>' +
       '<td style="text-align:right;">' + (tot.temVendas ? brl(tot.vendas) : '') + '</td>' +
       '<td class="' + (difTotal == null ? '' : difTotal < 0 ? 'neg' : 'pos') + '">' + pctBR(difTotal) + '</td>' +
       '<td></td><td></td><td></td><td></td></tr>';
