@@ -120,6 +120,18 @@ conferir('permissao negada por mensagem',
 conferir('erro de rede nao e permissao', App.ehPermissaoNegada({ code: 'unavailable' }), false);
 conferir('nulo nao e permissao', App.ehPermissaoNegada(null), false);
 
+// --- casaFornecedor: busca sem acento dos dois lados ---
+// As buscas de Produtos salvos ja' ignoravam acento; as telas de notas
+// nao. Agora todas passam por normalizarTexto, inclusive esta.
+conferir('casaFornecedor acha "CERÂMICA" digitando "ceramica"',
+         App.casaFornecedor('CERÂMICA BRASILEIRA', 'CERÂMICA BRASILEIRA LTDA', 'ceramica'), true);
+conferir('casaFornecedor aceita acento no termo digitado',
+         App.casaFornecedor('Ceramica Brasileira', 'CERAMICA LTDA', 'cerâmica'), true);
+conferir('casaFornecedor continua achando pelo rotulo da tela',
+         App.casaFornecedor('Vetrus (Stela)', 'VETRUS S/A', 'stela'), true);
+conferir('casaFornecedor nao casa a toa',
+         App.casaFornecedor('Vetrus (Stela)', 'VETRUS S/A', 'pamesa'), false);
+
 // --- confirmar / pedirData: o que a Promise devolve -----------
 //
 // Estes testes existem por causa de um bug real: alguem acrescentou uma
