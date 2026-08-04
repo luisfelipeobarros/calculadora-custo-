@@ -13,3 +13,12 @@ desktop.ini
 
 # Backups gerados pelo proprio app
 calculadora-custo-backup-*.json
+
+# Documentos com dado bancario/fiscal. Este repositorio e' PUBLICO: um
+# DDA ou um XML de NF-e commitado aqui expoe CNPJ, fornecedor, valor e
+# vencimento da empresa para qualquer pessoa. Amostras para desenvolver
+# ficam fora do controle de versao.
+*.pdf
+*.xml
+dda/
+amostras/
