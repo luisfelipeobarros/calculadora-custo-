@@ -133,6 +133,17 @@
   .dda-ilegiveis pre{ font-family:var(--font-mono); font-size:11px; white-space:pre-wrap; background:var(--stripe2); padding:8px; border-radius:4px; margin:6px 0 0; }
   #viewDda details{ margin-top:14px; }
   #viewDda summary{ cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+  #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
+
+  /* Impressao: so' o relatorio do DDA. O resumo (periodo, arquivo,
+     filtro aplicado) ja' esta' na primeira linha do resultado, entao o
+     papel se explica sozinho. */
+  @media print{
+    header.top, .barra-status, footer.note, .skip-link, #viewDda .filtros{ display:none !important; }
+    .wrap{ padding:0; }
+    .card{ border:none; box-shadow:none; padding:0; }
+    .dda-linha{ break-inside:avoid; page-break-inside:avoid; }
+  }
 </style>
 </head>
 <body>
@@ -369,6 +380,9 @@
       <div class="filtros" style="margin-top:12px;">
         <label class="acao-mini" for="arquivoDda" style="cursor:pointer;">📄 Escolher o PDF do DDA...</label>
         <input type="file" id="arquivoDda" accept=".pdf,application/pdf" class="sr-only">
+        <label class="sr-only" for="filtroFornDda">Filtrar por fornecedor</label>
+        <select id="filtroFornDda" style="display:none;"></select>
+        <button type="button" class="acao-mini" id="btnImprimirDda" style="display:none;">🖨 Imprimir</button>
         <span id="statusDda" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
       </div>
       <div id="resultadoDda"></div>
@@ -2431,6 +2445,28 @@
   // os ⚪ de fora-da-janela virarem resposta definitiva sozinhos.
   var ddaLido = null;
 
+  // Filtro por fornecedor DO NOSSO BANCO (o rotulo do
+  // fornecedorDaDuplicata, entao "Vetrus (Pamesa)" e "Vetrus (Stela)"
+  // sao opcoes separadas). Vazio = todos. Boleto que nao casou nao tem
+  // fornecedor nosso — ganha uma opcao propria em vez de sumir.
+  var filtroFornDda = '';
+  var SEM_FORNECEDOR = '__sem__';
+
+  $('filtroFornDda').addEventListener('change', function(){
+    filtroFornDda = this.value;
+    renderDda();
+  });
+
+  $('btnImprimirDda').addEventListener('click', function(){
+    // O check 8 fica recolhido na tela, mas papel nao tem clique:
+    // abre os <details> para imprimir e devolve como estava.
+    var detalhes = Array.prototype.slice.call(document.querySelectorAll('#viewDda details'));
+    var estados = detalhes.map(function(d){ return d.open; });
+    detalhes.forEach(function(d){ d.open = true; });
+    window.print();
+    detalhes.forEach(function(d, i){ d.open = estados[i]; });
+  });
+
   $('arquivoDda').addEventListener('change', function(){
     var f = this.files && this.files[0];
     this.value = ''; // reescolher o mesmo arquivo dispara change de novo
@@ -2489,24 +2525,88 @@
       periodo: ddaLido.periodo
     });
 
+    // Fornecedores presentes no relatorio (dos boletos casados e dos
+    // titulos fora do DDA), para as opcoes do filtro.
+    var fornecedores = Object.create(null);
+    rel.linhas.forEach(function(l){
+      if(!l.casamento.duplicata) return;
+      var nome = fornecedorDaDuplicata(l.casamento.duplicata);
+      fornecedores[nome] = (fornecedores[nome] || 0) + 1;
+    });
+    rel.foraDoDda.forEach(function(d2){
+      var nome = fornecedorDaDuplicata(d2);
+      if(!(nome in fornecedores)) fornecedores[nome] = 0;
+    });
+
+    var nomesForn = Object.keys(fornecedores).sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+    var temSemForn = rel.linhas.some(function(l){ return !l.casamento.duplicata; });
+    // Filtro que sobrou de outro PDF (fornecedor que nao existe neste)
+    // volta para "todos" em silencio, em vez de mostrar lista vazia.
+    if(filtroFornDda && filtroFornDda !== SEM_FORNECEDOR && !(filtroFornDda in fornecedores)) filtroFornDda = '';
+    if(filtroFornDda === SEM_FORNECEDOR && !temSemForn) filtroFornDda = '';
+
+    var sel = $('filtroFornDda');
+    sel.innerHTML = '<option value="">Todos os fornecedores</option>' +
+      nomesForn.map(function(n){
+        return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) +
+          ' (' + fornecedores[n] + ' boleto' + (fornecedores[n] === 1 ? '' : 's') + ')</option>';
+      }).join('') +
+      (temSemForn ? '<option value="' + SEM_FORNECEDOR + '">Sem fornecedor (não casaram)</option>' : '');
+    sel.value = filtroFornDda;
+    sel.style.display = '';
+    $('btnImprimirDda').style.display = '';
+
+    var fornecedorDaLinha = function(l){
+      return l.casamento.duplicata ? fornecedorDaDuplicata(l.casamento.duplicata) : null;
+    };
+    var linhasVisiveis = rel.linhas.filter(function(l){
+      if(!filtroFornDda) return true;
+      if(filtroFornDda === SEM_FORNECEDOR) return !l.casamento.duplicata;
+      return fornecedorDaLinha(l) === filtroFornDda;
+    });
+    var foraVisiveis = rel.foraDoDda.filter(function(d2){
+      if(!filtroFornDda) return true;
+      if(filtroFornDda === SEM_FORNECEDOR) return false;
+      return fornecedorDaDuplicata(d2) === filtroFornDda;
+    });
+
+    // O resumo acompanha o filtro: com "Vetrus (Pamesa)" selecionado,
+    // as contagens sao as da Vetrus (Pamesa), nao as do PDF inteiro.
+    var resumo = { vermelhos: 0, amarelos: 0, brancos: 0, ok: 0, totalCentavos: 0 };
+    linhasVisiveis.forEach(function(l){
+      resumo.totalCentavos += l.registro.valorCentavos;
+      var g = rel.gravidadeDa(l);
+      if(g === 3) resumo.vermelhos++;
+      else if(g === 2) resumo.amarelos++;
+      else if(g === 1) resumo.brancos++;
+      else resumo.ok++;
+    });
+
     var html = '';
 
     // Cabecalho do resultado: o periodo considerado fica escrito para
     // ninguem achar que a tela conferiu "tudo" — so' conferiu o
-    // intervalo que o proprio PDF diz cobrir.
+    // intervalo que o proprio PDF diz cobrir. O arquivo e o filtro
+    // tambem, porque e' esta linha que da' contexto na impressao.
     html += '<div class="dda-meta" style="margin:14px 0 10px; font-size:12.5px;">' +
       (rel.periodo
         ? 'Período do DDA: <strong>' + fmtData(rel.periodo.ini) + ' a ' + fmtData(rel.periodo.fim) + '</strong>'
         : '<strong>⚠ não achei o período no cabeçalho do PDF</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
-      ' · ' + ddaLido.registros.length + ' boleto(s) · total ' + brl(rel.resumo.totalCentavos / 100) +
-      ' · 🔴 ' + rel.resumo.vermelhos + ' · 🟡 ' + rel.resumo.amarelos +
-      ' · ⚪ ' + rel.resumo.brancos + ' · ✅ ' + rel.resumo.ok +
+      ' · arquivo ' + escapeHtml(ddaLido.nomeArquivo || '?') +
+      (filtroFornDda
+        ? ' · <strong>filtro: ' + escapeHtml(filtroFornDda === SEM_FORNECEDOR ? 'sem fornecedor (não casaram)' : filtroFornDda) +
+          '</strong> · mostrando ' + linhasVisiveis.length + ' de ' + rel.linhas.length + ' boleto(s)'
+        : ' · ' + rel.linhas.length + ' boleto(s)') +
+      ' · total ' + brl(resumo.totalCentavos / 100) +
+      ' · 🔴 ' + resumo.vermelhos + ' · 🟡 ' + resumo.amarelos +
+      ' · ⚪ ' + resumo.brancos + ' · ✅ ' + resumo.ok +
       (carregarTudo ? '' : ' · janela de ' + MESES_HISTORICO + ' meses') +
       '</div>';
 
-    // Ilegiveis PRIMEIRO e em destaque: uma cobranca fraudulenta que o
-    // parser nao entendeu e a tela engoliu seria o pior resultado
-    // possivel. Texto cru para conferir a mao.
+    // Ilegiveis PRIMEIRO, em destaque e FORA do filtro: bloco que o
+    // parser nao entendeu nao tem fornecedor, e uma cobranca
+    // fraudulenta engolida por causa de um filtro seria o pior
+    // resultado possivel. Texto cru para conferir a mao.
     if(ddaLido.ilegiveis.length){
       html += '<div class="dda-ilegiveis"><strong>⚠ Não consegui ler ' +
         (ddaLido.ilegiveis.length === 1 ? 'este bloco' : 'estes ' + ddaLido.ilegiveis.length + ' blocos') +
@@ -2516,7 +2616,11 @@
         }).join('') + '</div>';
     }
 
-    rel.linhas.forEach(function(l){
+    if(!linhasVisiveis.length){
+      html += '<p class="nota-explicativa">Nenhum boleto do DDA para este filtro.</p>';
+    }
+
+    linhasVisiveis.forEach(function(l){
       var r = l.registro, c = l.casamento, d = c.duplicata;
       var g = rel.gravidadeDa(l);
       html += '<div class="dda-linha g' + g + '">' +
@@ -2552,11 +2656,12 @@
     // Check 8 por ultimo e RECOLHIDO: fornecedor que cobra por PIX ou
     // deposito nunca aparece no DDA e cairia aqui toda santa vez;
     // aberto junto com os vermelhos viraria ruido permanente.
-    if(rel.periodo){
-      var somaFora = rel.foraDoDda.reduce(function(s, d2){ return s + (d2.valor || 0); }, 0);
-      html += '<details><summary>⚪ ' + rel.foraDoDda.length +
+    // Acompanha o filtro de fornecedor, como o resto do relatorio.
+    if(rel.periodo && filtroFornDda !== SEM_FORNECEDOR){
+      var somaFora = foraVisiveis.reduce(function(s, d2){ return s + (d2.valor || 0); }, 0);
+      html += '<details><summary>⚪ ' + foraVisiveis.length +
         ' título(s) nosso(s) no período sem boleto no DDA (' + brl(somaFora) + ') — normal para quem cobra fora de boleto</summary>';
-      rel.foraDoDda.forEach(function(d2){
+      foraVisiveis.forEach(function(d2){
         html += '<div class="dda-linha" style="margin-top:8px;"><div class="dda-cab">' +
           '<span class="nome">' + escapeHtml(fornecedorDaDuplicata(d2)) + '</span>' +
           '<span class="valor">' + brl(d2.valor || 0) + '</span></div>' +
