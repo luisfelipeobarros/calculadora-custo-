@@ -210,6 +210,10 @@
           <div class="top-forn-titulo" id="painelTopAtrasadosLabel">Atrasados</div>
           <div id="painelTopAtrasados"></div>
         </div>
+        <div>
+          <div class="top-forn-titulo" id="painelTopProx5Label">Próximos 5 meses</div>
+          <div id="painelTopProx5"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -892,14 +896,43 @@
       return d.vencimento && d.vencimento >= inicioProxMes && d.vencimento <= fimProxMes;
     });
 
+    // Proximos 5 meses: do primeiro dia do mes seguinte ate o ultimo
+    // dia do 5o mes a' frente (em agosto: setembro a janeiro). O mes
+    // atual fica de fora — ele ja' tem cartao proprio.
+    var fimProx5Date = new Date(anoAtual, mesAtual + 5, 0);
+    var fimProx5 = fimProx5Date.getFullYear() + '-' +
+      String(fimProx5Date.getMonth() + 1).padStart(2, '0') + '-' +
+      String(fimProx5Date.getDate()).padStart(2, '0');
+    var dosProx5 = todasValidas.filter(function(d){
+      return d.vencimento && d.vencimento >= inicioProxMes && d.vencimento <= fimProx5;
+    });
+
     var topHoje = agrupar(vHoje);
     var topAteFimMes = agrupar(ateFimMes);
     var topMesAtual = agrupar(doMes);
     var topProxMes = agrupar(doProxMes);
     var topAtrasadas = agrupar(atrasadas);
 
+    // Diferente dos outros cartoes, este agrupa por MES, nao por
+    // fornecedor: uma linha por mes com a soma de tudo que vence nele.
+    // Os 5 meses aparecem sempre, mesmo zerados — um mes sem linha se
+    // leria como "esqueceram", nao como "R$ 0".
+    var mesesProx5 = [];
+    for(var i = 1; i <= 5; i++){
+      var mIni = new Date(anoAtual, mesAtual - 1 + i, 1);
+      var prefixo = mIni.getFullYear() + '-' + String(mIni.getMonth() + 1).padStart(2, '0');
+      mesesProx5.push({ prefixo: prefixo, nome: NOMES_MES[mIni.getMonth()], total: 0, qtd: 0 });
+    }
+    dosProx5.forEach(function(d){
+      var pref = d.vencimento.substring(0, 7);
+      mesesProx5.forEach(function(m){
+        if(m.prefixo === pref){ m.total += (d.valor||0); m.qtd++; }
+      });
+    });
+
     var mesNome = nomeDoMes(hoje);
     var proxMesNome = nomeDoMes(inicioProxMes);
+    var fimProx5Nome = nomeDoMes(fimProx5);
 
     $('painelTopTitulo').textContent = 'Top 5 fornecedores por período';
     $('painelTopHojeLabel').textContent = 'Vencendo hoje (top 5)';
@@ -918,12 +951,35 @@
       ' inteiro (top 5)' + dica('o mês todo, pagas e a pagar');
     $('painelTopProxMesLabel').textContent = 'Próximo mês' + (proxMesNome ? ' (' + proxMesNome + ')' : '') + ' (top 5)';
     $('painelTopAtrasadosLabel').textContent = 'Atrasados (top 5)';
+    $('painelTopProx5Label').innerHTML = 'Próximos 5 meses' +
+      (proxMesNome && fimProx5Nome ? ' (' + proxMesNome + ' a ' + fimProx5Nome + ')' : '') +
+      dica('soma mês a mês, pagas e a pagar');
+
+    // Uma linha por mes + total do periodo no pe'. Mesma guarda de
+    // carregamento do htmlTop: nada de afirmar R$ 0 antes dos dados.
+    var prox5Html;
+    if(!carregouDuplicatas || !carregouPgtosInternos){
+      prox5Html = '<p class="nota-explicativa" style="margin:0;">Carregando...</p>';
+    } else {
+      var totalProx5 = dosProx5.reduce(function(s,d){ return s + (d.valor||0); }, 0);
+      prox5Html = mesesProx5.map(function(m){
+        return '<div class="top-forn-row"><div><div class="top-forn-nome">' +
+          m.nome.charAt(0).toUpperCase() + m.nome.slice(1) + '</div>' +
+          '<div class="top-forn-qtd">' + m.qtd + ' item(ns)</div></div>' +
+          '<div class="top-forn-valor">' + brl(m.total) + '</div></div>';
+      }).join('') +
+        '<div class="top-forn-row" style="border-top:2px solid var(--line);">' +
+        '<div><div class="top-forn-nome" style="font-weight:700;">Total do período</div>' +
+        '<div class="top-forn-qtd">' + dosProx5.length + ' item(ns)</div></div>' +
+        '<div class="top-forn-valor">' + brl(totalProx5) + '</div></div>';
+    }
 
     $('painelTopHoje').innerHTML = htmlTop(topHoje.slice(0,5));
     $('painelTopFimMes').innerHTML = htmlTop(topAteFimMes.slice(0,5));
     $('painelTopMesAtual').innerHTML = htmlTop(topMesAtual.slice(0,5));
     $('painelTopProxMes').innerHTML = htmlTop(topProxMes.slice(0,5));
     $('painelTopAtrasados').innerHTML = htmlTop(topAtrasadas.slice(0,5));
+    $('painelTopProx5').innerHTML = prox5Html;
   }
 
   var NOMES_MES = ['janeiro','fevereiro','março','abril','maio','junho',
