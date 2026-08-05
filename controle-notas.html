@@ -460,6 +460,10 @@
         simulação vive só neste navegador.
       </p>
       <div id="linhasSim"></div>
+      <!-- A lista com busca dos campos de fornecedor (datalist e' o
+           autocompletar nativo: digitou, filtrou). Uma so' para todas
+           as linhas; o render preenche as opcoes a partir do mapa. -->
+      <datalist id="listaFornSim"></datalist>
       <div class="filtros" style="margin-top:12px;">
         <button type="button" class="acao-mini" id="addLinhaSim">+ Adicionar compra</button>
         <button type="button" class="acao-mini perigo" id="limparSim">Limpar simulação</button>
@@ -2821,15 +2825,19 @@
   // Fornecedores. Frete e' entrada fixa: prazo manual, sem % — nao vem
   // de historico nenhum, e inventar confianca seria mentir.
   function infoFornSim(nome){
-    if(nome === SIM_FRETE){
+    // O campo e' digitavel (busca): compara sem caixa e sem acento, e
+    // devolve o nome CANONICO — "vetrus (stela)" digitado em
+    // minusculas resolve para o rotulo oficial.
+    if(nome === SIM_FRETE || normalizarTexto(nome) === 'frete'){
       return { nome: 'Frete', rotulo: '30/60/90', manual: true };
     }
+    var alvo = normalizarTexto(nome);
     var linhas = mapaFornecedores();
     for(var i = 0; i < linhas.length; i++){
-      if(linhas[i].fornecedor === nome){
+      if(normalizarTexto(linhas[i].fornecedor) === alvo){
         var principal = linhas[i].grupos[0];
         return {
-          nome: nome,
+          nome: linhas[i].fornecedor,
           rotulo: rotuloPrazo(principal.diasDoRotulo),
           pct: Math.round(100 * principal.qtd / linhas[i].itens.length),
           qtdNotas: linhas[i].itens.length
@@ -2849,7 +2857,7 @@
   function validarLinhaSim(l){
     if(!l.fornecedor) return { erro: 'escolha o fornecedor' };
     var info = infoFornSim(l.fornecedor);
-    if(!info) return { erro: 'fornecedor não encontrado na carga atual — confira ou remova a linha' };
+    if(!info) return { erro: 'fornecedor não encontrado — escolha um da lista (digite para buscar)' };
     var prazo = SimuladorNucleo.parsePrazo(l.prazo);
     if(!prazo) return { info: info, erro: 'prazo inválido — use "70/84/98", "28" ou "à vista"' };
     var valor = App.parseNumeroBR(l.valor);
@@ -2866,35 +2874,27 @@
     return { info: info, prazo: prazo, valorCent: valorCent, primeiraCent: primeiraCent, data: l.data };
   }
 
-  function opcoesFornSim(selecionado){
+  function preencherDatalistSim(){
     var linhas = mapaFornecedores().slice()
       .sort(function(a, b){ return a.fornecedor.localeCompare(b.fornecedor, 'pt-BR'); });
-    var html = '<option value="">— escolha —</option>' +
-      '<optgroup label="Especial">' +
-        '<option value="' + SIM_FRETE + '"' + (selecionado === SIM_FRETE ? ' selected' : '') + '>' +
-        '🚚 Frete — 30/60/90 (prazo definido manualmente)</option>' +
-      '</optgroup>' +
-      '<optgroup label="Fornecedores">' +
+    // O % de confianca e' obrigatorio: padrao que vale para 35% das
+    // notas e' chute, e esconder isso de quem decide seria mentira por
+    // omissao. A quantidade de notas vai junto para "100% (1 nota)"
+    // nao parecer mais solido que "82% (33)". No datalist, o rotulo
+    // aparece ao lado do nome enquanto se digita.
+    $('listaFornSim').innerHTML =
+      '<option value="Frete" label="🚚 30/60/90 — prazo definido manualmente"></option>' +
       linhas.map(function(l){
-        // O % de confianca e' obrigatorio: padrao que vale para 35%
-        // das notas e' chute, e esconder isso de quem decide seria
-        // mentira por omissao. A quantidade de notas vai junto para
-        // "100% (1 nota)" nao parecer mais solido que "82% (33)".
         var p = l.grupos[0];
-        var texto = l.fornecedor + ' — ' + rotuloPrazo(p.diasDoRotulo) +
+        var rotulo = rotuloPrazo(p.diasDoRotulo) +
           ' (' + Math.round(100 * p.qtd / l.itens.length) + '% de ' +
           l.itens.length + ' nota' + (l.itens.length === 1 ? '' : 's') + ')';
-        return '<option value="' + escapeHtml(l.fornecedor) + '"' +
-          (selecionado === l.fornecedor ? ' selected' : '') + '>' + escapeHtml(texto) + '</option>';
-      }).join('') + '</optgroup>';
-    if(selecionado && selecionado !== SIM_FRETE && !infoFornSim(selecionado)){
-      html += '<option value="' + escapeHtml(selecionado) + '" selected>⚠ ' +
-        escapeHtml(selecionado) + ' (não encontrado)</option>';
-    }
-    return html;
+        return '<option value="' + escapeHtml(l.fornecedor) + '" label="' + escapeHtml(rotulo) + '"></option>';
+      }).join('');
   }
 
   function renderLinhasSim(){
+    preencherDatalistSim();
     var alvo = $('linhasSim');
     if(!simulacao.linhas.length){
       alvo.innerHTML = '<p class="nota-explicativa">Nenhuma compra na simulação — comece por "+ Adicionar compra".</p>';
@@ -2917,9 +2917,11 @@
         infos.push('prazo de parcela única — o valor vence inteiro e a 1ª parcela digitada não vale');
       }
       return '<div class="sim-linha">' +
-        '<div class="campo"><label>Fornecedor</label>' +
-          '<select data-sim-forn="' + i + '" aria-label="Fornecedor da compra ' + (i + 1) + '">' +
-          opcoesFornSim(l.fornecedor) + '</select></div>' +
+        '<div class="campo"><label>Fornecedor (digite para buscar)</label>' +
+          '<input type="text" list="listaFornSim" style="width:320px;" data-sim-forn="' + i + '" ' +
+          'value="' + escapeHtml(l.fornecedor === SIM_FRETE ? 'Frete' : (l.fornecedor || '')) + '" ' +
+          'placeholder="nome do fornecedor ou Frete" ' +
+          'aria-label="Fornecedor da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Compra mensal (R$)</label>' +
           '<input type="text" inputmode="decimal" style="width:120px;" data-sim-valor="' + i + '" ' +
           'value="' + escapeHtml(l.valor || '') + '" aria-label="Valor da compra mensal ' + (i + 1) + '"></div>' +
@@ -3114,14 +3116,21 @@
     renderResultadoSim();
   });
 
-  App.delegar($('linhasSim'), 'change', 'select[data-sim-forn]', function(sel){
-    var l = simulacao.linhas[Number(sel.dataset.simForn)];
+  App.delegar($('linhasSim'), 'change', 'input[data-sim-forn]', function(inp){
+    var l = simulacao.linhas[Number(inp.dataset.simForn)];
     if(!l) return;
-    l.fornecedor = sel.value;
-    // Trocar o fornecedor re-preenche o prazo com o padrao DELE; o
-    // campo continua editavel depois.
-    var info = infoFornSim(sel.value);
-    if(info) l.prazo = info.rotulo;
+    var digitado = inp.value.trim();
+    var exibido = l.fornecedor === SIM_FRETE ? 'Frete' : (l.fornecedor || '');
+    if(digitado === exibido) return; // blur sem mudanca: nao reseta o prazo editado
+    l.fornecedor = digitado;
+    // Trocar o fornecedor re-preenche o prazo com o padrao DELE (o
+    // campo continua editavel depois) e guarda o nome CANONICO — quem
+    // digitou em minusculas ve o rotulo oficial ao sair do campo.
+    var info = infoFornSim(digitado);
+    if(info){
+      l.fornecedor = info.manual ? SIM_FRETE : info.nome;
+      l.prazo = info.rotulo;
+    }
     salvarSim();
     renderSimulador();
   });
