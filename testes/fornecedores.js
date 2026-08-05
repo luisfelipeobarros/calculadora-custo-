@@ -56,8 +56,11 @@ eq('a tolerancia da tela e de 5 dias', TOLERANCIA, 5);
 eq('a tela mostra 4 prazos antes de agrupar o resto', MAX_VISIVEIS, 4);
 // A tolerancia deixou de ser opcional: nao pode sobrar caixa de selecao.
 eq('nao ha mais caixa de "agrupar prazos"', /id="tolerarPrazo"/.test(html), false);
-eq('e o render usa a constante, nao um numero solto',
-  /var tol = TOLERANCIA_PRAZO;/.test(html), true);
+// A montagem mudou de casa (mapaFornecedores, compartilhada com o
+// Simulador), mas a regra continua: a tolerancia vem da constante,
+// nunca de um numero solto.
+eq('e a montagem usa a constante, nao um numero solto',
+  /agruparPrazos\(itens\.map\([^)]*\)[^,]*, TOLERANCIA_PRAZO\)/.test(html), true);
 
 // ── Separacao da Vetrus por produto ──────────────────────────
 // A Vetrus vende duas linhas, e nada na nota diz qual e': so' o produto.

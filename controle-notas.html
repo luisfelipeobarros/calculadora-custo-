@@ -133,6 +133,33 @@
   .dda-ilegiveis pre{ font-family:var(--font-mono); font-size:11px; white-space:pre-wrap; background:var(--stripe2); padding:8px; border-radius:4px; margin:6px 0 0; }
   #viewDda details{ margin-top:14px; }
   #viewDda summary{ cursor:pointer; font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }
+
+  /* Simulador de compra. */
+  .sim-linha{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; padding:10px 0; border-bottom:1px solid var(--line); }
+  .sim-linha .campo{ display:flex; flex-direction:column; gap:4px; }
+  .sim-linha label{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
+  .sim-linha select, .sim-linha input{ padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12.5px; }
+  .sim-linha select{ max-width:430px; }
+  .sim-linha input:disabled{ opacity:.45; }
+  .sim-aviso{ flex-basis:100%; font-family:var(--font-mono); font-size:11.5px; color:var(--loss); }
+  .sim-info{ flex-basis:100%; font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
+  .sim-mes{ border:1px solid var(--line); border-radius:4px; margin-bottom:6px; background:var(--card); }
+  .sim-mes.maior{ border-color:var(--brick); border-width:2px; }
+  .sim-mes summary{ display:block; cursor:pointer; padding:8px 12px; }
+  .sim-mes-grid{ display:grid; grid-template-columns:110px repeat(4, minmax(110px, 1fr)); gap:8px; align-items:baseline; font-family:var(--font-mono); font-size:12.5px; }
+  .sim-mes-grid .num{ text-align:right; white-space:nowrap; }
+  .sim-mes-grid .total{ font-weight:700; }
+  .sim-col-proj.desligado{ opacity:.4; text-decoration:line-through; }
+  .sim-barra{ height:8px; border-radius:4px; background:var(--stripe2); margin:6px 12px 0 0; overflow:hidden; display:flex; }
+  .sim-barra span{ display:block; height:100%; }
+  .sim-barra .b-contratado{ background:var(--azul); }
+  .sim-barra .b-projetado{ background:var(--brick); }
+  .sim-barra .b-simulado{ background:var(--profit); }
+  .sim-detalhe{ padding:4px 12px 10px; font-size:12px; }
+  .sim-detalhe h3{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin:8px 0 4px; }
+  .sim-detalhe .top-forn-row{ padding:4px 0; }
+  .sim-legenda{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:flex; gap:14px; flex-wrap:wrap; margin:8px 0; }
+  .sim-legenda i{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:baseline; }
   #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
 
   .so-imprimir{ display:none; }
@@ -191,6 +218,7 @@
       <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
+      <button class="btn secondary" id="navSimulador">🧪 Simulador</button>
       <!-- Sem link para a Calculadora: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
            cruzado navegava DENTRO da janela do app errado, recarregando
@@ -422,6 +450,34 @@
     </div>
   </div>
 
+  <!-- ═══════════ SIMULADOR ═══════════ -->
+  <div id="viewSimulador" style="display:none;">
+    <div class="card">
+      <h2>Simulador de compra</h2>
+      <p class="nota-explicativa">
+        "E se eu comprar X por mês deste fornecedor?" — o efeito nos próximos 12 meses
+        de pagamento, somado ao que já está contratado. Nada é gravado no banco: a
+        simulação vive só neste navegador.
+      </p>
+      <div id="linhasSim"></div>
+      <div class="filtros" style="margin-top:12px;">
+        <button type="button" class="acao-mini" id="addLinhaSim">+ Adicionar compra</button>
+        <button type="button" class="acao-mini perigo" id="limparSim">Limpar simulação</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2>Próximos 12 meses de desembolso</h2>
+      <div class="filtros" style="margin-top:8px; margin-bottom:4px;">
+        <label style="font-family:var(--font-mono); font-size:12px; color:var(--ink); display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="chkProjetado" class="sel-check">
+          incluir projetados (recorrentes que ainda não viraram documento)
+        </label>
+      </div>
+      <div id="resultadoSim"></div>
+    </div>
+  </div>
+
   </main>
 
 </div>
@@ -432,9 +488,11 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=14"></script>
+<script src="app-shared.js?v=15"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
+<!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
+<script src="simulador-nucleo.js?v=1"></script>
 <script>
   // Em file:// o Chrome bloqueia new Worker(), e o pdf.js cai no "fake
   // worker" na thread principal — e' o comportamento de producao do
@@ -610,6 +668,7 @@
       });
       notas = Object.keys(notasPorChave).map(function(k){ return notasPorChave[k]; });
       carregouNotas = true;
+      invalidarMapaForn();
       setStatus(resumoCarga());
       renderAtual();
     }
@@ -664,6 +723,7 @@
       });
       duplicatas = Object.keys(porId).map(function(k){ return porId[k]; });
       carregouDuplicatas = true;
+      invalidarMapaForn();
       setStatus(resumoCarga());
       atualizarAvisoJanela();
       renderAtual();
@@ -766,6 +826,10 @@
     notas = []; duplicatas = []; pagamentosInternos = [];
     notasPorChave = Object.create(null);
     carregouNotas = false; carregouDuplicatas = false; carregouPgtosInternos = false;
+    // Terceiro ponto de mutacao: este botao zera as colecoes DIRETO,
+    // sem passar pelos applies — sem invalidar aqui, o Simulador
+    // renderizaria fornecedores de uma carga que ja' nao existe.
+    invalidarMapaForn();
     setStatus('Carregando histórico completo...');
     atualizarAvisoJanela();
     escutarColecoes();
@@ -820,7 +884,8 @@
 
   var router = App.criarRouter({
     views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
-             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas', Dda:'viewDda' },
+             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas', Dda:'viewDda',
+             Simulador:'viewSimulador' },
     padrao: 'Painel',
     aoEntrar: {
       Painel: renderPainel,
@@ -828,12 +893,14 @@
       Pagamentos: renderPagamentos,
       Fornecedores: renderFornecedores,
       Canceladas: renderCanceladas,
-      Dda: renderDda
+      Dda: renderDda,
+      Simulador: renderSimulador
     },
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
-       ['Canceladas','navCanceladas'], ['Dda','navDda']].forEach(function(par){
+       ['Canceladas','navCanceladas'], ['Dda','navDda'],
+       ['Simulador','navSimulador']].forEach(function(par){
         var b = $(par[1]);
         if(par[0] === nome) b.setAttribute('aria-current', 'page');
         else b.removeAttribute('aria-current');
@@ -849,6 +916,7 @@
   $('navFornecedores').addEventListener('click', function(){ router.ir('Fornecedores'); });
   $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
   $('navDda').addEventListener('click', function(){ router.ir('Dda'); });
+  $('navSimulador').addEventListener('click', function(){ router.ir('Simulador'); });
 
   // Imprimir o Painel: preenche a linha de contexto que so' aparece no
   // papel (o cabecalho do app some na impressao) e chama o dialogo.
@@ -875,7 +943,8 @@
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
-               Canceladas:renderCanceladas, Dda:renderDda }[router.atual()];
+               Canceladas:renderCanceladas, Dda:renderDda,
+               Simulador:renderSimulador }[router.atual()];
     if(fn) fn();
     atualizarContadores();
 
@@ -1637,21 +1706,14 @@
 
   // ─── Recorrencia ────────────────────────────────────────────
 
+  // A aritmetica de mes mora no App.somarMeses (app-shared.js), junto
+  // das outras primitivas de data; aqui fica so' a traducao do
+  // vocabulario de pagamento ({regra, diaFixo}) para a chamada. O
+  // Simulador de compra usa o mesmo somarMeses — as datas das duas
+  // telas nao tem como discordar.
   function calcularProximoVencimento(pgto){
-    var ano = Number(pgto.vencimento.substring(0,4));
-    var mes = Number(pgto.vencimento.substring(5,7));
-    var proxMes = (mes === 12) ? 1 : mes + 1;
-    var proxAno = (mes === 12) ? ano + 1 : ano;
-
-    if(pgto.regra === 'ultimoDia'){
-      var ultimo = new Date(proxAno, proxMes, 0).getDate();
-      return proxAno + '-' + String(proxMes).padStart(2,'0') + '-' + String(ultimo).padStart(2,'0');
-    }
-    // diaFixo
-    var dia = pgto.diaFixo || Number(pgto.vencimento.substring(8,10));
-    var maxDia = new Date(proxAno, proxMes, 0).getDate();
-    if(dia > maxDia) dia = maxDia;
-    return proxAno + '-' + String(proxMes).padStart(2,'0') + '-' + String(dia).padStart(2,'0');
+    return App.somarMeses(pgto.vencimento, 1,
+      pgto.regra === 'ultimoDia' ? { ultimoDia: true } : { diaFixo: pgto.diaFixo });
   }
 
   // O documento como esta' no Firestore. A linha da tabela e' um resumo
@@ -2274,6 +2336,43 @@
   // Quantos prazos aparecem antes de o resto virar "outros".
   var MAX_PRAZOS_VISIVEIS = 4;
 
+  // ─── Mapa de fornecedores (compartilhado) ───────────────────
+  // A montagem fornecedor -> prazos e' usada pela aba Fornecedores E
+  // pelo Simulador de compra — extraida para ca' para as duas telas
+  // nao poderem discordar sobre qual e' o prazo padrao de cada um.
+  //
+  // Esta conta ja' foi O(n²) e custou 622 ms com 4.000 notas; alem do
+  // indice de duplicatas, o resultado agora fica em CACHE e so' e'
+  // refeito quando notas/duplicatas mudam de verdade — os tres pontos
+  // de mutacao chamam invalidarMapaForn(). Digitar no formulario do
+  // Simulador nunca recalcula isto.
+  var mapaFornCache = null;
+  function invalidarMapaForn(){ mapaFornCache = null; }
+
+  function mapaFornecedores(){
+    if(mapaFornCache) return mapaFornCache;
+
+    // So' notas ativas e emitidas contra a empresa. Canceladas ficam
+    // de fora: nao representam negociacao que valeu.
+    var porChave = indexarDuplicatas();
+    var porFornecedor = Object.create(null);
+    notas.forEach(function(n){
+      if(n.emitida !== true || !notaAtiva(n)) return;
+      var dias = prazosDaNota(n, porChave);
+      if(dias === null) return; // sem data de emissão: não dá para medir
+      var f = fornecedorDaNota(n);
+      if(!porFornecedor[f]) porFornecedor[f] = [];
+      porFornecedor[f].push({ nota: n, dias: dias });
+    });
+
+    mapaFornCache = Object.keys(porFornecedor).map(function(f){
+      var itens = porFornecedor[f];
+      var grupos = agruparPrazos(itens.map(function(x){ return x.dias; }), TOLERANCIA_PRAZO);
+      return { fornecedor: f, itens: itens, grupos: grupos };
+    });
+    return mapaFornCache;
+  }
+
   $('buscaForn').addEventListener('input', App.debounce(renderFornecedores));
 
   App.delegar($('tabelaForn'), 'click', '[data-forn]', function(b){
@@ -2290,26 +2389,10 @@
     }
 
     var termo = normalizarTexto($('buscaForn').value);
-    var tol = TOLERANCIA_PRAZO;
 
-    // Só notas ativas e emitidas contra a empresa. Canceladas ficam de
-    // fora: não representam negociação que valeu.
-    var porChave = indexarDuplicatas();
-    var porFornecedor = Object.create(null);
-    notas.forEach(function(n){
-      if(n.emitida !== true || !notaAtiva(n)) return;
-      var dias = prazosDaNota(n, porChave);
-      if(dias === null) return; // sem data de emissão: não dá para medir
-      var f = fornecedorDaNota(n);
-      if(!porFornecedor[f]) porFornecedor[f] = [];
-      porFornecedor[f].push({ nota: n, dias: dias });
-    });
-
-    var linhas = Object.keys(porFornecedor).map(function(f){
-      var itens = porFornecedor[f];
-      var grupos = agruparPrazos(itens.map(function(x){ return x.dias; }), tol);
-      return { fornecedor: f, itens: itens, grupos: grupos };
-    });
+    // O slice protege o cache: o sort logo abaixo reordena a copia,
+    // nao o mapa compartilhado com o Simulador.
+    var linhas = mapaFornecedores().slice();
 
     if(termo) linhas = linhas.filter(function(l){ return normalizarTexto(l.fornecedor).indexOf(termo) !== -1; });
     // Mais notas primeiro: quem você mais compra aparece no topo.
@@ -2715,6 +2798,359 @@
 
     alvo.innerHTML = html;
   }
+
+  // ─── Simulador de compra ────────────────────────────────────
+  // Toda a matematica mora no simulador-nucleo.js; aqui e' so' estado,
+  // formulario e desenho. NADA e' gravado no Firestore — a simulacao
+  // vive em memoria, espelhada em localStorage para sobreviver a F5.
+
+  var SIM_LS = 'simuladorCompra_v1';
+  var SIM_FRETE = '__frete__';
+
+  var simulacao = { linhas: [], projetado: true };
+  try{
+    var simSalva = JSON.parse(localStorage.getItem(SIM_LS) || 'null');
+    if(simSalva && simSalva.linhas) simulacao = simSalva;
+  }catch(e){ /* localStorage bloqueado: vive so' em memoria */ }
+
+  function salvarSim(){
+    try{ localStorage.setItem(SIM_LS, JSON.stringify(simulacao)); }catch(e){}
+  }
+
+  // Prazo e confianca de um fornecedor, do MESMO mapa da aba
+  // Fornecedores. Frete e' entrada fixa: prazo manual, sem % — nao vem
+  // de historico nenhum, e inventar confianca seria mentir.
+  function infoFornSim(nome){
+    if(nome === SIM_FRETE){
+      return { nome: 'Frete', rotulo: '30/60/90', manual: true };
+    }
+    var linhas = mapaFornecedores();
+    for(var i = 0; i < linhas.length; i++){
+      if(linhas[i].fornecedor === nome){
+        var principal = linhas[i].grupos[0];
+        return {
+          nome: nome,
+          rotulo: rotuloPrazo(principal.diasDoRotulo),
+          pct: Math.round(100 * principal.qtd / linhas[i].itens.length),
+          qtdNotas: linhas[i].itens.length
+        };
+      }
+    }
+    // Simulacao restaurada apontando para fornecedor que nao existe
+    // mais nesta carga: a linha fica MARCADA, nunca descartada em
+    // silencio — sumir e' como o total mostraria menos do que a pessoa
+    // montou, sem ela perceber.
+    return null;
+  }
+
+  // Valida a linha e devolve o que a simulacao precisa. Linha invalida
+  // NUNCA conta como zero: o formulario mostra o motivo e o resultado
+  // avisa que o total esta' incompleto.
+  function validarLinhaSim(l){
+    if(!l.fornecedor) return { erro: 'escolha o fornecedor' };
+    var info = infoFornSim(l.fornecedor);
+    if(!info) return { erro: 'fornecedor não encontrado na carga atual — confira ou remova a linha' };
+    var prazo = SimuladorNucleo.parsePrazo(l.prazo);
+    if(!prazo) return { info: info, erro: 'prazo inválido — use "70/84/98", "28" ou "à vista"' };
+    var valor = App.parseNumeroBR(l.valor);
+    if(valor == null || valor <= 0) return { info: info, erro: 'informe o valor da compra mensal' };
+    var valorCent = Math.round(valor * 100);
+    var primeiraCent = null;
+    if(prazo.length > 1 && String(l.primeira || '').trim() !== ''){
+      var pv = App.parseNumeroBR(l.primeira);
+      if(pv == null || pv < 0) return { info: info, erro: '1ª parcela inválida' };
+      primeiraCent = Math.round(pv * 100);
+      if(primeiraCent > valorCent) return { info: info, erro: '1ª parcela maior que o valor da compra — corrija para simular' };
+    }
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(l.data || '')) return { info: info, erro: 'informe a data da 1ª compra' };
+    return { info: info, prazo: prazo, valorCent: valorCent, primeiraCent: primeiraCent, data: l.data };
+  }
+
+  function opcoesFornSim(selecionado){
+    var linhas = mapaFornecedores().slice()
+      .sort(function(a, b){ return a.fornecedor.localeCompare(b.fornecedor, 'pt-BR'); });
+    var html = '<option value="">— escolha —</option>' +
+      '<optgroup label="Especial">' +
+        '<option value="' + SIM_FRETE + '"' + (selecionado === SIM_FRETE ? ' selected' : '') + '>' +
+        '🚚 Frete — 30/60/90 (prazo definido manualmente)</option>' +
+      '</optgroup>' +
+      '<optgroup label="Fornecedores">' +
+      linhas.map(function(l){
+        // O % de confianca e' obrigatorio: padrao que vale para 35%
+        // das notas e' chute, e esconder isso de quem decide seria
+        // mentira por omissao. A quantidade de notas vai junto para
+        // "100% (1 nota)" nao parecer mais solido que "82% (33)".
+        var p = l.grupos[0];
+        var texto = l.fornecedor + ' — ' + rotuloPrazo(p.diasDoRotulo) +
+          ' (' + Math.round(100 * p.qtd / l.itens.length) + '% de ' +
+          l.itens.length + ' nota' + (l.itens.length === 1 ? '' : 's') + ')';
+        return '<option value="' + escapeHtml(l.fornecedor) + '"' +
+          (selecionado === l.fornecedor ? ' selected' : '') + '>' + escapeHtml(texto) + '</option>';
+      }).join('') + '</optgroup>';
+    if(selecionado && selecionado !== SIM_FRETE && !infoFornSim(selecionado)){
+      html += '<option value="' + escapeHtml(selecionado) + '" selected>⚠ ' +
+        escapeHtml(selecionado) + ' (não encontrado)</option>';
+    }
+    return html;
+  }
+
+  function renderLinhasSim(){
+    var alvo = $('linhasSim');
+    if(!simulacao.linhas.length){
+      alvo.innerHTML = '<p class="nota-explicativa">Nenhuma compra na simulação — comece por "+ Adicionar compra".</p>';
+      return;
+    }
+    alvo.innerHTML = simulacao.linhas.map(function(l, i){
+      var v = validarLinhaSim(l);
+      var prazoParse = SimuladorNucleo.parsePrazo(l.prazo);
+      var unica = prazoParse !== null && prazoParse.length === 1;
+      var infos = [];
+      if(v.info && !v.info.manual && l.fornecedor){
+        infos.push('prazo padrão ' + escapeHtml(v.info.rotulo) + ' — ' + v.info.pct + '% de ' +
+          v.info.qtdNotas + ' nota' + (v.info.qtdNotas === 1 ? '' : 's'));
+      }
+      if(v.info && v.info.manual) infos.push('prazo definido manualmente (sem histórico)');
+      // O campo de 1a parcela e' DESABILITADO quando o prazo resolve
+      // para uma parcela so' — impedir e' melhor que avisar. O aviso
+      // fica para quem editou o prazo depois de ja' ter preenchido.
+      if(unica && String(l.primeira || '').trim() !== ''){
+        infos.push('prazo de parcela única — o valor vence inteiro e a 1ª parcela digitada não vale');
+      }
+      return '<div class="sim-linha">' +
+        '<div class="campo"><label>Fornecedor</label>' +
+          '<select data-sim-forn="' + i + '" aria-label="Fornecedor da compra ' + (i + 1) + '">' +
+          opcoesFornSim(l.fornecedor) + '</select></div>' +
+        '<div class="campo"><label>Compra mensal (R$)</label>' +
+          '<input type="text" inputmode="decimal" style="width:120px;" data-sim-valor="' + i + '" ' +
+          'value="' + escapeHtml(l.valor || '') + '" aria-label="Valor da compra mensal ' + (i + 1) + '"></div>' +
+        '<div class="campo"><label>1ª parcela (opcional)</label>' +
+          '<input type="text" inputmode="decimal" style="width:120px;" data-sim-primeira="' + i + '" ' +
+          'value="' + escapeHtml(l.primeira || '') + '"' +
+          (unica ? ' disabled title="Prazo de parcela única — o valor vence inteiro de uma vez"' : '') +
+          ' aria-label="Primeira parcela da compra ' + (i + 1) + '"></div>' +
+        '<div class="campo"><label>Prazo (dias)</label>' +
+          '<input type="text" style="width:110px;" data-sim-prazo="' + i + '" ' +
+          'value="' + escapeHtml(l.prazo || '') + '" aria-label="Prazo da compra ' + (i + 1) + '"></div>' +
+        '<div class="campo"><label>1ª compra</label>' +
+          '<input type="date" data-sim-data="' + i + '" value="' + escapeHtml(l.data || '') + '" ' +
+          'aria-label="Data da primeira compra ' + (i + 1) + '"></div>' +
+        '<button type="button" class="acao-mini perigo" data-sim-rm="' + i + '" aria-label="Remover a compra ' + (i + 1) + '">✕</button>' +
+        (infos.length ? '<div class="sim-info">' + infos.join(' · ') + '</div>' : '') +
+        (v.erro ? '<div class="sim-aviso">⚠ ' + escapeHtml(v.erro) + '</div>' : '') +
+      '</div>';
+    }).join('');
+  }
+
+  function agruparDetalheSim(itens, rotuloDe, centDe){
+    var mapa = Object.create(null);
+    itens.forEach(function(it){
+      var r = rotuloDe(it);
+      if(!mapa[r]) mapa[r] = { rotulo: r, cent: 0, qtd: 0 };
+      mapa[r].cent += centDe(it);
+      mapa[r].qtd++;
+    });
+    return Object.keys(mapa).map(function(k){ return mapa[k]; })
+      .sort(function(a, b){ return b.cent - a.cent; });
+  }
+
+  function listaDetalheSim(titulo, grupos){
+    if(!grupos.length) return '';
+    return '<h3>' + titulo + '</h3>' + grupos.map(function(g){
+      return '<div class="top-forn-row"><div><div class="top-forn-nome">' + escapeHtml(g.rotulo) + '</div>' +
+        '<div class="top-forn-qtd">' + g.qtd + ' parcela(s)</div></div>' +
+        '<div class="top-forn-valor">' + brl(g.cent / 100) + '</div></div>';
+    }).join('');
+  }
+
+  function detalheMesSim(m){
+    var centReais = function(it){ return Math.round((it.valor || 0) * 100); };
+    var html =
+      listaDetalheSim('Já contratado', agruparDetalheSim(m.contratado, function(it){
+        return it.chaveAcesso ? fornecedorDaDuplicata(it) : ((it.descricao || 'Pgto interno') + ' (interno)');
+      }, centReais)) +
+      listaDetalheSim('Projetado', agruparDetalheSim(m.projetado, function(it){
+        return (it.descricao || 'recorrente') + ' (projeção)';
+      }, centReais)) +
+      listaDetalheSim('Simulado', agruparDetalheSim(m.simulado, function(it){
+        return it.origem;
+      }, function(it){ return it.cent; }));
+    return html || '<p class="nota-explicativa" style="margin:4px 0;">Nada neste mês.</p>';
+  }
+
+  function renderResultadoSim(){
+    var alvo = $('resultadoSim');
+    $('chkProjetado').checked = simulacao.projetado !== false;
+    if(!carregouDuplicatas || !carregouNotas || !carregouPgtosInternos){
+      alvo.innerHTML = '<p class="nota-explicativa">Carregando as coleções... o resultado aparece sozinho.</p>';
+      return;
+    }
+
+    var hoje = hojeISO();
+    var mesInicial = hoje.substring(0, 7);
+    var ultimoDiaJanela = App.somarDias(App.somarMeses(mesInicial + '-01', 12), -1);
+
+    var validas = [], invalidas = 0, maiorPrazo = 0;
+    simulacao.linhas.forEach(function(l){
+      var v = validarLinhaSim(l);
+      if(v.erro){ invalidas++; return; }
+      validas.push(v);
+      maiorPrazo = Math.max(maiorPrazo, v.prazo[v.prazo.length - 1]);
+    });
+
+    var simuladas = [];
+    validas.forEach(function(v){
+      // Rampa: compra ate' o fim da janela + o maior prazo. Sem isso
+      // os ultimos meses sairiam artificialmente leves (a compra do
+      // mes 11 com prazo de 98 dias vence no mes 14, fora da tela) e o
+      // grafico despencaria no fim com falsa sensacao de alivio.
+      var parcelas = SimuladorNucleo.gerarCompras({
+        valorCent: v.valorCent,
+        primeiraCent: v.primeiraCent,
+        prazoDias: v.prazo,
+        dataPrimeira: v.data,
+        ateData: App.somarDias(ultimoDiaJanela, maiorPrazo)
+      });
+      (parcelas || []).forEach(function(p){
+        p.origem = v.info.nome;
+        simuladas.push(p);
+      });
+    });
+
+    var projetados = SimuladorNucleo.projetarInternos(pagamentosInternos, ultimoDiaJanela);
+    var meses = SimuladorNucleo.resumoMensal({
+      mesInicial: mesInicial, meses: 12,
+      duplicatas: duplicatas, notasPorChave: notasPorChave,
+      pagamentosInternos: pagamentosInternos,
+      projetados: projetados, simuladas: simuladas
+    });
+
+    var comProjetado = simulacao.projetado !== false;
+    function totalDe(m){ return m.contratadoCent + m.simuladoCent + (comProjetado ? m.projetadoCent : 0); }
+    var maior = null;
+    meses.forEach(function(m){ if(!maior || totalDe(m) > totalDe(maior)) maior = m; });
+    var maxTotal = Math.max(maior ? totalDe(maior) : 0, 1);
+
+    var html = '';
+    if(invalidas){
+      html += '<p class="sim-aviso" style="margin:6px 0;">⚠ ' + invalidas +
+        ' compra(s) fora da simulação (veja os avisos no formulário) — os totais abaixo NÃO as incluem.</p>';
+    }
+    html += '<p class="nota-explicativa">Os primeiros meses quase não têm parcela simulada: a ' +
+      'primeira compra leva o prazo inteiro para começar a vencer. É a realidade, não um erro.</p>';
+    html += '<div class="sim-legenda">' +
+      '<span><i style="background:var(--azul);"></i>contratado (fato)</span>' +
+      '<span><i style="background:var(--brick);"></i>projetado (recorrente inferido)</span>' +
+      '<span><i style="background:var(--profit);"></i>simulado (hipótese)</span></div>';
+    html += '<div class="sim-mes" style="border:none; background:transparent;">' +
+      '<div class="sim-mes-grid" style="padding:0 12px; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);">' +
+      '<span>Mês</span><span class="num">Contratado</span><span class="num">Projetado</span>' +
+      '<span class="num">Simulado</span><span class="num">Total</span></div></div>';
+
+    meses.forEach(function(m){
+      var total = totalDe(m);
+      var nomeMes = NOMES_MES[Number(m.mes.substring(5, 7)) - 1];
+      var rotuloMes = nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1, 3) + '/' + m.mes.substring(0, 4);
+      var ehMaior = maior && m.mes === maior.mes && total > 0;
+      html += '<div class="sim-mes' + (ehMaior ? ' maior' : '') + '"><details>' +
+        '<summary><div class="sim-mes-grid">' +
+          '<span>' + rotuloMes + (ehMaior ? ' · maior mês ⚠' : '') + '</span>' +
+          '<span class="num">' + brl(m.contratadoCent / 100) + '</span>' +
+          '<span class="num sim-col-proj' + (comProjetado ? '' : ' desligado') + '">' + brl(m.projetadoCent / 100) + '</span>' +
+          '<span class="num">' + brl(m.simuladoCent / 100) + '</span>' +
+          '<span class="num total">' + brl(total / 100) + '</span>' +
+        '</div>' +
+        '<div class="sim-barra">' +
+          '<span class="b-contratado" style="width:' + (100 * m.contratadoCent / maxTotal) + '%;"></span>' +
+          (comProjetado ? '<span class="b-projetado" style="width:' + (100 * m.projetadoCent / maxTotal) + '%;"></span>' : '') +
+          '<span class="b-simulado" style="width:' + (100 * m.simuladoCent / maxTotal) + '%;"></span>' +
+        '</div></summary>' +
+        '<div class="sim-detalhe">' + detalheMesSim(m) + '</div>' +
+      '</details></div>';
+    });
+
+    alvo.innerHTML = html;
+  }
+
+  function renderSimulador(){
+    if(!carregouNotas || !carregouDuplicatas){
+      $('linhasSim').innerHTML = '<p class="nota-explicativa">Carregando notas e duplicatas...</p>';
+      $('resultadoSim').innerHTML = '';
+      return;
+    }
+    renderLinhasSim();
+    renderResultadoSim();
+  }
+
+  // Digitar so' refaz a ARITMETICA sobre o mapa pronto (debounce); o
+  // mapa de fornecedores nunca e' recalculado por tecla. O formulario
+  // inteiro so' re-renderiza no 'change' (blur), para nao roubar o
+  // foco no meio da digitacao.
+  var resultadoSimDebounced = App.debounce(function(){
+    if(router.atual() === 'Simulador') renderResultadoSim();
+  });
+
+  $('addLinhaSim').addEventListener('click', function(){
+    simulacao.linhas.push({ fornecedor: '', valor: '', primeira: '', prazo: '', data: hojeISO() });
+    salvarSim();
+    renderSimulador();
+  });
+
+  $('limparSim').addEventListener('click', function(){
+    App.confirmar({
+      titulo: 'Limpar simulação',
+      mensagem: 'Apagar todas as compras simuladas? Nada disso está no banco — só some daqui.',
+      confirmar: 'Limpar'
+    }).then(function(ok){
+      if(!ok) return;
+      simulacao = { linhas: [], projetado: simulacao.projetado };
+      salvarSim();
+      renderSimulador();
+    });
+  });
+
+  $('chkProjetado').addEventListener('change', function(){
+    simulacao.projetado = this.checked;
+    salvarSim();
+    renderResultadoSim();
+  });
+
+  App.delegar($('linhasSim'), 'change', 'select[data-sim-forn]', function(sel){
+    var l = simulacao.linhas[Number(sel.dataset.simForn)];
+    if(!l) return;
+    l.fornecedor = sel.value;
+    // Trocar o fornecedor re-preenche o prazo com o padrao DELE; o
+    // campo continua editavel depois.
+    var info = infoFornSim(sel.value);
+    if(info) l.prazo = info.rotulo;
+    salvarSim();
+    renderSimulador();
+  });
+
+  App.delegar($('linhasSim'), 'click', 'button[data-sim-rm]', function(b){
+    simulacao.linhas.splice(Number(b.dataset.simRm), 1);
+    salvarSim();
+    renderSimulador();
+  });
+
+  [['simValor', 'valor'], ['simPrimeira', 'primeira'], ['simPrazo', 'prazo'], ['simData', 'data']]
+    .forEach(function(par){
+      var dataAttr = par[0], campo = par[1];
+      var seletor = 'input[data-' + dataAttr.replace(/[A-Z]/g, function(c){ return '-' + c.toLowerCase(); }) + ']';
+      App.delegar($('linhasSim'), 'input', seletor, function(inp){
+        var l = simulacao.linhas[Number(inp.dataset[dataAttr])];
+        if(!l) return;
+        l[campo] = inp.value;
+        salvarSim();
+        resultadoSimDebounced();
+      });
+      App.delegar($('linhasSim'), 'change', seletor, function(inp){
+        var l = simulacao.linhas[Number(inp.dataset[dataAttr])];
+        if(!l) return;
+        l[campo] = inp.value;
+        salvarSim();
+        renderSimulador();
+      });
+    });
 
   // ─── Inicio ─────────────────────────────────────────────────
   atualizarAvisoJanela();

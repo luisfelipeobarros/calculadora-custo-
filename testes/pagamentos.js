@@ -36,8 +36,12 @@ const somarDias = (iso, n) => {
   return d.toISOString().slice(0, 10);
 };
 
+// calcularProximoVencimento virou involucro do App.somarMeses — o App
+// de verdade entra na sandbox para o teste medir a conta real.
+const App = require('../app-shared.js');
+
 const estado = { filtroPag: 'pendentes' };
-const m = new Function('estado', 'somarDias',
+const m = new Function('estado', 'somarDias', 'App',
   'var filtroPag;\n' +
   bloco(/var CATEGORIAS = \[[\s\S]*?\n  \];/, 'CATEGORIAS') + '\n' +
   bloco(/var CAT_FORNECEDOR = \{[^}]*\};/, 'CAT_FORNECEDOR') + '\n' +
@@ -48,7 +52,7 @@ const m = new Function('estado', 'somarDias',
   ' categoriaPorValor: categoriaPorValor,' +
   ' calcularProximoVencimento: calcularProximoVencimento,' +
   ' passaFiltroPag: function(p, v, h, i){ filtroPag = estado.filtroPag; return passaFiltroPag(p, v, h, i); } };'
-)(estado, somarDias);
+)(estado, somarDias, App);
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);

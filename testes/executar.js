@@ -4,7 +4,7 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao doze etapas, em dez
+  Nao precisa instalar nada — so' o Node. Sao treze etapas, em onze
   frentes (a lista canonica, com o que cada uma cobre, esta' no README,
   secao "Rodando os testes"):
 
@@ -23,6 +23,8 @@
                          texto real do PDF) e casamento boleto/duplicata.
   - painel.js          — Painel de metas: dias uteis, limite de 60% e a
                          previsao de faturamento do mes corrente.
+  - simulador.js       — Simulador de compra: parcelas em centavos,
+                         rampa de 12 meses e projecao de recorrentes.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -42,7 +44,8 @@ const etapas = [
   ['Fornecedores e prazos', 'fornecedores.js', []],
   ['Pagamentos e recorrencia', 'pagamentos.js', []],
   ['Conferencia de DDA (Bradesco)', 'dda.js', []],
-  ['Painel de metas', 'painel.js', []]
+  ['Painel de metas', 'painel.js', []],
+  ['Simulador de compra', 'simulador.js', []]
 ];
 
 let falhou = 0;

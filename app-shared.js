@@ -145,6 +145,27 @@
     return iso(d);
   }
 
+  // Soma n meses preservando o DIA, encolhendo quando o mes de destino
+  // e' curto (31 -> 30 -> 28/29). Date somaria e deixaria transbordar
+  // (31/01 + 1 mes = 03/03), que e' exatamente o que vencimento mensal
+  // nao pode fazer.
+  //
+  // opcoes.diaFixo: usa este dia em vez do dia da data (quem rola
+  // vencimento mes a mes precisa que o 31 volte a ser 31 depois de
+  // fevereiro — sem ele, o dia encolhido viraria permanente).
+  // opcoes.ultimoDia: ignora o dia e cai no ultimo do mes de destino.
+  function somarMeses(isoStr, n, opcoes) {
+    opcoes = opcoes || {};
+    var ano = Number(isoStr.substring(0, 4));
+    var mes0 = Number(isoStr.substring(5, 7)) - 1 + n;
+    var alvoAno = ano + Math.floor(mes0 / 12);
+    var alvoMes = ((mes0 % 12) + 12) % 12 + 1;
+    var ultimo = new Date(alvoAno, alvoMes, 0).getDate();
+    var dia = opcoes.ultimoDia ? ultimo
+      : Math.min(opcoes.diaFixo || Number(isoStr.substring(8, 10)), ultimo);
+    return alvoAno + '-' + String(alvoMes).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
+  }
+
   function diasEntre(a, b) {
     return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
   }
@@ -1239,6 +1260,7 @@
     hojeISO: hojeISO,
     fmtData: fmtData,
     somarDias: somarDias,
+    somarMeses: somarMeses,
     diasEntre: diasEntre,
     fmtDataFirestore: fmtDataFirestore,
     horaAgora: horaAgora,

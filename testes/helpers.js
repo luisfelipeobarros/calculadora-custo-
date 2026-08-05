@@ -82,6 +82,24 @@ conferir('somarDias vira o ano', App.somarDias('2026-12-31', 1), '2027-01-01');
 conferir('diasEntre', App.diasEntre('2026-01-01', '2026-03-01'), 59);
 conferir('diasEntre mesmo dia', App.diasEntre('2026-05-05', '2026-05-05'), 0);
 
+// somarMeses: a rolagem mensal de vencimento (recorrencia dos
+// pagamentos internos e compras do Simulador). Encolhe mes curto em
+// vez de transbordar, e o diaFixo faz o 31 VOLTAR a ser 31 depois de
+// fevereiro — sem ele o encolhimento seria permanente.
+conferir('somarMeses simples', App.somarMeses('2026-08-10', 1), '2026-09-10');
+conferir('somarMeses dia 31 encolhe para mes de 30', App.somarMeses('2026-08-31', 1), '2026-09-30');
+conferir('somarMeses fevereiro encolhe para 28', App.somarMeses('2026-01-31', 1), '2026-02-28');
+conferir('somarMeses fevereiro bissexto vai a 29', App.somarMeses('2028-01-31', 1), '2028-02-29');
+conferir('somarMeses NAO transborda (31/01 + 1 nunca e 03/03)',
+         App.somarMeses('2026-01-31', 1) < '2026-03-01', true);
+conferir('somarMeses vira o ano', App.somarMeses('2026-12-15', 1), '2027-01-15');
+conferir('somarMeses varios meses de uma vez', App.somarMeses('2026-01-15', 13), '2027-02-15');
+conferir('somarMeses diaFixo devolve o 31 depois do mes curto',
+         App.somarMeses('2026-09-30', 1, { diaFixo: 31 }), '2026-10-31');
+conferir('somarMeses ultimoDia cai no fim do mes de destino',
+         App.somarMeses('2026-01-31', 1, { ultimoDia: true }), '2026-02-28');
+conferir('somarMeses ultimoDia em mes de 31', App.somarMeses('2026-02-28', 1, { ultimoDia: true }), '2026-03-31');
+
 // Datas em texto aaaa-mm-dd sao comparaveis alfabeticamente — o app
 // depende disso em todos os filtros de vencimento.
 conferir('ordem alfabetica = ordem cronologica', ['2026-10-01', '2026-02-01', '2026-01-15'].sort(),
