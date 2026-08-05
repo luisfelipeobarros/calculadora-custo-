@@ -107,6 +107,16 @@
   // compra dia 31 encolhe para 30/28 nos meses curtos e VOLTA a ser 31
   // depois — a mesma regra da recorrencia dos pagamentos internos.
   //
+  // stCent e' a Substituicao Tributaria da compra: valor ADICIONAL
+  // (total = compra + ST), que nao participa da divisao e recorre com
+  // cada compra mensal. Onde ela cai (regra de negocio de 05/08/2026):
+  //   - prazo com mais de uma parcela e a 1a ANTES de 30 dias ->
+  //     junto da 1a parcela (mesma data);
+  //   - parcela unica, ou 1a parcela aos 30 dias ou alem ->
+  //     parcela propria aos 30 dias da compra.
+  // A parcela de ST sai marcada (st: true) para o detalhe mostrar
+  // separado, sem se misturar a' mercadoria.
+  //
   // ateData diz ate' quando COMPRAR (o chamador passa o fim da janela
   // + o maior prazo — o efeito rampa: sem isso os ultimos meses da
   // janela sairiam artificialmente leves, porque a compra do mes 11
@@ -122,6 +132,7 @@
       opts.primeiraCent == null ? null : opts.primeiraCent);
     if (!parcelasBase) return null;
 
+    var stCent = opts.stCent == null ? 0 : opts.stCent;
     var diaFixo = Number(opts.dataPrimeira.substring(8, 10));
     var saida = [];
     for (var k = 0; ; k++) {
@@ -133,6 +144,15 @@
           compra: dataCompra,
           vencimento: somarDias(dataCompra, prazo[i]),
           cent: parcelasBase[i]
+        });
+      }
+      if (stCent > 0) {
+        var diasSt = (prazo.length > 1 && prazo[0] < 30) ? prazo[0] : 30;
+        saida.push({
+          compra: dataCompra,
+          vencimento: somarDias(dataCompra, diasSt),
+          cent: stCent,
+          st: true
         });
       }
       if (opts.limiteCompras && k + 1 >= opts.limiteCompras) break;

@@ -103,6 +103,62 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
   eq('  ...com o valor inteiro', parcelas[0].cent, 123456);
 }
 
+// ── ST: adicional, cobrada na 1a parcela ou aos 30 dias ──────
+// Total da linha = compra + ST. A ST nao participa da divisao da
+// compra e recorre com cada compra mensal. Onde cai:
+//   1a parcela antes de 30 dias  -> junto dela;
+//   parcela unica OU 1a >= 30    -> parcela propria aos 30 dias.
+
+{
+  // 70/84/98: a 1a parcela vence aos 70 (> 30) -> ST propria aos 30.
+  const ps = S.gerarCompras({
+    valorCent: 300000, stCent: 45000, prazoDias: [70, 84, 98],
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05'
+  });
+  eq('ST com 1a parcela alem de 30 dias vira parcela propria aos 30',
+    ps.find(p => p.st).vencimento, App.somarDias('2026-08-05', 30));
+  eq('  ...o total da compra = mercadoria + ST', soma(ps.map(p => p.cent)), 345000);
+  eq('  ...e a mercadoria continua dividida igual, sem a ST',
+    ps.filter(p => !p.st).map(p => p.cent), [100000, 100000, 100000]);
+}
+{
+  // 15/45: a 1a parcela vence aos 15 (< 30) -> ST cobrada JUNTO dela.
+  const ps = S.gerarCompras({
+    valorCent: 10000, stCent: 5000, prazoDias: [15, 45],
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05'
+  });
+  eq('ST com 1a parcela antes de 30 dias cai junto dela (mesma data)',
+    ps.find(p => p.st).vencimento, App.somarDias('2026-08-05', 15));
+}
+{
+  // Parcela unica: a vista e "112" — nos dois casos, ST aos 30 dias.
+  const aVista = S.gerarCompras({
+    valorCent: 10000, stCent: 5000, prazoDias: S.parsePrazo('à vista'),
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05'
+  });
+  eq('ST com compra a vista vai para os 30 dias',
+    aVista.find(p => p.st).vencimento, App.somarDias('2026-08-05', 30));
+  const cento12 = S.gerarCompras({
+    valorCent: 10000, stCent: 5000, prazoDias: [112],
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05'
+  });
+  eq('ST com parcela unica de 112 dias tambem: 30 dias',
+    cento12.find(p => p.st).vencimento, App.somarDias('2026-08-05', 30));
+}
+{
+  // A ST recorre com cada compra mensal, e sem ST nada muda.
+  const ps = S.gerarCompras({
+    valorCent: 10000, stCent: 5000, prazoDias: [70],
+    dataPrimeira: '2026-08-05', ateData: '2026-09-05'
+  });
+  eq('cada compra mensal traz a propria ST', ps.filter(p => p.st).length, 2);
+  const sem = S.gerarCompras({
+    valorCent: 10000, prazoDias: [70],
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05'
+  });
+  eq('sem ST, nenhuma parcela marcada', sem.filter(p => p.st).length, 0);
+}
+
 // ── 5. Rampa: o 12o mes recebe a carga de regime do 6o ───────
 
 {

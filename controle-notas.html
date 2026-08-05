@@ -2808,12 +2808,27 @@
   // formulario e desenho. NADA e' gravado no Firestore — a simulacao
   // vive em memoria, espelhada em localStorage para sobreviver a F5.
 
-  var SIM_LS = 'simuladorCompra_v1';
-  var SIM_FRETE = '__frete__';
+  var SIM_LS = 'simuladorCompra_v2';
 
   var simulacao = { linhas: [], projetado: true };
   try{
     var simSalva = JSON.parse(localStorage.getItem(SIM_LS) || 'null');
+    if(!simSalva){
+      // Migra a v1 (que tinha "1ª parcela" e o pseudo-fornecedor
+      // Frete): a linha de Frete vira uma linha com o campo de frete
+      // preenchido e sem fornecedor — marcada na tela, nunca sumida.
+      // O campo "1ª parcela" foi substituido pela ST (outra semantica)
+      // e nao migra.
+      var v1 = JSON.parse(localStorage.getItem('simuladorCompra_v1') || 'null');
+      if(v1 && v1.linhas){
+        simSalva = { projetado: v1.projetado, linhas: v1.linhas.map(function(l){
+          if(l.fornecedor === '__frete__'){
+            return { fornecedor: '', valor: '', st: '', frete: l.valor || '', prazo: '', data: l.data };
+          }
+          return { fornecedor: l.fornecedor, valor: l.valor, st: '', frete: '', prazo: l.prazo, data: l.data };
+        }) };
+      }
+    }
     if(simSalva && simSalva.linhas) simulacao = simSalva;
   }catch(e){ /* localStorage bloqueado: vive so' em memoria */ }
 
@@ -2822,15 +2837,11 @@
   }
 
   // Prazo e confianca de um fornecedor, do MESMO mapa da aba
-  // Fornecedores. Frete e' entrada fixa: prazo manual, sem % — nao vem
-  // de historico nenhum, e inventar confianca seria mentir.
+  // Fornecedores.
   function infoFornSim(nome){
     // O campo e' digitavel (busca): compara sem caixa e sem acento, e
     // devolve o nome CANONICO — "vetrus (stela)" digitado em
     // minusculas resolve para o rotulo oficial.
-    if(nome === SIM_FRETE || normalizarTexto(nome) === 'frete'){
-      return { nome: 'Frete', rotulo: '30/60/90', manual: true };
-    }
     var alvo = normalizarTexto(nome);
     var linhas = mapaFornecedores();
     for(var i = 0; i < linhas.length; i++){
@@ -2863,15 +2874,21 @@
     var valor = App.parseNumeroBR(l.valor);
     if(valor == null || valor <= 0) return { info: info, erro: 'informe o valor da compra mensal' };
     var valorCent = Math.round(valor * 100);
-    var primeiraCent = null;
-    if(prazo.length > 1 && String(l.primeira || '').trim() !== ''){
-      var pv = App.parseNumeroBR(l.primeira);
-      if(pv == null || pv < 0) return { info: info, erro: '1ª parcela inválida' };
-      primeiraCent = Math.round(pv * 100);
-      if(primeiraCent > valorCent) return { info: info, erro: '1ª parcela maior que o valor da compra — corrija para simular' };
+    // ST e frete sao ADICIONAIS: total da linha = compra + ST + frete.
+    var stCent = null;
+    if(String(l.st || '').trim() !== ''){
+      var sv = App.parseNumeroBR(l.st);
+      if(sv == null || sv < 0) return { info: info, erro: 'valor de ST inválido' };
+      stCent = Math.round(sv * 100);
+    }
+    var freteCent = null;
+    if(String(l.frete || '').trim() !== ''){
+      var fv = App.parseNumeroBR(l.frete);
+      if(fv == null || fv < 0) return { info: info, erro: 'valor de frete inválido' };
+      freteCent = Math.round(fv * 100);
     }
     if(!/^\d{4}-\d{2}-\d{2}$/.test(l.data || '')) return { info: info, erro: 'informe a data da 1ª compra' };
-    return { info: info, prazo: prazo, valorCent: valorCent, primeiraCent: primeiraCent, data: l.data };
+    return { info: info, prazo: prazo, valorCent: valorCent, stCent: stCent, freteCent: freteCent, data: l.data };
   }
 
   function preencherDatalistSim(){
@@ -2883,7 +2900,6 @@
     // nao parecer mais solido que "82% (33)". No datalist, o rotulo
     // aparece ao lado do nome enquanto se digita.
     $('listaFornSim').innerHTML =
-      '<option value="Frete" label="🚚 30/60/90 — prazo definido manualmente"></option>' +
       linhas.map(function(l){
         var p = l.grupos[0];
         var rotulo = rotuloPrazo(p.diasDoRotulo) +
@@ -2903,33 +2919,39 @@
     alvo.innerHTML = simulacao.linhas.map(function(l, i){
       var v = validarLinhaSim(l);
       var prazoParse = SimuladorNucleo.parsePrazo(l.prazo);
-      var unica = prazoParse !== null && prazoParse.length === 1;
       var infos = [];
-      if(v.info && !v.info.manual && l.fornecedor){
+      if(v.info && l.fornecedor){
         infos.push('prazo padrão ' + escapeHtml(v.info.rotulo) + ' — ' + v.info.pct + '% de ' +
           v.info.qtdNotas + ' nota' + (v.info.qtdNotas === 1 ? '' : 's'));
       }
-      if(v.info && v.info.manual) infos.push('prazo definido manualmente (sem histórico)');
-      // O campo de 1a parcela e' DESABILITADO quando o prazo resolve
-      // para uma parcela so' — impedir e' melhor que avisar. O aviso
-      // fica para quem editou o prazo depois de ja' ter preenchido.
-      if(unica && String(l.primeira || '').trim() !== ''){
-        infos.push('prazo de parcela única — o valor vence inteiro e a 1ª parcela digitada não vale');
+      // Onde a ST vai cair, dito ANTES de simular: junto da 1a parcela
+      // quando ela vence antes de 30 dias; parcela propria aos 30 nos
+      // demais casos (parcela unica ou 1a aos 30 dias ou alem).
+      if(prazoParse && String(l.st || '').trim() !== ''){
+        infos.push(prazoParse.length > 1 && prazoParse[0] < 30
+          ? 'ST cobrada junto da 1ª parcela (' + prazoParse[0] + ' dias)'
+          : 'ST vira parcela própria aos 30 dias');
       }
+      if(String(l.frete || '').trim() !== '') infos.push('frete em 30/60/90 a partir da compra');
       return '<div class="sim-linha">' +
         '<div class="campo"><label>Fornecedor (digite para buscar)</label>' +
           '<input type="text" list="listaFornSim" style="width:320px;" data-sim-forn="' + i + '" ' +
-          'value="' + escapeHtml(l.fornecedor === SIM_FRETE ? 'Frete' : (l.fornecedor || '')) + '" ' +
-          'placeholder="nome do fornecedor ou Frete" ' +
+          'value="' + escapeHtml(l.fornecedor || '') + '" ' +
+          'placeholder="nome do fornecedor" ' +
           'aria-label="Fornecedor da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Compra mensal (R$)</label>' +
           '<input type="text" inputmode="decimal" style="width:120px;" data-sim-valor="' + i + '" ' +
           'value="' + escapeHtml(l.valor || '') + '" aria-label="Valor da compra mensal ' + (i + 1) + '"></div>' +
-        '<div class="campo"><label>1ª parcela (opcional)</label>' +
-          '<input type="text" inputmode="decimal" style="width:120px;" data-sim-primeira="' + i + '" ' +
-          'value="' + escapeHtml(l.primeira || '') + '"' +
-          (unica ? ' disabled title="Prazo de parcela única — o valor vence inteiro de uma vez"' : '') +
-          ' aria-label="Primeira parcela da compra ' + (i + 1) + '"></div>' +
+        '<div class="campo"><label>ST (opcional)</label>' +
+          '<input type="text" inputmode="decimal" style="width:110px;" data-sim-st="' + i + '" ' +
+          'value="' + escapeHtml(l.st || '') + '" ' +
+          'title="Substituição tributária: soma ao total e vence junto da 1ª parcela (se antes de 30 dias) ou aos 30 dias" ' +
+          'aria-label="ST da compra ' + (i + 1) + '"></div>' +
+        '<div class="campo"><label>Frete (opcional)</label>' +
+          '<input type="text" inputmode="decimal" style="width:110px;" data-sim-frete="' + i + '" ' +
+          'value="' + escapeHtml(l.frete || '') + '" ' +
+          'title="Frete da compra: soma ao total, sempre em 30/60/90" ' +
+          'aria-label="Frete da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Prazo (dias)</label>' +
           '<input type="text" style="width:110px;" data-sim-prazo="' + i + '" ' +
           'value="' + escapeHtml(l.prazo || '') + '" aria-label="Prazo da compra ' + (i + 1) + '"></div>' +
@@ -2997,6 +3019,7 @@
       if(v.erro){ invalidas++; return; }
       validas.push(v);
       maiorPrazo = Math.max(maiorPrazo, v.prazo[v.prazo.length - 1]);
+      if(v.freteCent != null) maiorPrazo = Math.max(maiorPrazo, 90); // frete e' sempre 30/60/90
     });
 
     var simuladas = [];
@@ -3005,17 +3028,34 @@
       // os ultimos meses sairiam artificialmente leves (a compra do
       // mes 11 com prazo de 98 dias vence no mes 14, fora da tela) e o
       // grafico despencaria no fim com falsa sensacao de alivio.
+      var ateData = App.somarDias(ultimoDiaJanela, maiorPrazo);
       var parcelas = SimuladorNucleo.gerarCompras({
         valorCent: v.valorCent,
-        primeiraCent: v.primeiraCent,
+        stCent: v.stCent,
         prazoDias: v.prazo,
         dataPrimeira: v.data,
-        ateData: App.somarDias(ultimoDiaJanela, maiorPrazo)
+        ateData: ateData
       });
       (parcelas || []).forEach(function(p){
-        p.origem = v.info.nome;
+        // A ST sai rotulada a' parte no detalhe — total da linha e'
+        // compra + ST, e quem le precisa ver de onde veio cada pedaco.
+        p.origem = v.info.nome + (p.st ? ' (ST)' : '');
         simuladas.push(p);
       });
+      // O frete da compra e' origem propria, sempre em 30/60/90 a
+      // partir da mesma data, recorrendo mes a mes com a compra.
+      if(v.freteCent != null){
+        var freteParcelas = SimuladorNucleo.gerarCompras({
+          valorCent: v.freteCent,
+          prazoDias: [30, 60, 90],
+          dataPrimeira: v.data,
+          ateData: ateData
+        });
+        (freteParcelas || []).forEach(function(p){
+          p.origem = 'Frete — ' + v.info.nome;
+          simuladas.push(p);
+        });
+      }
     });
 
     var projetados = SimuladorNucleo.projetarInternos(pagamentosInternos, ultimoDiaJanela);
@@ -3092,7 +3132,7 @@
   });
 
   $('addLinhaSim').addEventListener('click', function(){
-    simulacao.linhas.push({ fornecedor: '', valor: '', primeira: '', prazo: '', data: hojeISO() });
+    simulacao.linhas.push({ fornecedor: '', valor: '', st: '', frete: '', prazo: '', data: hojeISO() });
     salvarSim();
     renderSimulador();
   });
@@ -3120,15 +3160,14 @@
     var l = simulacao.linhas[Number(inp.dataset.simForn)];
     if(!l) return;
     var digitado = inp.value.trim();
-    var exibido = l.fornecedor === SIM_FRETE ? 'Frete' : (l.fornecedor || '');
-    if(digitado === exibido) return; // blur sem mudanca: nao reseta o prazo editado
+    if(digitado === (l.fornecedor || '')) return; // blur sem mudanca: nao reseta o prazo editado
     l.fornecedor = digitado;
     // Trocar o fornecedor re-preenche o prazo com o padrao DELE (o
     // campo continua editavel depois) e guarda o nome CANONICO — quem
     // digitou em minusculas ve o rotulo oficial ao sair do campo.
     var info = infoFornSim(digitado);
     if(info){
-      l.fornecedor = info.manual ? SIM_FRETE : info.nome;
+      l.fornecedor = info.nome;
       l.prazo = info.rotulo;
     }
     salvarSim();
@@ -3141,7 +3180,7 @@
     renderSimulador();
   });
 
-  [['simValor', 'valor'], ['simPrimeira', 'primeira'], ['simPrazo', 'prazo'], ['simData', 'data']]
+  [['simValor', 'valor'], ['simSt', 'st'], ['simFrete', 'frete'], ['simPrazo', 'prazo'], ['simData', 'data']]
     .forEach(function(par){
       var dataAttr = par[0], campo = par[1];
       var seletor = 'input[data-' + dataAttr.replace(/[A-Z]/g, function(c){ return '-' + c.toLowerCase(); }) + ']';

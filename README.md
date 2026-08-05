@@ -248,15 +248,17 @@ Não precisa instalar nada. São treze etapas, em onze frentes:
     previsto/realizado e a previsão do mês corrente — que só projeta
     sobre os dias úteis restantes e **nunca inventa média de amostra
     vazia**.
-11. **Simulador de compra** — 37 verificações em `simulador-nucleo.js`:
+11. **Simulador de compra** — 45 verificações em `simulador-nucleo.js`:
     a soma das parcelas **sempre bate** com o valor da compra (centavos
-    inteiros, sobra na última, 1ª parcela informada), datas de compra
-    que encolhem no mês curto e voltam ao dia 31, "à vista" como
-    parcela única na data da compra, a **rampa** (o 12º mês recebe a
-    mesma carga de regime que o 6º), a projeção de recorrentes que
-    **não conta em dobro** o mês cujo documento já existe, e
-    `parcelasTotal` encerrando a corrente mesmo com `parcelaAtual`
-    ausente.
+    inteiros, sobra na última), a **ST** como valor adicional cobrado
+    junto da 1ª parcela (quando ela vence antes de 30 dias) ou em
+    parcela própria aos 30 dias (parcela única ou 1ª aos 30+), datas
+    de compra que encolhem no mês curto e voltam ao dia 31, "à vista"
+    como parcela única na data da compra, a **rampa** (o 12º mês
+    recebe a mesma carga de regime que o 6º), a projeção de
+    recorrentes que **não conta em dobro** o mês cujo documento já
+    existe, e `parcelasTotal` encerrando a corrente mesmo com
+    `parcelaAtual` ausente.
 
 Rode antes de publicar qualquer alteração.
 
