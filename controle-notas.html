@@ -157,6 +157,17 @@
     #tabelaImportar th:nth-child(6), #tabelaImportar td:nth-child(6),
     #tabelaImportar th:nth-child(7), #tabelaImportar td:nth-child(7),
     #maisImportarBtn{ display:none; }
+    /* Papel nao tem rolagem: o que passa da borda da folha e' cortado
+       em silencio (era o badge de atraso). Solta o corte do conteiner
+       e compacta a tabela para caber — a chave de 44 digitos e' o que
+       mais pesa, e a celula da previsao pode quebrar linha: melhor o
+       badge descer do que sumir. */
+    .tabela-rolavel{ overflow:visible !important; }
+    #tabelaImportar table{ width:100%; font-size:11px; }
+    #tabelaImportar th, #tabelaImportar td{ padding:4px 6px; }
+    #tabelaImportar td{ white-space:normal !important; }
+    #tabelaImportar .chave-nota{ font-size:8.5px !important; word-break:break-all; }
+    #tabelaImportar .previsao-input{ font-size:10px; padding:2px 4px; border-width:1px; }
   }
 </style>
 </head>
@@ -1288,7 +1299,7 @@
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
         '<td>' + escapeHtml(fornecedorEmCelula(n.nomeEmitente, fornecedorDaNota(n))) +
           (ehNfse(n) ? ' <span class="badge avencer" style="font-size:9.5px;">NFS-e</span>' : '') +
-          '<div style="font-size:10px; color:var(--ink-soft);">' + escapeHtml(n.id) + '</div></td>' +
+          '<div class="chave-nota" style="font-size:10px; color:var(--ink-soft);">' + escapeHtml(n.id) + '</div></td>' +
         '<td>' + brl(n.valorTotal) + '</td>' +
         '<td>' + (link ? '<a class="acao-mini" href="' + escapeHtml(link) + '" target="_blank" rel="noopener noreferrer">⬇ Baixar</a>' : '-') + '</td>' +
         '<td style="white-space:nowrap;">' +
