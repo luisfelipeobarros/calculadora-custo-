@@ -160,6 +160,12 @@
   .sim-detalhe .top-forn-row{ padding:4px 0; }
   .sim-legenda{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:flex; gap:14px; flex-wrap:wrap; margin:8px 0; }
   .sim-legenda i{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:baseline; }
+  .sim-ajustes{ display:flex; flex-wrap:wrap; gap:6px 10px; align-items:flex-end; margin:10px 0 12px; padding:10px 12px; background:var(--stripe2); border:1px solid var(--line); border-radius:4px; }
+  .sim-ajustes .rotulo{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink); font-weight:700; flex-basis:100%; }
+  .sim-ajustes label{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); display:flex; flex-direction:column; gap:2px; }
+  .sim-ajustes input{ width:54px; padding:4px 5px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:11.5px; text-align:right; background:var(--card); color:var(--ink); }
+  .sim-ajustes input.ativo{ border-color:var(--brick); color:var(--brick); font-weight:700; }
+  .sim-ajustes .dica{ flex-basis:100%; font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); }
   #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
 
   .so-imprimir{ display:none; }
@@ -2831,6 +2837,7 @@
     }
     if(simSalva && simSalva.linhas) simulacao = simSalva;
   }catch(e){ /* localStorage bloqueado: vive so' em memoria */ }
+  if(!simulacao.ajustes) simulacao.ajustes = {}; // {'aaaa-mm': % de ajuste da compra do mes}
 
   function salvarSim(){
     try{ localStorage.setItem(SIM_LS, JSON.stringify(simulacao)); }catch(e){}
@@ -2909,6 +2916,16 @@
       }).join('');
   }
 
+  // Dinheiro digitado ganha ponto de milhar ao sair do campo (o
+  // formulario re-renderiza no blur): "136816,69" vira "136.816,69".
+  // O que nao parsear fica como esta' — e' o caso invalido, que a
+  // validacao ja' aponta; mascarar aqui esconderia o erro.
+  function fmtDinheiroSim(txt){
+    var v = App.parseNumeroBR(txt);
+    if(v == null) return txt || '';
+    return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
   function renderLinhasSim(){
     preencherDatalistSim();
     var alvo = $('linhasSim');
@@ -2941,15 +2958,15 @@
           'aria-label="Fornecedor da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Compra mensal (R$)</label>' +
           '<input type="text" inputmode="decimal" style="width:120px;" data-sim-valor="' + i + '" ' +
-          'value="' + escapeHtml(l.valor || '') + '" aria-label="Valor da compra mensal ' + (i + 1) + '"></div>' +
+          'value="' + escapeHtml(fmtDinheiroSim(l.valor)) + '" aria-label="Valor da compra mensal ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>ST (opcional)</label>' +
           '<input type="text" inputmode="decimal" style="width:110px;" data-sim-st="' + i + '" ' +
-          'value="' + escapeHtml(l.st || '') + '" ' +
+          'value="' + escapeHtml(fmtDinheiroSim(l.st)) + '" ' +
           'title="Substituição tributária: soma ao total e vence junto da 1ª parcela (se antes de 30 dias) ou aos 30 dias" ' +
           'aria-label="ST da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Frete (opcional)</label>' +
           '<input type="text" inputmode="decimal" style="width:110px;" data-sim-frete="' + i + '" ' +
-          'value="' + escapeHtml(l.frete || '') + '" ' +
+          'value="' + escapeHtml(fmtDinheiroSim(l.frete)) + '" ' +
           'title="Frete da compra: soma ao total, sempre em 30/60/90" ' +
           'aria-label="Frete da compra ' + (i + 1) + '"></div>' +
         '<div class="campo"><label>Prazo (dias)</label>' +
@@ -3034,7 +3051,8 @@
         stCent: v.stCent,
         prazoDias: v.prazo,
         dataPrimeira: v.data,
-        ateData: ateData
+        ateData: ateData,
+        ajustes: simulacao.ajustes
       });
       (parcelas || []).forEach(function(p){
         // A ST sai rotulada a' parte no detalhe — total da linha e'
@@ -3049,7 +3067,8 @@
           valorCent: v.freteCent,
           prazoDias: [30, 60, 90],
           dataPrimeira: v.data,
-          ateData: ateData
+          ateData: ateData,
+          ajustes: simulacao.ajustes // "tudo diminui": o frete acompanha a compra do mes
         });
         (freteParcelas || []).forEach(function(p){
           p.origem = 'Frete — ' + v.info.nome;
@@ -3083,6 +3102,26 @@
       '<span><i style="background:var(--azul);"></i>contratado (fato)</span>' +
       '<span><i style="background:var(--brick);"></i>projetado (recorrente inferido)</span>' +
       '<span><i style="background:var(--profit);"></i>simulado (hipótese)</span></div>';
+
+    // "E se eu comprar mais/menos em tal mes?" — um % por mes, que
+    // escala as COMPRAS feitas naquele mes (mercadoria + ST + frete).
+    // O efeito aparece quando as parcelas dessas compras vencem, meses
+    // depois — a dica avisa, senao quem poe -10% em novembro e ve
+    // novembro igual acha que o campo nao funcionou.
+    html += '<div class="sim-ajustes">' +
+      '<span class="rotulo">Ajuste das compras por mês (%) — ex.: -10 compra 10% a menos naquele mês</span>' +
+      meses.map(function(m){
+        var nm = NOMES_MES[Number(m.mes.substring(5, 7)) - 1];
+        var rot = nm.charAt(0).toUpperCase() + nm.slice(1, 3) + '/' + m.mes.substring(2, 4);
+        var val = simulacao.ajustes[m.mes];
+        return '<label>' + rot +
+          '<input type="text" inputmode="numeric" data-sim-ajuste="' + m.mes + '"' +
+          (val != null && val !== 0 ? ' class="ativo"' : '') +
+          ' value="' + (val == null ? '' : escapeHtml(String(val))) + '" placeholder="0"' +
+          ' aria-label="Ajuste percentual das compras de ' + nm + '"></label>';
+      }).join('') +
+      '<span class="dica">o efeito aparece nos meses em que as parcelas dessas compras vencem (conforme o prazo), não no próprio mês</span>' +
+      '</div>';
     html += '<div class="sim-mes" style="border:none; background:transparent;">' +
       '<div class="sim-mes-grid" style="padding:0 12px; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft);">' +
       '<span>Mês</span><span class="num">Contratado</span><span class="num">Projetado</span>' +
@@ -3152,6 +3191,25 @@
 
   $('chkProjetado').addEventListener('change', function(){
     simulacao.projetado = this.checked;
+    salvarSim();
+    renderResultadoSim();
+  });
+
+  App.delegar($('resultadoSim'), 'change', 'input[data-sim-ajuste]', function(inp){
+    var mes = inp.dataset.simAjuste;
+    var txt = String(inp.value).replace('%', '').replace(',', '.').trim();
+    if(txt === '' || Number(txt) === 0){
+      delete simulacao.ajustes[mes];
+    } else {
+      var pct = parseFloat(txt);
+      if(isNaN(pct)){
+        App.toastErro('Ajuste inválido', 'Use um percentual como -10 ou 15.');
+        renderResultadoSim();
+        return;
+      }
+      if(pct < -100) pct = -100; // nao existe compra negativa
+      simulacao.ajustes[mes] = pct;
+    }
     salvarSim();
     renderResultadoSim();
   });
