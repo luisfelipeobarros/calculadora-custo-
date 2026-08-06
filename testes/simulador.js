@@ -159,6 +159,47 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
   eq('sem ST, nenhuma parcela marcada', sem.filter(p => p.st).length, 0);
 }
 
+// ── Media de compra mensal (referencia para preencher a linha) ──
+// Mes sem compra conta como zero: e' a media REAL de desembolso do
+// semestre, nao a media so' dos meses com nota.
+
+{
+  const notas = [
+    { dataEmissao: '2026-07-10', valorTotal: 60000 },   // dentro da janela
+    { dataEmissao: '2026-05-20', valorTotal: 30000 },   // dentro
+    { dataEmissao: '2026-03-01', valorTotal: 30000 },   // dentro (> corte 2026-02-05)
+    { dataEmissao: '2026-01-15', valorTotal: 999999 },  // FORA (antes de 6 meses)
+    { dataEmissao: '2026-09-01', valorTotal: 999999 },  // FORA (futuro; emissao > hoje)
+    { valorTotal: 500 }                                  // sem data: fora
+  ];
+  const m = S.mediaCompraMensal(notas, '2026-08-05', 6);
+  eq('media de 6 meses soma so as notas da janela', m.totalCent, 12000000);
+  eq('  ...e divide pelos 6 meses, com mes vazio contando zero',
+    m.mediaCent, 2000000);
+  eq('  ...contando as notas consideradas', m.qtdNotas, 3);
+}
+{
+  const m = S.mediaCompraMensal([], '2026-08-05', 6);
+  eq('fornecedor sem compra no semestre: zero de verdade (janela completa carregada)',
+    [m.totalCent, m.mediaCent, m.qtdNotas], [0, 0, 0]);
+}
+{
+  // Centavos: 100,01 em 6 meses nao vira float perdido.
+  const m = S.mediaCompraMensal([{ dataEmissao: '2026-07-01', valorTotal: 100.01 }], '2026-08-05', 6);
+  eq('media arredonda em centavos inteiros', m.mediaCent, Math.round(10001 / 6));
+}
+{
+  // A janela padronizada das telas e' 12 meses: nota de 11 meses atras
+  // entra, de 13 fica fora.
+  const m = S.mediaCompraMensal([
+    { dataEmissao: '2025-09-10', valorTotal: 1200 },  // 11 meses atras: entra
+    { dataEmissao: '2025-07-10', valorTotal: 9999 }   // 13 meses atras: fora
+  ], '2026-08-05', 12);
+  eq('janela de 12 meses: 11 meses atras entra, 13 fica fora',
+    [m.totalCent, m.qtdNotas], [120000, 1]);
+  eq('  ...e a media divide pelos 12', m.mediaCent, 10000);
+}
+
 // ── Ajuste % por mes de COMPRA ("-10 em novembro") ───────────
 // O percentual escala a COMPRA feita no mes (mercadoria + ST; o frete
 // acompanha porque a tela passa o mesmo mapa). O efeito aparece nos
