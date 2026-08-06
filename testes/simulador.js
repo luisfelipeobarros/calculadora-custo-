@@ -188,6 +188,17 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
   const m = S.mediaCompraMensal([{ dataEmissao: '2026-07-01', valorTotal: 100.01 }], '2026-08-05', 6);
   eq('media arredonda em centavos inteiros', m.mediaCent, Math.round(10001 / 6));
 }
+{
+  // A janela padronizada das telas e' 12 meses: nota de 11 meses atras
+  // entra, de 13 fica fora.
+  const m = S.mediaCompraMensal([
+    { dataEmissao: '2025-09-10', valorTotal: 1200 },  // 11 meses atras: entra
+    { dataEmissao: '2025-07-10', valorTotal: 9999 }   // 13 meses atras: fora
+  ], '2026-08-05', 12);
+  eq('janela de 12 meses: 11 meses atras entra, 13 fica fora',
+    [m.totalCent, m.qtdNotas], [120000, 1]);
+  eq('  ...e a media divide pelos 12', m.mediaCent, 10000);
+}
 
 // ── Ajuste % por mes de COMPRA ("-10 em novembro") ───────────
 // O percentual escala a COMPRA feita no mes (mercadoria + ST; o frete

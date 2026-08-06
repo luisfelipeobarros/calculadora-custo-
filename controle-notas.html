@@ -2346,6 +2346,12 @@
   // Quantos prazos aparecem antes de o resto virar "outros".
   var MAX_PRAZOS_VISIVEIS = 4;
 
+  // Janela da media de compra mensal (Fornecedores E Simulador usam a
+  // MESMA formula do simulador-nucleo com esta MESMA janela — mudar
+  // aqui muda as duas telas juntas). 12 meses: a carga de notas cobre
+  // 18, entao "sem compras" continua sendo afirmacao, nao chute.
+  var MESES_MEDIA_COMPRA = 12;
+
   // ─── Mapa de fornecedores (compartilhado) ───────────────────
   // A montagem fornecedor -> prazos e' usada pela aba Fornecedores E
   // pelo Simulador de compra — extraida para ca' para as duas telas
@@ -2415,8 +2421,11 @@
       return;
     }
 
+    var hoje = hojeISO();
     var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
-      '<th scope="col">Fornecedor</th><th scope="col">Prazo padrão</th>' +
+      '<th scope="col">Fornecedor</th>' +
+      '<th scope="col">Média de compra mensal</th>' +
+      '<th scope="col">Prazo padrão</th>' +
       '<th scope="col">Notas</th><th scope="col">Outros prazos encontrados</th>' +
       '</tr></thead><tbody>';
 
@@ -2433,11 +2442,21 @@
       // Uma vez por linha: antes mediaPrazo rodava duas vezes so' para
       // decidir se mostrava e depois imprimir o mesmo numero.
       var mediaDoPrincipal = mediaPrazo(principal.diasDoRotulo);
+      // A MESMA conta do Simulador (mesma funcao do nucleo, mesma
+      // janela de MESES_MEDIA_COMPRA meses, mes vazio conta zero) —
+      // as duas telas nao podem discordar da media.
+      var mediaCompra = SimuladorNucleo.mediaCompraMensal(
+        l.itens.map(function(x){ return x.nota; }), hoje, MESES_MEDIA_COMPRA);
 
       html += '<tr>' +
         '<td><button type="button" class="acao-mini" data-forn="' + escapeHtml(l.fornecedor) + '" ' +
           'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
           escapeHtml(l.fornecedor) + '</td>' +
+        '<td>' + (mediaCompra.qtdNotas
+          ? '<strong>' + brl(mediaCompra.mediaCent / 100) + '</strong>' +
+            '<div style="font-size:10px; color:var(--ink-soft);">últimos ' + MESES_MEDIA_COMPRA + ' meses · ' +
+            mediaCompra.qtdNotas + ' nota(s) · total ' + brl(mediaCompra.totalCent / 100) + '</div>'
+          : '<span class="nota-explicativa" style="margin:0;">sem compras nos últimos ' + MESES_MEDIA_COMPRA + ' meses</span>') + '</td>' +
         '<td><strong style="font-size:14px;">' + escapeHtml(principal.rotulo) + '</strong>' +
           (mediaDoPrincipal !== null
             ? ' <span style="font-size:11px; color:var(--azul); font-weight:700;">(média ' + mediaDoPrincipal + ' dias)</span>'
@@ -2456,7 +2475,7 @@
         '</tr>';
 
       if(aberto){
-        html += '<tr><td colspan="4" style="background:var(--stripe2); padding:10px;">' +
+        html += '<tr><td colspan="5" style="background:var(--stripe2); padding:10px;">' +
           '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
           '<th scope="col">Emissão</th><th scope="col">Nº</th><th scope="col">Valor</th>' +
           '<th scope="col">Prazo</th>' +
@@ -2859,10 +2878,11 @@
           rotulo: rotuloPrazo(principal.diasDoRotulo),
           pct: Math.round(100 * principal.qtd / linhas[i].itens.length),
           qtdNotas: linhas[i].itens.length,
-          // Quanto se comprou por mes, em media, no ultimo semestre —
-          // a referencia para preencher "compra mensal" sem chutar.
-          media6m: SimuladorNucleo.mediaCompraMensal(
-            linhas[i].itens.map(function(x){ return x.nota; }), hojeISO(), 6)
+          // Quanto se comprou por mes, em media, na MESMA janela da
+          // coluna da aba Fornecedores — a referencia para preencher
+          // "compra mensal" sem chutar.
+          mediaCompra: SimuladorNucleo.mediaCompraMensal(
+            linhas[i].itens.map(function(x){ return x.nota; }), hojeISO(), MESES_MEDIA_COMPRA)
         };
       }
     }
@@ -2944,16 +2964,16 @@
       if(v.info && l.fornecedor){
         infos.push('prazo padrão ' + escapeHtml(v.info.rotulo) + ' — ' + v.info.pct + '% de ' +
           v.info.qtdNotas + ' nota' + (v.info.qtdNotas === 1 ? '' : 's'));
-        var m6 = v.info.media6m;
-        if(m6 && m6.qtdNotas > 0){
+        var mc = v.info.mediaCompra;
+        if(mc && mc.qtdNotas > 0){
           // O "usar" preenche a compra mensal com a media — e' o numero
           // que se quer digitar ali na maioria das vezes.
-          infos.push('média de compra (últimos 6 meses): <strong>' + brl(m6.mediaCent / 100) +
-            '/mês</strong> — ' + m6.qtdNotas + ' nota' + (m6.qtdNotas === 1 ? '' : 's') +
+          infos.push('média de compra (últimos ' + MESES_MEDIA_COMPRA + ' meses): <strong>' + brl(mc.mediaCent / 100) +
+            '/mês</strong> — ' + mc.qtdNotas + ' nota' + (mc.qtdNotas === 1 ? '' : 's') +
             ' <button type="button" class="acao-mini" data-usar-media="' + i + '"' +
             ' title="Preencher a compra mensal com esta média">usar</button>');
-        } else if(m6){
-          infos.push('sem compras nos últimos 6 meses');
+        } else if(mc){
+          infos.push('sem compras nos últimos ' + MESES_MEDIA_COMPRA + ' meses');
         }
       }
       // Onde a ST vai cair, dito ANTES de simular: junto da 1a parcela
@@ -3257,8 +3277,8 @@
     var l = simulacao.linhas[Number(b.dataset.usarMedia)];
     if(!l) return;
     var info = infoFornSim(l.fornecedor);
-    if(!info || !info.media6m || !info.media6m.qtdNotas) return;
-    l.valor = (info.media6m.mediaCent / 100).toLocaleString('pt-BR',
+    if(!info || !info.mediaCompra || !info.mediaCompra.qtdNotas) return;
+    l.valor = (info.mediaCompra.mediaCent / 100).toLocaleString('pt-BR',
       { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     salvarSim();
     renderSimulador();
