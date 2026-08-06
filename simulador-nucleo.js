@@ -184,6 +184,31 @@
   }
 
   /* ============================================================
+     3b. Media de compra mensal de um fornecedor
+     ============================================================ */
+
+  // Quanto se comprou por mes, em media, nos ultimos `meses` meses —
+  // o numero que normalmente se quer digitar em "compra mensal". Mes
+  // sem compra conta como zero: e' a media REAL de desembolso, nao a
+  // media so' dos meses em que houve nota. Notas fora da janela ficam
+  // de fora; a soma e' em centavos, como todo dinheiro aqui.
+  function mediaCompraMensal(notas, hoje, meses) {
+    var corte = somarMeses(hoje, -meses);
+    var totalCent = 0, qtd = 0;
+    (notas || []).forEach(function (n) {
+      if (!n.dataEmissao || n.dataEmissao < corte || n.dataEmissao > hoje) return;
+      totalCent += Math.round((n.valorTotal || 0) * 100);
+      qtd++;
+    });
+    return {
+      totalCent: totalCent,
+      mediaCent: Math.round(totalCent / meses),
+      qtdNotas: qtd,
+      meses: meses
+    };
+  }
+
+  /* ============================================================
      4. Projecao dos pagamentos internos recorrentes
      ============================================================ */
 
@@ -296,6 +321,7 @@
     parsePrazo: parsePrazo,
     dividirParcelas: dividirParcelas,
     gerarCompras: gerarCompras,
+    mediaCompraMensal: mediaCompraMensal,
     projetarInternos: projetarInternos,
     resumoMensal: resumoMensal
   };

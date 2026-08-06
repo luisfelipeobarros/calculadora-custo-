@@ -502,7 +502,7 @@
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
-<script src="simulador-nucleo.js?v=1"></script>
+<script src="simulador-nucleo.js?v=2"></script>
 <script>
   // Em file:// o Chrome bloqueia new Worker(), e o pdf.js cai no "fake
   // worker" na thread principal — e' o comportamento de producao do
@@ -2858,7 +2858,11 @@
           nome: linhas[i].fornecedor,
           rotulo: rotuloPrazo(principal.diasDoRotulo),
           pct: Math.round(100 * principal.qtd / linhas[i].itens.length),
-          qtdNotas: linhas[i].itens.length
+          qtdNotas: linhas[i].itens.length,
+          // Quanto se comprou por mes, em media, no ultimo semestre —
+          // a referencia para preencher "compra mensal" sem chutar.
+          media6m: SimuladorNucleo.mediaCompraMensal(
+            linhas[i].itens.map(function(x){ return x.nota; }), hojeISO(), 6)
         };
       }
     }
@@ -2940,6 +2944,17 @@
       if(v.info && l.fornecedor){
         infos.push('prazo padrão ' + escapeHtml(v.info.rotulo) + ' — ' + v.info.pct + '% de ' +
           v.info.qtdNotas + ' nota' + (v.info.qtdNotas === 1 ? '' : 's'));
+        var m6 = v.info.media6m;
+        if(m6 && m6.qtdNotas > 0){
+          // O "usar" preenche a compra mensal com a media — e' o numero
+          // que se quer digitar ali na maioria das vezes.
+          infos.push('média de compra (últimos 6 meses): <strong>' + brl(m6.mediaCent / 100) +
+            '/mês</strong> — ' + m6.qtdNotas + ' nota' + (m6.qtdNotas === 1 ? '' : 's') +
+            ' <button type="button" class="acao-mini" data-usar-media="' + i + '"' +
+            ' title="Preencher a compra mensal com esta média">usar</button>');
+        } else if(m6){
+          infos.push('sem compras nos últimos 6 meses');
+        }
       }
       // Onde a ST vai cair, dito ANTES de simular: junto da 1a parcela
       // quando ela vence antes de 30 dias; parcela propria aos 30 nos
@@ -3234,6 +3249,17 @@
 
   App.delegar($('linhasSim'), 'click', 'button[data-sim-rm]', function(b){
     simulacao.linhas.splice(Number(b.dataset.simRm), 1);
+    salvarSim();
+    renderSimulador();
+  });
+
+  App.delegar($('linhasSim'), 'click', 'button[data-usar-media]', function(b){
+    var l = simulacao.linhas[Number(b.dataset.usarMedia)];
+    if(!l) return;
+    var info = infoFornSim(l.fornecedor);
+    if(!info || !info.media6m || !info.media6m.qtdNotas) return;
+    l.valor = (info.media6m.mediaCent / 100).toLocaleString('pt-BR',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     salvarSim();
     renderSimulador();
   });

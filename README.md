@@ -248,7 +248,7 @@ Não precisa instalar nada. São treze etapas, em onze frentes:
     previsto/realizado e a previsão do mês corrente — que só projeta
     sobre os dias úteis restantes e **nunca inventa média de amostra
     vazia**.
-11. **Simulador de compra** — 51 verificações em `simulador-nucleo.js`:
+11. **Simulador de compra** — 56 verificações em `simulador-nucleo.js`:
     a soma das parcelas **sempre bate** com o valor da compra (centavos
     inteiros, sobra na última), a **ST** como valor adicional cobrado
     junto da 1ª parcela (quando ela vence antes de 30 dias) ou em
