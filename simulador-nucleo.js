@@ -123,35 +123,58 @@
   // com prazo de 98 dias so' vence no mes 14). limiteCompras e' a
   // porta para compra avulsa (limite 1); ausente = sem limite.
   //
+  // ajustes e' o "e se eu comprar mais/menos NAQUELE mes": um mapa
+  // {'aaaa-mm': percentual} que escala a COMPRA feita no mes (valor,
+  // ST e — porque quem chama passa o mesmo mapa — o frete junto).
+  // "-10" em novembro reduz as compras de novembro em 10%; o efeito
+  // aparece quando as parcelas DELAS vencem, meses depois — e' o
+  // fluxo de caixa real, nao um corte visual na barra do mes. Abaixo
+  // de -100% nao existe compra negativa: trava no zero.
+  //
   // Devolve a lista de parcelas {compra, vencimento, cent} — quem
   // agrega depois descarta o que cair fora da janela — ou null quando
   // a divisao nao fecha (1a parcela maior que o total).
   function gerarCompras(opts) {
     var prazo = opts.prazoDias;
-    var parcelasBase = dividirParcelas(opts.valorCent, prazo.length,
-      opts.primeiraCent == null ? null : opts.primeiraCent);
-    if (!parcelasBase) return null;
+    // Valida a forma da divisao ANTES do laco (1a > total falha ja'
+    // aqui, mesmo que o ajuste do mes fosse zerar a compra).
+    if (!dividirParcelas(opts.valorCent, prazo.length,
+      opts.primeiraCent == null ? null : opts.primeiraCent)) return null;
 
-    var stCent = opts.stCent == null ? 0 : opts.stCent;
+    var stCentBase = opts.stCent == null ? 0 : opts.stCent;
+    var ajustes = opts.ajustes || {};
     var diaFixo = Number(opts.dataPrimeira.substring(8, 10));
     var saida = [];
     for (var k = 0; ; k++) {
       var dataCompra = k === 0 ? opts.dataPrimeira
         : somarMeses(opts.dataPrimeira, k, { diaFixo: diaFixo });
       if (dataCompra > opts.ateData) break;
+
+      var pct = ajustes[dataCompra.substring(0, 7)];
+      var fator = 1 + (Number(pct) || 0) / 100;
+      if (fator < 0) fator = 0;
+
+      // O fator escala o TOTAL da compra do mes e a divisao refaz por
+      // cima — escalar parcela a parcela deixaria a soma divergir do
+      // total escalado por arredondamento.
+      var valorMes = Math.round(opts.valorCent * fator);
+      var primeiraMes = opts.primeiraCent == null ? null : Math.round(opts.primeiraCent * fator);
+      var stMes = Math.round(stCentBase * fator);
+      var parcelas = dividirParcelas(valorMes, prazo.length, primeiraMes);
+
       for (var i = 0; i < prazo.length; i++) {
         saida.push({
           compra: dataCompra,
           vencimento: somarDias(dataCompra, prazo[i]),
-          cent: parcelasBase[i]
+          cent: parcelas[i]
         });
       }
-      if (stCent > 0) {
+      if (stMes > 0) {
         var diasSt = (prazo.length > 1 && prazo[0] < 30) ? prazo[0] : 30;
         saida.push({
           compra: dataCompra,
           vencimento: somarDias(dataCompra, diasSt),
-          cent: stCent,
+          cent: stMes,
           st: true
         });
       }

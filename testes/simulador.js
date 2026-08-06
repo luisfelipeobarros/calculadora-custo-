@@ -159,6 +159,46 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
   eq('sem ST, nenhuma parcela marcada', sem.filter(p => p.st).length, 0);
 }
 
+// ── Ajuste % por mes de COMPRA ("-10 em novembro") ───────────
+// O percentual escala a COMPRA feita no mes (mercadoria + ST; o frete
+// acompanha porque a tela passa o mesmo mapa). O efeito aparece nos
+// vencimentos daquelas parcelas, meses depois — fluxo de caixa real.
+
+{
+  const ps = S.gerarCompras({
+    valorCent: 1000000, stCent: 100000, prazoDias: [70, 84, 98],
+    dataPrimeira: '2026-08-05', ateData: '2026-09-05',
+    ajustes: { '2026-09': -10 }
+  });
+  const ago = ps.filter(p => p.compra === '2026-08-05');
+  const set = ps.filter(p => p.compra === '2026-09-05');
+  eq('mes sem ajuste fica intacto', soma(ago.map(p => p.cent)), 1100000);
+  eq('compra de setembro com -10%: total escalado (mercadoria + ST)',
+    soma(set.map(p => p.cent)), 900000 + 90000);
+  eq('  ...a ST escala junto', set.find(p => p.st).cent, 90000);
+  eq('  ...e a divisao refeita fecha em cima do total escalado',
+    soma(set.filter(p => !p.st).map(p => p.cent)), 900000);
+}
+{
+  // Aumento tambem, e valor que nao divide redondo continua fechando.
+  const ps = S.gerarCompras({
+    valorCent: 999999, prazoDias: [30, 60, 90],
+    dataPrimeira: '2026-08-05', ateData: '2026-08-05',
+    ajustes: { '2026-08': 15 }
+  });
+  eq('+15% escala o total e a soma das parcelas bate com o escalado',
+    soma(ps.map(p => p.cent)), Math.round(999999 * 1.15));
+}
+{
+  // Abaixo de -100% nao existe compra negativa: trava no zero.
+  const ps = S.gerarCompras({
+    valorCent: 1000, prazoDias: [30], dataPrimeira: '2026-08-05',
+    ateData: '2026-08-05', ajustes: { '2026-08': -150 }
+  });
+  eq('ajuste abaixo de -100% trava no zero, nunca vira negativo',
+    soma(ps.map(p => p.cent)), 0);
+}
+
 // ── 5. Rampa: o 12o mes recebe a carga de regime do 6o ───────
 
 {
