@@ -195,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São treze etapas, em onze frentes:
+Não precisa instalar nada. São quatorze etapas, em doze frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -261,6 +261,13 @@ Não precisa instalar nada. São treze etapas, em onze frentes:
     de recorrentes que **não conta em dobro** o mês cujo documento já
     existe, e `parcelasTotal` encerrando a corrente mesmo com
     `parcelaAtual` ausente.
+12. **DANFE simplificado** — as duas leituras determinísticas do
+    documento de conferência: a **UF do emitente** extraída dos 2
+    primeiros dígitos da chave de acesso (código IBGE; desconhecido →
+    "—", nunca chute) e a **classificação da operação pelo CFOP**
+    (interna/interestadual/exterior; venda com/sem ST; e 5405/6404 como
+    "ST retida anteriormente", que legitimamente vem sem cobrança e não
+    pode virar alarme falso na checagem cruzada com o valor de ST).
 
 Rode antes de publicar qualquer alteração.
 

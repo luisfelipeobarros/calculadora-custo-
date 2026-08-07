@@ -4,7 +4,7 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao treze etapas, em onze
+  Nao precisa instalar nada — so' o Node. Sao quatorze etapas, em doze
   frentes (a lista canonica, com o que cada uma cobre, esta' no README,
   secao "Rodando os testes"):
 
@@ -25,6 +25,8 @@
                          previsao de faturamento do mes corrente.
   - simulador.js       — Simulador de compra: parcelas em centavos,
                          rampa de 12 meses e projecao de recorrentes.
+  - danfe.js           — DANFE simplificado: UF pela chave de acesso e
+                         classificacao da operacao pelo CFOP.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -45,7 +47,8 @@ const etapas = [
   ['Pagamentos e recorrencia', 'pagamentos.js', []],
   ['Conferencia de DDA (Bradesco)', 'dda.js', []],
   ['Painel de metas', 'painel.js', []],
-  ['Simulador de compra', 'simulador.js', []]
+  ['Simulador de compra', 'simulador.js', []],
+  ['DANFE simplificado', 'danfe.js', []]
 ];
 
 let falhou = 0;
