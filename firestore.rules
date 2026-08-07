@@ -66,10 +66,12 @@ service cloud.firestore {
       // codigo nao consegue sobrescrever valor, emitente ou chave.
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual', 'previsaoEntrega'])
+             .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual',
+                       'previsaoEntrega', 'disponivelRetirada'])
         && (!mudou('status') || request.resource.data.status in ['ativa', 'cancelada'])
         && boolValido('noSistema')
         && boolValido('noSistemaManual')
+        && boolValido('disponivelRetirada')
         && dataISOValida('canceladaEm')
         && dataISOValida('previsaoEntrega');
     }

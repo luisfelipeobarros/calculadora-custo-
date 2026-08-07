@@ -181,14 +181,17 @@
     .top-forn-grid > div, .kpi{ break-inside:avoid; page-break-inside:avoid; }
     .so-imprimir{ display:block; font-family:var(--font-mono); font-size:12px; color:var(--ink); margin-bottom:12px; }
     /* "A importar" no papel: a 1a coluna (botoes de expandir itens),
-       XML (6a) e Ações (7a) sao interacao, nao informacao — fora da
-       impressao. Os indices casam com o cabecalho montado em
-       renderImportar; se uma coluna entrar ou sair de la', ajuste
-       aqui junto. O :not([colspan]) preserva as linhas expandidas de
-       itens/vencimentos, que usam um td unico atravessando a tabela. */
+       XML (6a), Ações (7a) e a caixa de Disponível (8a) sao interacao,
+       nao informacao — fora da impressao (o estado "disponivel"
+       sobrevive no papel pelo badge da coluna de previsao). Os indices
+       casam com o cabecalho montado em renderImportar; se uma coluna
+       entrar ou sair de la', ajuste aqui junto. O :not([colspan])
+       preserva as linhas expandidas de itens/vencimentos, que usam um
+       td unico atravessando a tabela. */
     #tabelaImportar th:nth-child(1), #tabelaImportar td:nth-child(1):not([colspan]),
     #tabelaImportar th:nth-child(6), #tabelaImportar td:nth-child(6),
     #tabelaImportar th:nth-child(7), #tabelaImportar td:nth-child(7),
+    #tabelaImportar th:nth-child(8), #tabelaImportar td:nth-child(8),
     #maisImportarBtn{ display:none; }
     /* Papel nao tem rolagem: o que passa da borda da folha e' cortado
        em silencio (era o badge de atraso). Solta o corte do conteiner
@@ -1303,7 +1306,7 @@
     renderImportar();
   });
 
-  var COLUNAS_IMPORTAR = 8;
+  var COLUNAS_IMPORTAR = 9;
 
   function renderImportar(){
     var termo = normalizarTexto($('buscaImportar').value);
@@ -1358,15 +1361,20 @@
     var html = '<div class="tabela-rolavel"><table class="quote-table">' +
       '<thead><tr><th scope="col"><span class="sr-only">Itens</span></th><th scope="col">Nº</th>' +
       '<th scope="col">Emissão</th><th scope="col">Emitente</th><th scope="col">Valor</th>' +
-      '<th scope="col">XML</th><th scope="col">Ações</th><th scope="col">Previsão de entrega</th></tr></thead><tbody>';
+      '<th scope="col">XML</th><th scope="col">Ações</th><th scope="col">Disponível</th>' +
+      '<th scope="col">Previsão de entrega</th></tr></thead><tbody>';
 
     visiveis.forEach(function(n){
       var aberta = !!itensAbertos[n.id];
       var vencAberto = !!vencAbertos[n.id];
       var previsaoVencida = !!n.previsaoEntrega && n.previsaoEntrega < hoje;
+      // Disponivel para retirada: a mercadoria esta' pronta na fabrica
+      // e quem esta' devendo a acao somos NOS (buscar). Nao e' atraso
+      // do fornecedor — a linha nao fica vermelha nem ganha o ⚠.
+      var disponivel = n.disponivelRetirada === true;
       var link = safeUrl(n.linkXml);
 
-      html += '<tr' + (previsaoVencida ? ' class="linha-atrasada"' : '') + '>' +
+      html += '<tr' + (previsaoVencida && !disponivel ? ' class="linha-atrasada"' : '') + '>' +
         '<td style="white-space:nowrap;">' + (ehNfse(n) ? '' :
           '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
           'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
@@ -1385,11 +1393,18 @@
           '<button type="button" class="acao-mini" data-lancar="' + escapeHtml(n.id) + '">✓ Já lançada</button> ' +
           '<button type="button" class="acao-mini perigo" data-cancelar="' + escapeHtml(n.id) + '">🚫 Cancelada</button>' +
         '</td>' +
+        '<td style="text-align:center;">' + (ehNfse(n) ? '-' :
+          '<input type="checkbox" class="sel-check" data-disponivel="' + escapeHtml(n.id) + '"' +
+          (disponivel ? ' checked' : '') +
+          ' title="Mercadoria pronta na fábrica, aguardando a nossa retirada"' +
+          ' aria-label="Disponível para retirada">') + '</td>' +
         '<td style="white-space:nowrap;">' +
           '<label class="sr-only" for="prev_' + escapeHtml(n.id) + '">Previsão de entrega</label>' +
           '<input type="date" class="previsao-input" id="prev_' + escapeHtml(n.id) + '" ' +
           'data-previsao="' + escapeHtml(n.id) + '" value="' + escapeHtml(n.previsaoEntrega || '') + '">' +
-          '<span data-avisoprev="' + escapeHtml(n.id) + '">' + avisoPrevisao(n.previsaoEntrega) + '</span></td>' +
+          '<span data-avisoprev="' + escapeHtml(n.id) + '">' +
+          (disponivel ? ' <span class="badge avencer">🏭 aguardando retirada</span>' : avisoPrevisao(n.previsaoEntrega)) +
+          '</span></td>' +
         '</tr>';
 
       if(aberta) html += htmlItens(n.id, COLUNAS_IMPORTAR);
@@ -1458,13 +1473,47 @@
         // Atualiza so' o aviso e a cor desta linha. O onSnapshot vai
         // redesenhar a tabela de qualquer forma, mas assim o ⚠ aparece
         // ou some no mesmo instante, sem esperar a confirmacao.
-        var span = document.querySelector('[data-avisoprev="' + CSS.escape(chave) + '"]');
-        if(span) span.innerHTML = avisoPrevisao(inp.value);
+        // Nota disponivel para retirada nao volta a ficar vermelha:
+        // o atraso e' nosso (buscar), nao do fornecedor.
         var linha = inp.closest('tr');
-        if(linha) linha.classList.toggle('linha-atrasada', !!inp.value && inp.value < hojeISO());
+        var chk = linha && linha.querySelector('[data-disponivel]');
+        var disponivel = !!(chk && chk.checked);
+        var span = document.querySelector('[data-avisoprev="' + CSS.escape(chave) + '"]');
+        if(span) span.innerHTML = disponivel
+          ? ' <span class="badge avencer">🏭 aguardando retirada</span>'
+          : avisoPrevisao(inp.value);
+        if(linha) linha.classList.toggle('linha-atrasada',
+          !disponivel && !!inp.value && inp.value < hojeISO());
       })
       .catch(function(e){ App.toastErro('Erro ao gravar a previsão', e); inp.value = anterior; })
       .then(function(){ inp.disabled = false; });
+  });
+
+  // Disponivel para retirada: so' aponta o estado, sem mexer em
+  // previsao nem em nada alem do proprio campo. A regra do Firestore
+  // permite gravar apenas os campos de controle allowlistados —
+  // disponivelRetirada entrou na lista (publicar o firestore.rules!).
+  App.delegar($('tabelaImportar'), 'change', '[data-disponivel]', function(chk){
+    var chave = chk.dataset.disponivel;
+    var marcado = chk.checked;
+    chk.disabled = true;
+    atualizarNota(chave, { disponivelRetirada: marcado })
+      .then(function(){
+        // Reflete na hora, sem esperar o snapshot: badge e cor da linha.
+        var linha = chk.closest('tr');
+        var inp = linha && linha.querySelector('[data-previsao]');
+        var venc = !!(inp && inp.value && inp.value < hojeISO());
+        var span = document.querySelector('[data-avisoprev="' + CSS.escape(chave) + '"]');
+        if(span) span.innerHTML = marcado
+          ? ' <span class="badge avencer">🏭 aguardando retirada</span>'
+          : avisoPrevisao(inp ? inp.value : '');
+        if(linha) linha.classList.toggle('linha-atrasada', !marcado && venc);
+      })
+      .catch(function(e){
+        App.toastErro('Erro ao gravar', e);
+        chk.checked = !marcado;
+      })
+      .then(function(){ chk.disabled = false; });
   });
 
   // ─── Pagamentos ─────────────────────────────────────────────
