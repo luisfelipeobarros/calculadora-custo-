@@ -11,36 +11,12 @@
     grupo x.1xx = venda sem ST. Grupo desconhecido -> st null, sem
     rotulo inventado.
 
-  As funcoes sao extraidas do controle-notas.html — o teste mede o
-  codigo que roda na tela, nao uma copia.
+  As funcoes moram no app-shared.js (o DANFE e' compartilhado entre o
+  Controle de Notas e a NF-e Emitidas da Calculadora) e o teste carrega
+  o modulo de verdade — o mesmo que as duas telas usam.
 */
-const fs = require('fs');
-const path = require('path');
-const raiz = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(raiz, 'controle-notas.html'), 'utf8');
-
-function extrair(nome){
-  const i = html.indexOf('function ' + nome + '(');
-  if(i === -1) throw new Error('nao achei ' + nome + ' em controle-notas.html');
-  let d = 0, j = html.indexOf('{', i);
-  for(; j < html.length; j++){
-    if(html[j] === '{') d++;
-    else if(html[j] === '}'){ d--; if(d === 0) break; }
-  }
-  return html.slice(i, j + 1);
-}
-function bloco(re, nome){
-  const m = html.match(re);
-  if(!m) throw new Error('nao achei ' + nome);
-  return m[0];
-}
-
-const m = new Function(
-  bloco(/var UF_POR_CODIGO = \{[\s\S]*?\};/, 'UF_POR_CODIGO') + '\n' +
-  extrair('ufDaChave') + '\n' +
-  extrair('classificarCfop') + '\n' +
-  'return { ufDaChave: ufDaChave, classificarCfop: classificarCfop };'
-)();
+const App = require('../app-shared.js');
+const m = { ufDaChave: App.ufDaChave, classificarCfop: App.classificarCfop };
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);

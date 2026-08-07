@@ -1080,6 +1080,171 @@
   }
 
   /* ============================================================
+     9d. DANFE simplificado (documento de conferencia interna)
+
+     Usado pelas DUAS paginas (Controle de Notas e a tela NF-e
+     Emitidas da Calculadora) — o construtor mora aqui para os dois
+     documentos serem UM SO'. E' conferencia, nao documento fiscal:
+     o proprio papel diz "SEM VALOR FISCAL".
+
+     Leituras deterministicas que ele faz:
+     - UF do emitente: os 2 primeiros digitos da chave de acesso sao
+       o codigo IBGE da UF, por definicao do padrao da NF-e;
+     - natureza da operacao pelo CFOP: 1o digito = ambito (5 interna /
+       6 interestadual / 7 exterior); grupo x.4xx = regime de ST,
+       sendo 5405/6404 "ST retida anteriormente" (a nota vem sem
+       cobranca e esta' CERTA assim — tratar como "venda com ST"
+       geraria alarme falso na checagem cruzada); x.1xx = sem ST.
+     Codigo desconhecido devolve null e a tela mostra "—", sem chute.
+     ============================================================ */
+
+  var UF_POR_CODIGO = {
+    11: 'RO (Rondônia)', 12: 'AC (Acre)', 13: 'AM (Amazonas)', 14: 'RR (Roraima)',
+    15: 'PA (Pará)', 16: 'AP (Amapá)', 17: 'TO (Tocantins)', 21: 'MA (Maranhão)',
+    22: 'PI (Piauí)', 23: 'CE (Ceará)', 24: 'RN (Rio Grande do Norte)', 25: 'PB (Paraíba)',
+    26: 'PE (Pernambuco)', 27: 'AL (Alagoas)', 28: 'SE (Sergipe)', 29: 'BA (Bahia)',
+    31: 'MG (Minas Gerais)', 32: 'ES (Espírito Santo)', 33: 'RJ (Rio de Janeiro)',
+    35: 'SP (São Paulo)', 41: 'PR (Paraná)', 42: 'SC (Santa Catarina)',
+    43: 'RS (Rio Grande do Sul)', 50: 'MS (Mato Grosso do Sul)', 51: 'MT (Mato Grosso)',
+    52: 'GO (Goiás)', 53: 'DF (Distrito Federal)'
+  };
+
+  function ufDaChave(chave) {
+    if (!/^\d{44}$/.test(String(chave || ''))) return null;
+    return UF_POR_CODIGO[Number(String(chave).substring(0, 2))] || null;
+  }
+
+  function classificarCfop(cfop) {
+    var c = String(cfop == null ? '' : cfop).replace(/\D/g, '');
+    if (c.length !== 4) return null;
+    var ambito = { 5: 'interna (mesmo estado do fornecedor)', 6: 'interestadual', 7: 'exterior' }[Number(c.charAt(0))] || null;
+    if (!ambito) return null;
+    var st = null;
+    if (c.charAt(1) === '4') {
+      st = (c === '5405' || c === '6404') ? 'ST retida anteriormente (sem cobrança nesta nota)' : 'venda com ST';
+    } else if (c.charAt(1) === '1') {
+      st = 'venda sem ST';
+    }
+    return { ambito: ambito, st: st };
+  }
+
+  function fmtCnpj14(v) {
+    var d = String(v == null ? '' : v).replace(/\D/g, '');
+    return d.length === 14
+      ? d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')
+      : (d || '—');
+  }
+
+  // ctx: { chave, numero, serie, dataEmissao, valorTotal, nomeEmitente,
+  //   cnpjEmitente, ehNfse, cancelada, canceladaEm, rotuloInterno,
+  //   itens (dados de itensNotas | {carregando} | {erro} | {semItens}),
+  //   comPisCofins, duplicatas (lista | null = carregando),
+  //   msgSemDuplicatas, origem ('Controle de Notas' | ...) }
+  function htmlDanfe(ctx) {
+    var chaveEspacada = escapeHtml(String(ctx.chave || '').replace(/(\d{4})(?=\d)/g, '$1 '));
+    var dados = ctx.itens;
+
+    var html = '<div class="danfe-titulo"><span>DANFE simplificado — conferência interna</span>' +
+      '<span class="sem-valor">SEM VALOR FISCAL</span></div>';
+
+    if (ctx.cancelada) {
+      html += '<div class="danfe-cancelada">NOTA CANCELADA' +
+        (ctx.canceladaEm ? ' EM ' + fmtData(ctx.canceladaEm) : '') + '</div>';
+    }
+
+    html += '<div class="danfe-secao">Nota</div><div class="danfe-grade">' +
+      '<div class="danfe-campo"><span class="rotulo">Número</span><span class="valor">' + escapeHtml(ctx.numero || '—') + '</span></div>' +
+      '<div class="danfe-campo"><span class="rotulo">Série</span><span class="valor">' + escapeHtml(ctx.serie || '—') + '</span></div>' +
+      '<div class="danfe-campo"><span class="rotulo">Emissão</span><span class="valor">' + fmtData(ctx.dataEmissao) + '</span></div>' +
+      (ctx.ehNfse ? '<div class="danfe-campo"><span class="rotulo">Tipo</span><span class="valor">NFS-e (serviço)</span></div>' : '') +
+      '</div>';
+
+    // Documento reproduz o XML: a RAZAO SOCIAL crua e' o correto aqui
+    // (o DANFE nao conhece nossos apelidos). A regra da Vetrus nao se
+    // perde: quando o rotulo interno diverge, ele aparece ao lado.
+    var razaoSocial = String(ctx.nomeEmitente || '—');
+    html += '<div class="danfe-secao">Emitente</div><div class="danfe-grade">' +
+      '<div class="danfe-campo"><span class="rotulo">Razão social</span><span class="valor">' + escapeHtml(razaoSocial) + '</span></div>' +
+      '<div class="danfe-campo"><span class="rotulo">CNPJ</span><span class="valor">' + fmtCnpj14(ctx.cnpjEmitente) + '</span></div>' +
+      '<div class="danfe-campo"><span class="rotulo">UF de origem</span><span class="valor">' +
+        escapeHtml(ufDaChave(ctx.chave) || '—') + '</span></div>' +
+      (ctx.rotuloInterno && ctx.rotuloInterno !== razaoSocial
+        ? '<div class="danfe-campo"><span class="rotulo">No app</span><span class="valor">' + escapeHtml(ctx.rotuloInterno) + '</span></div>'
+        : '') +
+      '</div>';
+
+    html += '<div class="danfe-secao">Chave de acesso</div>' +
+      '<div class="danfe-chave">' + chaveEspacada + '</div>';
+
+    // Natureza da operacao pelo CFOP dos itens + checagem cruzada com
+    // o valor de ST. "ST retida anteriormente" fica FORA da checagem:
+    // nota de substituido legitimamente vem sem vST.
+    if (dados && (dados.itens || []).length) {
+      var porCfop = Object.create(null);
+      dados.itens.forEach(function (it) {
+        var c = String(it.cfop == null ? '' : it.cfop).replace(/\D/g, '');
+        porCfop[c] = (porCfop[c] || 0) + 1;
+      });
+      html += '<div class="danfe-secao">Natureza da operação (pelo CFOP)</div>';
+      Object.keys(porCfop).sort().forEach(function (c) {
+        var cl = classificarCfop(c);
+        var rotulo = cl ? [cl.ambito, cl.st].filter(Boolean).join(' · ') : 'CFOP fora do padrão';
+        html += '<div style="padding:2px 0;">CFOP <strong>' + escapeHtml(c || '—') + '</strong> — ' +
+          escapeHtml(rotulo) + ' <span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:11px;">(' +
+          porCfop[c] + ' item' + (porCfop[c] === 1 ? '' : 'ns') + ')</span></div>';
+      });
+      var temVendaComSt = dados.itens.some(function (it) {
+        var cl = classificarCfop(it.cfop);
+        return cl && cl.st === 'venda com ST';
+      });
+      var stNota = dados.stTotal || 0;
+      if (temVendaComSt && !(stNota > 0)) {
+        html += '<div style="padding:2px 0; color:var(--loss);">⚠ o CFOP indica venda com ST, mas a nota veio sem valor de ST — confira.</div>';
+      } else if (!temVendaComSt && stNota > 0) {
+        html += '<div style="padding:2px 0; color:var(--loss);">⚠ há valor de ST na nota, mas nenhum item tem CFOP de venda com ST — confira.</div>';
+      }
+    }
+
+    html += '<div class="danfe-secao">Produtos (NCM / CFOP / impostos por item)</div>';
+    if (!dados || dados.carregando) {
+      html += '<p class="nota-explicativa">Carregando itens...</p>';
+    } else if (dados.erro) {
+      html += '<p class="nota-explicativa" style="color:var(--loss);">Erro ao carregar os itens: ' + escapeHtml(dados.erro) + '</p>';
+    } else if (dados.semItens || !(dados.itens || []).length) {
+      html += '<p class="nota-explicativa">Itens não disponíveis para esta nota — o detalhamento por produto ' +
+        '(CFOP, NCM, ST por item) cobre as notas dos últimos 60 dias. Os totais abaixo continuam valendo.</p>';
+    } else {
+      html += tabelaItensNota(dados, { comPisCofins: !!ctx.comPisCofins, larguraMinima: '760px' });
+    }
+
+    // ST sempre presente nos totais: zero e' resposta, campo sumido e'
+    // duvida. Destaque so' quando ha' cobranca de verdade.
+    var st = (dados && dados.stTotal) || 0;
+    html += '<div class="danfe-totais">' +
+      (dados && dados.valorProdutos != null
+        ? '<div class="danfe-campo"><span class="rotulo">Valor dos produtos</span><span class="valor">' + brl(dados.valorProdutos) + '</span></div>'
+        : '') +
+      '<div class="danfe-campo"><span class="rotulo">Total de ICMS-ST</span><span class="valor' +
+        (st > 0 ? ' danfe-st-destaque' : '') + '">' + brl(st) + '</span></div>' +
+      '<div class="danfe-campo"><span class="rotulo">Valor total da nota</span><span class="valor">' + brl(ctx.valorTotal || 0) + '</span></div>' +
+      '</div>';
+
+    html += '<div class="danfe-secao">Duplicatas / vencimentos</div>';
+    if (ctx.duplicatas === null) {
+      html += '<p class="nota-explicativa">Carregando duplicatas...</p>';
+    } else if ((ctx.duplicatas || []).length) {
+      html += tabelaVencimentos(ctx.duplicatas, { dataEmissao: ctx.dataEmissao || '' });
+    } else {
+      html += '<p class="nota-explicativa">' + escapeHtml(ctx.msgSemDuplicatas || 'Nenhuma duplicata registrada.') + '</p>';
+    }
+
+    html += '<div class="danfe-rodape">Gerado' + (ctx.origem ? ' pelo ' + escapeHtml(ctx.origem) : '') + ' em ' +
+      fmtData(hojeISO()) + ' ' + horaAgora() + ' · dados da importação do XML (nota emitida contra a empresa) · ' +
+      'documento de conferência — não substitui o DANFE do emitente.</div>';
+    return html;
+  }
+
+  /* ============================================================
      Linhas posicionadas de PDF (camada de texto do pdf.js)
 
      A ORDEM SEQUENCIAL dos itens de getTextContent() mente: o PDF
@@ -1290,6 +1455,9 @@
     tabelaItensNota: tabelaItensNota,
     tabelaVencimentos: tabelaVencimentos,
     linhasDePdf: linhasDePdf,
+    ufDaChave: ufDaChave,
+    classificarCfop: classificarCfop,
+    htmlDanfe: htmlDanfe,
 
     REGRAS_FORNECEDOR: REGRAS_FORNECEDOR,
     rotularFornecedor: rotularFornecedor,

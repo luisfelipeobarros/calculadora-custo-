@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=14">
+<link rel="stylesheet" href="app-shared.css?v=15">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. */
@@ -811,12 +811,25 @@ Tupan</textarea>
 
 </div>
 
+<!-- ═══════════ DANFE SIMPLIFICADO (sobreposição) ═══════════
+     O mesmo documento do Controle de Notas (App.htmlDanfe). Fora do
+     .wrap de propósito: na impressão o .wrap some e só ele vai. -->
+<div id="danfeView" style="display:none;">
+  <div class="danfe-caixa">
+    <div class="no-print" style="display:flex; gap:8px; justify-content:flex-end; margin-bottom:10px;">
+      <button type="button" class="btn secondary mini" id="imprimirDanfeBtn">🖨 Imprimir / salvar PDF</button>
+      <button type="button" class="btn secondary mini" id="fecharDanfeBtn">✕ Fechar</button>
+    </div>
+    <div id="danfeDoc"></div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=15"></script>
+<script src="app-shared.js?v=16"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -3011,6 +3024,8 @@ Tupan</textarea>
         '<button type="button" class="btn secondary mini" data-venc="'+escapeHtml(n.chave)+'" ' +
         'aria-expanded="'+(vencAberto?'true':'false')+'" title="Ver vencimentos desta nota">' +
         (vencAberto?'📅 ▼':'📅')+'</button>' +
+        '<button type="button" class="btn secondary mini" data-danfe="'+escapeHtml(n.chave)+'" ' +
+        'title="DANFE simplificado (conferência interna)">📄</button>' +
         '</div>';
       if(vencAberto){
         html += '<div style="border:1px solid var(--line); border-top:none; padding:10px; background:var(--stripe2);">' +
@@ -3039,14 +3054,66 @@ Tupan</textarea>
     // outros elementos, não a execução do outro listener deste. Quem
     // resolve é o cabeçalho ignorar cliques que nasceram no botão.
     App.delegar(container, 'click', '[data-nota]', (h, ev)=>{
-      if(ev.target.closest && ev.target.closest('[data-venc]')) return;
+      if(ev.target.closest && ev.target.closest('[data-venc],[data-danfe]')) return;
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
       renderListaNotas(suf);
     });
     App.delegar(container, 'click', '[data-venc]', (b)=>{
       alternarVencimentos(b.dataset.venc, suf);
     });
+    App.delegar(container, 'click', '[data-danfe]', (b)=> abrirDanfe(b.dataset.danfe));
   });
+
+  // ─── DANFE simplificado ───
+  // O documento e' o MESMO do Controle de Notas (App.htmlDanfe); aqui
+  // so' se monta o contexto. A linha desta lista JA' E' o documento de
+  // itensNotas (itens, ST, CFOP em memoria); as duplicatas vem da
+  // mesma consulta-por-nota do botao 📅, com o mesmo cache.
+  function danfeCtx(n, dups){
+    return {
+      chave: n.chave, numero: n.numero, serie: n.serie,
+      dataEmissao: n.dataEmissao, valorTotal: n.valorTotal,
+      nomeEmitente: n.nomeEmitente, cnpjEmitente: n.cnpjEmitente,
+      ehNfse: false, // esta lista nasce de itensNotas, que so' tem NF-e
+      cancelada: n.status === 'cancelada', canceladaEm: n.canceladaEm,
+      rotuloInterno: fornecedorDaNotaEmitida(n),
+      itens: n,
+      comPisCofins: true, // mesma coluna extra que esta tela ja' mostra
+      duplicatas: dups,
+      msgSemDuplicatas: 'Nenhuma duplicata registrada para esta nota.',
+      origem: 'Calculadora de Custo'
+    };
+  }
+
+  function abrirDanfe(chave){
+    const n = (notasEmitidasCache || []).find(x => x.chave === chave);
+    if(!n){ App.toastErro('Nota não encontrada', 'Recarregue a lista e tente de novo.'); return; }
+    document.body.classList.add('danfe-aberto');
+    $('danfeView').style.display = '';
+    $('danfeView').scrollTop = 0;
+
+    const c = vencCache[chave];
+    if(c && c.lista){
+      $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, c.lista));
+      return;
+    }
+    // duplicatas: null = "carregando" para o documento
+    $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, null));
+    App.comAuth(()=> exigirDb().collection('duplicatas').where('chaveAcesso','==',chave).get())
+      .then(snap => { vencCache[chave] = { lista: snap.docs.map(d => d.data()) }; })
+      .catch(e => { console.error('Erro ao carregar vencimentos:', e); vencCache[chave] = { lista: [], erro: App.erroDe(e) }; })
+      .then(()=>{
+        if(document.body.classList.contains('danfe-aberto')){
+          $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, vencCache[chave].lista || []));
+        }
+      });
+  }
+
+  $('fecharDanfeBtn').addEventListener('click', ()=>{
+    $('danfeView').style.display = 'none';
+    document.body.classList.remove('danfe-aberto');
+  });
+  $('imprimirDanfeBtn').addEventListener('click', ()=> window.print());
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);
