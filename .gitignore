@@ -8,8 +8,10 @@ desktop.ini
 .idea/
 *.swp
 
-# Configuracao local do Claude Code
-.claude/
+# Configuracao local do Claude Code — MENOS as skills, que sao parte
+# do projeto e devem valer em qualquer maquina que clonar o repo.
+.claude/*
+!.claude/skills/
 
 # Backups gerados pelo proprio app
 calculadora-custo-backup-*.json

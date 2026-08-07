@@ -107,8 +107,10 @@ eq('os gemeos 372280-02 e 372281-02 existem separados',
   !!(porDoc['372280-02'] && porDoc['372281-02']), true);
 eq('  ...com o MESMO valor', porDoc['372280-02'].valorCentavos, porDoc['372281-02'].valorCentavos);
 
+// O CNPJ da fixture e' ficticio (repositorio publico); o que o teste
+// trava e' a NORMALIZACAO: 15 digitos do Bradesco -> 14, em todos.
 eq('CNPJ do pagador normalizado em todos',
-  lido.registros.every(r => r.cnpjPagador === '04226489000175'), true);
+  lido.registros.every(r => r.cnpjPagador === '00111222000133'), true);
 
 // ── 3. Estrategias de casamento ──────────────────────────────
 
