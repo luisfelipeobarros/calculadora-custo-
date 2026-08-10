@@ -259,11 +259,9 @@
       <button type="button" class="acao-mini" id="btnImprimirPainel">🖨 Imprimir</button>
     </div>
     <div class="kpi-grid">
-      <button type="button" class="kpi" id="kpiImportar">
-        <span class="k-label">Notas a importar</span>
-        <span class="k-num" id="kImportarQtd">--</span>
-        <span class="k-sub" id="kImportarValor"></span>
-      </button>
+      <!-- O cartao "Notas a importar" (NF-e + NFS-e somadas) saiu a
+           pedido (08/08/2026): o numero misturava fluxos e ja' existe
+           o "NF-e a receber", que e' o acionavel. -->
       <button type="button" class="kpi alerta" id="kpiAtrasadas">
         <span class="k-label">Duplicatas atrasadas</span>
         <span class="k-num compacto" id="kAtrasadasValor">--</span>
@@ -334,9 +332,9 @@
         <input type="search" id="buscaImportar" placeholder="Buscar por emitente, número ou chave...">
         <!-- Sem "Todas": mercadoria e serviço são fluxos diferentes, e
              misturar os dois só obrigava a filtrar depois. NF-e é o
-             padrão ao abrir a tela. A contagem em cada chip evita a
-             dúvida de por que a lista tem menos linhas que o contador
-             do menu, que soma os dois tipos. -->
+             padrão ao abrir a tela — e é só ela que o contador do
+             menu soma; NFS-e aparece aqui limitada aos últimos
+             30 dias. -->
         <button type="button" class="chip-filtro" data-tipo="nfe" aria-pressed="true">NF-e <span id="chipQtdNfe"></span></button>
         <button type="button" class="chip-filtro" data-tipo="nfse" aria-pressed="false">NFS-e <span id="chipQtdNfse"></span></button>
         <button type="button" class="chip-filtro" id="ordDataBtn">Mais antigas primeiro</button>
@@ -958,7 +956,6 @@
     window.print();
   });
 
-  $('kpiImportar').addEventListener('click', function(){ router.ir('Importar'); });
   $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
   $('kpiAtrasadas').addEventListener('click', function(){ setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
   $('kpiHoje').addEventListener('click', function(){ setFiltroPag('hoje'); router.ir('Pagamentos'); });
@@ -986,7 +983,10 @@
   }
 
   function atualizarContadores(){
-    var aImportar = notas.filter(notaAImportar);
+    // O contador do menu conta SO' NF-e (pedido de 08/08/2026): e' a
+    // mercadoria que vira divida e cobra acao; servico tem fluxo
+    // proprio e envelhece rapido — inflava o numero sem dizer nada.
+    var aImportar = notas.filter(function(n){ return notaAImportar(n) && !ehNfse(n); });
     $('countImportar').textContent = aImportar.length ? '(' + aImportar.length + ')' : '';
     var inicioHoje = inicioJanelaHoje();
     // Mesma conta do cartao "Duplicatas atrasadas" do Painel: duplicatas
@@ -1023,8 +1023,6 @@
     var inicioHoje = inicioJanelaHoje();
 
     var aImportar = notas.filter(notaAImportar);
-    $('kImportarQtd').textContent = aImportar.length;
-    $('kImportarValor').textContent = brl(aImportar.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0));
 
     var pendentes = duplicatas.filter(function(d){ return d.pago !== true && !dupDaNotaCancelada(d); })
       .concat(internosDoPainel().filter(function(p){ return p.pago !== true; }));
@@ -1333,9 +1331,18 @@
 
     var pendentes = notas.filter(notaAImportar);
 
+    // NFS-e so' dos ultimos 30 dias (pedido de 08/08/2026): servico
+    // antigo pendente e' ruido permanente — quem nao foi lancado em um
+    // mes nao vai ser por esta lista. NF-e nao tem corte: mercadoria
+    // pendente e' divida real ate' entrar no ERP.
+    var corteNfse = App.somarDias(hojeISO(), -30);
+    pendentes = pendentes.filter(function(n){
+      return !ehNfse(n) || (n.dataEmissao || '') >= corteNfse;
+    });
+
     // Contagem por tipo ANTES dos filtros de texto: os chips dizem
-    // quantas notas existem de cada lado, e a soma dos dois bate com o
-    // contador do menu — senão a lista pareceria estar escondendo algo.
+    // quantas notas existem de cada lado (a NFS-e ja' com o corte de
+    // 30 dias aplicado).
     var totalNfe = 0, totalNfse = 0;
     pendentes.forEach(function(n){ if(ehNfse(n)) totalNfse++; else totalNfe++; });
     $('chipQtdNfe').textContent = totalNfe ? '(' + totalNfe + ')' : '';
