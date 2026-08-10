@@ -1440,11 +1440,34 @@
     });
 
     $('tabelaImportar').innerHTML = html + '</tbody></table></div>';
+
     // O total é sempre o da lista filtrada inteira, não o da página:
-    // é ele que responde "quanto ainda falta importar".
-    $('totalImportar').textContent = totalFiltrado + ' nota(s) · total ' +
-      brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0)) +
-      (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
+    // é ele que responde "quanto ainda falta importar". Para NF-e, o
+    // rodapé abre o total nas TRES situacoes da mercadoria — a mesma
+    // regra das linhas: disponivel (marcada) > atrasado (previsao
+    // vencida) > producao (o resto). Sao mutuamente exclusivas e a
+    // soma bate com o total; zero aparece escrito porque a lista esta'
+    // toda em memoria — zero aqui e' afirmacao.
+    var mostrando = totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '';
+    if(filtroTipoImportar === 'nfse'){
+      // Servico nao tem retirada/producao — rodapé simples.
+      $('totalImportar').textContent = totalFiltrado + ' nota(s) · total ' +
+        brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0)) + mostrando;
+    } else {
+      var somaDisp = 0, somaAtras = 0, somaProd = 0, somaTotal = 0;
+      lista.forEach(function(n){
+        var v = n.valorTotal || 0;
+        somaTotal += v;
+        if(n.disponivelRetirada === true) somaDisp += v;
+        else if(n.previsaoEntrega && n.previsaoEntrega < hoje) somaAtras += v;
+        else somaProd += v;
+      });
+      $('totalImportar').textContent = totalFiltrado + ' nota(s) · ' +
+        '🏭 disponível p/ retirada ' + brl(somaDisp) + ' · ' +
+        '⚠ atrasado ' + brl(somaAtras) + ' · ' +
+        'em produção ' + brl(somaProd) + ' · ' +
+        'total ' + brl(somaTotal) + mostrando;
+    }
   }
 
   // Delegacao: registrada UMA vez, vale para todas as linhas de agora e
