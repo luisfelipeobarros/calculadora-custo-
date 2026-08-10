@@ -297,5 +297,46 @@ if(/\}\)\.then\(function\(\)\{ iniciando = false; \}\);/.test(cn)){
   erro('a guarda de iniciar() nunca e liberada — uma falha travaria o app para sempre');
 }
 
+// ============================================================
+// Recebimento derivado do vinculo cotacao <-> NF-e
+// ============================================================
+// O selo NUNCA e' gravado: deriva das notas vinculadas na hora de
+// exibir. Regras travadas: sem vinculo -> null (ausencia de vinculo
+// nao e' "nao recebida"); "recebida" exige TODAS com noSistema true;
+// nota vinculada sem documento carregado conta como nao recebida —
+// o selo nao sai por falta de dado.
+
+const statusRecebimentoCotacao = new Function(
+  extrair('statusRecebimentoCotacao') + '\nreturn statusRecebimentoCotacao;')();
+
+const eqRec = (t, a, b) => {
+  const va = JSON.stringify(a), vb = JSON.stringify(b);
+  va === vb ? ok(t) : erro(t + ' — esperava ' + vb + ', veio ' + va);
+};
+
+const estado = {
+  'chave-ok-1': { noSistema: true },
+  'chave-ok-2': { noSistema: true },
+  'chave-pendente': { noSistema: false },
+  'chave-sem-flag': {}
+};
+
+eqRec('sem vinculo -> null (sem selo, nao "nao recebida")',
+  statusRecebimentoCotacao([], estado), null);
+eqRec('vinculo ausente (undefined) tambem -> null',
+  statusRecebimentoCotacao(undefined, estado), null);
+eqRec('todas as vinculadas no ERP -> recebida completa',
+  statusRecebimentoCotacao(['chave-ok-1', 'chave-ok-2'], estado),
+  { total: 2, recebidas: 2, completa: true });
+eqRec('parte no ERP -> parcial, nunca completa',
+  statusRecebimentoCotacao(['chave-ok-1', 'chave-pendente'], estado),
+  { total: 2, recebidas: 1, completa: false });
+eqRec('noSistema ausente no doc conta como NAO recebida',
+  statusRecebimentoCotacao(['chave-sem-flag'], estado),
+  { total: 1, recebidas: 0, completa: false });
+eqRec('nota vinculada sem documento carregado nao vira "recebida"',
+  statusRecebimentoCotacao(['chave-que-nao-veio'], estado),
+  { total: 1, recebidas: 0, completa: false });
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

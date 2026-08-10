@@ -56,6 +56,16 @@
      roda isolado num iframe com sandbox. */
   .busca-google-frame{ width:100%; border:0; display:block; }
 
+  /* Estado de controle na lista de NF-e Emitidas (recebida/disponivel/
+     previsao) — mesmos significados do Controle de Notas. */
+  .nf-badge{ font-family:var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
+  .nf-badge.ok{ background:#E1EFE6; color:var(--profit); border-color:var(--profit); }
+  .nf-badge.aguarda{ background:var(--stripe); color:var(--ink); }
+  .nf-badge.atraso{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
+  .nf-controle{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:4px; cursor:pointer; white-space:nowrap; }
+  .nf-controle input{ width:14px; height:14px; accent-color:var(--azul); cursor:pointer; }
+  .nf-prev{ font-size:11px; padding:4px 5px; }
+
   nav.telas{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   nav.telas .btn[aria-current="page"]{ background:var(--ink); color:var(--paper); }
   .campo-data{ padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
@@ -463,7 +473,7 @@
   <div id="viewNotas" style="display:none;">
 
     <div class="card">
-      <h2>NF-e Emitidas — últimos 60 dias</h2>
+      <h2>NF-e Emitidas — últimos 120 dias</h2>
       <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
         Notas emitidas contra a empresa (pasta de XML), com os produtos, CFOP e impostos de cada uma. Clique numa nota para abrir os itens.
       </p>
@@ -490,7 +500,7 @@
         <div id="cmpPedido"></div>
       </div>
       <div class="card">
-        <h2>NF-e Emitidas — últimos 60 dias</h2>
+        <h2>NF-e Emitidas — últimos 120 dias</h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
           <input type="search" id="buscaNotasCmp" class="campo-busca" placeholder="Buscar por emitente, nº ou produto..." style="min-width:170px;">
           <label class="rotulo-mono">De <input type="date" id="notasDataDeCmp" class="campo-data"></label>
@@ -2366,6 +2376,7 @@ Tupan</textarea>
     const d = historicoDocsCache.find(x => x.id === docId);
     if(!d) return;
 
+    cotacaoComparandoId = d.id; // liga os botoes de vinculo do painel direito
     router.ir('Comparar');
 
     // Painel esquerdo: o pedido, somente leitura
@@ -2374,6 +2385,9 @@ Tupan</textarea>
     $('cmpPedidoTitulo').textContent = 'Pedido — ' + nome;
     let html = '<p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">' +
       (d.fornecedor ? escapeHtml(d.fornecedor)+' · ' : '') + (dt ? formatarDataFirestore(d.data) : '') + '</p>';
+    html += '<p class="nota-explicativa" style="margin:0 0 8px;">🔗 <span id="cmpQtdVinculos">' +
+      ((d.chavesNfe||[]).length) + '</span> NF-e vinculada(s) a este pedido — vincule pela lista ao lado; ' +
+      'o pedido aparece como "recebido" no Histórico quando todas derem entrada no ERP.</p>';
     html += '<table class="quote-table"><thead><tr><th>Código</th><th>Produto</th><th>Qtd</th><th>Preço</th><th>Total</th><th>Status</th></tr></thead><tbody>';
     let totalPedido = 0;
     (d.itens||[]).forEach((it, idx)=>{
@@ -2919,17 +2933,34 @@ Tupan</textarea>
     if($('notasMsgCmp')) $('notasMsgCmp').textContent = txt;
   }
 
+  // Janela da aba. O Apps Script grava itensNotas de TODA nota nova
+  // (sem poda), entao alargar aqui e' so' front — o buraco possivel e'
+  // o periodo ANTERIOR a' implantacao do script, coberto rodando a
+  // cargaInicialItens60Dias uma vez com DIAS_ITENS = 120.
+  const DIAS_NOTAS_EMITIDAS = 120;
+
+  // Estado de controle das notas (noSistema, disponivel, previsao,
+  // cancelada) vem da colecao "notas" — a MESMA que o Controle de
+  // Notas edita. Junta por chave; editar aqui grava la', entao as
+  // duas telas ficam sincronizadas por construcao.
+  let notasInfoPorChave = {};
+
   async function carregarNotasEmitidas(forcar){
     if(!firestoreDb){
       setNotasMsg('Firebase não conectado — configure na tela de Sincronização.');
       return;
     }
     if(notasEmitidasCache && !forcar){ renderNotasEmitidas(); return; }
-    setNotasMsg('Carregando notas dos últimos 60 dias...');
+    setNotasMsg('Carregando notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias...');
     try{
-      const corte = new Date(Date.now() - 60*86400000);
+      const corte = new Date(Date.now() - DIAS_NOTAS_EMITIDAS*86400000);
       const corteISO = corte.getFullYear() + '-' + String(corte.getMonth()+1).padStart(2,'0') + '-' + String(corte.getDate()).padStart(2,'0');
-      const snap = await App.comAuth(()=> firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get());
+      const [snap, snapNotas] = await Promise.all([
+        App.comAuth(()=> firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get()),
+        App.comAuth(()=> firestoreDb.collection('notas').where('dataEmissao', '>=', corteISO).get())
+      ]);
+      notasInfoPorChave = {};
+      snapNotas.forEach(doc => { notasInfoPorChave[doc.id] = doc.data(); });
       notasEmitidasCache = [];
       snap.forEach(doc => notasEmitidasCache.push({ chave: doc.id, ...doc.data() }));
       notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
@@ -2994,7 +3025,7 @@ Tupan</textarea>
     }
     if(!lista.length){
       $('listaNotasEmitidas'+suf).innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
-        ((termo || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 60 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+        ((termo || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
       $('maisNotasBtn'+suf).style.display = 'none';
       return;
     }
@@ -3007,17 +3038,52 @@ Tupan</textarea>
     const visiveis = lista.slice(0, limiteNotas[suf]);
     $('maisNotasBtn'+suf).style.display = totalFiltrado > limiteNotas[suf] ? 'inline-block' : 'none';
 
+    const hojeNotas = App.hojeISO();
+    // Modo comparacao: cada linha mostra/edita o vinculo com o pedido
+    // aberto no painel esquerdo.
+    const docCmp = (suf === 'Cmp' && cotacaoComparandoId)
+      ? historicoDocsCache.find(x => x.id === cotacaoComparandoId) : null;
+    const chavesVinculadas = new Set((docCmp && docCmp.chavesNfe) || []);
     let html = '';
     visiveis.forEach(n=>{
       const aberta = !!notasAbertas[n.chave];
       const vencAberto = !!vencAbertos[n.chave];
       const qtdItens = (n.itens||[]).length;
+      // Estado de controle vindo da colecao "notas" (a mesma que o
+      // Controle de Notas edita). Nota ausente de la' = sem estado
+      // para mostrar, nao "nao recebida" — dai' os checks por presenca.
+      const info = notasInfoPorChave[n.chave] || null;
+      const recebida = !!(info && info.noSistema === true);
+      const disponivel = !!(info && info.disponivelRetirada === true);
+      const previsao = (info && info.previsaoEntrega) || '';
+      const previsaoVencida = !!previsao && previsao < hojeNotas && !recebida && !disponivel;
+      let estadoHtml = '';
+      if(info){
+        if(recebida){
+          estadoHtml = '<span class="nf-badge ok">✓ recebida</span>';
+        } else {
+          estadoHtml =
+            '<label class="nf-controle" title="Mercadoria pronta na fábrica, aguardando a nossa retirada">' +
+              '<input type="checkbox" data-disp="'+escapeHtml(n.chave)+'"'+(disponivel?' checked':'')+'> disponível' +
+            '</label>' +
+            '<input type="date" class="campo-data nf-prev" data-prev="'+escapeHtml(n.chave)+'" value="'+escapeHtml(previsao)+'" ' +
+              'title="Previsão de entrega" aria-label="Previsão de entrega da NF '+escapeHtml(n.numero||'')+'">' +
+            (disponivel ? '<span class="nf-badge aguarda">🏭 aguardando retirada</span>' : '') +
+            (previsaoVencida ? '<span class="nf-badge atraso">⚠ '+App.diasEntre(previsao, hojeNotas)+' dia(s)</span>' : '');
+        }
+      }
       html += '<div style="margin-bottom:8px;">';
       html += '<div class="historico-header" data-nota="'+escapeHtml(n.chave)+'">' +
         '<span style="font-family:var(--font-mono); font-size:12px;">'+(aberta?'▼':'▶')+'</span>' +
         '<span class="h-data">'+fmtDataNota(n.dataEmissao)+'</span>' +
         '<span class="h-fornecedor">'+escapeHtml(n.nomeEmitente ? fornecedorDaNotaEmitida(n) : '-')+'</span>' +
         '<span class="h-count">NF '+escapeHtml(n.numero||'-')+' · '+qtdItens+' item(ns)</span>' +
+        estadoHtml +
+        (docCmp
+          ? '<button type="button" class="btn secondary mini" data-vinculo="'+escapeHtml(n.chave)+'" ' +
+            'title="'+(chavesVinculadas.has(n.chave) ? 'Desvincular esta NF-e do pedido' : 'Vincular esta NF-e ao pedido ao lado')+'">' +
+            (chavesVinculadas.has(n.chave) ? '🔗 vinculada ✕' : '🔗 vincular') + '</button>'
+          : '') +
         '<span class="h-total" style="font-family:var(--font-mono); font-weight:700;">'+brl(n.valorTotal||0)+'</span>' +
         // Botão próprio: clicar nele NÃO pode abrir os itens junto, por
         // isso o handler dele para a propagação para o cabeçalho.
@@ -3054,7 +3120,9 @@ Tupan</textarea>
     // outros elementos, não a execução do outro listener deste. Quem
     // resolve é o cabeçalho ignorar cliques que nasceram no botão.
     App.delegar(container, 'click', '[data-nota]', (h, ev)=>{
-      if(ev.target.closest && ev.target.closest('[data-venc],[data-danfe]')) return;
+      // Cliques nascidos nos controles da linha (vencimentos, DANFE,
+      // disponivel, previsao) nao podem abrir/fechar os itens junto.
+      if(ev.target.closest && ev.target.closest('[data-venc],[data-danfe],[data-disp],[data-prev],[data-vinculo],.nf-controle')) return;
       notasAbertas[h.dataset.nota] = !notasAbertas[h.dataset.nota];
       renderListaNotas(suf);
     });
@@ -3062,6 +3130,38 @@ Tupan</textarea>
       alternarVencimentos(b.dataset.venc, suf);
     });
     App.delegar(container, 'click', '[data-danfe]', (b)=> abrirDanfe(b.dataset.danfe));
+    App.delegar(container, 'click', '[data-vinculo]', (b)=> alternarVinculoNfe(b.dataset.vinculo));
+
+    // Edicao de "disponivel para retirada" e "previsao de entrega"
+    // direto desta aba: grava nos MESMOS campos de "notas" que o
+    // Controle de Notas usa (as rules ja' permitem os dois). Erro
+    // desfaz o campo na tela — falha alto, nada fica meio-gravado.
+    App.delegar(container, 'change', 'input[data-disp]', (chk)=>{
+      const chave = chk.dataset.disp;
+      const marcado = chk.checked;
+      chk.disabled = true;
+      App.comAuth(()=> exigirDb().collection('notas').doc(chave).set({ disponivelRetirada: marcado }, { merge: true }))
+        .then(()=>{
+          notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { disponivelRetirada: marcado });
+          renderListaNotas(suf);
+        })
+        .catch(e=>{ App.toastErro('Erro ao gravar', e); chk.checked = !marcado; chk.disabled = false; });
+    });
+    App.delegar(container, 'change', 'input[data-prev]', (inp)=>{
+      const chave = inp.dataset.prev;
+      const valor = inp.value || null;
+      inp.disabled = true;
+      App.comAuth(()=> exigirDb().collection('notas').doc(chave).set({ previsaoEntrega: valor }, { merge: true }))
+        .then(()=>{
+          notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { previsaoEntrega: valor });
+          renderListaNotas(suf);
+        })
+        .catch(e=>{
+          App.toastErro('Erro ao gravar a previsão', e);
+          inp.value = (notasInfoPorChave[chave] && notasInfoPorChave[chave].previsaoEntrega) || '';
+          inp.disabled = false;
+        });
+    });
   });
 
   // ─── DANFE simplificado ───
@@ -3070,12 +3170,15 @@ Tupan</textarea>
   // itensNotas (itens, ST, CFOP em memoria); as duplicatas vem da
   // mesma consulta-por-nota do botao 📅, com o mesmo cache.
   function danfeCtx(n, dups){
+    // O doc de itensNotas nao tem serie/status; eles vem do estado de
+    // controle carregado da colecao "notas" junto com a lista.
+    const info = notasInfoPorChave[n.chave] || {};
     return {
-      chave: n.chave, numero: n.numero, serie: n.serie,
+      chave: n.chave, numero: n.numero, serie: n.serie || info.serie,
       dataEmissao: n.dataEmissao, valorTotal: n.valorTotal,
-      nomeEmitente: n.nomeEmitente, cnpjEmitente: n.cnpjEmitente,
+      nomeEmitente: n.nomeEmitente, cnpjEmitente: n.cnpjEmitente || info.cnpjEmitente,
       ehNfse: false, // esta lista nasce de itensNotas, que so' tem NF-e
-      cancelada: n.status === 'cancelada', canceladaEm: n.canceladaEm,
+      cancelada: info.status === 'cancelada', canceladaEm: info.canceladaEm,
       rotuloInterno: fornecedorDaNotaEmitida(n),
       itens: n,
       comPisCofins: true, // mesma coluna extra que esta tela ja' mostra
@@ -3686,6 +3789,71 @@ Tupan</textarea>
     return d.data && d.data.toDate ? d.data.toDate() : (d.data ? new Date(d.data) : null);
   }
 
+  // ─── Vínculo cotação ↔ NF-e (recebimento derivado) ───
+  // O vinculo e' MANUAL (um clique na tela Comparar) e mora na
+  // cotacao (chavesNfe: [chave...]) — automatizar por fornecedor/valor
+  // seria chute, e chute virando status e' o que este projeto evita.
+  // O selo e' DERIVADO na hora de exibir, nunca gravado: quando a
+  // ultima nota vinculada entra no ERP, o pedido "vira" sozinho.
+  let cotacaoComparandoId = null;
+
+  // Sem vinculo -> null (sem selo): nao ha' como afirmar nada.
+  // Nota vinculada cujo documento nao veio conta como NAO recebida:
+  // o selo "recebida" exige evidencia de TODAS, nunca sai por falta
+  // de dado.
+  function statusRecebimentoCotacao(chavesNfe, estadoPorChave){
+    const chaves = chavesNfe || [];
+    if(!chaves.length) return null;
+    let recebidas = 0;
+    chaves.forEach(c=>{
+      const n = estadoPorChave[c];
+      if(n && n.noSistema === true) recebidas++;
+    });
+    return { total: chaves.length, recebidas, completa: recebidas === chaves.length };
+  }
+
+  // Estado das notas vinculadas, buscado PELA CHAVE (acesso direto ao
+  // documento): funciona mesmo para nota mais velha que a janela da
+  // aba NF-e Emitidas. Poucas dezenas de leituras por abertura.
+  let estadoNotasVinculadas = {};
+  async function carregarEstadoVinculos(){
+    const faltam = [];
+    historicoDocsCache.forEach(d => (d.chavesNfe||[]).forEach(c=>{
+      if(!(c in estadoNotasVinculadas) && faltam.indexOf(c) === -1) faltam.push(c);
+    }));
+    if(!faltam.length || !firestoreDb) return;
+    try{
+      for(let i = 0; i < faltam.length; i += 10){
+        const fatia = faltam.slice(i, i + 10);
+        const snap = await App.comAuth(()=> exigirDb().collection('notas')
+          .where(firebase.firestore.FieldPath.documentId(), 'in', fatia).get());
+        fatia.forEach(c => { if(!(c in estadoNotasVinculadas)) estadoNotasVinculadas[c] = null; });
+        snap.forEach(doc => { estadoNotasVinculadas[doc.id] = doc.data(); });
+      }
+      renderHistorico();
+    }catch(e){
+      console.error('Erro ao carregar estado dos vínculos:', e);
+    }
+  }
+
+  async function alternarVinculoNfe(chave){
+    const d = historicoDocsCache.find(x => x.id === cotacaoComparandoId);
+    if(!d) return;
+    const atual = d.chavesNfe || [];
+    const tinha = atual.indexOf(chave) !== -1;
+    const novo = tinha ? atual.filter(c => c !== chave) : atual.concat([chave]);
+    try{
+      await App.comAuth(()=> exigirDb().collection('cotacoes').doc(d.id).update({ chavesNfe: novo }));
+      d.chavesNfe = novo;
+      if($('cmpQtdVinculos')) $('cmpQtdVinculos').textContent = novo.length;
+      renderListaNotasCmp();
+      carregarEstadoVinculos(); // o selo do Historico ja' fica pronto para quando voltar
+      App.toast(tinha ? 'NF-e desvinculada do pedido.' : 'NF-e vinculada ao pedido.', 'ok');
+    }catch(e){
+      App.toastErro('Erro ao gravar o vínculo', e);
+    }
+  }
+
   async function carregarHistorico(){
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
@@ -3708,6 +3876,7 @@ Tupan</textarea>
       historicoDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
       atualizarFiltroMesHistorico();
       renderHistorico();
+      carregarEstadoVinculos(); // assincrono: o selo de recebimento aparece quando chegar
     }catch(e){
       console.error(e);
       lista.innerHTML = '';
@@ -3831,11 +4000,19 @@ Tupan</textarea>
       header.className = 'historico-header';
       header.setAttribute('aria-expanded', String(!!aberto));
       const contagem = temFiltroItem ? (itensFiltrados.length+' de '+totalOriginal+' item(ns)') : (totalOriginal+' item(ns)');
+      // Selo de recebimento derivado do vinculo com as NF-e: todas as
+      // vinculadas com noSistema -> "recebida"; parte -> "n/m"; sem
+      // vinculo -> nada (ausencia de vinculo nao e' "nao recebida").
+      const rec = statusRecebimentoCotacao(d.chavesNfe, estadoNotasVinculadas);
+      const seloRec = !rec ? '' : (rec.completa
+        ? '<span class="nf-badge ok" title="Todas as '+rec.total+' NF-e vinculadas deram entrada no ERP">✓ recebida</span>'
+        : '<span class="nf-badge aguarda" title="NF-e vinculadas que já deram entrada no ERP">📦 '+rec.recebidas+'/'+rec.total+' recebida(s)</span>');
       header.innerHTML =
         '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
         '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
         '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
         '<span class="h-count">'+contagem+'</span>'+
+        seloRec+
         '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
       header.dataset.cotacaoHeader = d.id;
       item.appendChild(header);
