@@ -195,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São quatorze etapas, em doze frentes:
+Não precisa instalar nada. São quinze etapas, em treze frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -268,6 +268,13 @@ Não precisa instalar nada. São quatorze etapas, em doze frentes:
     (interna/interestadual/exterior; venda com/sem ST; e 5405/6404 como
     "ST retida anteriormente", que legitimamente vem sem cobrança e não
     pode virar alarme falso na checagem cruzada com o valor de ST).
+13. **Fiscal (NCM & ST)** — 23 verificações em `fiscal-nucleo.js`: o
+    agrupamento por **NCM + UF de origem** (da chave de acesso), o % de
+    ST observado em centavos inteiros (null sem base, nunca zero
+    inventado), a contagem por classe de CFOP (com "retida
+    anteriormente" separada de "com ST") e a divergência cadastro ×
+    observado — **só categórica**: percentual não ganha veredito
+    automático, porque tolerância numérica seria invenção.
 
 Rode antes de publicar qualquer alteração.
 

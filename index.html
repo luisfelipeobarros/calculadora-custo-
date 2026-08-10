@@ -56,6 +56,18 @@
      roda isolado num iframe com sandbox. */
   .busca-google-frame{ width:100%; border:0; display:block; }
 
+  /* Aba Fiscal (NCM & ST): observado x cadastro, lado a lado. */
+  .fiscal-linha{ border:1px solid var(--line); border-left:4px solid var(--line); border-radius:4px; padding:10px 12px; margin-bottom:8px; background:var(--card); }
+  .fiscal-linha.divergente{ border-left-color:var(--loss); }
+  .fiscal-cab{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:baseline; }
+  .fiscal-ncm{ font-family:var(--font-mono); font-weight:700; font-size:13.5px; }
+  .fiscal-valor{ font-family:var(--font-mono); font-weight:700; white-space:nowrap; }
+  .fiscal-meta{ font-size:12.5px; margin-top:3px; }
+  .fiscal-cadastro{ display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
+  .fiscal-cadastro label{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; }
+  .fiscal-cadastro select, .fiscal-cadastro input{ padding:5px 7px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
+  .fiscal-aviso{ font-family:var(--font-mono); font-size:11.5px; color:var(--loss); margin-top:6px; }
+
   /* Estado de controle na lista de NF-e Emitidas (recebida/disponivel/
      previsao) — mesmos significados do Controle de Notas. */
   .nf-badge{ font-family:var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
@@ -124,6 +136,7 @@
       <button type="button" class="btn secondary" id="verHistoricoBtn">🕘 Histórico</button>
       <button type="button" class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
       <button type="button" class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
+      <button type="button" class="btn secondary" id="verFiscalBtn">📇 NCM &amp; ST</button>
       <button type="button" class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
       <!-- Sem link para o Controle de Notas: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
@@ -642,6 +655,25 @@ Tupan</textarea>
     </div>
   </div>
 
+  <!-- ═══════════ FISCAL (NCM & ST) ═══════════ -->
+  <div id="viewFiscal" style="display:none;">
+    <div class="card">
+      <h2>Fiscal — NCM, origem e ST</h2>
+      <p class="nota-explicativa">
+        O <strong>observado</strong> vem das NF-e dos últimos 120 dias, agrupadas por NCM e UF de
+        origem do fornecedor. O <strong>cadastro</strong> é a regra oficial que você confirma:
+        se tem ST, se é cobrada na nota ou antecipada (retida anteriormente) e o percentual.
+        Divergência entre os dois aparece marcada em vermelho.
+      </p>
+      <div class="filtros" style="margin-top:10px;">
+        <label class="sr-only" for="buscaFiscal">Buscar</label>
+        <input type="search" id="buscaFiscal" class="campo-busca" placeholder="Buscar por NCM, produto, fornecedor ou UF...">
+        <button type="button" class="btn secondary mini" id="recarregarFiscalBtn">⟳ Recarregar</button>
+      </div>
+      <div id="listaFiscal"></div>
+    </div>
+  </div>
+
   <div id="viewCalculadora" style="display:none;">
   <div class="grid">
     <!-- LEFT: FORM -->
@@ -839,11 +871,13 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=16"></script>
+<script src="app-shared.js?v=17"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
 <script src="painel-nucleo.js?v=1"></script>
+<!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
+<script src="fiscal-nucleo.js?v=1"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2302,6 +2336,7 @@ Tupan</textarea>
       Historico:    'viewHistorico',
       Concorrentes: 'viewConcorrentes',
       Notas:        'viewNotas',
+      Fiscal:       'viewFiscal',
       Sync:         'viewSync',
       Comparar:     'viewComparar',
       PesquisaLote: 'viewPesquisaLote'
@@ -2317,14 +2352,15 @@ Tupan</textarea>
       Produtos:     () => atualizarListaSalvos(),
       Historico:    () => carregarHistorico(),
       Concorrentes: () => carregarHistoricoConcorrentes(),
-      Notas:        () => carregarNotasEmitidas(false)
+      Notas:        () => carregarNotasEmitidas(false),
+      Fiscal:       () => carregarFiscal(false)
     },
     aoTrocar: (nome) => {
       const botoes = {
         Painel:'verPainelBtn', Calculadora:'verCalculadoraBtn',
         Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
         Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
-        Notas:'verNotasBtn', Sync:'verSyncBtn'
+        Notas:'verNotasBtn', Fiscal:'verFiscalBtn', Sync:'verSyncBtn'
       };
       Object.keys(botoes).forEach(v => {
         const b = $(botoes[v]);
@@ -2359,6 +2395,9 @@ Tupan</textarea>
   $('buscaFornecedor').addEventListener('input', debounce(renderListaSalvos, DEBOUNCE_BUSCA));
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
+  $('verFiscalBtn').addEventListener('click', ()=> router.ir('Fiscal'));
+  $('recarregarFiscalBtn').addEventListener('click', ()=> carregarFiscal(true));
+  $('buscaFiscal').addEventListener('input', debounce(()=> renderFiscal(), DEBOUNCE_BUSCA));
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
   $('buscaNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
   $('buscaNotasCmp').addEventListener('input', debounce(()=>refiltrarNotas('Cmp'), DEBOUNCE_BUSCA));
@@ -3181,7 +3220,6 @@ Tupan</textarea>
       cancelada: info.status === 'cancelada', canceladaEm: info.canceladaEm,
       rotuloInterno: fornecedorDaNotaEmitida(n),
       itens: n,
-      comPisCofins: true, // mesma coluna extra que esta tela ja' mostra
       duplicatas: dups,
       msgSemDuplicatas: 'Nenhuma duplicata registrada para esta nota.',
       origem: 'Calculadora de Custo'
@@ -3217,6 +3255,142 @@ Tupan</textarea>
     document.body.classList.remove('danfe-aberto');
   });
   $('imprimirDanfeBtn').addEventListener('click', ()=> window.print());
+
+  // ─── Fiscal (NCM & ST) ───
+  // O agrupamento observado sai do FiscalNucleo sobre os itensNotas
+  // que a NF-e Emitidas ja' baixa; o cadastro oficial mora na colecao
+  // fiscaisNcm (um doc por NCM_UF). Grupo com UF desconhecida ('??')
+  // aparece, mas nao aceita cadastro: nao ha' id confiavel para ele.
+  let fiscaisCadastro = null;
+  let fiscalCarregando = false;
+
+  async function carregarFiscal(forcar){
+    if(!firestoreDb){
+      $('listaFiscal').innerHTML = '<p class="nota-explicativa">Firebase não conectado — configure na tela de Sincronização.</p>';
+      return;
+    }
+    if(fiscalCarregando) return;
+    fiscalCarregando = true;
+    try{
+      if(!notasEmitidasCache || forcar){
+        $('listaFiscal').innerHTML = '<p class="nota-explicativa">Carregando as notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias...</p>';
+        await carregarNotasEmitidas(forcar);
+      }
+      if(fiscaisCadastro === null || forcar){
+        const snap = await App.comAuth(()=> exigirDb().collection('fiscaisNcm').get());
+        fiscaisCadastro = {};
+        snap.forEach(doc => { fiscaisCadastro[doc.id] = doc.data(); });
+      }
+      renderFiscal();
+    }catch(e){
+      console.error(e);
+      $('listaFiscal').innerHTML = '<p class="nota-explicativa" style="color:var(--loss);">Erro ao carregar: ' +
+        escapeHtml(App.erroDe(e)) + ' — as regras da coleção "fiscaisNcm" já foram publicadas no Console?</p>';
+    }finally{
+      fiscalCarregando = false;
+    }
+  }
+
+  const MODALIDADES_ST = {
+    '': '— sem cadastro —',
+    'nota': 'ST cobrada na nota',
+    'antecipacao': 'Antecipação (retida anteriormente)',
+    'sem': 'Sem ST'
+  };
+
+  function renderFiscal(){
+    const alvo = $('listaFiscal');
+    if(!notasEmitidasCache || fiscaisCadastro === null) return;
+
+    const grupos = FiscalNucleo.agruparFiscal(notasEmitidasCache);
+    const termo = normalizarTexto($('buscaFiscal').value);
+    const visiveis = !termo ? grupos : grupos.filter(g =>
+      g.ncm.includes(termo) || normalizarTexto(g.uf).includes(termo) ||
+      g.produtos.some(p => normalizarTexto(p).includes(termo)) ||
+      g.fornecedores.some(f => normalizarTexto(f).includes(termo)));
+
+    if(!visiveis.length){
+      alvo.innerHTML = '<p class="nota-explicativa">' +
+        (termo ? 'Nada encontrado com essa busca.' : 'Nenhum item nas notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias.') + '</p>';
+      return;
+    }
+
+    const resumoLista = (xs, n) => xs.slice(0, n).map(escapeHtml).join(' · ') +
+      (xs.length > n ? ' <span style="color:var(--ink-soft);">+' + (xs.length - n) + '</span>' : '');
+
+    let html = '';
+    visiveis.forEach(g=>{
+      const cad = fiscaisCadastro[g.id] || null;
+      const divergencias = FiscalNucleo.divergenciaFiscal(g, cad);
+      const cfopsHtml = Object.keys(g.cfops).sort().map(c=>{
+        const cl = App.classificarCfop(c);
+        return '<span title="' + escapeHtml(cl ? [cl.ambito, cl.st].filter(Boolean).join(' · ') : '') + '">' +
+          escapeHtml(c) + ' <span style="color:var(--ink-soft);">(' + g.cfops[c] + ')</span></span>';
+      }).join(' · ');
+      const semUf = g.uf === '??';
+
+      html += '<div class="fiscal-linha' + (divergencias ? ' divergente' : '') + '">' +
+        '<div class="fiscal-cab">' +
+          '<span class="fiscal-ncm">NCM ' + escapeHtml(g.ncm) + ' · ' + escapeHtml(g.uf) + '</span>' +
+          '<span class="fiscal-valor">' + brl(g.somaValorCent / 100) +
+            ' <span style="color:var(--ink-soft); font-weight:400;">em ' + g.qtdNotas + ' nota(s), ' + g.qtdItens + ' item(ns)</span></span>' +
+        '</div>' +
+        '<div class="fiscal-meta">' + resumoLista(g.produtos, 2) + '</div>' +
+        '<div class="fiscal-meta" style="color:var(--ink-soft);">' + resumoLista(g.fornecedores, 2) + '</div>' +
+        '<div class="fiscal-meta">CFOP: ' + (cfopsHtml || '—') + '</div>' +
+        '<div class="fiscal-meta"><strong>ST observada: ' +
+          (g.pctStObservado != null
+            ? g.pctStObservado.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '% (' + brl(g.somaStCent / 100) + ')'
+            : '—') + '</strong>' +
+          (g.somaStCent === 0 && g.observado.retida > 0 ? ' · <span style="color:var(--ink-soft);">há CFOP de ST retida anteriormente</span>' : '') +
+        '</div>' +
+        '<div class="fiscal-cadastro">' +
+          (semUf
+            ? '<span class="nota-explicativa">UF desconhecida (chave fora do padrão) — sem cadastro.</span>'
+            : '<label>Cadastro: <select data-fiscal-mod="' + escapeHtml(g.id) + '">' +
+                Object.keys(MODALIDADES_ST).map(m =>
+                  '<option value="' + m + '"' + ((cad ? cad.modalidade || '' : '') === m ? ' selected' : '') + '>' +
+                  MODALIDADES_ST[m] + '</option>').join('') +
+              '</select></label>' +
+              '<label>% ST: <input type="text" inputmode="decimal" style="width:70px;" data-fiscal-pct="' + escapeHtml(g.id) + '" ' +
+                'value="' + (cad && cad.percentual != null ? escapeHtml(String(cad.percentual).replace('.', ',')) : '') + '"></label>' +
+              '<label style="flex:1;">Obs: <input type="text" style="width:100%;" data-fiscal-obs="' + escapeHtml(g.id) + '" ' +
+                'value="' + escapeHtml((cad && cad.obs) || '') + '"></label>') +
+        '</div>' +
+        (divergencias ? '<div class="fiscal-aviso">' + divergencias.map(d => '⚠ ' + escapeHtml(d)).join('<br>') + '</div>' : '') +
+      '</div>';
+    });
+
+    alvo.innerHTML = html;
+  }
+
+  // Gravacao do cadastro: qualquer um dos tres campos alterado salva o
+  // documento inteiro do NCM_UF (merge). Erro reverte pela re-renderizacao.
+  async function salvarFiscal(id){
+    const mod = document.querySelector('[data-fiscal-mod="' + CSS.escape(id) + '"]');
+    const pct = document.querySelector('[data-fiscal-pct="' + CSS.escape(id) + '"]');
+    const obs = document.querySelector('[data-fiscal-obs="' + CSS.escape(id) + '"]');
+    if(!mod) return;
+    const partes = id.split('_');
+    const doc = {
+      ncm: partes[0], uf: partes[1],
+      modalidade: mod.value || null,
+      percentual: pct && pct.value.trim() !== '' ? App.parseNumeroBR(pct.value) : null,
+      obs: (obs && obs.value.trim()) || null,
+      atualizadoEm: App.hojeISO()
+    };
+    try{
+      await App.comAuth(()=> exigirDb().collection('fiscaisNcm').doc(id).set(doc, { merge: true }));
+      fiscaisCadastro[id] = doc;
+      renderFiscal(); // reavalia a divergencia na hora
+    }catch(e){
+      App.toastErro('Erro ao gravar o cadastro fiscal', e);
+      renderFiscal();
+    }
+  }
+  App.delegar($('listaFiscal'), 'change', '[data-fiscal-mod],[data-fiscal-pct],[data-fiscal-obs]', (el)=>{
+    salvarFiscal(el.dataset.fiscalMod || el.dataset.fiscalPct || el.dataset.fiscalObs);
+  });
   $('verSyncBtn').addEventListener('click', mostrarViewSync);
   $('irSyncBtn').addEventListener('click', mostrarViewSync);
   $('verCotacaoBtn').addEventListener('click', mostrarViewCotacao);

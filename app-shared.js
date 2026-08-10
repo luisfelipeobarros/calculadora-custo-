@@ -901,8 +901,12 @@
       '</tr></thead><tbody>';
 
     itens.slice().sort(function (a, b) { return (a.n || 0) - (b.n || 0); }).forEach(function (it) {
-      var icms = 'CST ' + escapeHtml(it.icmsCst || '-');
-      if (it.icmsValor) icms += ' · ' + num(it.icmsAliq || 0) + '% · ' + brl(it.icmsValor);
+      // semCst: o DANFE simplificado mostra so' aliquota/valor — o CST
+      // e' ruido para quem confere valores; as telas de itens seguem
+      // mostrando.
+      var icms = o.semCst ? '' : 'CST ' + escapeHtml(it.icmsCst || '-');
+      if (it.icmsValor) icms += (icms ? ' · ' : '') + num(it.icmsAliq || 0) + '% · ' + brl(it.icmsValor);
+      if (!icms) icms = '—';
       if (it.icmsStValor > 0) {
         var pctSt = (it.vTotal > 0) ? (it.icmsStValor / it.vTotal * 100) : 0;
         icms += '<br><span style="color:var(--brick); font-weight:600;">ST: ' + brl(it.icmsStValor) +
@@ -1138,8 +1142,12 @@
   // ctx: { chave, numero, serie, dataEmissao, valorTotal, nomeEmitente,
   //   cnpjEmitente, ehNfse, cancelada, canceladaEm, rotuloInterno,
   //   itens (dados de itensNotas | {carregando} | {erro} | {semItens}),
-  //   comPisCofins, duplicatas (lista | null = carregando),
+  //   duplicatas (lista | null = carregando),
   //   msgSemDuplicatas, origem ('Controle de Notas' | ...) }
+  //
+  // A tabela de itens do DANFE sai SEM PIS+COFINS e SEM o CST do ICMS
+  // (pedido de 08/08/2026): quem confere o documento olha valores e
+  // ST; esses dois eram ruido aqui — e continuam nas telas de itens.
   function htmlDanfe(ctx) {
     var chaveEspacada = escapeHtml(String(ctx.chave || '').replace(/(\d{4})(?=\d)/g, '$1 '));
     var dados = ctx.itens;
@@ -1214,7 +1222,7 @@
       html += '<p class="nota-explicativa">Itens não disponíveis para esta nota — o detalhamento por produto ' +
         '(CFOP, NCM, ST por item) cobre as notas dos últimos 60 dias. Os totais abaixo continuam valendo.</p>';
     } else {
-      html += tabelaItensNota(dados, { comPisCofins: !!ctx.comPisCofins, larguraMinima: '760px' });
+      html += tabelaItensNota(dados, { semCst: true, larguraMinima: '760px' });
     }
 
     // ST sempre presente nos totais: zero e' resposta, campo sumido e'

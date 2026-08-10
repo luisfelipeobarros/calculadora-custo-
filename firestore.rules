@@ -122,6 +122,15 @@ service cloud.firestore {
       allow write: if autenticado() && mes.matches('\\d{4}-\\d{2}');
     }
 
+    // Cadastro fiscal por NCM + UF de origem (aba "NCM & ST" da
+    // Calculadora): modalidade de ST (na nota / antecipacao / sem) e
+    // percentual oficiais, digitados pelos usuarios por cima do que
+    // as notas mostram. Id no formato NCM_UF (ex: 69072300_PE).
+    match /fiscaisNcm/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado() && id.matches('[0-9]{2,8}_[A-Z]{2}');
+    }
+
     // Nada mais e' acessivel pelo navegador.
     match /{document=**} {
       allow read, write: if false;

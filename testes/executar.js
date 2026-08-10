@@ -4,7 +4,7 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao quatorze etapas, em doze
+  Nao precisa instalar nada — so' o Node. Sao quinze etapas, em treze
   frentes (a lista canonica, com o que cada uma cobre, esta' no README,
   secao "Rodando os testes"):
 
@@ -48,7 +48,8 @@ const etapas = [
   ['Conferencia de DDA (Bradesco)', 'dda.js', []],
   ['Painel de metas', 'painel.js', []],
   ['Simulador de compra', 'simulador.js', []],
-  ['DANFE simplificado', 'danfe.js', []]
+  ['DANFE simplificado', 'danfe.js', []],
+  ['Fiscal (NCM & ST)', 'fiscal.js', []]
 ];
 
 let falhou = 0;
