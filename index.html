@@ -490,12 +490,23 @@
       <p style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px;">
         Notas emitidas contra a empresa (pasta de XML), com os produtos, CFOP e impostos de cada uma. Clique numa nota para abrir os itens.
       </p>
-      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
         <input type="search" id="buscaNotas" class="campo-busca" placeholder="Buscar por emitente, nº da nota ou produto...">
         <label class="rotulo-mono">De <input type="date" id="notasDataDe" class="campo-data"></label>
         <label class="rotulo-mono">Até <input type="date" id="notasDataAte" class="campo-data"></label>
         <button class="btn secondary" id="limparDatasNotasBtn" style="display:none;">✕ Limpar datas</button>
         <button class="btn secondary" id="recarregarNotasBtn">⟳ Recarregar</button>
+      </div>
+      <!-- Filtro por produto separado da busca geral — o mesmo padrão
+           da tela "A importar" do Controle de Notas, inclusive a
+           negação ("quais notas NÃO têm o 58x58?"). -->
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+        <label class="sr-only" for="buscaProdutoNotas">Filtrar por produto</label>
+        <input type="search" id="buscaProdutoNotas" class="campo-busca" placeholder="Filtrar por produto (código ou descrição)...">
+        <label class="rotulo-mono" style="display:flex; align-items:center; gap:5px; cursor:pointer;">
+          <input type="checkbox" id="excluirProdutoNotas" style="width:15px; height:15px; cursor:pointer;">
+          mostrar as que NÃO têm esse produto
+        </label>
       </div>
       <div id="notasMsg" class="msg-mono"></div>
       <div id="listaNotasEmitidas"></div>
@@ -2400,6 +2411,8 @@ Tupan</textarea>
   $('buscaFiscal').addEventListener('input', debounce(()=> renderFiscal(), DEBOUNCE_BUSCA));
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
   $('buscaNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
+  $('buscaProdutoNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
+  $('excluirProdutoNotas').addEventListener('change', ()=>refiltrarNotas(''));
   $('buscaNotasCmp').addEventListener('input', debounce(()=>refiltrarNotas('Cmp'), DEBOUNCE_BUSCA));
   $('notasDataDeCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
   $('notasDataAteCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
@@ -3062,9 +3075,22 @@ Tupan</textarea>
         (n.itens||[]).some(it => normalizarTexto(it.descricao).includes(termo) || normalizarTexto(it.codigo).includes(termo))
       );
     }
+    // Filtro por produto separado, com negação — o mesmo padrão da
+    // tela "A importar". So' existe na aba principal (o painel da
+    // comparação já vem pré-filtrado pelo pedido), daí a guarda.
+    const elProduto = $('buscaProdutoNotas'+suf);
+    const termoProduto = elProduto ? normalizarTexto(elProduto.value) : '';
+    if(termoProduto){
+      const elExcluir = $('excluirProdutoNotas'+suf);
+      const excluir = !!(elExcluir && elExcluir.checked);
+      const temProduto = n => (n.itens||[]).some(it =>
+        normalizarTexto(it.descricao).includes(termoProduto) ||
+        normalizarTexto(it.codigo).includes(termoProduto));
+      lista = lista.filter(n => excluir ? !temProduto(n) : temProduto(n));
+    }
     if(!lista.length){
       $('listaNotasEmitidas'+suf).innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
-        ((termo || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+        ((termo || termoProduto || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
       $('maisNotasBtn'+suf).style.display = 'none';
       return;
     }
