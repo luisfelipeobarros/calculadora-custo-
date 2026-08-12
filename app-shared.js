@@ -895,7 +895,10 @@
     var colunas = ['Cod. / Produto', 'NCM / CFOP', 'Qtd', 'V. Unit.', 'V. Total', 'ICMS', 'IPI'];
     if (o.comPisCofins) colunas.push('PIS+COFINS');
 
-    var html = '<div class="tabela-rolavel"><table class="quote-table" style="min-width:' +
+    // A classe propria permite regras de impressao mirarem SO' esta
+    // tabela (a de itens), sem acertar a tabela externa que a abriga
+    // nem a de vencimentos — as tres compartilham .quote-table.
+    var html = '<div class="tabela-rolavel"><table class="quote-table tabela-itens-nota" style="min-width:' +
       (o.larguraMinima || '860px') + ';"><thead><tr>' +
       colunas.map(function (c) { return '<th scope="col">' + c + '</th>'; }).join('') +
       '</tr></thead><tbody>';

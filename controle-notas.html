@@ -190,14 +190,34 @@
        nao informacao — fora da impressao (o estado "disponivel"
        sobrevive no papel pelo badge da coluna de previsao). Os indices
        casam com o cabecalho montado em renderImportar; se uma coluna
-       entrar ou sair de la', ajuste aqui junto. O :not([colspan])
-       preserva as linhas expandidas de itens/vencimentos, que usam um
-       td unico atravessando a tabela. */
-    #tabelaImportar th:nth-child(1), #tabelaImportar td:nth-child(1):not([colspan]),
-    #tabelaImportar th:nth-child(6), #tabelaImportar td:nth-child(6),
-    #tabelaImportar th:nth-child(7), #tabelaImportar td:nth-child(7),
-    #tabelaImportar th:nth-child(8), #tabelaImportar td:nth-child(8),
+       entrar ou sair de la', ajuste aqui junto.
+       Os seletores de filho DIRETO (.tab-importar >) existem para as
+       regras NAO vazarem para as tabelas aninhadas de itens e
+       vencimentos — foi esse vazamento que ja' engoliu a coluna
+       Cod./Produto do papel. O :not([colspan]) preserva as linhas
+       expandidas, que usam um td unico atravessando a tabela. */
+    #tabelaImportar .tab-importar > thead > tr > th:nth-child(1),
+    #tabelaImportar .tab-importar > tbody > tr > td:nth-child(1):not([colspan]),
+    #tabelaImportar .tab-importar > thead > tr > th:nth-child(6),
+    #tabelaImportar .tab-importar > tbody > tr > td:nth-child(6),
+    #tabelaImportar .tab-importar > thead > tr > th:nth-child(7),
+    #tabelaImportar .tab-importar > tbody > tr > td:nth-child(7),
+    #tabelaImportar .tab-importar > thead > tr > th:nth-child(8),
+    #tabelaImportar .tab-importar > tbody > tr > td:nth-child(8),
     #maisImportarBtn{ display:none; }
+    /* A tabela de ITENS no papel (pedido de 12/08/2026): Cod./Produto,
+       Qtd, V.Unit e V.Total — NCM/CFOP, ICMS, IPI e PIS+COFINS ficam
+       so' na tela; o botao Baixar XML e' interacao e some. */
+    #tabelaImportar .tabela-itens-nota th:nth-child(2), #tabelaImportar .tabela-itens-nota td:nth-child(2),
+    #tabelaImportar .tabela-itens-nota th:nth-child(6), #tabelaImportar .tabela-itens-nota td:nth-child(6),
+    #tabelaImportar .tabela-itens-nota th:nth-child(7), #tabelaImportar .tabela-itens-nota td:nth-child(7),
+    #tabelaImportar .tabela-itens-nota th:nth-child(8), #tabelaImportar .tabela-itens-nota td:nth-child(8),
+    #tabelaImportar a.btn{ display:none; }
+    /* Sem o traco sob o cabecalho dos itens; a divisao forte fica no
+       FIM do bloco expandido (logo abaixo do "ST total da nota"),
+       separando visualmente uma nota da outra. */
+    #tabelaImportar .tabela-itens-nota th{ border-bottom:none; }
+    #tabelaImportar .tab-importar > tbody > tr > td[colspan]{ border-bottom:2.5px solid var(--ink); }
     /* Papel nao tem rolagem: o que passa da borda da folha e' cortado
        em silencio (era o badge de atraso). Solta o corte do conteiner
        e compacta a tabela para caber — a chave de 44 digitos e' o que
@@ -517,7 +537,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=17"></script>
+<script src="app-shared.js?v=18"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -1383,7 +1403,10 @@
     $('maisImportarBtn').style.display = totalFiltrado > limiteImportar ? 'inline-block' : 'none';
 
     var hoje = hojeISO();
-    var html = '<div class="tabela-rolavel"><table class="quote-table">' +
+    // .tab-importar: ancora das regras de impressao da tabela EXTERNA
+    // (esconder botoes/colunas de interacao) sem vazar para as tabelas
+    // aninhadas de itens e vencimentos.
+    var html = '<div class="tabela-rolavel"><table class="quote-table tab-importar">' +
       '<thead><tr><th scope="col"><span class="sr-only">Itens</span></th><th scope="col">Nº</th>' +
       '<th scope="col">Emissão</th><th scope="col">Emitente</th><th scope="col">Valor</th>' +
       '<th scope="col">XML</th><th scope="col">Ações</th><th scope="col">Disponível</th>' +
