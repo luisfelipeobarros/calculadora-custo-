@@ -1479,18 +1479,26 @@
         brl(lista.reduce(function(s,n){ return s + (n.valorTotal||0); }, 0)) + mostrando;
     } else {
       var somaDisp = 0, somaAtras = 0, somaProd = 0, somaTotal = 0;
+      var qtdDisp = 0, qtdAtras = 0, qtdProd = 0;
       lista.forEach(function(n){
         var v = n.valorTotal || 0;
         somaTotal += v;
-        if(n.disponivelRetirada === true) somaDisp += v;
-        else if(n.previsaoEntrega && n.previsaoEntrega < hoje) somaAtras += v;
-        else somaProd += v;
+        if(n.disponivelRetirada === true){ somaDisp += v; qtdDisp++; }
+        else if(n.previsaoEntrega && n.previsaoEntrega < hoje){ somaAtras += v; qtdAtras++; }
+        else { somaProd += v; qtdProd++; }
       });
-      $('totalImportar').textContent = totalFiltrado + ' nota(s) · ' +
-        '🏭 disponível p/ retirada ' + brl(somaDisp) + ' · ' +
-        '⚠ atrasado ' + brl(somaAtras) + ' · ' +
-        'em produção ' + brl(somaProd) + ' · ' +
-        'total ' + brl(somaTotal) + mostrando;
+      // Duas linhas (pedido de 12/08/2026): valores em cima,
+      // quantidades embaixo — mesmas categorias, mesma ordem, para o
+      // olho casar coluna a coluna.
+      $('totalImportar').innerHTML =
+        '<div>🏭 disponível p/ retirada ' + brl(somaDisp) + ' · ' +
+          '⚠ atrasado ' + brl(somaAtras) + ' · ' +
+          'em produção ' + brl(somaProd) + ' · ' +
+          'total ' + brl(somaTotal) + '</div>' +
+        '<div>🏭 ' + qtdDisp + ' nota(s) · ' +
+          '⚠ ' + qtdAtras + ' nota(s) · ' +
+          'em produção ' + qtdProd + ' nota(s) · ' +
+          'total ' + totalFiltrado + ' nota(s)' + mostrando + '</div>';
     }
   }
 
