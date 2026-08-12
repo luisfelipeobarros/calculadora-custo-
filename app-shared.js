@@ -940,7 +940,9 @@
     if ((dados.stTotal || 0) > 0) {
       var baseProd = dados.valorProdutos || itens.reduce(function (s, it) { return s + (it.vTotal || 0); }, 0);
       var pctStNota = baseProd > 0 ? (dados.stTotal / baseProd * 100) : 0;
-      html += '<div style="margin-top:8px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">' +
+      // A classe deixa cada tela decidir se a linha vai para o papel
+      // (a impressao de "A importar" a esconde; o DANFE mantem).
+      html += '<div class="st-total-nota" style="margin-top:8px; font-family:var(--font-mono); font-size:12px; color:var(--brick); font-weight:600;">' +
         'ST total da nota: ' + brl(dados.stTotal) + ' · ' + num(pctStNota, 2) + '% sobre os produtos' +
         (baseProd > 0 ? ' (' + brl(baseProd) + ')' : '') + '</div>';
     }
