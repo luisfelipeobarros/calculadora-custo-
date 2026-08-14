@@ -67,7 +67,7 @@ ok('refs locais: ' + refs.join(', '));
 
 // 7) os arquivos compartilhados precisam de ?v=, senao o navegador
 //    continua servindo a copia antiga depois de um deploy.
-['app-shared.css', 'app-shared.js', 'calculo-nucleo.js', 'dda-nucleo.js', 'painel-nucleo.js', 'simulador-nucleo.js', 'fiscal-nucleo.js'].forEach(nome => {
+['app-shared.css', 'app-shared.js', 'calculo-nucleo.js', 'dda-nucleo.js', 'painel-nucleo.js', 'simulador-nucleo.js', 'fiscal-nucleo.js', 'concorrentes-nucleo.js'].forEach(nome => {
   const semVersao = new RegExp('(?:href|src)=["\']' + nome.replace('.', '\\.') + '["\']');
   if (semVersao.test(html)) erro(nome + ' referenciado sem ?v= (quebra de cache)');
 });

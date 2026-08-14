@@ -4,9 +4,9 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao quinze etapas, em treze
-  frentes (a lista canonica, com o que cada uma cobre, esta' no README,
-  secao "Rodando os testes"):
+  Nao precisa instalar nada — so' o Node. Sao dezesseis etapas, em
+  quatorze frentes (a lista canonica, com o que cada uma cobre, esta'
+  no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
@@ -27,6 +27,9 @@
                          rampa de 12 meses e projecao de recorrentes.
   - danfe.js           — DANFE simplificado: UF pela chave de acesso e
                          classificacao da operacao pelo CFOP.
+  - concorrentes.js    — catalogo da pesquisa em lote por planilha:
+                         leitura, consulta de busca, diff e o painel
+                         de desatualizacao por fabricante.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -49,7 +52,8 @@ const etapas = [
   ['Painel de metas', 'painel.js', []],
   ['Simulador de compra', 'simulador.js', []],
   ['DANFE simplificado', 'danfe.js', []],
-  ['Fiscal (NCM & ST)', 'fiscal.js', []]
+  ['Fiscal (NCM & ST)', 'fiscal.js', []],
+  ['Concorrentes em lote (planilha)', 'concorrentes.js', []]
 ];
 
 let falhou = 0;

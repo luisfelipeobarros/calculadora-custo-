@@ -195,7 +195,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São quinze etapas, em treze frentes:
+Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -275,6 +275,17 @@ Não precisa instalar nada. São quinze etapas, em treze frentes:
     anteriormente" separada de "com ST") e a divergência cadastro ×
     observado — **só categórica**: percentual não ganha veredito
     automático, porque tolerância numérica seria invenção.
+14. **Concorrentes em lote (planilha)** — 33 verificações em
+    `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
+    ordem/acento/caixa, preço com sujeira de float → centavos inteiros,
+    linha ruim **contada com motivo**, nunca engolida), a consulta de
+    busca sem a notação interna (`*` e `(CX...)`) com o nome original
+    intacto, fabricante **sem agrupamento** de grafias parecidas
+    (variação é sinal, não ruído), o comparativo da substituição
+    (novo/saiu/mudou/igual, chaveado pelo código) e os **três motivos**
+    de desatualização — nunca pesquisado, preço mudou desde a pesquisa
+    (vence o prazo: comparação contra preço que não praticamos mais diz
+    a coisa errada) e prazo vencido.
 
 Rode antes de publicar qualquer alteração.
 

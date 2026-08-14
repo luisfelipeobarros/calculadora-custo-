@@ -608,6 +608,26 @@ Tupan</textarea>
     </div>
 
     <div class="card" style="max-width:1000px;">
+      <h2>Pesquisa em lote — planilha de preços</h2>
+      <p class="empty-note" style="display:block;">
+        Importe a tabela de preços uma vez; ela fica guardada neste navegador. O painel mostra,
+        por fabricante, quem está mais desatualizado — e pesquisar abre a mesma tela de lote
+        dos pedidos do Histórico. Nada é pesquisado automaticamente ao importar.
+      </p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0 8px;">
+        <button class="btn secondary" id="importarCatalogoBtn">📄 Importar planilha</button>
+        <input type="file" id="arquivoCatalogo" accept=".xlsx,.xls" style="display:none;">
+        <label class="rotulo-mono">desatualizado após
+          <input type="number" id="prazoDesatualizado" value="30" min="1" class="no-spin" style="width:64px; padding:6px;"> dias</label>
+        <button class="btn secondary mini" id="atualizarPainelFabBtn" title="Rebusca no Firestore a última pesquisa de cada código">⟳ Atualizar painel</button>
+      </div>
+      <div id="retomarLoteAviso"></div>
+      <div id="catalogoStatus" class="empty-note" style="display:block; margin-bottom:8px;"></div>
+      <div id="painelFabricantes" style="overflow-x:auto;"></div>
+      <div id="produtosCatalogo" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card" style="max-width:1000px;">
       <h2>Comparações salvas</h2>
       <div id="concorrentesHistLista"></div>
       <div class="empty-note" id="concorrentesHistMsg" style="display:block;">Carregando...</div>
@@ -889,6 +909,8 @@ Tupan</textarea>
 <script src="painel-nucleo.js?v=1"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=1"></script>
+<!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
+<script src="concorrentes-nucleo.js?v=1"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2362,7 +2384,7 @@ Tupan</textarea>
       Painel:       () => carregarPainel(),
       Produtos:     () => atualizarListaSalvos(),
       Historico:    () => carregarHistorico(),
-      Concorrentes: () => carregarHistoricoConcorrentes(),
+      Concorrentes: () => { carregarHistoricoConcorrentes(); renderLotePlanilha(); },
       Notas:        () => carregarNotasEmitidas(false),
       Fiscal:       () => carregarFiscal(false)
     },
@@ -2512,18 +2534,20 @@ Tupan</textarea>
   let loteNomePedido = '';
   let loteExecToken = 0;   // invalida o loop anterior quando outro pedido é aberto
   let loteSomenteLeitura = false; // remontagem de uma pesquisa já salva
+  let loteOrigemPlanilha = false; // origem catálogo: grava codigo/fabricante e progresso anti-F5
+  let loteSoPendentes = false;    // retomada: o laço pula produtos já completos
 
-  function abrirPesquisaLote(docId){
-    const d = historicoDocsCache.find(x => x.id === docId);
-    if(!d) return;
-
+  // O reset da tela de lote, extraído para as DUAS origens de pesquisa
+  // (pedido do Histórico e planilha) não copiarem dez linhas de
+  // show/hide uma da outra.
+  function prepararTelaLote(nome){
     router.ir('PesquisaLote');
-
-    loteDocId = docId;
     loteExecToken++;      // qualquer pesquisa ainda rodando deixa de valer
     loteRodando = false;
     loteParar = false;
     loteSomenteLeitura = false;
+    loteOrigemPlanilha = false;
+    loteSoPendentes = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').disabled = false;
     $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
@@ -2533,10 +2557,16 @@ Tupan</textarea>
     $('pesqLoteMsg').textContent = '';
     $('salvarLoteMsg').textContent = '';
     mostrarWidgetBusca('buscaGoogleWidgetLote', null);
-
-    const nome = d.nomeCotacao || d.fornecedor || 'Pedido';
     loteNomePedido = nome;
     $('loteTitulo').textContent = 'Pesquisar concorrentes — ' + nome;
+  }
+
+  function abrirPesquisaLote(docId){
+    const d = historicoDocsCache.find(x => x.id === docId);
+    if(!d) return;
+
+    loteDocId = docId;
+    prepararTelaLote(d.nomeCotacao || d.fornecedor || 'Pedido');
 
     loteItens = (d.itens||[]).map(it => ({
       codigo: it.codigo || '',
@@ -2666,7 +2696,12 @@ Tupan</textarea>
       const menor = menorPrecoDaLinha(item);
       html += '<tr'+(emAndamento?' class="lote-row-atual"':'')+'>';
       html += '<td style="font-size:11px;">'+escapeHtml(item.codigo||'-')+'</td>';
-      html += '<td class="lote-produto">'+escapeHtml(item.produto)+'</td>';
+      html += '<td class="lote-produto">'+escapeHtml(item.produto)+
+        // A consulta realmente usada, quando difere do nome: se a
+        // limpeza da notacao atrapalhar em vez de ajudar, da' para VER.
+        (item.consulta && item.consulta !== item.produto
+          ? '<br><span style="color:var(--ink-soft); font-size:10px;">busca: '+escapeHtml(item.consulta)+'</span>'
+          : '')+'</td>';
       // Mesmo campo de preço do resto do app: prefixo R$ e sem as
       // setinhas do input number.
       html += '<td class="lote-nosso"><div class="input-row" style="max-width:140px;">'
@@ -2721,7 +2756,7 @@ Tupan</textarea>
     item.porLoja[lojaIdx] = { pendente: true };
     atualizarLinhaLote(idx);
     try{
-      const r = await window.geminiRebuscarUmaLoja(item.produto, loja, 'maxima');
+      const r = await window.geminiRebuscarUmaLoja(item.consulta || item.produto, loja, 'maxima');
       if(meuToken !== loteExecToken) return;
       item.porLoja[lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
     }catch(e){
@@ -2756,14 +2791,19 @@ Tupan</textarea>
 
     for(let idx = 0; idx < loteItens.length; idx++){
       if(loteParar || meuToken !== loteExecToken) break;
-      loteIdxAtual = idx;
       const item = loteItens[idx];
+      // Retomada pos-F5: pula quem ja' tem resposta de todas as lojas.
+      // Fora da retomada nada muda — "Pesquisar novamente" refaz tudo.
+      if(loteSoPendentes && loteLojas.every((_, li) => item.porLoja[li] && !item.porLoja[li].pendente)) continue;
+      loteIdxAtual = idx;
       loteLojas.forEach((_, lojaIdx) => { item.porLoja[lojaIdx] = { pendente: true }; });
       $('pesqLoteMsg').textContent = 'Pesquisando produto ' + (idx+1) + ' de ' + loteItens.length + ': ' + item.produto;
       renderLoteTabela();
 
       try{
-        const { buscaHtml } = await window.geminiBuscarPrecos(item.produto, loteLojas, (lojaIdx, r) => {
+        // A consulta limpa (sem a notacao interna da planilha) vai para
+        // a busca; o nome original continua sendo o que aparece e salva.
+        const { buscaHtml } = await window.geminiBuscarPrecos(item.consulta || item.produto, loteLojas, (lojaIdx, r) => {
           item.porLoja[lojaIdx] = r;
           if(meuToken === loteExecToken) atualizarLinhaLote(idx);
         });
@@ -2777,12 +2817,18 @@ Tupan</textarea>
         });
         if(meuToken === loteExecToken) atualizarLinhaLote(idx);
       }
+      // Origem planilha: o progresso vai para o localStorage a cada
+      // produto concluido — uma hora de varredura nao pode morrer num F5.
+      if(loteOrigemPlanilha && meuToken === loteExecToken) salvarProgressoLote();
     }
 
     if(meuToken !== loteExecToken) return; // outro pedido assumiu a tela; não mexe mais nela
 
     loteIdxAtual = -1;
     loteRodando = false;
+    // A retomada só vale para UMA passada: um "Pesquisar novamente"
+    // depois dela deve varrer tudo, não pular os já completos.
+    loteSoPendentes = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').textContent = '🔁 Pesquisar novamente';
     $('pararLoteBtn').style.display = 'none';
@@ -2844,7 +2890,8 @@ Tupan</textarea>
       $('pesqLoteMsg').textContent = 'Precisão máxima ' + (i+1) + '/' + falhas.length + ': ' + f.produto + ' — ' + f.loja;
       atualizarLinhaLote(f.idx);
       try{
-        const r = await window.geminiRebuscarUmaLoja(f.produto, f.loja, 'maxima');
+        const itemF = loteItens[f.idx];
+        const r = await window.geminiRebuscarUmaLoja((itemF && itemF.consulta) || f.produto, f.loja, 'maxima');
         loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
       }catch(e){
         console.error('Erro no reprocessamento:', e);
@@ -2900,12 +2947,26 @@ Tupan</textarea>
           // O id é a chave confiável do botão "Pesquisas salvas" do
           // histórico: o nome do pedido se repete entre cotações do
           // mesmo fornecedor no mesmo dia.
-          origemPedidoId: loteDocId || null
+          origemPedidoId: loteDocId || null,
+          // Origem planilha: codigo/fabricante são a chave do painel
+          // "quando pesquisei este fornecedor pela última vez" — casar
+          // por texto de nome quebraria na primeira renomeação.
+          codigo: it.codigo || null,
+          fabricante: it.fabricante || null
         }));
       }));
       // O pedido ganhou pesquisas novas: a próxima abertura do painel no
       // histórico busca de novo, em vez de mostrar o cache anterior.
       if(loteDocId) delete pesquisasPorPedido[loteDocId];
+      // Origem planilha: atualiza o índice local de "última pesquisa
+      // por código" (o painel por fabricante lê dele) e encerra o
+      // progresso anti-F5 — o trabalho está salvo no Firestore.
+      if(loteOrigemPlanilha){
+        itensParaSalvar.forEach(it => {
+          if(it.codigo) registrarUltimaPesquisa(it.codigo, it.nossoPreco);
+        });
+        limparProgressoLote();
+      }
       $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
       carregarHistoricoConcorrentes();
     }catch(e){
@@ -2919,6 +2980,380 @@ Tupan</textarea>
   $('voltarHistoricoLoteBtn').addEventListener('click', ()=>{
     loteParar = true; // interrompe uma pesquisa em andamento ao sair da tela
     mostrarViewHistorico();
+  });
+
+  // ─── Pesquisa em lote a partir da PLANILHA (catálogo local) ───
+  // Terceira porta de entrada da máquina de lote acima. O catálogo
+  // importado vive no localStorage (não no Firestore — é material de
+  // trabalho local); as PESQUISAS continuam indo para "concorrentes".
+  const CATALOGO_LS = 'catalogoConcorrentes_v1';
+  const INDICE_PESQ_LS = 'ultimaPesquisaPorCodigo_v1';
+  const PROGRESSO_LS = 'progressoLotePlanilha_v1';
+  const PRAZO_LS = 'prazoDesatualizadoDias_v1';
+  const LIMITE_CONFIRMA_PRODUTOS = 50;
+  const ROTULO_ORIGEM_PLANILHA = 'Planilha — Tabela de Preços';
+
+  const lerLS = (chave) => { try{ return JSON.parse(localStorage.getItem(chave) || 'null'); }catch(e){ return null; } };
+  const gravarLS = (chave, valor) => { try{ localStorage.setItem(chave, JSON.stringify(valor)); return true; }catch(e){ return false; } };
+
+  let catalogoLote = lerLS(CATALOGO_LS);      // {importadoEm, itens:[{codigo,nome,consulta,unidade,precoCent,fabricante}]}
+  let ultimaPorCodigo = lerLS(INDICE_PESQ_LS); // {codigo:{data,meuPrecoCent}} — null = ainda não hidratado do Firestore
+  let fabricanteAberto = null;
+  const selecaoLote = new Set();               // códigos marcados (limpa ao trocar de fabricante)
+
+  function prazoDias(){
+    const n = Number($('prazoDesatualizado').value);
+    return n >= 1 ? n : 30;
+  }
+
+  // Índice local de "última pesquisa por código": atualizado a cada
+  // salvamento e hidratado do Firestore só na 1ª carga (ou no botão
+  // Atualizar painel) — a consulta cresce com o histórico, então ela
+  // não roda a cada abertura da aba.
+  function registrarUltimaPesquisa(codigo, nossoPreco){
+    if(!ultimaPorCodigo) ultimaPorCodigo = {};
+    ultimaPorCodigo[codigo] = {
+      data: App.hojeISO(),
+      meuPrecoCent: (nossoPreco != null && nossoPreco > 0) ? Math.round(nossoPreco * 100) : null
+    };
+    gravarLS(INDICE_PESQ_LS, ultimaPorCodigo);
+  }
+
+  async function carregarUltimaPorCodigo(){
+    // Só documentos com o campo "codigo" (as pesquisas vindas da
+    // planilha): pesquisa antiga sem código não tem como casar com o
+    // catálogo sem adivinhação por texto — e adivinhação está fora.
+    const snap = await App.comAuth(()=> exigirDb().collection('concorrentes')
+      .where('codigo', '>=', '').get());
+    const idx = {};
+    snap.forEach(doc => {
+      const d = doc.data();
+      if(!d.codigo) return;
+      const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
+      const atual = idx[d.codigo];
+      if(!atual || (quando && (!atual.data || quando > atual.data))){
+        idx[d.codigo] = { data: quando, meuPrecoCent: d.meuPreco != null ? Math.round(d.meuPreco * 100) : null };
+      }
+    });
+    ultimaPorCodigo = idx;
+    gravarLS(INDICE_PESQ_LS, ultimaPorCodigo);
+  }
+
+  // Progresso anti-F5: gravado a cada produto concluído pelo laço (só
+  // origem planilha) e limpo quando a pesquisa é salva no Firestore.
+  function salvarProgressoLote(){
+    const ok = gravarLS(PROGRESSO_LS, {
+      v: 1, quando: Date.now(), nome: loteNomePedido, lojas: loteLojas, itens: loteItens
+    });
+    if(!ok && !salvarProgressoLote.avisou){
+      salvarProgressoLote.avisou = true;
+      App.toast('Sem espaço local para guardar o progresso — um F5 perde a varredura atual.', 'info');
+    }
+  }
+  function limparProgressoLote(){ try{ localStorage.removeItem(PROGRESSO_LS); }catch(e){} }
+
+  function abrirPesquisaLotePlanilha(itensCat){
+    loteDocId = null;
+    prepararTelaLote(ROTULO_ORIGEM_PLANILHA);
+    loteOrigemPlanilha = true;
+    loteItens = itensCat.map(it => ({
+      codigo: it.codigo,
+      produto: it.nome,          // nome ORIGINAL: é o que aparece e o que salva
+      consulta: it.consulta,     // é o que vai para a busca
+      fabricante: it.fabricante,
+      // O preço de venda da planilha é exatamente o nossoPreco que o
+      // lote espera (lojas anunciam preço ao consumidor).
+      nossoPreco: it.precoCent != null ? it.precoCent / 100 : null,
+      porLoja: {}
+    }));
+    const nLojas = lojasDoCampo().length;
+    $('pesqLoteMsg').textContent = loteItens.length + ' produto(s) × ' + nLojas +
+      ' loja(s) = ' + ConcorrentesNucleo.contarBuscas(loteItens.length, nLojas) +
+      ' busca(s). Confira e clique em Iniciar.';
+    renderLoteTabela();
+  }
+
+  async function iniciarLotePlanilha(itensCat){
+    if(!itensCat.length){ App.toast('Nenhum produto selecionado.', 'info'); return; }
+    const lojas = lojasDoCampo();
+    if(!lojas.length){ App.toast('Preencha as lojas (campo acima) antes de pesquisar.', 'info'); return; }
+    const buscas = ConcorrentesNucleo.contarBuscas(itensCat.length, lojas.length);
+    if(itensCat.length > LIMITE_CONFIRMA_PRODUTOS){
+      const ok = await App.confirmar({
+        titulo: 'Pesquisa grande',
+        mensagem: 'São ' + itensCat.length + ' produtos × ' + lojas.length + ' lojas = ' +
+          buscas + ' buscas — isso leva tempo e consome API. O uso normal é fatiar por ' +
+          'fabricante e usar "só os desatualizados". Pesquisar mesmo assim?',
+        confirmar: 'Pesquisar ' + buscas + ' buscas'
+      });
+      if(!ok) return;
+    }
+    abrirPesquisaLotePlanilha(itensCat);
+  }
+
+  // ── Render: status do catálogo + painel por fabricante ──
+
+  async function renderLotePlanilha(){
+    const prog = lerLS(PROGRESSO_LS);
+    if(prog && prog.itens && prog.itens.length){
+      const feitos = prog.itens.filter(it =>
+        (prog.lojas||[]).every((_, li) => it.porLoja && it.porLoja[li] && !it.porLoja[li].pendente)).length;
+      $('retomarLoteAviso').innerHTML =
+        '<div class="empty-note" style="display:block; border:1.5px solid var(--brick); border-radius:4px; padding:8px 10px; margin-bottom:8px;">' +
+        '⏸ Pesquisa de planilha interrompida — ' + feitos + ' de ' + prog.itens.length + ' produto(s) concluído(s). ' +
+        '<button class="btn secondary mini" id="retomarLoteBtn">▶ Retomar</button> ' +
+        '<button class="btn secondary mini" id="descartarLoteBtn">✕ Descartar</button></div>';
+    } else {
+      $('retomarLoteAviso').innerHTML = '';
+    }
+
+    if(!catalogoLote || !catalogoLote.itens || !catalogoLote.itens.length){
+      $('importarCatalogoBtn').textContent = '📄 Importar planilha';
+      $('catalogoStatus').textContent = 'Nenhuma planilha importada ainda.';
+      $('painelFabricantes').innerHTML = '';
+      $('produtosCatalogo').innerHTML = '';
+      return;
+    }
+    $('importarCatalogoBtn').textContent = '📄 Substituir planilha';
+    $('catalogoStatus').textContent = 'planilha importada em ' + App.fmtData(catalogoLote.importadoEm) +
+      ' · ' + catalogoLote.itens.length + ' produto(s)';
+
+    if(ultimaPorCodigo === null){
+      if(!firestoreDb){
+        $('painelFabricantes').innerHTML = '<p class="empty-note" style="display:block;">Conecte o Firebase (aba Sincronização) para o painel saber o que já foi pesquisado.</p>';
+        return;
+      }
+      $('painelFabricantes').innerHTML = '<p class="empty-note" style="display:block;">Carregando o histórico de pesquisas...</p>';
+      try{ await carregarUltimaPorCodigo(); }
+      catch(e){
+        console.error(e);
+        $('painelFabricantes').innerHTML = '<p class="empty-note" style="display:block; color:var(--loss);">Erro ao carregar as pesquisas: ' + escapeHtml(App.erroDe(e)) + '</p>';
+        return;
+      }
+    }
+    renderPainelFabricantes();
+    renderProdutosCatalogo();
+  }
+
+  function renderPainelFabricantes(){
+    const painel = ConcorrentesNucleo.painelFabricantes(
+      catalogoLote.itens, ultimaPorCodigo || {}, App.hojeISO(), prazoDias());
+    let html = '<table class="quote-table" style="min-width:640px; max-width:820px;"><thead><tr>' +
+      '<th scope="col">Fabricante</th><th scope="col">Produtos</th>' +
+      '<th scope="col">Última pesquisa</th><th scope="col">Desatualizados</th></tr></thead><tbody>';
+    painel.forEach(g=>{
+      const motivos = [];
+      if(g.motivos.nunca) motivos.push(g.motivos.nunca + ' nunca');
+      if(g.motivos.preco) motivos.push(g.motivos.preco + ' preço mudou');
+      if(g.motivos.prazo) motivos.push(g.motivos.prazo + ' prazo vencido');
+      const aberto = fabricanteAberto === g.fabricante;
+      html += '<tr>' +
+        '<td><button class="btn secondary mini" data-abrir-fab="'+escapeHtml(g.fabricante)+'">'+
+          (aberto?'▼':'▶')+' '+escapeHtml(g.fabricante)+'</button></td>' +
+        '<td style="font-family:var(--font-mono);">'+g.qtd+'</td>' +
+        '<td style="font-family:var(--font-mono);">'+
+          (g.ultimaData ? App.fmtData(g.ultimaData) : '<strong style="color:var(--loss);">nunca</strong>')+'</td>' +
+        '<td style="font-family:var(--font-mono);'+(g.desatualizados?' color:var(--loss); font-weight:700;':'')+'">'+
+          g.desatualizados +
+          (motivos.length ? ' <span style="color:var(--ink-soft); font-weight:400; font-size:11px;">('+motivos.join(' · ')+')</span>' : '')+
+        '</td></tr>';
+    });
+    $('painelFabricantes').innerHTML = html + '</tbody></table>';
+  }
+
+  // ── Render: produtos do fabricante aberto, com filtros e seleção ──
+
+  function produtosFiltradosCat(){
+    const termo = normalizarTexto(($('filtroProdutoCat') && $('filtroProdutoCat').value) || '');
+    const min = App.parseNumeroBR(($('precoMinCat') && $('precoMinCat').value) || '');
+    const max = App.parseNumeroBR(($('precoMaxCat') && $('precoMaxCat').value) || '');
+    return catalogoLote.itens.filter(it =>
+      (it.fabricante || '(sem fabricante)') === fabricanteAberto &&
+      (!termo || normalizarTexto(it.nome).includes(termo) || normalizarTexto(it.codigo).includes(termo)) &&
+      (min == null || it.precoCent >= Math.round(min * 100)) &&
+      (max == null || it.precoCent <= Math.round(max * 100)));
+  }
+
+  function desatualizadosDe(lista){
+    const hoje = App.hojeISO(), pd = prazoDias();
+    return lista.filter(it =>
+      ConcorrentesNucleo.statusProduto(it, (ultimaPorCodigo||{})[it.codigo], hoje, pd).motivo);
+  }
+
+  function atualizarContagemSelCat(){
+    const el = $('contagemSelCat');
+    if(!el) return;
+    const nLojas = lojasDoCampo().length;
+    el.textContent = selecaoLote.size + ' selecionado(s) × ' + nLojas + ' loja(s) = ' +
+      ConcorrentesNucleo.contarBuscas(selecaoLote.size, nLojas) + ' busca(s)';
+  }
+
+  function renderProdutosCatalogo(){
+    const alvo = $('produtosCatalogo');
+    if(!fabricanteAberto){ alvo.innerHTML = ''; return; }
+    alvo.innerHTML =
+      '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">' +
+        '<input type="search" id="filtroProdutoCat" class="campo-busca" style="min-width:220px;" placeholder="Filtrar por nome ou código...">' +
+        '<label class="rotulo-mono">R$ de <input type="number" id="precoMinCat" class="no-spin" style="width:80px; padding:6px;"></label>' +
+        '<label class="rotulo-mono">até <input type="number" id="precoMaxCat" class="no-spin" style="width:80px; padding:6px;"></label>' +
+        '<button class="btn secondary mini" id="selTodosCatBtn">☑ Selecionar filtrados</button>' +
+        '<button class="btn secondary mini" id="limparSelCatBtn">☐ Limpar seleção</button>' +
+      '</div>' +
+      '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">' +
+        '<span id="contagemSelCat" class="rotulo-mono"></span>' +
+        '<button class="btn" id="pesquisarSelCatBtn">🏪 Pesquisar selecionados</button>' +
+        '<button class="btn secondary" id="pesquisarDesatCatBtn"></button>' +
+      '</div>' +
+      '<div id="listaProdutosCat" style="overflow-x:auto;"></div>';
+    renderListaProdutosCat();
+  }
+
+  function renderListaProdutosCat(){
+    const el = $('listaProdutosCat');
+    if(!el) return;
+    const lista = produtosFiltradosCat();
+    const hoje = App.hojeISO(), pd = prazoDias();
+    const desat = desatualizadosDe(lista);
+    const btnDesat = $('pesquisarDesatCatBtn');
+    if(btnDesat) btnDesat.textContent = '⏳ Pesquisar só os desatualizados (' + desat.length + ')';
+
+    let html = '<table class="quote-table" style="min-width:840px;"><thead><tr>' +
+      '<th scope="col"><span class="sr-only">Selecionar</span></th><th scope="col">Código</th>' +
+      '<th scope="col">Produto</th><th scope="col">Preço de venda</th><th scope="col">Situação</th>' +
+      '</tr></thead><tbody>';
+    lista.forEach(it=>{
+      const st = ConcorrentesNucleo.statusProduto(it, (ultimaPorCodigo||{})[it.codigo], hoje, pd);
+      let situacao;
+      if(st.motivo === 'nunca') situacao = '<span style="color:var(--loss); font-weight:700;">nunca pesquisado</span>';
+      else if(st.motivo === 'preco') situacao = '<span style="color:var(--loss); font-weight:700;">💲 preço mudou desde a pesquisa</span>';
+      else if(st.motivo === 'prazo') situacao = '<span style="color:var(--brick); font-weight:700;">⏰ há ' + App.diasEntre(st.ultima.data, hoje) + ' dias</span>';
+      else situacao = '<span style="color:var(--profit);">✓ ' + App.fmtData(st.ultima.data) + '</span>';
+      html += '<tr>' +
+        '<td><input type="checkbox" data-selcat="'+escapeHtml(it.codigo)+'"'+
+          (selecaoLote.has(it.codigo)?' checked':'')+' style="width:16px; height:16px; cursor:pointer;" '+
+          'aria-label="Selecionar '+escapeHtml(it.nome)+'"></td>' +
+        '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(it.codigo)+'</td>' +
+        '<td title="busca: '+escapeHtml(it.consulta)+'">'+escapeHtml(it.nome)+'</td>' +
+        '<td style="font-family:var(--font-mono);">'+brl(it.precoCent/100)+'</td>' +
+        '<td style="font-size:11.5px;">'+situacao+'</td></tr>';
+    });
+    el.innerHTML = html + '</tbody></table>' +
+      (lista.length ? '' : '<p class="empty-note" style="display:block;">Nada com esses filtros.</p>');
+    atualizarContagemSelCat();
+  }
+
+  // ── Handlers do catálogo (delegação registrada UMA vez) ──
+
+  $('importarCatalogoBtn').addEventListener('click', ()=> $('arquivoCatalogo').click());
+
+  $('arquivoCatalogo').addEventListener('change', async function(){
+    const f = this.files && this.files[0];
+    this.value = '';
+    if(!f) return;
+    let rows;
+    try{
+      const buf = await f.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array' });
+      rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+    }catch(e){ App.toastErro('Não consegui ler o arquivo', e); return; }
+
+    const r = ConcorrentesNucleo.lerCatalogo(rows);
+    if(r.erro){ App.toastErro('Planilha recusada', r.erro); return; }
+    const avisoIgnoradas = r.ignoradas.length
+      ? r.ignoradas.length + ' linha(s) ignorada(s): ' +
+        r.ignoradas.slice(0, 5).map(i => 'linha ' + i.linha + ' (' + i.motivo + ')').join(', ') +
+        (r.ignoradas.length > 5 ? '…' : '')
+      : '';
+
+    // Substituição é sempre da planilha INTEIRA — e nunca às cegas:
+    // o comparativo diz o que mudou antes de confirmar. As pesquisas
+    // já feitas ficam no Firestore; substituir não apaga nada.
+    if(catalogoLote && catalogoLote.itens && catalogoLote.itens.length){
+      const d = ConcorrentesNucleo.diffCatalogos(catalogoLote.itens, r.itens);
+      const det = [];
+      d.sairam.slice(0, 8).forEach(it => det.push('− saiu: ' + it.codigo + ' ' + it.nome));
+      if(d.sairam.length > 8) det.push('… e mais ' + (d.sairam.length - 8) + ' que saíram');
+      d.mudaram.slice(0, 8).forEach(m => det.push('≠ ' + m.codigo + ': ' +
+        (m.mudouPreco ? brl(m.precoDeCent/100) + ' → ' + brl(m.precoParaCent/100) : '') +
+        (m.mudouNome ? (m.mudouPreco ? ' · ' : '') + 'nome mudou' : '')));
+      if(d.mudaram.length > 8) det.push('… e mais ' + (d.mudaram.length - 8) + ' mudança(s)');
+      const ok = await App.confirmar({
+        titulo: 'Substituir a planilha inteira',
+        mensagem: d.novos.length + ' novos · ' + d.sairam.length + ' saíram · ' +
+          d.mudaram.length + ' mudaram · ' + d.iguais + ' iguais' +
+          (det.length ? '\n\n' + det.join('\n') : '') +
+          (avisoIgnoradas ? '\n\n' + avisoIgnoradas : '') +
+          '\n\nAs pesquisas já feitas não são apagadas.',
+        confirmar: 'Substituir'
+      });
+      if(!ok) return;
+    } else if(avisoIgnoradas){
+      App.toast(avisoIgnoradas, 'info');
+    }
+
+    catalogoLote = { importadoEm: App.hojeISO(), itens: r.itens };
+    if(!gravarLS(CATALOGO_LS, catalogoLote)){
+      App.toastErro('Sem espaço local', 'O catálogo não coube no armazenamento deste navegador.');
+    }
+    fabricanteAberto = null;
+    selecaoLote.clear();
+    renderLotePlanilha();
+    App.toast('Catálogo importado: ' + r.itens.length + ' produto(s).', 'ok');
+  });
+
+  (function(){ const p = lerLS(PRAZO_LS); if(p >= 1) $('prazoDesatualizado').value = p; })();
+  $('prazoDesatualizado').addEventListener('change', ()=>{ gravarLS(PRAZO_LS, prazoDias()); renderLotePlanilha(); });
+  $('atualizarPainelFabBtn').addEventListener('click', ()=>{ ultimaPorCodigo = null; renderLotePlanilha(); });
+
+  App.delegar($('painelFabricantes'), 'click', '[data-abrir-fab]', (b)=>{
+    const f = b.dataset.abrirFab;
+    fabricanteAberto = (fabricanteAberto === f) ? null : f;
+    // Trocar de fabricante limpa a seleção: marcação invisível de um
+    // fabricante fechado entraria escondida na contagem de buscas.
+    selecaoLote.clear();
+    renderPainelFabricantes();
+    renderProdutosCatalogo();
+  });
+
+  App.delegar($('produtosCatalogo'), 'input', '#filtroProdutoCat', renderListaProdutosCat);
+  App.delegar($('produtosCatalogo'), 'change', '#precoMinCat', renderListaProdutosCat);
+  App.delegar($('produtosCatalogo'), 'change', '#precoMaxCat', renderListaProdutosCat);
+  App.delegar($('produtosCatalogo'), 'click', '#selTodosCatBtn', ()=>{
+    produtosFiltradosCat().forEach(it => selecaoLote.add(it.codigo));
+    renderListaProdutosCat();
+  });
+  App.delegar($('produtosCatalogo'), 'click', '#limparSelCatBtn', ()=>{
+    selecaoLote.clear();
+    renderListaProdutosCat();
+  });
+  App.delegar($('produtosCatalogo'), 'change', '[data-selcat]', (chk)=>{
+    if(chk.checked) selecaoLote.add(chk.dataset.selcat);
+    else selecaoLote.delete(chk.dataset.selcat);
+    atualizarContagemSelCat();
+  });
+  App.delegar($('produtosCatalogo'), 'click', '#pesquisarSelCatBtn', ()=>{
+    iniciarLotePlanilha(catalogoLote.itens.filter(it => selecaoLote.has(it.codigo)));
+  });
+  App.delegar($('produtosCatalogo'), 'click', '#pesquisarDesatCatBtn', ()=>{
+    iniciarLotePlanilha(desatualizadosDe(produtosFiltradosCat()));
+  });
+
+  App.delegar($('retomarLoteAviso'), 'click', '#retomarLoteBtn', ()=>{
+    const prog = lerLS(PROGRESSO_LS);
+    if(!prog || !prog.itens || !prog.itens.length){ renderLotePlanilha(); return; }
+    loteDocId = null;
+    prepararTelaLote(prog.nome || ROTULO_ORIGEM_PLANILHA);
+    loteOrigemPlanilha = true;
+    loteSoPendentes = true; // o laço pula quem já tem resposta de todas as lojas
+    if(prog.lojas && prog.lojas.length) $('lojasBusca').value = prog.lojas.join('\n');
+    loteItens = prog.itens;
+    $('iniciarLoteBtn').textContent = '▶ Retomar pesquisa';
+    $('pesqLoteMsg').textContent = 'Retomada: os produtos já concluídos serão pulados.';
+    renderLoteTabela();
+  });
+  App.delegar($('retomarLoteAviso'), 'click', '#descartarLoteBtn', ()=>{
+    limparProgressoLote();
+    renderLotePlanilha();
   });
 
   $('notasDataDe').addEventListener('change', ()=>refiltrarNotas(''));
@@ -3937,6 +4372,8 @@ Tupan</textarea>
     loteRodando = false;
     loteParar = false;
     loteSomenteLeitura = true;
+    loteOrigemPlanilha = false;
+    loteSoPendentes = false;
     loteDocId = pedidoId;
     loteLojas = lojas;
     loteItens = docs.map(p=>{
