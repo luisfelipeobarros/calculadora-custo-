@@ -2556,6 +2556,12 @@ Tupan</textarea>
     $('refazerFalhasBtn').style.display = 'none';
     $('pesqLoteMsg').textContent = '';
     $('salvarLoteMsg').textContent = '';
+    // A tabela anterior precisa sumir ANTES do proximo render: o
+    // renderLoteTabela repoe por indice o que estiver digitado em
+    // "Nosso preco" (protecao contra a reconstrucao no meio da
+    // varredura) — com a tabela velha ainda no DOM, os precos da
+    // pesquisa anterior eram colados linha a linha na nova.
+    $('loteTabela').innerHTML = '';
     mostrarWidgetBusca('buscaGoogleWidgetLote', null);
     loteNomePedido = nome;
     $('loteTitulo').textContent = 'Pesquisar concorrentes — ' + nome;
@@ -3203,6 +3209,7 @@ Tupan</textarea>
         '<span id="contagemSelCat" class="rotulo-mono"></span>' +
         '<button class="btn" id="pesquisarSelCatBtn">🏪 Pesquisar selecionados</button>' +
         '<button class="btn secondary" id="pesquisarDesatCatBtn"></button>' +
+        '<button class="btn secondary" id="verUltimaPesqFabBtn" title="Abre a última pesquisa salva de cada produto deste fabricante, em tabela, como no histórico">📋 Ver última pesquisa</button>' +
       '</div>' +
       '<div id="listaProdutosCat" style="overflow-x:auto;"></div>';
     renderListaProdutosCat();
@@ -3337,6 +3344,53 @@ Tupan</textarea>
   App.delegar($('produtosCatalogo'), 'click', '#pesquisarDesatCatBtn', ()=>{
     iniciarLotePlanilha(desatualizadosDe(produtosFiltradosCat()));
   });
+  App.delegar($('produtosCatalogo'), 'click', '#verUltimaPesqFabBtn', abrirUltimaPesquisaFabricante);
+
+  // A última pesquisa salva de cada produto do fabricante aberto, na
+  // mesma tabela produto × loja do histórico. "Última por produto":
+  // produtos pesquisados em dias diferentes aparecem juntos, cada um
+  // com o resultado mais recente — a mensagem mostra o intervalo.
+  async function abrirUltimaPesquisaFabricante(btn){
+    if(!firestoreDb){ App.toast('Conecte o Firebase (aba Sincronização) primeiro.', 'info'); return; }
+    if(!fabricanteAberto) return;
+    btn.disabled = true;
+    try{
+      // O rótulo "(sem fabricante)" é da tela; no documento o campo é null.
+      const alvo = fabricanteAberto === '(sem fabricante)' ? null : fabricanteAberto;
+      const snap = await App.comAuth(()=> exigirDb().collection('concorrentes')
+        .where('fabricante', '==', alvo).get());
+      const porCodigo = {};
+      snap.forEach(doc => {
+        const d = doc.data();
+        if(!d.codigo) return;
+        const quando = (d.data && d.data.toDate) ? d.data.toDate() : null;
+        const atual = porCodigo[d.codigo];
+        if(!atual || (quando && (!atual.quando || quando > atual.quando))){
+          porCodigo[d.codigo] = { doc: d, quando: quando };
+        }
+      });
+      const ultimas = Object.values(porCodigo);
+      if(!ultimas.length){
+        App.toast('Nenhuma pesquisa salva deste fabricante ainda.', 'info');
+        return;
+      }
+      ultimas.sort((a, b) => String(a.doc.produto).localeCompare(String(b.doc.produto), 'pt-BR'));
+      const datas = ultimas.map(u => u.quando ? App.iso(u.quando) : null).filter(Boolean).sort();
+      const de = datas[0] ? App.fmtData(datas[0]) : null;
+      const ate = datas.length ? App.fmtData(datas[datas.length - 1]) : null;
+      const periodo = !de ? '' : (de === ate ? ', de ' + de : ', entre ' + de + ' e ' + ate);
+      loteNomePedido = fabricanteAberto;
+      montarLoteSomenteLeitura(ultimas.map(u => u.doc),
+        'Última pesquisa — ' + fabricanteAberto,
+        'Somente leitura: a pesquisa mais recente de cada produto' + periodo);
+      loteDocId = null;
+    }catch(e){
+      console.error(e);
+      App.toastErro('Erro ao carregar as pesquisas', e);
+    }finally{
+      btn.disabled = false;
+    }
+  }
 
   App.delegar($('retomarLoteAviso'), 'click', '#retomarLoteBtn', ()=>{
     const prog = lerLS(PROGRESSO_LS);
@@ -4353,12 +4407,10 @@ Tupan</textarea>
   // Remonta na tela da pesquisa em lote uma varredura já salva, para
   // ver o resultado inteiro — o mesmo quadro produto × loja de quando
   // ela rodou. Somente leitura: nada aqui refaz busca nem grava.
-  function abrirPesquisaSalva(pedidoId, chaveDia){
-    const estado = pesquisasPorPedido[pedidoId];
-    if(!estado || !estado.lista) return;
-    const docs = estado.lista.filter(p => diaDaPesquisa(p).chave === chaveDia);
-    if(!docs.length) return;
-
+  // Remonta documentos de "concorrentes" na tela de lote, sem edição.
+  // Serve a pesquisa salva do histórico E a última pesquisa de um
+  // fabricante da planilha — as duas são a mesma tabela produto × loja.
+  function montarLoteSomenteLeitura(docs, titulo, mensagem){
     // As lojas da execução, na ordem em que aparecem. Documentos
     // diferentes podem ter lojas diferentes (uma falhou e foi refeita
     // sozinha, por exemplo), então é a união que vira a coluna.
@@ -4374,7 +4426,6 @@ Tupan</textarea>
     loteSomenteLeitura = true;
     loteOrigemPlanilha = false;
     loteSoPendentes = false;
-    loteDocId = pedidoId;
     loteLojas = lojas;
     loteItens = docs.map(p=>{
       const porLoja = {};
@@ -4383,7 +4434,7 @@ Tupan</textarea>
         if(i !== -1) porLoja[i] = r;
       });
       return {
-        codigo: '',
+        codigo: p.codigo || '',
         produto: p.produto || '',
         nossoPreco: p.meuPreco != null ? p.meuPreco : null,
         porLoja
@@ -4391,18 +4442,32 @@ Tupan</textarea>
     });
 
     router.ir('PesquisaLote');
+    $('loteTitulo').textContent = titulo;
+    ['iniciarLoteBtn','pararLoteBtn','salvarPesqLoteBtn','refazerFalhasBtn']
+      .forEach(id => { $(id).style.display = 'none'; });
+    $('pesqLoteMsg').textContent = mensagem + ' — ' + loteItens.length +
+      ' produto(s) em ' + lojas.length + ' loja(s).';
+    $('salvarLoteMsg').textContent = '';
+    // Mesmo motivo do prepararTelaLote: sem limpar, o render reporia
+    // por indice os precos digitados na pesquisa anterior.
+    $('loteTabela').innerHTML = '';
+    mostrarWidgetBusca('buscaGoogleWidgetLote', null);
+    renderLoteTabela();
+  }
+
+  function abrirPesquisaSalva(pedidoId, chaveDia){
+    const estado = pesquisasPorPedido[pedidoId];
+    if(!estado || !estado.lista) return;
+    const docs = estado.lista.filter(p => diaDaPesquisa(p).chave === chaveDia);
+    if(!docs.length) return;
 
     const pedido = historicoDocsCache.find(x => x.id === pedidoId);
     loteNomePedido = pedido ? (pedido.nomeCotacao || pedido.fornecedor || 'Pedido') : 'Pedido';
     const rotulo = diaDaPesquisa(docs[0]).rotulo;
-    $('loteTitulo').textContent = 'Pesquisa salva de ' + rotulo + ' — ' + loteNomePedido;
-    ['iniciarLoteBtn','pararLoteBtn','salvarPesqLoteBtn','refazerFalhasBtn']
-      .forEach(id => { $(id).style.display = 'none'; });
-    $('pesqLoteMsg').textContent = 'Somente leitura — ' + loteItens.length +
-      ' produto(s) em ' + lojas.length + ' loja(s), como ficou em ' + rotulo + '.';
-    $('salvarLoteMsg').textContent = '';
-    mostrarWidgetBusca('buscaGoogleWidgetLote', null);
-    renderLoteTabela();
+    montarLoteSomenteLeitura(docs,
+      'Pesquisa salva de ' + rotulo + ' — ' + loteNomePedido,
+      'Somente leitura, como ficou em ' + rotulo);
+    loteDocId = pedidoId;
   }
 
   const formatarDataFirestore = App.fmtDataFirestore; // app-shared.js
