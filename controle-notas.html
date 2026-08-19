@@ -214,10 +214,11 @@
     #tabelaImportar .tabela-itens-nota th:nth-child(8), #tabelaImportar .tabela-itens-nota td:nth-child(8),
     #tabelaImportar .st-total-nota,
     #tabelaImportar a.btn{ display:none; }
-    /* Sem o traco sob o cabecalho dos itens; a divisao forte fica no
-       FIM do bloco expandido (logo abaixo do "ST total da nota"),
-       separando visualmente uma nota da outra. */
-    #tabelaImportar .tabela-itens-nota th{ border-bottom:none; }
+    /* Sem o traco sob o cabecalho das tabelas ANINHADAS — vale para a
+       de ITENS e para a de VENCIMENTOS (pedido de 18/08/2026: pagamentos
+       impressos com a mesma cara dos produtos); a divisao forte fica no
+       FIM do bloco expandido, separando visualmente uma nota da outra. */
+    #tabelaImportar .tab-importar > tbody > tr > td[colspan] table th{ border-bottom:none; }
     #tabelaImportar .tab-importar > tbody > tr > td[colspan]{ border-bottom:2.5px solid var(--ink); }
     /* Papel nao tem rolagem: o que passa da borda da folha e' cortado
        em silencio (era o badge de atraso). Solta o corte do conteiner
