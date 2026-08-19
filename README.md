@@ -268,13 +268,16 @@ Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
     (interna/interestadual/exterior; venda com/sem ST; e 5405/6404 como
     "ST retida anteriormente", que legitimamente vem sem cobrança e não
     pode virar alarme falso na checagem cruzada com o valor de ST).
-13. **Fiscal (NCM & ST)** — 23 verificações em `fiscal-nucleo.js`: o
+13. **Fiscal (NCM & ST)** — 28 verificações em `fiscal-nucleo.js`: o
     agrupamento por **NCM + UF de origem** (da chave de acesso), o % de
     ST observado em centavos inteiros (null sem base, nunca zero
     inventado), a contagem por classe de CFOP (com "retida
-    anteriormente" separada de "com ST") e a divergência cadastro ×
+    anteriormente" separada de "com ST"), a divergência cadastro ×
     observado — **só categórica**: percentual não ganha veredito
-    automático, porque tolerância numérica seria invenção.
+    automático, porque tolerância numérica seria invenção — e a trava
+    de cadastro (`grupoCadastravel`), que espelha o regex do
+    `firestore.rules`: item sem NCM ou UF desconhecida não ganha
+    formulário, senão o salvamento morreria em permission-denied.
 14. **Concorrentes em lote (planilha)** — 33 verificações em
     `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
     ordem/acento/caixa, preço com sujeira de float → centavos inteiros,

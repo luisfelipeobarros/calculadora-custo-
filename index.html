@@ -20,11 +20,8 @@
 <link rel="stylesheet" href="app-shared.css?v=15">
 
 <style>
-  /* Somente o que e' exclusivo da Calculadora de Custo. */
-  .wrap{ padding:28px 20px 60px; }
-  header.top, footer.note{ max-width:1700px; margin-left:auto; margin-right:auto; }
-  #viewCalculadora, #viewFrete, #viewSync{ max-width:1440px; margin-left:auto; margin-right:auto; }
-  #viewCotacao, #viewHistorico, #viewProdutos, #viewConcorrentes{ max-width:1700px; margin-left:auto; margin-right:auto; }
+  /* Somente o que e' exclusivo da Calculadora de Custo. As larguras
+     das views e do cabecalho/rodape moram no app-shared.css. */
 
   /* Pesquisa de concorrentes em lote */
   /* A tabela usa o MESMO desenho da pesquisa individual (.quote-table:
@@ -908,7 +905,7 @@ Tupan</textarea>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
 <script src="painel-nucleo.js?v=1"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
-<script src="fiscal-nucleo.js?v=1"></script>
+<script src="fiscal-nucleo.js?v=2"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=1"></script>
 <script>
@@ -3257,6 +3254,7 @@ Tupan</textarea>
     const f = this.files && this.files[0];
     this.value = '';
     if(!f) return;
+    if(!xlsxDisponivel()) return;
     let rows;
     try{
       const buf = await f.arrayBuffer();
@@ -3322,7 +3320,7 @@ Tupan</textarea>
     renderProdutosCatalogo();
   });
 
-  App.delegar($('produtosCatalogo'), 'input', '#filtroProdutoCat', renderListaProdutosCat);
+  App.delegar($('produtosCatalogo'), 'input', '#filtroProdutoCat', debounce(renderListaProdutosCat, DEBOUNCE_BUSCA));
   App.delegar($('produtosCatalogo'), 'change', '#precoMinCat', renderListaProdutosCat);
   App.delegar($('produtosCatalogo'), 'change', '#precoMaxCat', renderListaProdutosCat);
   App.delegar($('produtosCatalogo'), 'click', '#selTodosCatBtn', ()=>{
@@ -3842,6 +3840,10 @@ Tupan</textarea>
         return '<span title="' + escapeHtml(cl ? [cl.ambito, cl.st].filter(Boolean).join(' · ') : '') + '">' +
           escapeHtml(c) + ' <span style="color:var(--ink-soft);">(' + g.cfops[c] + ')</span></span>';
       }).join(' · ');
+      // A regra de "pode cadastrar" mora no nucleo e espelha o regex do
+      // firestore.rules: id fora do padrao (sem NCM ou UF '??') nao
+      // ganha formulario — a gravacao seria rejeitada na hora de salvar.
+      const cadastravel = FiscalNucleo.grupoCadastravel(g);
       const semUf = g.uf === '??';
 
       html += '<div class="fiscal-linha' + (divergencias ? ' divergente' : '') + '">' +
@@ -3860,8 +3862,10 @@ Tupan</textarea>
           (g.somaStCent === 0 && g.observado.retida > 0 ? ' · <span style="color:var(--ink-soft);">há CFOP de ST retida anteriormente</span>' : '') +
         '</div>' +
         '<div class="fiscal-cadastro">' +
-          (semUf
-            ? '<span class="nota-explicativa">UF desconhecida (chave fora do padrão) — sem cadastro.</span>'
+          (!cadastravel
+            ? '<span class="nota-explicativa">' + (semUf
+                ? 'UF desconhecida (chave fora do padrão) — sem cadastro.'
+                : 'Item sem NCM na nota — sem cadastro fiscal disponível.') + '</span>'
             : '<label>Cadastro: <select data-fiscal-mod="' + escapeHtml(g.id) + '">' +
                 Object.keys(MODALIDADES_ST).map(m =>
                   '<option value="' + m + '"' + ((cad ? cad.modalidade || '' : '') === m ? ' selected' : '') + '>' +
@@ -4031,6 +4035,16 @@ Tupan</textarea>
   }
 
   const LOJAS_PADRAO = 'Ferreira Costa\nCanal da Construção\nLojas 2001\nArmazém Coral\nArmazém Jenipapo\nTupan';
+
+  // Enter no campo de descrição dispara a busca — o gesto natural de
+  // quem digita. O guard de disabled evita disparo duplo com uma
+  // pesquisa já em andamento.
+  $('descricaoProdutoBusca').addEventListener('keydown', (ev)=>{
+    if(ev.key === 'Enter' && !$('compararConcorrentesBtn').disabled){
+      ev.preventDefault();
+      $('compararConcorrentesBtn').click();
+    }
+  });
 
   $('compararConcorrentesBtn').addEventListener('click', async ()=>{
     if(!window.__geminiPronto){
@@ -4924,6 +4938,16 @@ Tupan</textarea>
     return map;
   }
 
+  // O XLSX vem de CDN: com a rede bloqueando o jsdelivr, o objeto nem
+  // existe e qualquer uso viraria ReferenceError mudo no console. A
+  // guarda troca isso por um aviso que explica a causa.
+  function xlsxDisponivel(){
+    if(typeof XLSX !== 'undefined') return true;
+    App.toastErro('Planilhas indisponíveis',
+      'A biblioteca de Excel (XLSX, via CDN) não carregou. Verifique a internet e recarregue a página (F5).');
+    return false;
+  }
+
   // --- Planilha de Cotação (Excel) ---
   async function parseExcelCotacao(file){
     const buf = await file.arrayBuffer();
@@ -5437,6 +5461,7 @@ Tupan</textarea>
   $('arquivoExcel').addEventListener('change', async (ev)=>{
     const file = ev.target.files[0];
     if(!file) return;
+    if(!xlsxDisponivel()) return;
     const meuToken = ++tokenExcel;
     $('previewExcel').innerHTML = '<div class="empty-note" style="display:block;">Lendo planilha...</div>';
     try{
@@ -5540,6 +5565,7 @@ Tupan</textarea>
 
   $('exportarExcelBtn').addEventListener('click', ()=>{
     if(!ultimosResultados.length){ App.toast('Nada para exportar ainda — compare uma cotação primeiro.', 'info'); return; }
+    if(!xlsxDisponivel()) return;
     const linhas = ultimosResultados.map(r=>({
       'Código': r.codigo || '',
       'Produto': r.produtoEsperado,

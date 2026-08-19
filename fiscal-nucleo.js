@@ -119,9 +119,20 @@
     return avisos.length ? avisos : null;
   }
 
+  // A tela so' oferece o formulario de cadastro para grupos cujo id o
+  // firestore.rules aceita ([0-9]{2,8}_[A-Z]{2}). Sem esta trava, um
+  // item sem NCM (id 'sem-ncm_PE') ou de chave fora do padrao (uf '??')
+  // mostrava campos que o Firestore ia rejeitar com permission-denied
+  // na hora de salvar — falha silenciosa ate' a primeira nota torta.
+  var ID_CADASTRAVEL = /^[0-9]{2,8}_[A-Z]{2}$/;
+  function grupoCadastravel(grupo) {
+    return !!(grupo && ID_CADASTRAVEL.test(grupo.id));
+  }
+
   var FiscalNucleo = {
     agruparFiscal: agruparFiscal,
-    divergenciaFiscal: divergenciaFiscal
+    divergenciaFiscal: divergenciaFiscal,
+    grupoCadastravel: grupoCadastravel
   };
 
   global.FiscalNucleo = FiscalNucleo;

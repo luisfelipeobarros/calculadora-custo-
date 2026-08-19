@@ -105,5 +105,21 @@ eq('cadastrado "na nota" onde nada de ST apareceu -> aviso',
 eq('percentual diferente do observado NAO e divergencia automatica',
   F.divergenciaFiscal(pe, { modalidade: 'nota', percentual: 99 }), null);
 
+// ── Quem pode receber cadastro (espelha o regex do firestore.rules) ──
+// Item sem NCM ou chave fora do padrao gera grupo cujo id as regras
+// rejeitam ([0-9]{2,8}_[A-Z]{2}): a tela nao pode oferecer o
+// formulario, senao o salvamento morre em permission-denied.
+
+eq('grupo normal pode ser cadastrado', F.grupoCadastravel(pe), true);
+{
+  const semNcm = F.agruparFiscal([{ chave: chavePE1, itens: [{ ncm: '', cfop: '6101', vTotal: 10, icmsStValor: 0 }] }])[0];
+  eq('item sem NCM vira grupo "sem-ncm_UF"', semNcm.id, 'sem-ncm_PE');
+  eq('  ...que NAO pode ser cadastrado', F.grupoCadastravel(semNcm), false);
+  const semUf = F.agruparFiscal([{ chave: 'abc', itens: [{ ncm: '11112222', cfop: '6101', vTotal: 10, icmsStValor: 0 }] }])[0];
+  eq('UF desconhecida tambem nao pode', F.grupoCadastravel(semUf), false);
+  eq('NCM de 9 digitos (fora do padrao) tambem nao',
+    F.grupoCadastravel({ id: '123456789_PE' }), false);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;
