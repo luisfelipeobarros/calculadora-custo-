@@ -219,7 +219,11 @@
        impressos com a mesma cara dos produtos); a divisao forte fica no
        FIM do bloco expandido, separando visualmente uma nota da outra. */
     #tabelaImportar .tab-importar > tbody > tr > td[colspan] table th{ border-bottom:none; }
-    #tabelaImportar .tab-importar > tbody > tr > td[colspan]{ border-bottom:2.5px solid var(--ink); }
+    /* A divisao grossa fecha a NOTA, nao cada bloco: com itens e
+       vencimentos abertos juntos, so' o ultimo bloco (.fim-expandido,
+       marcado na montagem) ganha a linha — nada de traco grosso entre
+       os produtos e as parcelas da mesma nota (pedido de 19/08/2026). */
+    #tabelaImportar .tab-importar > tbody > tr.fim-expandido > td[colspan]{ border-bottom:2.5px solid var(--ink); }
     /* Papel nao tem rolagem: o que passa da borda da folha e' cortado
        em silencio (era o badge de atraso). Solta o corte do conteiner
        e compacta a tabela para caber — a chave de 44 digitos e' o que
@@ -1256,7 +1260,10 @@
     aoTerminar();
   }
 
-  function htmlVencimentos(chave, colunas){
+  // fimDaNota: e' o ultimo bloco expandido desta nota — a impressao
+  // desenha a divisao grossa so' nele (nunca ENTRE itens e vencimentos
+  // da mesma nota).
+  function htmlVencimentos(chave, colunas, fimDaNota){
     var n = notasPorChave[chave];
     var inner;
 
@@ -1288,11 +1295,12 @@
       }
     }
 
-    return '<tr><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' +
+    return '<tr' + (fimDaNota ? ' class="fim-expandido"' : '') +
+      '><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' +
       inner + '</td></tr>';
   }
 
-  function htmlItens(chave, colunas){
+  function htmlItens(chave, colunas, fimDaNota){
     var d = itensCache[chave];
     var inner;
     if(!d || d.carregando){
@@ -1304,7 +1312,8 @@
     } else {
       inner = App.tabelaItensNota(d, { larguraMinima:'760px' });
     }
-    return '<tr><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' + inner + '</td></tr>';
+    return '<tr' + (fimDaNota ? ' class="fim-expandido"' : '') +
+      '><td colspan="' + colunas + '" style="background:var(--stripe2); padding:10px;">' + inner + '</td></tr>';
   }
 
   var ordAntigasPrimeiro = true;
@@ -1460,8 +1469,8 @@
           '</span></td>' +
         '</tr>';
 
-      if(aberta) html += htmlItens(n.id, COLUNAS_IMPORTAR);
-      if(vencAberto) html += htmlVencimentos(n.id, COLUNAS_IMPORTAR);
+      if(aberta) html += htmlItens(n.id, COLUNAS_IMPORTAR, !vencAberto);
+      if(vencAberto) html += htmlVencimentos(n.id, COLUNAS_IMPORTAR, true);
     });
 
     $('tabelaImportar').innerHTML = html + '</tbody></table></div>';
