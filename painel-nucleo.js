@@ -155,12 +155,77 @@
     };
   }
 
+  /* ============================================================
+     Projecao anual e comparacao com o ano anterior
+     ============================================================ */
+
+  // Faturamento TOTAL de anos ja' fechados, em reais. E' o UNICO lugar
+  // deste numero (mesma politica do TRIBUTOS no calculo-nucleo): na
+  // virada do ano, acrescente aqui o total do ano que fechou e o
+  // comparativo do Painel segue funcionando.
+  var FATURAMENTO_ANUAL = {
+    2025: 66311608.92
+  };
+
+  // A projecao do ano, composta por tres fatias (regra combinada em
+  // 21/08/2026):
+  //   - meses FECHADOS entram pelas vendas realizadas;
+  //   - o mes CORRENTE entra pela previsao de fim de mes (media por
+  //     dia util x dias restantes); sem previsao ainda, cai para as
+  //     vendas parciais e, sem lancamento nenhum, para o objetivo —
+  //     e a resposta DIZ qual fonte usou (fonte), nada e' silencioso;
+  //   - meses FUTUROS entram pelo objetivo ("vamos bater a meta").
+  // Mes fechado sem vendas lancadas e futuro sem objetivo NAO viram
+  // zero mudo: saem contados nas listas proprias, para a tela avisar
+  // que a projecao esta' incompleta.
+  function projecaoAnual(entradas, hoje) {
+    var realizado = 0, futuros = 0;
+    var corrente = null;
+    var fechadosSemVendas = [], futurosSemObjetivo = [];
+
+    (entradas || []).forEach(function (e) {
+      var r = resumoDoMes(e, hoje);
+      if (r.estado === 'fechado') {
+        if (r.vendas == null) fechadosSemVendas.push(e.mes);
+        else realizado += r.vendas;
+      } else if (r.estado === 'corrente') {
+        var prevista = (r.previsao && r.previsao.prevista != null) ? r.previsao.prevista : null;
+        if (prevista != null) corrente = { mes: e.mes, valor: prevista, fonte: 'previsao' };
+        else if (r.vendas != null) corrente = { mes: e.mes, valor: r.vendas, fonte: 'vendas' };
+        else if (e.objetivo != null) corrente = { mes: e.mes, valor: e.objetivo, fonte: 'objetivo' };
+        else corrente = { mes: e.mes, valor: 0, fonte: null };
+      } else {
+        if (e.objetivo == null) futurosSemObjetivo.push(e.mes);
+        else futuros += e.objetivo;
+      }
+    });
+
+    return {
+      realizado: centavos(realizado),
+      corrente: corrente,
+      futuros: centavos(futuros),
+      total: centavos(realizado + (corrente ? corrente.valor : 0) + futuros),
+      fechadosSemVendas: fechadosSemVendas,
+      futurosSemObjetivo: futurosSemObjetivo
+    };
+  }
+
+  // total / ano anterior - 1. Null quando falta um dos lados — sem
+  // numero do ano anterior nao existe crescimento, nem "0%".
+  function crescimentoAnual(total, faturamentoAnterior) {
+    if (total == null || faturamentoAnterior == null || !(faturamentoAnterior > 0)) return null;
+    return total / faturamentoAnterior - 1;
+  }
+
   var PainelNucleo = {
     LIMITE_DO_OBJETIVO: LIMITE_DO_OBJETIVO,
+    FATURAMENTO_ANUAL: FATURAMENTO_ANUAL,
     ultimoDiaDoMes: ultimoDiaDoMes,
     diasUteis: diasUteis,
     diasDeTrabalho: diasDeTrabalho,
-    resumoDoMes: resumoDoMes
+    resumoDoMes: resumoDoMes,
+    projecaoAnual: projecaoAnual,
+    crescimentoAnual: crescimentoAnual
   };
 
   global.PainelNucleo = PainelNucleo;

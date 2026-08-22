@@ -89,6 +89,8 @@
   .painel-prev-grid .bloco .rotulo{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); display:block; }
   .painel-prev-grid .bloco .num{ font-family:var(--font-display); font-size:21px; font-weight:700; color:var(--ink); display:block; margin-top:3px; }
   .painel-prev-grid .bloco .sub{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); display:block; margin-top:2px; }
+  .painel-prev-grid .bloco .num.pos{ color:var(--profit); }
+  .painel-prev-grid .bloco .num.neg{ color:var(--loss); }
   .painel-prev-form{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; margin-top:10px; }
   .painel-prev-form .campo{ display:flex; flex-direction:column; gap:4px; }
   .painel-prev-form label{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); }
@@ -167,6 +169,16 @@
         <button type="button" class="btn" id="prevSalvarBtn">Salvar</button>
       </div>
       <div id="prevResultado"></div>
+    </div>
+
+    <!-- Projeção do ano × faturamento do ano anterior. A conta mora no
+         painel-nucleo.js (projecaoAnual): vendas dos meses fechados +
+         previsão do mês corrente + objetivos dos meses futuros. O
+         faturamento dos anos fechados fica em FATURAMENTO_ANUAL, no
+         mesmo arquivo. -->
+    <div class="card" style="margin-top:18px;">
+      <h2 id="compAnualTitulo">Ano × ano anterior</h2>
+      <div id="comparativoAnual"></div>
     </div>
 
     <div class="card" style="margin-top:18px;">
@@ -903,7 +915,7 @@ Tupan</textarea>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
-<script src="painel-nucleo.js?v=1"></script>
+<script src="painel-nucleo.js?v=2"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=2"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
@@ -6242,8 +6254,71 @@ Tupan</textarea>
       '</div>';
   }
 
+  // Card "Ano × ano anterior": projeção composta (vendas fechadas +
+  // previsão do mês corrente + metas futuras) contra o total do ano
+  // anterior (PainelNucleo.FATURAMENTO_ANUAL). Segue o ano exibido na
+  // tabela — voltar para um ano fechado compara realizado × anterior.
+  function renderComparativoAnual(){
+    const alvo = $('comparativoAnual');
+    $('compAnualTitulo').textContent = painelAno + ' × ' + (painelAno - 1);
+    if(!painelDados || painelDados.ano !== painelAno || painelDados.semFirebase || painelDados.erro){
+      alvo.innerHTML = '';
+      return;
+    }
+
+    const hoje = App.hojeISO();
+    const entradas = [];
+    for(let m = 1; m <= 12; m++){
+      const mes = painelAno + '-' + String(m).padStart(2, '0');
+      const meta = metaDe(mes);
+      entradas.push({
+        mes,
+        objetivo: meta.objetivo != null ? meta.objetivo : null,
+        feriados: meta.feriados || [],
+        faturamento: meta.faturamento || null
+      });
+    }
+    const p = PainelNucleo.projecaoAnual(entradas, hoje);
+    const anterior = PainelNucleo.FATURAMENTO_ANUAL[painelAno - 1] != null
+      ? PainelNucleo.FATURAMENTO_ANUAL[painelAno - 1] : null;
+    const cresc = PainelNucleo.crescimentoAnual(p.total, anterior);
+
+    const nomeMesCurto = (mes) => NOMES_MES_PAINEL[Number(mes.substring(5, 7)) - 1].substring(0, 3);
+    const fontesCorrente = {
+      previsao: 'previsão de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : ''),
+      vendas: 'vendas parciais de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : '') + ' (sem previsão ainda)',
+      objetivo: 'objetivo de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : '') + ' (nada lançado no mês)'
+    };
+    const partes = [];
+    if(p.realizado > 0) partes.push('vendas fechadas R$ ' + numBR(p.realizado));
+    if(p.corrente && p.corrente.fonte) partes.push(fontesCorrente[p.corrente.fonte] + ' R$ ' + numBR(p.corrente.valor));
+    if(p.futuros > 0) partes.push('metas futuras R$ ' + numBR(p.futuros));
+
+    const avisos = [];
+    if(p.fechadosSemVendas.length) avisos.push('sem vendas lançadas: ' + p.fechadosSemVendas.map(nomeMesCurto).join(', '));
+    if(p.futurosSemObjetivo.length) avisos.push('sem objetivo: ' + p.futurosSemObjetivo.map(nomeMesCurto).join(', '));
+    if(p.corrente && !p.corrente.fonte) avisos.push('mês corrente sem lançamento e sem objetivo');
+
+    const bloco = (rotulo, num, sub, classe) =>
+      '<div class="bloco"><span class="rotulo">' + rotulo + '</span>' +
+      '<span class="num' + (classe ? ' ' + classe : '') + '">' + num + '</span>' +
+      (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
+
+    alvo.innerHTML = '<div class="painel-prev-grid">' +
+      bloco('Projeção de ' + painelAno, 'R$ ' + numBR(p.total), partes.join(' + ') || 'nenhum dado lançado ainda') +
+      bloco('Faturamento de ' + (painelAno - 1),
+        anterior != null ? 'R$ ' + numBR(anterior) : '--',
+        anterior != null ? '' : 'cadastre em FATURAMENTO_ANUAL (painel-nucleo.js)') +
+      bloco('Crescimento', cresc != null ? pctBR(cresc) : '--',
+        cresc != null ? (p.total >= anterior ? '+' : '−') + ' R$ ' + numBR(Math.abs(p.total - anterior)) + ' vs ' + (painelAno - 1) : '',
+        cresc == null ? '' : (cresc < 0 ? 'neg' : 'pos')) +
+      '</div>' +
+      (avisos.length ? '<p class="msg-mono" style="margin-top:8px;">⚠ Projeção incompleta — ' + escapeHtml(avisos.join(' · ')) + '.</p>' : '');
+  }
+
   function renderPainel(){
     renderPrevisao();
+    renderComparativoAnual();
     $('anoPainel').textContent = painelAno;
     const alvo = $('tabelaPainel');
     if(!painelDados || painelDados.ano !== painelAno){

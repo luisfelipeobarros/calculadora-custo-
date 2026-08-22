@@ -200,5 +200,57 @@ eq('fevereiro bissexto tem os dias certos (2028)',
 // O 60% mora num lugar so'.
 eq('a constante do limite e 60%', P.LIMITE_DO_OBJETIVO, 0.6);
 
+// ── Projecao anual e crescimento vs ano anterior ────────────
+// Regra de 21/08/2026: fechados pelas vendas, corrente pela previsao,
+// futuros pelo objetivo ("vamos bater a meta") — e o que faltar e'
+// AVISADO, nunca zero mudo.
+
+{
+  // Cenario minimo com as tres fatias: julho fechado (vendas 100.000),
+  // agosto corrente (previsao) e setembro futuro (objetivo 120.000).
+  // Agosto/2026 sem feriados: 26 dias uteis; ate 07/08 (6 uteis, o
+  // domingo dia 02 fora) acumulou 30.000 -> media 5.000 -> previsao
+  // 30.000 + 5.000 x 20 restantes = 130.000.
+  const entradas = [
+    { mes: '2026-07', objetivo: 100000, feriados: [], faturamento: { acumulado: 100000, ate: '2026-07-31' } },
+    { mes: '2026-08', objetivo: 130000, feriados: [], faturamento: { acumulado: 30000, ate: '2026-08-07' } },
+    { mes: '2026-09', objetivo: 120000, feriados: [], faturamento: null }
+  ];
+  const p = P.projecaoAnual(entradas, '2026-08-10');
+  eq('fechado entra pelas vendas', p.realizado, 100000);
+  eq('corrente entra pela PREVISAO', [p.corrente.fonte, p.corrente.valor], ['previsao', 130000]);
+  eq('futuro entra pelo objetivo', p.futuros, 120000);
+  eq('total = as tres fatias somadas', p.total, 350000);
+  eq('nada faltando: listas vazias',
+    [p.fechadosSemVendas, p.futurosSemObjetivo], [[], []]);
+}
+{
+  // Mes corrente sem lancamento cai para o objetivo — e diz isso.
+  const p = P.projecaoAnual([
+    { mes: '2026-08', objetivo: 90000, feriados: [], faturamento: null }
+  ], '2026-08-10');
+  eq('corrente sem lancamento usa o objetivo, declarando a fonte',
+    [p.corrente.fonte, p.corrente.valor, p.total], ['objetivo', 90000, 90000]);
+}
+{
+  // Fechado sem vendas e futuro sem objetivo sao AVISADOS, nao zerados
+  // em silencio.
+  const p = P.projecaoAnual([
+    { mes: '2026-06', objetivo: 100000, feriados: [], faturamento: null },
+    { mes: '2026-10', objetivo: null, feriados: [], faturamento: null }
+  ], '2026-08-10');
+  eq('fechado sem vendas vai para a lista de avisos', p.fechadosSemVendas, ['2026-06']);
+  eq('futuro sem objetivo tambem', p.futurosSemObjetivo, ['2026-10']);
+  eq('e nenhum dos dois entra no total', p.total, 0);
+}
+
+eq('crescimento = total / anterior - 1',
+  Math.round(P.crescimentoAnual(72942769.81, 66311608.92) * 10000) / 10000, 0.1);
+eq('queda sai negativa', P.crescimentoAnual(50, 100), -0.5);
+eq('sem ano anterior: null, nunca 0%', P.crescimentoAnual(100, null), null);
+eq('anterior zero nao divide', P.crescimentoAnual(100, 0), null);
+eq('o faturamento de 2025 mora no nucleo (um lugar so)',
+  P.FATURAMENTO_ANUAL[2025], 66311608.92);
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;
