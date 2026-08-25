@@ -2659,13 +2659,17 @@
     renderCanceladas();
   });
 
-  var COLUNAS_CANCELADAS = 7;
+  var COLUNAS_CANCELADAS = 8;
 
   function renderCanceladas(){
     var termo = normalizarTexto($('buscaCanc').value);
     var lista = notas.filter(function(n){ return !notaAtiva(n); });
     if(termo) lista = lista.filter(function(n){
-      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) || normalizarTexto(n.numero).includes(termo);
+      // O numero da nota DEVOLVIDA tambem acha a cancelada: e' assim
+      // que se responde "cadê a devolução da 375912?".
+      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
+        normalizarTexto(n.numero).includes(termo) ||
+        (n.devolucaoDe && normalizarTexto(n.devolucaoDe).includes(termo));
     });
     lista.sort(function(a,b){
       return (b.canceladaEm || b.dataEmissao || '').localeCompare(a.canceladaEm || a.dataEmissao || '');
@@ -2688,26 +2692,48 @@
       '<th scope="col"><span class="sr-only">Itens</span></th>' +
       '<th scope="col">Nº</th><th scope="col">Emissão</th><th scope="col">Emitente</th>' +
       '<th scope="col">Valor</th><th scope="col">Cancelada em</th>' +
+      '<th scope="col">Devolução</th>' +
       '<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>';
 
     visiveisCanc.forEach(function(n){
       var aberta = !!itensAbertos[n.id];
+      var vencAberto = !!vencAbertos[n.id];
+      var ehDevolucao = n.devolucao === true;
       html += '<tr>' +
         '<td>' + (ehNfse(n) ? '' :
           '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
           'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
-          (aberta ? '▼' : '▶') + '</button>' +
+          (aberta ? '▼' : '▶') + '</button>') +
+          ' <button type="button" class="acao-mini" data-venc="' + escapeHtml(n.id) + '" ' +
+          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota">' +
+          (vencAberto ? '📅▼' : '📅') + '</button>' +
+          (ehNfse(n) ? '' :
           ' <button type="button" class="acao-mini" data-danfe="' + escapeHtml(n.id) + '" ' +
           'title="DANFE simplificado (conferência interna)">📄</button>') + '</td>' +
-        '<td>' + escapeHtml(n.numero || '-') + '</td>' +
+        '<td>' + escapeHtml(n.numero || '-') +
+          (ehDevolucao && n.devolucaoDe
+            ? '<br><span class="badge avencer" style="font-size:9.5px;">↩ dev. da nota ' + escapeHtml(n.devolucaoDe) + '</span>'
+            : '') + '</td>' +
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
         '<td>' + escapeHtml(fornecedorEmCelula(n.nomeEmitente, fornecedorDaNota(n))) + '</td>' +
         '<td>' + brl(n.valorTotal) + '</td>' +
         '<td>' + fmtData(n.canceladaEm) + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<label style="cursor:pointer; font-family:var(--font-mono); font-size:11px;">' +
+            '<input type="checkbox" data-devolucao="' + escapeHtml(n.id) + '"' + (ehDevolucao ? ' checked' : '') +
+            ' style="vertical-align:middle; cursor:pointer;"> devolução</label>' +
+          (ehDevolucao
+            ? ' <input type="text" inputmode="numeric" data-devolucao-de="' + escapeHtml(n.id) + '"' +
+              ' value="' + escapeHtml(n.devolucaoDe || '') + '" placeholder="nº da nota devolvida"' +
+              ' maxlength="30" style="width:130px; padding:3px 6px; border:1.5px solid var(--line); border-radius:4px;' +
+              ' font-family:var(--font-mono); font-size:11px; background:#fff; color:var(--ink);"' +
+              ' aria-label="Número da nota devolvida">'
+            : '') + '</td>' +
         '<td><button type="button" class="acao-mini" data-reativar="' + escapeHtml(n.id) + '">↩ Reativar</button></td>' +
         '</tr>';
       // O botao de itens existia mas nunca abria nada nesta tela.
-      if(aberta) html += htmlItens(n.id, COLUNAS_CANCELADAS);
+      if(aberta) html += htmlItens(n.id, COLUNAS_CANCELADAS, !vencAberto);
+      if(vencAberto) html += htmlVencimentos(n.id, COLUNAS_CANCELADAS, true);
     });
 
     $('tabelaCanc').innerHTML = html + '</tbody></table></div>';
@@ -2718,6 +2744,47 @@
 
   App.delegar($('tabelaCanc'), 'click', '[data-itens]', function(b){
     alternarItens(b.dataset.itens, renderCanceladas);
+  });
+
+  App.delegar($('tabelaCanc'), 'click', '[data-venc]', function(b){
+    alternarVencimentos(b.dataset.venc, renderCanceladas);
+  });
+
+  // Devolução: registro e rastreio, sem efeito em conta nenhuma (as
+  // duplicatas ja' estao desativadas pelo cancelamento). A escrita e'
+  // otimista — a tela muda na hora e reverte se o Firestore recusar.
+  App.delegar($('tabelaCanc'), 'change', '[data-devolucao]', function(chk){
+    var chave = chk.dataset.devolucao;
+    var n = notasPorChave[chave];
+    if(!n) return;
+    var marcado = chk.checked;
+    var antes = { devolucao: n.devolucao === true, devolucaoDe: n.devolucaoDe || null };
+    n.devolucao = marcado;
+    if(!marcado) n.devolucaoDe = null; // desmarcar limpa o numero junto
+    renderCanceladas();
+    atualizarNota(chave, marcado ? { devolucao: true } : { devolucao: false, devolucaoDe: null })
+      .catch(function(e){
+        n.devolucao = antes.devolucao;
+        n.devolucaoDe = antes.devolucaoDe;
+        renderCanceladas();
+        App.toastErro('Erro ao gravar', e);
+      });
+  });
+
+  App.delegar($('tabelaCanc'), 'change', '[data-devolucao-de]', function(inp){
+    var chave = inp.dataset.devolucaoDe;
+    var n = notasPorChave[chave];
+    if(!n) return;
+    var valor = inp.value.trim() || null;
+    var antes = n.devolucaoDe || null;
+    n.devolucaoDe = valor;
+    renderCanceladas();
+    atualizarNota(chave, { devolucaoDe: valor })
+      .catch(function(e){
+        n.devolucaoDe = antes;
+        renderCanceladas();
+        App.toastErro('Erro ao gravar', e);
+      });
   });
 
   App.delegar($('tabelaCanc'), 'click', '[data-reativar]', function(b){

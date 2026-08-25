@@ -50,6 +50,12 @@ service cloud.firestore {
         || (request.resource.data[campo] is string
             && request.resource.data[campo].matches('\\d{4}-\\d{2}-\\d{2}'));
     }
+    function textoCurtoValido(campo) {
+      return !mudou(campo)
+        || request.resource.data.get(campo, null) == null
+        || (request.resource.data[campo] is string
+            && request.resource.data[campo].size() <= 30);
+    }
 
     // ------------------------------------------------------------
     // Colecoes alimentadas pelo Apps Script (importacao de XML).
@@ -67,11 +73,14 @@ service cloud.firestore {
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual',
-                       'previsaoEntrega', 'disponivelRetirada'])
+                       'previsaoEntrega', 'disponivelRetirada',
+                       'devolucao', 'devolucaoDe'])
         && (!mudou('status') || request.resource.data.status in ['ativa', 'cancelada'])
         && boolValido('noSistema')
         && boolValido('noSistemaManual')
         && boolValido('disponivelRetirada')
+        && boolValido('devolucao')
+        && textoCurtoValido('devolucaoDe')
         && dataISOValida('canceladaEm')
         && dataISOValida('previsaoEntrega');
     }

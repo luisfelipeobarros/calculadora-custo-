@@ -191,7 +191,7 @@ const telas = [
   ['Pagamentos (celula)',   html, /fornecedorEmCelula\(d\.nomeEmitente, d\.descricao\)/],
   ['Pagamentos (busca)',    html, /casaFornecedor\(rotulo, d\.nomeEmitente, termo\)/],
   ['A importar (celula)',   html, /fornecedorEmCelula\(n\.nomeEmitente, fornecedorDaNota\(n\)\)/],
-  ['Canceladas (busca)',    html, /casaFornecedor\(fornecedorDaNota\(n\), n\.nomeEmitente, termo\) \|\| normalizarTexto\(n\.numero\)/],
+  ['Canceladas (busca)',    html, /casaFornecedor\(fornecedorDaNota\(n\), n\.nomeEmitente, termo\) \|\|\s+normalizarTexto\(n\.numero\)/],
   ['Notas Emitidas',        calc, /fornecedorDaNotaEmitida\(n\)/]
 ];
 telas.forEach(([nome, fonte, re]) => eq('a tela ' + nome + ' usa a regra', re.test(fonte), true));
