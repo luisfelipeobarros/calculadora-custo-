@@ -216,6 +216,34 @@ assincrono('pedirData nao fecha com o campo vazio', () => {
   });
 });
 
+// pedirTexto: cancelar devolve null; confirmar devolve o texto — e
+// confirmar VAZIO devolve '' (limpar a observacao e' resposta valida,
+// diferente de cancelar). Quem chama testa `!== null`.
+function campoTextoDoModal() {
+  return achar(modalAberto(), el => el.type === 'text');
+}
+
+assincrono('pedirTexto devolve o texto digitado', () => {
+  const p = App.pedirTexto({ titulo: 'Observação', mensagem: 'x', confirmar: 'Salvar' });
+  campoTextoDoModal().value = '  acordo com o fornecedor  ';
+  botaoDoModal('Salvar').disparar('click');
+  return p.then(v => conferir('pedirTexto devolve o texto digitado (sem espacos das pontas)',
+    v, 'acordo com o fornecedor'));
+});
+
+assincrono('pedirTexto devolve null no Cancelar', () => {
+  const p = App.pedirTexto({ titulo: 'Observação', mensagem: 'x' });
+  campoTextoDoModal().value = 'digitei mas desisti';
+  botaoDoModal('Cancelar').disparar('click');
+  return p.then(v => conferir('pedirTexto devolve null no Cancelar', v, null));
+});
+
+assincrono('pedirTexto confirmado em branco devolve "" (limpar), nao null', () => {
+  const p = App.pedirTexto({ titulo: 'Observação', mensagem: 'x' });
+  botaoDoModal('Confirmar').disparar('click');
+  return p.then(v => conferir('pedirTexto confirmado em branco devolve "" (limpar), nao null', v, ''));
+});
+
 // E o confirmar nao pode voltar a aceitar inputDate por engano.
 conferir('confirmar nao tem mais inputDate',
   /inputDate/.test(fs.readFileSync(path.resolve(__dirname, '..', 'app-shared.js'), 'utf8')), false);

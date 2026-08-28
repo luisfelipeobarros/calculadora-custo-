@@ -543,7 +543,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=19"></script>
+<script src="app-shared.js?v=20"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -2008,13 +2008,19 @@
     var ids = Object.keys(selecionados);
     if(!ids.length) return;
 
-    App.confirmar({
+    // pedirTexto no lugar do confirmar: mesmo 1 dialogo, mesma
+    // confirmacao — so' que com o campo de observacao (opcional, vale
+    // para todas as selecionadas). Cancelar devolve null; confirmar em
+    // branco devolve '' e segue sem observacao.
+    App.pedirTexto({
       titulo: 'Marcar como pagas',
       mensagem: 'Marcar ' + ids.length + ' item(ns) como PAGOS?\n\nTotal: ' + brl(somaSelecionada(ids)),
+      rotulo: 'Observação (opcional) — vale para todas',
       confirmar: 'Marcar como pagas',
-      perigo: true
-    }).then(function(ok){
-      if(!ok) return;
+      sugestoes: sugestoesObs()
+    }).then(function(texto){
+      if(texto === null) return; // cancelou
+      var obs = texto || null;
       var btn = $('selPagarBtn');
       btn.disabled = true;
       var dataPgto = hojeISO();
@@ -2023,8 +2029,8 @@
       var t = gravarSelecionados(ids, btn, 'Gravando', function(item){
         if(!item) return null;
         return item._tipo === 'interno'
-          ? { colecao:'pagamentosInternos', dados:{ pago:true, dataPagamento:dataPgto } }
-          : { colecao:'duplicatas', dados:{ pago:true, dataPagamento:dataPgto, pagoEmLote:true } };
+          ? { colecao:'pagamentosInternos', dados:{ pago:true, dataPagamento:dataPgto, obsPagamento: obs } }
+          : { colecao:'duplicatas', dados:{ pago:true, dataPagamento:dataPgto, pagoEmLote:true, obsPagamento: obs } };
       }, function(pedaco){
         // Recorrencia so' faz sentido para pagamento interno, e tem que
         // partir do DOCUMENTO, nao da linha da tabela: a linha nao
@@ -2134,7 +2140,9 @@
         var pago = d.pago === true;
         if(!passaFiltroPag(pago, d.vencimento, hoje, inicioHoje)) return;
         var rotulo = fornecedorDaDuplicata(d);
-        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) || normalizarTexto(d.numeroNota).includes(termo))) return;
+        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) ||
+           normalizarTexto(d.numeroNota).includes(termo) ||
+           (d.obsPagamento && normalizarTexto(d.obsPagamento).includes(termo)))) return;
         lista.push({
           id: d.id,
           _tipo: 'fornecedor',
@@ -2146,6 +2154,7 @@
           pago: pago,
           parcela: d.parcela,
           numeroNota: d.numeroNota,
+          obsPagamento: d.obsPagamento || null,
           _recebido: dupRecebida(d),
           recorrente: false
         });
@@ -2159,10 +2168,12 @@
         var descricao = p.descricao || 'Sem descrição';
         var categoria = p.categoria || 'outro';
         if(termo && normalizarTexto(descricao).indexOf(termo) === -1 &&
-           normalizarTexto(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1) return;
+           normalizarTexto(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1 &&
+           !(p.obsPagamento && normalizarTexto(p.obsPagamento).includes(termo))) return;
         lista.push({
           id: p.id,
           _tipo: 'interno',
+          obsPagamento: p.obsPagamento || null,
           descricao: descricao,
           nomeEmitente: null,
           categoria: categoria,
@@ -2273,8 +2284,20 @@
       // Valor
       html += '<td>' + brl(d.valor) + '</td>';
 
-      // Situacao
-      html += '<td>' + badgeSit + '</td>';
+      // Situacao — pago ganha o 💬: com observacao mostra o texto no
+      // title e abre para editar; sem, abre para adicionar. So' em
+      // linha PAGA: a observacao e' DO pagamento, nao da divida.
+      html += '<td>' + badgeSit +
+        (d.pago
+          ? ' <button type="button" class="acao-mini" data-obs-pag="' + escapeHtml(d.id) + '"' +
+            ' title="' + escapeHtml(d.obsPagamento || 'Adicionar observação do pagamento') + '"' +
+            ' aria-label="Observação do pagamento de ' + escapeHtml(rotuloLinha) + '">' +
+            (d.obsPagamento ? '💬' : '💬+') + '</button>' +
+            (d.obsPagamento
+              ? '<br><span style="font-family:var(--font-mono); font-size:10px; color:var(--ink-soft);">' +
+                escapeHtml(d.obsPagamento) + '</span>'
+              : '')
+          : '') + '</td>';
 
       // Recebido (so fornecedores)
       if(mostraRecebido){
@@ -2309,14 +2332,15 @@
 
   // ─── Eventos de pagamento individual ────────────────────────
 
-  // Duplicata de fornecedor: checkbox pago
+  // Duplicata de fornecedor: checkbox pago. Desfazer o pagamento limpa
+  // a observacao junto — ela era DAQUELE pagamento.
   App.delegar($('tabelaPag'), 'change', '.pago-check', function(cb){
     var id = cb.dataset.dup;
     var marcado = cb.checked;
     cb.disabled = true;
     atualizarDuplicata(id, marcado
       ? { pago:true, dataPagamento: hojeISO() }
-      : { pago:false, dataPagamento: null })
+      : { pago:false, dataPagamento: null, obsPagamento: null })
       .catch(function(e){
         App.toastErro('Erro ao gravar o pagamento', e);
         cb.checked = !marcado;
@@ -2332,7 +2356,7 @@
 
     var campos = marcado
       ? { pago:true, dataPagamento: hojeISO() }
-      : { pago:false, dataPagamento: null };
+      : { pago:false, dataPagamento: null, obsPagamento: null };
 
     App.comAuth(function(){
       return db.collection('pagamentosInternos').doc(id).set(campos, { merge: true });
@@ -2351,6 +2375,51 @@
       App.toastErro('Erro ao gravar o pagamento', e);
       cb.checked = !marcado;
     }).then(function(){ cb.disabled = false; });
+  });
+
+  // ─── Observacao do pagamento ────────────────────────────────
+
+  // As observacoes ja' usadas viram autocomplete, mais frequentes
+  // primeiro — e' o que mantem o "rapido" depois do decimo pagamento.
+  function sugestoesObs(){
+    var freq = Object.create(null);
+    var conta = function(v){ if(v) freq[v] = (freq[v] || 0) + 1; };
+    duplicatas.forEach(function(d){ conta(d.obsPagamento); });
+    pagamentosInternos.forEach(function(p){ conta(p.obsPagamento); });
+    return Object.keys(freq)
+      .sort(function(a, b){ return freq[b] - freq[a] || a.localeCompare(b, 'pt-BR'); })
+      .slice(0, 8);
+  }
+
+  // 💬 na linha paga: adicionar/editar. Confirmar vazio LIMPA a
+  // observacao (por isso o teste e' !== null, nao truthiness).
+  App.delegar($('tabelaPag'), 'click', '[data-obs-pag]', function(btn){
+    var id = btn.dataset.obsPag;
+    var item = pagPorId.get(id);
+    if(!item) return;
+    App.pedirTexto({
+      titulo: 'Observação do pagamento',
+      mensagem: (item._tipo === 'fornecedor'
+        ? fornecedorEmCelula(item.nomeEmitente, item.descricao) + (item.numeroNota ? ' — nota ' + item.numeroNota : '')
+        : item.descricao) + ' · ' + brl(item.valor),
+      rotulo: 'Ex.: acordo, direto pra fábrica... (opcional)',
+      confirmar: 'Salvar',
+      valor: item.obsPagamento || '',
+      sugestoes: sugestoesObs()
+    }).then(function(texto){
+      if(texto === null) return; // cancelou
+      var campos = { obsPagamento: texto || null };
+      var p = item._tipo === 'fornecedor'
+        ? atualizarDuplicata(id, campos)
+        : App.comAuth(function(){
+            return db.collection('pagamentosInternos').doc(id).set(campos, { merge: true });
+          });
+      p.then(function(){
+        App.toast(texto ? 'Observação salva.' : 'Observação removida.', 'ok');
+      }).catch(function(e){
+        App.toastErro('Erro ao gravar a observação', e);
+      });
+    });
   });
 
   // Editar pagamento interno

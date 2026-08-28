@@ -50,11 +50,11 @@ service cloud.firestore {
         || (request.resource.data[campo] is string
             && request.resource.data[campo].matches('\\d{4}-\\d{2}-\\d{2}'));
     }
-    function textoCurtoValido(campo) {
+    function textoValido(campo, tamanhoMax) {
       return !mudou(campo)
         || request.resource.data.get(campo, null) == null
         || (request.resource.data[campo] is string
-            && request.resource.data[campo].size() <= 30);
+            && request.resource.data[campo].size() <= tamanhoMax);
     }
 
     // ------------------------------------------------------------
@@ -80,7 +80,7 @@ service cloud.firestore {
         && boolValido('noSistemaManual')
         && boolValido('disponivelRetirada')
         && boolValido('devolucao')
-        && textoCurtoValido('devolucaoDe')
+        && textoValido('devolucaoDe', 30)
         && dataISOValida('canceladaEm')
         && dataISOValida('previsaoEntrega');
     }
@@ -90,9 +90,10 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento'])
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento', 'obsPagamento'])
         && boolValido('pago')
         && boolValido('pagoEmLote')
+        && textoValido('obsPagamento', 200)
         && dataISOValida('dataPagamento')
         && dataISOValida('vencimento');
     }

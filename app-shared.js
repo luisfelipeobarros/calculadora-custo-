@@ -468,6 +468,78 @@
     }).then(function (v) { return typeof v === 'string' ? v : null; });
   }
 
+  // Pede UM texto curto e OPCIONAL (observacao de pagamento, por
+  // exemplo). Confirmar com o campo vazio devolve '' — limpar e'
+  // resposta valida; cancelar/fechar devolve null. Por isso quem chama
+  // testa `!== null`, nunca só truthiness.
+  //
+  // opcoes: {titulo, mensagem, rotulo, confirmar, cancelar, valor,
+  //          maxlength, sugestoes: ['acordo', ...]} — as sugestoes
+  // viram um datalist (autocomplete do proprio navegador).
+  function pedirTexto(opcoes) {
+    var o = opcoes || {};
+    return abrirModal(function (caixa, fechar) {
+      var h = document.createElement('h2');
+      h.textContent = o.titulo || 'Informar';
+
+      var p = document.createElement('p');
+      p.textContent = o.mensagem || '';
+
+      var campo = document.createElement('input');
+      campo.type = 'text';
+      campo.className = 'modal-data';
+      campo.id = 'modalTextoCampo';
+      campo.maxLength = o.maxlength || 200;
+      campo.value = o.valor || '';
+      if (o.rotulo) campo.placeholder = o.rotulo;
+
+      var rotulo = document.createElement('label');
+      rotulo.className = 'sr-only';
+      rotulo.setAttribute('for', campo.id);
+      rotulo.textContent = o.rotulo || o.mensagem || 'Texto';
+
+      if (o.sugestoes && o.sugestoes.length) {
+        var lista = document.createElement('datalist');
+        lista.id = 'modalTextoSugestoes';
+        o.sugestoes.forEach(function (s) {
+          var opt = document.createElement('option');
+          opt.value = s;
+          lista.appendChild(opt);
+        });
+        campo.setAttribute('list', lista.id);
+        caixa.appendChild(lista);
+      }
+
+      var acoes = document.createElement('div');
+      acoes.className = 'modal-acoes';
+
+      var cancelar = document.createElement('button');
+      cancelar.type = 'button';
+      cancelar.className = 'btn secondary';
+      cancelar.textContent = o.cancelar || 'Cancelar';
+      cancelar.addEventListener('click', function () { fechar(null); });
+
+      var ok = document.createElement('button');
+      ok.type = 'button';
+      ok.className = 'btn';
+      ok.textContent = o.confirmar || 'Confirmar';
+      ok.addEventListener('click', function () { fechar(campo.value.trim()); });
+      campo.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') { ev.preventDefault(); fechar(campo.value.trim()); }
+      });
+
+      acoes.appendChild(cancelar);
+      acoes.appendChild(ok);
+      caixa.appendChild(h);
+      caixa.appendChild(p);
+      caixa.appendChild(rotulo);
+      caixa.appendChild(campo);
+      caixa.appendChild(acoes);
+      caixa.setAttribute('aria-label', o.titulo || 'Informar');
+      setTimeout(function () { campo.focus(); }, 0);
+    }).then(function (v) { return typeof v === 'string' ? v : null; });
+  }
+
   // Substitui alert().
   function avisar(mensagem, titulo) {
     return abrirModal(function (caixa, fechar) {
@@ -1011,7 +1083,13 @@
         '<td>' + fmtData(d.vencimento) + '</td>' +
         '<td>' + (dias != null ? dias + ' dias' : '—') + '</td>' +
         '<td>' + brl(valor) + '</td>' +
-        '<td><span class="badge ' + classe + '">' + escapeHtml(sit) + '</span></td>' +
+        '<td><span class="badge ' + classe + '">' + escapeHtml(sit) + '</span>' +
+        // Observacao do pagamento (acordo, direto na fabrica...): vale
+        // mais visivel do que num tooltip — inclusive na impressao.
+        (d.obsPagamento
+          ? '<br><span style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft);">💬 ' +
+            escapeHtml(d.obsPagamento) + '</span>'
+          : '') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -1452,6 +1530,7 @@
     erroDe: erroDe,
     confirmar: confirmar,
     pedirData: pedirData,
+    pedirTexto: pedirTexto,
     avisar: avisar,
 
     iniciarFirebase: iniciarFirebase,
