@@ -75,7 +75,16 @@
   .acao-mini.perigo{ color:var(--loss); border-color:var(--loss); }
   .acao-mini[disabled]{ opacity:.5; cursor:default; }
 
-  .pago-check{ width:18px; height:18px; accent-color:var(--profit); cursor:pointer; }
+  /* Botao de pagar: nasceu checkbox e confundia com a caixa de
+     SELECAO ao lado (pedido de 28/08/2026) — agora e' visivelmente um
+     botao. Verde vazado = a pagar; preenchido com ✓ = pago (clicar de
+     novo desfaz). Mesma paleta do .badge.pago. */
+  .btn-pagar{ font-family:var(--font-mono); font-size:11px; font-weight:600; padding:3px 8px;
+    border:1.5px solid var(--profit); border-radius:4px; background:#fff; color:var(--profit);
+    cursor:pointer; white-space:nowrap; }
+  .btn-pagar:hover{ background:#E1EFE6; }
+  .btn-pagar.pago{ background:#E1EFE6; }
+  .btn-pagar[disabled]{ opacity:.5; cursor:default; }
   .rodape-total{ font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft); margin-top:10px; text-align:right; }
   .previsao-input{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
   .nota-explicativa{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px; }
@@ -2247,13 +2256,17 @@
         (selecionados[d.id] ? ' checked' : '') +
         ' aria-label="Selecionar ' + escapeHtml(rotuloLinha) + '"></td>';
 
-      // Pago
-      html += '<td><input type="checkbox"' +
-        (d._tipo === 'fornecedor'
-          ? ' class="pago-check" data-dup="'
-          : ' class="pago-check-int" data-pgto="') + escapeHtml(d.id) + '"' +
-        (d.pago ? ' checked' : '') +
-        ' aria-label="Marcar ' + escapeHtml(rotuloLinha) + ' como pago"></td>';
+      // Pago: botao, nao checkbox — ao lado da caixa de selecao, dois
+      // quadradinhos iguais confundiam (um marcava pago de verdade).
+      html += '<td><button type="button" class="btn-pagar' + (d.pago ? ' pago' : '') + '"' +
+        (d._tipo === 'fornecedor' ? ' data-dup="' : ' data-pgto="') + escapeHtml(d.id) + '"' +
+        ' data-pago="' + (d.pago ? '1' : '0') + '"' +
+        ' title="' + (d.pago ? 'Clique para DESFAZER o pagamento' : 'Marcar como pago') + '"' +
+        ' aria-pressed="' + (d.pago ? 'true' : 'false') + '"' +
+        ' aria-label="' + (d.pago
+          ? 'Desfazer o pagamento de ' + escapeHtml(rotuloLinha)
+          : 'Marcar ' + escapeHtml(rotuloLinha) + ' como pago') + '">' +
+        (d.pago ? '✓ pago' : '💲 pagar') + '</button></td>';
 
       // Vencimento
       html += '<td>' + fmtData(d.vencimento) + '</td>';
@@ -2332,27 +2345,28 @@
 
   // ─── Eventos de pagamento individual ────────────────────────
 
-  // Duplicata de fornecedor: checkbox pago. Desfazer o pagamento limpa
-  // a observacao junto — ela era DAQUELE pagamento.
-  App.delegar($('tabelaPag'), 'change', '.pago-check', function(cb){
-    var id = cb.dataset.dup;
-    var marcado = cb.checked;
-    cb.disabled = true;
+  // Duplicata de fornecedor: botao pagar. Desfazer o pagamento limpa
+  // a observacao junto — ela era DAQUELE pagamento. O estado visual do
+  // botao vem do onSnapshot (a linha e' redesenhada quando o Firestore
+  // confirma), entao nao ha' o que reverter no erro.
+  App.delegar($('tabelaPag'), 'click', '.btn-pagar[data-dup]', function(b){
+    var id = b.dataset.dup;
+    var marcado = b.dataset.pago !== '1'; // o clique inverte o estado atual
+    b.disabled = true;
     atualizarDuplicata(id, marcado
       ? { pago:true, dataPagamento: hojeISO() }
       : { pago:false, dataPagamento: null, obsPagamento: null })
       .catch(function(e){
         App.toastErro('Erro ao gravar o pagamento', e);
-        cb.checked = !marcado;
       })
-      .then(function(){ cb.disabled = false; });
+      .then(function(){ b.disabled = false; });
   });
 
-  // Pagamento interno: checkbox pago (com recorrencia)
-  App.delegar($('tabelaPag'), 'change', '.pago-check-int', function(cb){
-    var id = cb.dataset.pgto;
-    var marcado = cb.checked;
-    cb.disabled = true;
+  // Pagamento interno: botao pagar (com recorrencia)
+  App.delegar($('tabelaPag'), 'click', '.btn-pagar[data-pgto]', function(b){
+    var id = b.dataset.pgto;
+    var marcado = b.dataset.pago !== '1';
+    b.disabled = true;
 
     var campos = marcado
       ? { pago:true, dataPagamento: hojeISO() }
@@ -2373,8 +2387,7 @@
       }
     }).catch(function(e){
       App.toastErro('Erro ao gravar o pagamento', e);
-      cb.checked = !marcado;
-    }).then(function(){ cb.disabled = false; });
+    }).then(function(){ b.disabled = false; });
   });
 
   // ─── Observacao do pagamento ────────────────────────────────
