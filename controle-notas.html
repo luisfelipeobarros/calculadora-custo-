@@ -308,7 +308,7 @@
         <span class="k-sub" id="kHojeQtd"></span>
       </button>
       <button type="button" class="kpi" id="kpiSemana">
-        <span class="k-label">Vencendo em 7 dias</span>
+        <span class="k-label">Pgto da semana (sáb–sex)</span>
         <span class="k-num compacto" id="kSemanaValor">--</span>
         <span class="k-sub" id="kSemanaQtd"></span>
       </button>
@@ -417,7 +417,8 @@
         <button type="button" class="chip-filtro" data-f="pendentes" aria-pressed="true">Pendentes</button>
         <button type="button" class="chip-filtro" data-f="atrasadas" aria-pressed="false">Atrasadas</button>
         <button type="button" class="chip-filtro" data-f="hoje" aria-pressed="false">Hoje</button>
-        <button type="button" class="chip-filtro" data-f="7dias" aria-pressed="false">Próx. 7 dias</button>
+        <button type="button" class="chip-filtro" data-f="semana" aria-pressed="false"
+          title="Do último sábado até a sexta — a segunda acumula o fim de semana">Pgto semana</button>
         <button type="button" class="chip-filtro" data-f="pagas" aria-pressed="false">Pagas</button>
         <button type="button" class="chip-filtro" data-f="todas" aria-pressed="false">Todas</button>
       </div>
@@ -994,7 +995,7 @@
   $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
   $('kpiAtrasadas').addEventListener('click', function(){ setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
   $('kpiHoje').addEventListener('click', function(){ setFiltroPag('hoje'); router.ir('Pagamentos'); });
-  $('kpiSemana').addEventListener('click', function(){ setFiltroPag('7dias'); router.ir('Pagamentos'); });
+  $('kpiSemana').addEventListener('click', function(){ setFiltroPag('semana'); router.ir('Pagamentos'); });
   $('kpiFimMes').addEventListener('click', function(){ setFiltroPag('pendentes'); router.ir('Pagamentos'); });
 
   // Redesenha SO' a tela aberta. Antes, marcar uma duplicata como paga
@@ -1063,7 +1064,10 @@
       .concat(internosDoPainel().filter(function(p){ return p.pago !== true; }));
     var atrasadas = pendentes.filter(function(d){ return d.vencimento && d.vencimento < inicioHoje; });
     var vHoje = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= hoje; });
-    var em7 = pendentes.filter(function(d){ return d.vencimento > hoje && d.vencimento <= somarDias(hoje,7); });
+    // A MESMA janela do filtro "Pgto semana" da tela de Pagamentos: o
+    // cartao e o filtro que ele abre tem que contar as mesmas linhas.
+    var sem = janelaSemanaPagamento(hoje);
+    var daSemana = pendentes.filter(function(d){ return d.vencimento >= sem.ini && d.vencimento <= sem.fim; });
 
     var ultimoDiaMes = new Date(Number(hoje.substring(0,4)), Number(hoje.substring(5,7)), 0).getDate();
     var fimMes = hoje.substring(0,8) + String(ultimoDiaMes).padStart(2,'0');
@@ -1084,7 +1088,7 @@
     }
     preencher('kAtrasadasQtd', 'kAtrasadasValor', atrasadas);
     preencher('kHojeQtd', 'kHojeValor', vHoje);
-    preencher('kSemanaQtd', 'kSemanaValor', em7);
+    preencher('kSemanaQtd', 'kSemanaValor', daSemana);
     preencher('kFimMesQtd', 'kFimMesValor', ateFimMes);
 
     // NF-e a receber: SO' NF-e de mercadoria (sem NFS-e), ainda sem
@@ -2114,13 +2118,25 @@
 
   // ─── Renderizacao ───────────────────────────────────────────
 
+  // A semana de PAGAMENTO vai de sabado a sexta: paga-se de segunda a
+  // sexta, e a segunda acumula o que venceu no fim de semana. O
+  // "ultimo sabado" e' o proprio dia quando hoje e' sabado.
+  function janelaSemanaPagamento(hoje){
+    var dow = new Date(hoje + 'T12:00:00').getDay(); // 0=dom ... 6=sab
+    var ini = somarDias(hoje, -((dow + 1) % 7));
+    return { ini: ini, fim: somarDias(ini, 6) };
+  }
+
   // Passa o filtro de periodo. Roda ANTES de montar a linha, para uma
   // busca por "Hoje" nao construir 8.000 objetos e jogar 7.995 fora.
   function passaFiltroPag(pago, vencimento, hoje, inicioHoje){
     if(filtroPag === 'pendentes') return !pago;
     if(filtroPag === 'atrasadas') return !pago && vencimento && vencimento < inicioHoje;
     if(filtroPag === 'hoje')      return !pago && vencimento >= inicioHoje && vencimento <= hoje;
-    if(filtroPag === '7dias')     return !pago && vencimento > hoje && vencimento <= somarDias(hoje,7);
+    if(filtroPag === 'semana'){
+      var sem = janelaSemanaPagamento(hoje);
+      return !pago && vencimento >= sem.ini && vencimento <= sem.fim;
+    }
     if(filtroPag === 'pagas')     return pago;
     return true; // 'todas'
   }

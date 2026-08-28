@@ -47,6 +47,7 @@ const m = new Function('estado', 'somarDias', 'App',
   bloco(/var CAT_FORNECEDOR = \{[^}]*\};/, 'CAT_FORNECEDOR') + '\n' +
   extrair('categoriaPorValor') + '\n' +
   extrair('calcularProximoVencimento') + '\n' +
+  extrair('janelaSemanaPagamento') + '\n' +
   extrair('passaFiltroPag') + '\n' +
   'return { CATEGORIAS: CATEGORIAS, CAT_FORNECEDOR: CAT_FORNECEDOR,' +
   ' categoriaPorValor: categoriaPorValor,' +
@@ -116,9 +117,26 @@ eq('atrasadas: hoje nao esta atrasado', comFiltro('atrasadas', false, '2026-08-0
 eq('atrasadas: pago nunca entra', comFiltro('atrasadas', true, '2026-07-01'), false);
 eq('hoje: vence hoje', comFiltro('hoje', false, '2026-08-03'), true);
 eq('hoje: amanha nao', comFiltro('hoje', false, '2026-08-04'), false);
-eq('7dias: dentro da janela', comFiltro('7dias', false, '2026-08-09'), true);
-eq('7dias: fora da janela', comFiltro('7dias', false, '2026-08-11'), false);
-eq('7dias: hoje ja nao conta', comFiltro('7dias', false, '2026-08-03'), false);
+// Semana de PAGAMENTO = sabado a sexta (paga-se de segunda a sexta; a
+// segunda acumula o fim de semana). HOJE e' segunda 03/08/2026, entao
+// a janela vai do sabado 01/08 ate a sexta 07/08 — inclusive os dias
+// que JA' passaram: e' exatamente o que a segunda acumula.
+eq('semana: sabado passado entra (a segunda acumula o fim de semana)',
+  comFiltro('semana', false, '2026-08-01'), true);
+eq('semana: hoje entra', comFiltro('semana', false, '2026-08-03'), true);
+eq('semana: a sexta desta semana entra', comFiltro('semana', false, '2026-08-07'), true);
+eq('semana: o sabado SEGUINTE fica fora', comFiltro('semana', false, '2026-08-08'), false);
+eq('semana: semana anterior fica fora (é caso de Atrasadas)',
+  comFiltro('semana', false, '2026-07-31'), false);
+eq('semana: pago nao entra', comFiltro('semana', true, '2026-08-05'), false);
+// No proprio sabado, o "ultimo sabado" e' o dia mesmo.
+{
+  estado.filtroPag = 'semana';
+  eq('semana começando no proprio sabado: a sexta dali entra',
+    m.passaFiltroPag(false, '2026-08-07', '2026-08-01', '2026-08-01'), true);
+  eq('  ...e a sexta anterior nao',
+    m.passaFiltroPag(false, '2026-07-31', '2026-08-01', '2026-08-01'), false);
+}
 eq('pagas: so as pagas', comFiltro('pagas', true, '2026-07-01'), true);
 eq('pagas: pendente fica de fora', comFiltro('pagas', false, '2026-07-01'), false);
 eq('todas: deixa tudo passar', comFiltro('todas', true, '2026-01-01'), true);
