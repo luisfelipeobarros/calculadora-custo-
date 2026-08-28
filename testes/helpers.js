@@ -150,6 +150,26 @@ conferir('casaFornecedor continua achando pelo rotulo da tela',
 conferir('casaFornecedor nao casa a toa',
          App.casaFornecedor('Vetrus (Stela)', 'VETRUS S/A', 'pamesa'), false);
 
+// --- notaAImportar: a regra da aba "A importar", usada pelas DUAS ---
+// paginas (Controle de Notas e o filtro "so' as nao recebidas" da NF-e
+// Emitidas). Se uma tela mostrar uma nota que a outra nao mostra, e'
+// aqui que se conserta.
+const pendente = { emitida: true, noSistema: false, status: 'ativa', dataEmissao: '2026-08-10' };
+conferir('notaAImportar: emitida, ativa e sem entrada no ERP -> a importar',
+         App.notaAImportar(pendente), true);
+conferir('notaAImportar: ja deu entrada (noSistema) -> nao',
+         App.notaAImportar(Object.assign({}, pendente, { noSistema: true })), false);
+conferir('notaAImportar: cancelada -> nao',
+         App.notaAImportar(Object.assign({}, pendente, { status: 'cancelada' })), false);
+conferir('notaAImportar: sem o campo emitida (doc da funcao 2 do Apps Script) -> nao',
+         App.notaAImportar({ noSistema: false, dataEmissao: '2026-08-10' }), false);
+conferir('notaAImportar: sem status vale como ativa',
+         App.notaAImportar({ emitida: true, noSistema: false, dataEmissao: '2026-08-10' }), true);
+conferir('notaAImportar: antes do corte -> nao',
+         App.notaAImportar(pendente, '2026-09-01'), false);
+conferir('notaAImportar: nota ausente (null) -> nao, nunca chute',
+         App.notaAImportar(null), false);
+
 // --- confirmar / pedirData: o que a Promise devolve -----------
 //
 // Estes testes existem por causa de um bug real: alguem acrescentou uma

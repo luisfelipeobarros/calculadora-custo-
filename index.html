@@ -505,6 +505,11 @@
         <label class="rotulo-mono">Até <input type="date" id="notasDataAte" class="campo-data"></label>
         <button class="btn secondary" id="limparDatasNotasBtn" style="display:none;">✕ Limpar datas</button>
         <button class="btn secondary" id="recarregarNotasBtn">⟳ Recarregar</button>
+        <label class="rotulo-mono" style="display:flex; align-items:center; gap:5px; cursor:pointer;"
+          title="O mesmo critério da aba A importar do Controle de Notas: emitida contra a empresa, ativa e ainda sem entrada no ERP">
+          <input type="checkbox" id="soNaoRecebidasNotas" style="width:15px; height:15px; cursor:pointer;">
+          só as não recebidas (como o "A importar")
+        </label>
       </div>
       <!-- Filtro por produto separado da busca geral — o mesmo padrão
            da tela "A importar" do Controle de Notas, inclusive a
@@ -911,7 +916,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=20"></script>
+<script src="app-shared.js?v=21"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -2444,6 +2449,7 @@ Tupan</textarea>
   $('buscaNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
   $('buscaProdutoNotas').addEventListener('input', debounce(()=>refiltrarNotas(''), DEBOUNCE_BUSCA));
   $('excluirProdutoNotas').addEventListener('change', ()=>refiltrarNotas(''));
+  $('soNaoRecebidasNotas').addEventListener('change', ()=>refiltrarNotas(''));
   $('buscaNotasCmp').addEventListener('input', debounce(()=>refiltrarNotas('Cmp'), DEBOUNCE_BUSCA));
   $('notasDataDeCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
   $('notasDataAteCmp').addEventListener('change', ()=>refiltrarNotas('Cmp'));
@@ -3567,6 +3573,16 @@ Tupan</textarea>
     let lista = notasEmitidasCache;
     if(dataDe)  lista = lista.filter(n => (n.dataEmissao||'') >= dataDe);
     if(dataAte) lista = lista.filter(n => (n.dataEmissao||'') <= dataAte);
+    // "So' as nao recebidas": o MESMO criterio da aba A importar do
+    // Controle de Notas (App.notaAImportar), lido do documento da
+    // colecao "notas". Nota sem documento la' nao tem como ser
+    // afirmada como "a importar" — fica de fora, nunca chute. So'
+    // existe na aba principal, dai' a guarda pelo elemento.
+    const elSoNao = $('soNaoRecebidasNotas'+suf);
+    const soNaoRecebidas = !!(elSoNao && elSoNao.checked);
+    if(soNaoRecebidas){
+      lista = lista.filter(n => App.notaAImportar(notasInfoPorChave[n.chave]));
+    }
     if(termo){
       lista = lista.filter(n =>
         App.casaFornecedor(fornecedorDaNotaEmitida(n), n.nomeEmitente, termo) ||
@@ -3589,7 +3605,11 @@ Tupan</textarea>
     }
     if(!lista.length){
       $('listaNotasEmitidas'+suf).innerHTML = '<p style="font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft);">' +
-        ((termo || termoProduto || dataDe || dataAte) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+        ((termo || termoProduto || dataDe || dataAte || soNaoRecebidas)
+          ? (soNaoRecebidas && !termo && !termoProduto && !dataDe && !dataAte
+              ? 'Nenhuma nota pendente de entrada no ERP nos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias.'
+              : 'Nada encontrado com esses filtros.')
+          : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
       $('maisNotasBtn'+suf).style.display = 'none';
       return;
     }

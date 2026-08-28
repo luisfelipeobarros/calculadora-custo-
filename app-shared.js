@@ -1166,6 +1166,20 @@
     return normalizarTexto(rotulo).indexOf(t) !== -1 || normalizarTexto(nomeCru).indexOf(t) !== -1;
   }
 
+  // "A importar": nota emitida contra a empresa que AINDA NAO deu
+  // entrada no ERP. E' a lista da aba homonima do Controle de Notas e
+  // o filtro "so' as nao recebidas" da NF-e Emitidas na Calculadora —
+  // as duas telas tem que concordar nota por nota, dai' a regra viver
+  // aqui. dataCorte (opcional) descarta o que ficou para tras em anos
+  // ja' informados a' fazenda. NFS-e NAO e' decidido aqui: cada tela
+  // separa servico de mercadoria do seu jeito (chips / sem itens).
+  function notaAImportar(n, dataCorte) {
+    if (!n || n.emitida !== true || n.noSistema === true) return false;
+    if ((n.status || 'ativa') === 'cancelada') return false;
+    if (dataCorte && (n.dataEmissao || '') < dataCorte) return false;
+    return true;
+  }
+
   /* ============================================================
      9d. DANFE simplificado (documento de conferencia interna)
 
@@ -1554,6 +1568,7 @@
     REGRAS_FORNECEDOR: REGRAS_FORNECEDOR,
     rotularFornecedor: rotularFornecedor,
     casaFornecedor: casaFornecedor,
+    notaAImportar: notaAImportar,
 
     instalarErroGlobal: instalarErroGlobal
   };

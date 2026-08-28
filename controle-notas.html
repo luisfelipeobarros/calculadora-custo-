@@ -553,7 +553,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=20"></script>
+<script src="app-shared.js?v=21"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -628,10 +628,9 @@
 
   var ehNfse = function(n){ return n.tipo === 'nfse'; }; // sem campo tipo = NF-e (documentos antigos)
   var notaAtiva = function(n){ return (n.status || 'ativa') !== 'cancelada'; };
-  var notaAImportar = function(n){
-    return n.emitida === true && n.noSistema !== true && notaAtiva(n) &&
-      (n.dataEmissao || '') >= DATA_CORTE_IMPORTACAO;
-  };
+  // A regra mora no app-shared.js (a Calculadora filtra a NF-e Emitidas
+  // pelo MESMO criterio): so' o corte de data e' desta pagina.
+  var notaAImportar = function(n){ return App.notaAImportar(n, DATA_CORTE_IMPORTACAO); };
 
   // Estes tres devolvem null quando a nota de origem nao esta' carregada
   // (emitida antes do corte). Antes o codigo devolvia "false", ou seja,
