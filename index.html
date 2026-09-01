@@ -6311,7 +6311,6 @@ Tupan</textarea>
     // repositorio e' publico). So' vale com os 12 meses preenchidos.
     const metas = painelDados.metas;
     const anterior = PainelNucleo.totalAnualVendas(metas, painelAno - 1);
-    const cresc = PainelNucleo.crescimentoAnual(p.total, anterior);
     const agora = PainelNucleo.crescimentoAteAgora(metas, painelAno, hoje);
     const saz = PainelNucleo.projecaoSazonal(metas, painelAno, hoje);
 
@@ -6322,29 +6321,38 @@ Tupan</textarea>
     // pode ser silenciosa.
     const avisos = [];
     if(p.fechadosSemVendas.length) avisos.push('sem vendas lançadas: ' + p.fechadosSemVendas.map(nomeMesCurto).join(', '));
-    if(p.futurosSemObjetivo.length) avisos.push('sem objetivo: ' + p.futurosSemObjetivo.map(nomeMesCurto).join(', '));
-    if(p.corrente && !p.corrente.fonte) avisos.push('mês corrente sem lançamento e sem objetivo');
+    // Os avisos de meta so' importam quando a projecao exibida e' a
+    // das metas (reserva) — com a sazonalidade na tela, objetivo
+    // faltando nao muda o numero mostrado.
+    if(!saz){
+      if(p.futurosSemObjetivo.length) avisos.push('sem objetivo: ' + p.futurosSemObjetivo.map(nomeMesCurto).join(', '));
+      if(p.corrente && !p.corrente.fonte) avisos.push('mês corrente sem lançamento e sem objetivo');
+    }
 
     const bloco = (rotulo, num, sub, classe) =>
       '<div class="bloco"><span class="rotulo">' + rotulo + '</span>' +
       '<span class="num' + (classe ? ' ' + classe : '') + '">' + num + '</span>' +
       (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
 
+    // UMA projeção só (pedido de 31/08/2026): a da SAZONALIDADE — ela
+    // parte do vendido de verdade, não da aspiração. A projeção pelas
+    // metas fica de reserva para quando não houver ano-base completo.
+    // O crescimento projetado usa o MESMO número exibido.
+    const projTotal = saz ? saz.total : p.total;
+    const projSub = saz
+      ? 'no ritmo atual — sazonalidade média de ' + saz.anosBase.join('/')
+      : 'pelas metas (sem ano-base completo para a sazonalidade)';
+    const crescProj = PainelNucleo.crescimentoAnual(projTotal, anterior);
+
     const nomeM = (m) => NOMES_MES_PAINEL[m - 1].substring(0, 3);
     alvo.innerHTML = '<div class="painel-prev-grid">' +
-      bloco('Projeção de ' + painelAno + ' (metas)', 'R$ ' + numBR(p.total), '') +
-      // As duas projecoes respondem perguntas diferentes: a de cima e'
-      // "e se as metas baterem?"; esta e' "e se o ritmo de agora
-      // seguir a sazonalidade dos ultimos anos?".
-      bloco('No ritmo atual (sazonalidade)',
-        saz ? 'R$ ' + numBR(saz.total) : '--',
-        saz ? 'média de ' + saz.anosBase.join('/') : 'precisa de um ano anterior completo na tabela') +
+      bloco('Projeção de ' + painelAno, 'R$ ' + numBR(projTotal), projSub) +
       bloco('Faturamento de ' + (painelAno - 1),
         anterior != null ? 'R$ ' + numBR(anterior) : '--',
         anterior != null ? '' : 'lance as vendas de ' + (painelAno - 1) + ' na tabela (ano ◀)') +
-      bloco('Crescimento projetado', cresc != null ? pctBR(cresc) : '--',
-        cresc != null ? (p.total >= anterior ? '+' : '−') + ' R$ ' + numBR(Math.abs(p.total - anterior)) + ' vs ' + (painelAno - 1) : '',
-        cresc == null ? '' : (cresc < 0 ? 'neg' : 'pos')) +
+      bloco('Crescimento projetado', crescProj != null ? pctBR(crescProj) : '--',
+        crescProj != null ? (projTotal >= anterior ? '+' : '−') + ' R$ ' + numBR(Math.abs(projTotal - anterior)) + ' vs ' + (painelAno - 1) : '',
+        crescProj == null ? '' : (crescProj < 0 ? 'neg' : 'pos')) +
       // Fato contra fato: acumulado dos meses fechados x os MESMOS
       // meses do ano anterior. Nao depende de meta nem de projecao.
       bloco('Crescimento até agora', agora ? pctBR(agora.pct) : '--',
@@ -6500,16 +6508,21 @@ Tupan</textarea>
     // trocando de ano so' para ver esses pagamentos. A consulta cobre
     // ate junho do ano seguinte, entao ausencia = zero de verdade.
     let somaSemestre = 0;
-    const celulasSemestre = [];
+    const linhasSemestre = [];
     for(let m = 1; m <= 6; m++){
       const mesSeg = (painelAno + 1) + '-' + String(m).padStart(2, '0');
       const v = painelDados.aPagar[mesSeg] || 0;
       somaSemestre += v;
-      celulasSemestre.push(NOMES_MES_PAINEL[m - 1].substring(0, 3) + ' ' + brl(v));
+      const nome = NOMES_MES_PAINEL[m - 1];
+      linhasSemestre.push('<div><span style="display:inline-block; width:84px;">' +
+        nome.charAt(0).toUpperCase() + nome.slice(1) + '</span>' + brl(v) + '</div>');
     }
-    html += '<tr><td colspan="12" style="text-align:left; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); padding:8px 10px;">' +
-      'A pagar — 1º semestre de ' + (painelAno + 1) + ': ' + celulasSemestre.join(' · ') +
-      ' · <strong style="color:var(--ink);">total ' + brl(somaSemestre) + '</strong></td></tr>';
+    html += '<tr><td colspan="12" style="text-align:left; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); padding:8px 10px; line-height:1.7;">' +
+      '<div style="font-weight:600; color:var(--ink);">A pagar — 1º semestre de ' + (painelAno + 1) + '</div>' +
+      linhasSemestre.join('') +
+      '<div style="border-top:1px solid var(--line); margin-top:2px; padding-top:2px;">' +
+        '<span style="display:inline-block; width:84px; font-weight:600; color:var(--ink);">Total</span>' +
+        '<strong style="color:var(--ink);">' + brl(somaSemestre) + '</strong></div></td></tr>';
 
     alvo.innerHTML = html + '</tbody></table>';
   }
