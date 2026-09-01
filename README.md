@@ -6,9 +6,10 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 |---|---|
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, notas canceladas |
+| `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
-| `app-shared.css` | Design system comum aos dois |
-| `app-shared.js` | Helpers, login, avisos, roteador — comum aos dois |
+| `app-shared.css` | Design system comum aos apps |
+| `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
 | `firestore.rules` | Regras de segurança do banco (**precisa ser publicada**) |
 | `testes/` | Verificação automatizada, roda só com Node |
 
@@ -195,7 +196,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
+Não precisa instalar nada. São dezenove etapas, em quinze frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -304,6 +305,15 @@ Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
+15. **Assistências e reclamações** — 28 verificações em
+    `assistencias-nucleo.js`: as listas de status/causa/solução e a cor
+    do badge (status desconhecido cai no **vermelho**, nunca parece
+    resolvido), o resumo dos cartões (em aberto = tudo que não está
+    resolvido; custos só do mês corrente; líquido = custo −
+    ressarcimento), o filtro (busca em cliente **e** sequência, sem
+    acento), a **duplicidade de sequência** (outro documento avisa; o
+    próprio em edição não conta) e a exportação (linha sem dinheiro sai
+    com líquido em branco, não "0"; fotos exportam como contagem).
 
 Rode antes de publicar qualquer alteração.
 

@@ -123,6 +123,13 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
+    // Assistencias e reclamacoes (assistencias.html, usado pelos
+    // gerentes de vendas). Colecao propria do app; nenhuma outra
+    // colecao foi alterada por causa dele.
+    match /assistencias/{id} {
+      allow read, write: if autenticado();
+    }
+
     // Metas mensais do Painel da Calculadora (um documento por mes,
     // id 'aaaa-mm'): objetivo de vendas, feriados e o faturamento
     // acumulado lancado a mao. Tudo digitado pelos proprios usuarios;

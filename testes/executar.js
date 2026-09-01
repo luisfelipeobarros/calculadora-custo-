@@ -4,8 +4,8 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao dezesseis etapas, em
-  quatorze frentes (a lista canonica, com o que cada uma cobre, esta'
+  Nao precisa instalar nada — so' o Node. Sao dezenove etapas, em
+  quinze frentes (a lista canonica, com o que cada uma cobre, esta'
   no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
@@ -30,6 +30,8 @@
   - concorrentes.js    — catalogo da pesquisa em lote por planilha:
                          leitura, consulta de busca, diff e o painel
                          de desatualizacao por fabricante.
+  - assistencias.js    — app de assistencias/reclamacoes: resumo,
+                         filtro, duplicidade de sequencia e exportacao.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -41,8 +43,10 @@ const etapas = [
   ['Nucleo de calculo (200k casos)', 'calculo.js', ['index.html']],
   ['Estrutura: index.html', 'validar-html.js', ['index.html']],
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
+  ['Estrutura: assistencias.html', 'validar-html.js', ['assistencias.html']],
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
+  ['Carga em DOM: assistencias.html', 'carregar-em-dom.js', ['assistencias.html']],
   ['Helpers de app-shared.js', 'helpers.js', []],
   ['Roteador de telas', 'router.js', []],
   ['Regras da tela de cotacao', 'cotacao.js', ['index.html']],
@@ -53,7 +57,8 @@ const etapas = [
   ['Simulador de compra', 'simulador.js', []],
   ['DANFE simplificado', 'danfe.js', []],
   ['Fiscal (NCM & ST)', 'fiscal.js', []],
-  ['Concorrentes em lote (planilha)', 'concorrentes.js', []]
+  ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
+  ['Assistencias e reclamacoes', 'assistencias.js', []]
 ];
 
 let falhou = 0;

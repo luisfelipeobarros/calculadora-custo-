@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assistências</title>
+<link rel="manifest" href="manifest-assistencias.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#2E6B45">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Assistências">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Design system comum aos apps da empresa. Ver app-shared.css -->
+<link rel="stylesheet" href="app-shared.css?v=15">
+<style>
+  /* Somente o que é exclusivo do app de Assistências. Feito para o
+     CELULAR primeiro: os gerentes usam no telefone, na loja. */
+  .wrap{ padding:16px 12px 60px; max-width:960px; margin:0 auto; }
+
+  .chip-filtro{ font-family:var(--font-mono); font-size:11.5px; padding:6px 12px; border:1.5px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink-soft); cursor:pointer; }
+  .chip-filtro[aria-pressed="true"]{ background:var(--brick); border-color:var(--brick); color:#fff; }
+
+  /* Badge por status: aberta vermelha, análise amarela, fábrica azul,
+     resolvida verde. As classes vêm do assistencias-nucleo.js. */
+  .badge-st{ font-family:var(--font-mono); font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:10px; border:1.5px solid; white-space:nowrap; }
+  .badge-st.st-aberta{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
+  .badge-st.st-analise{ background:#F5EAD2; color:#8A6414; border-color:#8A6414; }
+  .badge-st.st-fabrica{ background:var(--azul-fundo); color:var(--azul); border-color:var(--azul); }
+  .badge-st.st-resolvida{ background:#E1EFE6; color:var(--profit); border-color:var(--profit); }
+
+  .asst-resumo{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px; }
+  .asst-kpi{ background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .asst-kpi .k-rot{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:block; }
+  .asst-kpi .k-val{ font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
+  .asst-kpi .k-val.neg{ color:var(--loss); }
+
+  .asst-item{ border:1px solid var(--line); border-radius:6px; background:var(--card); padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .asst-item:hover{ background:var(--stripe2); }
+  .asst-item .linha1{ display:flex; justify-content:space-between; gap:8px; align-items:center; }
+  .asst-item .seq{ font-family:var(--font-mono); font-size:12px; font-weight:600; }
+  .asst-item .cliente{ font-weight:600; margin-top:2px; }
+  .asst-item .meta{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); margin-top:2px; }
+
+  .asst-filtros{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .asst-filtros input[type="search"]{ flex:1; min-width:160px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13px; }
+  .asst-filtros select, .asst-filtros input[type="date"]{ padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
+
+  .af-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .af-grid .cheio{ grid-column:1 / -1; }
+  @media (max-width:560px){ .af-grid{ grid-template-columns:1fr; } .asst-resumo{ grid-template-columns:1fr 1fr; } }
+  .af-campo label{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+  .af-campo input, .af-campo select, .af-campo textarea{ width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  .af-campo textarea{ min-height:70px; resize:vertical; }
+
+  .af-fotos{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .af-fotos .foto{ position:relative; }
+  .af-fotos img{ width:86px; height:86px; object-fit:cover; border-radius:4px; border:1px solid var(--line); cursor:pointer; display:block; }
+  .af-fotos .tirar{ position:absolute; top:-6px; right:-6px; width:22px; height:22px; border-radius:50%; border:1.5px solid var(--loss); background:#fff; color:var(--loss); font-weight:700; cursor:pointer; line-height:1; }
+
+  .foto-zoom{ position:fixed; inset:0; background:rgba(26,22,18,.85); display:flex; align-items:center; justify-content:center; z-index:60; cursor:zoom-out; }
+  .foto-zoom img{ max-width:96vw; max-height:92vh; border-radius:4px; }
+
+  header.top{ max-width:960px; }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1>Assistências</h1>
+      <p>RECLAMAÇÕES · TROCAS · ASSISTÊNCIA DE FÁBRICA</p>
+    </div>
+    <nav class="telas" aria-label="Conta">
+      <div id="asstContaBarra"></div>
+      <div class="stamp">Uso interno</div>
+    </nav>
+  </header>
+
+  <div class="barra-status">
+    <span id="asstConexao" role="status" aria-live="polite">Conectando...</span>
+  </div>
+
+  <main id="conteudo">
+
+  <!-- ═══════════ LISTA ═══════════ -->
+  <div id="viewListaAsst">
+    <div class="asst-resumo" id="asstResumo"></div>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button type="button" class="btn" id="asstNovaBtn" style="flex:1;">＋ Nova assistência</button>
+      <button type="button" class="btn secondary" id="asstExportarBtn">⬇ Excel</button>
+    </div>
+
+    <div class="asst-filtros" id="asstChips">
+      <button type="button" class="chip-filtro" data-st="" aria-pressed="true">Todas</button>
+      <!-- os chips de status são montados pelo script, a partir do núcleo -->
+    </div>
+    <div class="asst-filtros">
+      <label class="sr-only" for="asstBusca">Buscar por cliente ou sequência</label>
+      <input type="search" id="asstBusca" placeholder="Buscar por cliente ou sequência...">
+      <label class="sr-only" for="asstCausaFiltro">Filtrar por causa</label>
+      <select id="asstCausaFiltro"><option value="">— causa —</option></select>
+      <label class="sr-only" for="asstDe">De</label>
+      <input type="date" id="asstDe" title="Abertura de">
+      <label class="sr-only" for="asstAte">Até</label>
+      <input type="date" id="asstAte" title="Abertura até">
+    </div>
+
+    <div id="asstLista"></div>
+    <div id="asstListaMsg" class="empty-note" style="display:block;"></div>
+  </div>
+
+  <!-- ═══════════ FICHA (nova / edição) ═══════════ -->
+  <div id="viewFichaAsst" style="display:none;">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h2 id="afTitulo" style="margin:0;">Nova assistência</h2>
+        <button type="button" class="btn secondary" id="asstVoltarBtn">← Lista</button>
+      </div>
+
+      <div class="af-grid" style="margin-top:14px;">
+        <div class="af-campo"><label for="afSequencia">Sequência (Shop9) *</label>
+          <input id="afSequencia" inputmode="numeric" autocomplete="off"></div>
+        <div class="af-campo"><label for="afDataAbertura">Data de abertura</label>
+          <input id="afDataAbertura" type="date"></div>
+        <div class="af-campo cheio"><label for="afCliente">Cliente</label>
+          <input id="afCliente" autocomplete="off"></div>
+        <div class="af-campo"><label for="afCodigo">Código do produto</label>
+          <input id="afCodigo" autocomplete="off"></div>
+        <div class="af-campo"><label for="afProduto">Produto</label>
+          <input id="afProduto" autocomplete="off"></div>
+        <div class="af-campo"><label for="afTonalidade">Tonalidade</label>
+          <input id="afTonalidade" autocomplete="off"></div>
+        <div class="af-campo"><label for="afQuantidade">Quantidade</label>
+          <input id="afQuantidade" inputmode="decimal"></div>
+        <div class="af-campo"><label for="afValor">Valor da venda (R$)</label>
+          <input id="afValor" inputmode="decimal"></div>
+        <div class="af-campo"><label for="afNfVenda">NF-e de venda</label>
+          <input id="afNfVenda" inputmode="numeric" autocomplete="off"></div>
+        <div class="af-campo cheio"><label for="afProblema">Problema</label>
+          <textarea id="afProblema"></textarea></div>
+        <div class="af-campo"><label for="afCausa">Causa</label>
+          <select id="afCausa"></select></div>
+        <div class="af-campo"><label for="afStatus">Status</label>
+          <select id="afStatus"></select></div>
+        <div class="af-campo"><label for="afTipoSolucao">Tipo de solução</label>
+          <select id="afTipoSolucao"></select></div>
+        <div class="af-campo"><label for="afDataResolucao">Data de resolução</label>
+          <input id="afDataResolucao" type="date"></div>
+        <div class="af-campo cheio"><label for="afSolucao">Solução (o que foi feito)</label>
+          <textarea id="afSolucao"></textarea></div>
+        <div class="af-campo"><label for="afCustoLoja">Custo para a loja (R$)</label>
+          <input id="afCustoLoja" inputmode="decimal"></div>
+        <div class="af-campo"><label for="afRessarcimento">Ressarcimento da fábrica (R$)</label>
+          <input id="afRessarcimento" inputmode="decimal"></div>
+        <div class="af-campo cheio"><label for="afResponsavel">Responsável</label>
+          <input id="afResponsavel" autocomplete="off"></div>
+      </div>
+
+      <div style="margin-top:14px;">
+        <label class="rotulo-forte" style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Fotos</label>
+        <div style="margin-top:6px;">
+          <button type="button" class="btn secondary" id="afFotoBtn">📷 Adicionar fotos</button>
+          <input type="file" id="afFotos" accept="image/*" multiple style="display:none;">
+        </div>
+        <div class="af-fotos" id="afFotosPreview"></div>
+        <p class="empty-note" id="afFotosMsg" style="display:block;"></p>
+      </div>
+
+      <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
+        <button type="button" class="btn" id="afSalvarBtn" style="flex:1;">💾 Salvar</button>
+      </div>
+      <div class="empty-note" id="afMsg" style="display:block; margin-top:8px;"></div>
+    </div>
+  </div>
+
+  </main>
+  <footer class="note">Assistências e reclamações · dados no Firebase da empresa · uso interno.</footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="app-shared.js?v=21"></script>
+<script src="assistencias-nucleo.js?v=1"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = App.$;
+  const escapeHtml = App.escapeHtml;
+  const brl = App.brl;
+  const N = AssistenciasNucleo;
+
+  let db = null;
+  let assistencias = [];      // cache vivo (onSnapshot), cada item com .id
+  let carregou = false;
+  let editandoId = null;      // null = nova
+  let fotosAtuais = [];       // dataURLs (base64) da ficha aberta
+  let filtroStatus = '';
+
+  const setStatus = (t) => { $('asstConexao').textContent = t; };
+
+  // ─── Roteador ───
+  const router = App.criarRouter({
+    views: { Lista: 'viewListaAsst', Ficha: 'viewFichaAsst' },
+    padrao: 'Lista',
+    naoRestauraveis: ['Ficha'] // a ficha depende do item aberto; F5 volta para a lista
+  });
+
+  // ─── Selects e chips a partir do núcleo (um lugar só) ───
+  const encherSelect = (el, opcoes, comVazio) => {
+    el.innerHTML = (comVazio ? '<option value=""></option>' : '') +
+      opcoes.map(o => '<option value="' + escapeHtml(o) + '">' + escapeHtml(o) + '</option>').join('');
+  };
+  encherSelect($('afCausa'), N.CAUSAS, true);
+  encherSelect($('afStatus'), N.STATUS, false);
+  encherSelect($('afTipoSolucao'), N.TIPOS_SOLUCAO, true);
+  $('asstCausaFiltro').innerHTML = '<option value="">— causa —</option>' +
+    N.CAUSAS.map(c => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
+  $('asstChips').innerHTML = '<button type="button" class="chip-filtro" data-st="" aria-pressed="true">Todas</button>' +
+    N.STATUS.map(s => '<button type="button" class="chip-filtro" data-st="' + escapeHtml(s) + '" aria-pressed="false">' + escapeHtml(s) + '</button>').join('');
+
+  // ─── Lista ───
+  const filtrosAtuais = () => ({
+    status: filtroStatus,
+    causa: $('asstCausaFiltro').value,
+    de: $('asstDe').value,
+    ate: $('asstAte').value,
+    termo: $('asstBusca').value
+  });
+
+  function renderLista(){
+    if(!carregou){ $('asstListaMsg').textContent = 'Carregando...'; return; }
+    const hoje = App.hojeISO();
+    const r = N.resumoAssistencias(assistencias, hoje);
+    $('asstResumo').innerHTML =
+      '<div class="asst-kpi"><span class="k-rot">Em aberto</span><span class="k-val' + (r.emAberto ? ' neg' : '') + '">' + r.emAberto + '</span></div>' +
+      '<div class="asst-kpi"><span class="k-rot">Custo loja no mês</span><span class="k-val">' + brl(r.custoMes) + '</span></div>' +
+      '<div class="asst-kpi"><span class="k-rot">Custo líquido no mês</span><span class="k-val">' + brl(r.liquidoMes) + '</span></div>';
+
+    const lista = N.ordenarAssistencias(N.filtrarAssistencias(assistencias, filtrosAtuais()));
+    if(!lista.length){
+      $('asstLista').innerHTML = '';
+      $('asstListaMsg').textContent = assistencias.length
+        ? 'Nada com esses filtros.' : 'Nenhuma assistência registrada ainda — toque em "Nova assistência".';
+      return;
+    }
+    $('asstListaMsg').textContent = lista.length + ' assistência(s)' +
+      (lista.length !== assistencias.length ? ' (de ' + assistencias.length + ')' : '');
+    $('asstLista').innerHTML = lista.map(a =>
+      '<div class="asst-item" data-abrir="' + escapeHtml(a.id) + '" role="button" tabindex="0"' +
+        ' aria-label="Abrir assistência ' + escapeHtml(a.sequencia || '') + ' de ' + escapeHtml(a.cliente || '') + '">' +
+        '<div class="linha1"><span class="seq">#' + escapeHtml(a.sequencia || '—') + '</span>' +
+          '<span class="badge-st ' + N.classeStatus(a.status) + '">' + escapeHtml(a.status || 'Aberta') + '</span></div>' +
+        '<div class="cliente">' + escapeHtml(a.cliente || '(sem cliente)') + '</div>' +
+        '<div class="meta">' + App.fmtData(a.dataAbertura) +
+          (a.produto ? ' · ' + escapeHtml(a.produto) : '') +
+          (a.causa ? ' · ' + escapeHtml(a.causa) : '') +
+          (a.custoLoja != null ? ' · custo ' + brl(a.custoLoja) : '') +
+          ((a.fotos || []).length ? ' · 📷 ' + a.fotos.length : '') + '</div>' +
+      '</div>').join('');
+  }
+
+  App.delegar($('asstChips'), 'click', '.chip-filtro', (b) => {
+    filtroStatus = b.dataset.st;
+    $('asstChips').querySelectorAll('.chip-filtro').forEach(c =>
+      c.setAttribute('aria-pressed', c === b ? 'true' : 'false'));
+    renderLista();
+  });
+  $('asstBusca').addEventListener('input', App.debounce(renderLista, 250));
+  $('asstCausaFiltro').addEventListener('change', renderLista);
+  $('asstDe').addEventListener('change', renderLista);
+  $('asstAte').addEventListener('change', renderLista);
+
+  App.delegar($('asstLista'), 'click', '[data-abrir]', (el) => abrirFicha(el.dataset.abrir));
+
+  // ─── Ficha ───
+  const CAMPOS_TEXTO = [
+    ['afSequencia', 'sequencia'], ['afCliente', 'cliente'], ['afCodigo', 'codigo'],
+    ['afProduto', 'produto'], ['afTonalidade', 'tonalidade'], ['afNfVenda', 'nfVenda'],
+    ['afProblema', 'problema'], ['afSolucao', 'solucao'], ['afResponsavel', 'responsavel']
+  ];
+  const CAMPOS_NUMERO = [
+    ['afQuantidade', 'quantidade'], ['afValor', 'valor'],
+    ['afCustoLoja', 'custoLoja'], ['afRessarcimento', 'ressarcimentoFabrica']
+  ];
+
+  function abrirFicha(id){
+    const a = id ? assistencias.find(x => x.id === id) : null;
+    editandoId = a ? a.id : null;
+    fotosAtuais = (a && a.fotos ? a.fotos.slice() : []);
+    $('afTitulo').textContent = a ? 'Assistência #' + (a.sequencia || '') : 'Nova assistência';
+    CAMPOS_TEXTO.forEach(([elId, campo]) => { $(elId).value = (a && a[campo]) || ''; });
+    CAMPOS_NUMERO.forEach(([elId, campo]) => {
+      $(elId).value = a && a[campo] != null
+        ? a[campo].toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '';
+    });
+    $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
+    $('afDataResolucao').value = (a && a.dataResolucao) || '';
+    $('afCausa').value = (a && a.causa) || '';
+    $('afStatus').value = (a && a.status) || 'Aberta';
+    $('afTipoSolucao').value = (a && a.tipoSolucao) || '';
+    $('afMsg').textContent = '';
+    renderFotos();
+    router.ir('Ficha', { forcar: true });
+    window.scrollTo(0, 0);
+  }
+
+  $('asstNovaBtn').addEventListener('click', () => abrirFicha(null));
+  $('asstVoltarBtn').addEventListener('click', () => router.ir('Lista'));
+
+  // ─── Fotos: compressão no cliente ───
+  // O limite do Firestore é 1 MB por documento; cada foto vira JPEG de
+  // no máx. 800px de largura com qualidade 0.7 (~60–120 KB em base64).
+  // O teto de 700 mil caracteres deixa folga para o resto do documento.
+  const LIMITE_FOTOS_CHARS = 700000;
+  const tamanhoFotos = () => fotosAtuais.reduce((s, f) => s + f.length, 0);
+
+  function comprimirFoto(file){
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const esc = Math.min(1, 800 / img.width);
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * esc);
+        c.height = Math.round(img.height * esc);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não consegui ler a imagem.')); };
+      img.src = url;
+    });
+  }
+
+  function renderFotos(){
+    $('afFotosPreview').innerHTML = fotosAtuais.map((f, i) =>
+      '<div class="foto"><img src="' + f + '" alt="Foto ' + (i + 1) + '" data-zoom="' + i + '">' +
+      '<button type="button" class="tirar" data-tirar="' + i + '" aria-label="Remover foto ' + (i + 1) + '">×</button></div>').join('');
+    $('afFotosMsg').textContent = fotosAtuais.length
+      ? fotosAtuais.length + ' foto(s) · ' + Math.round(tamanhoFotos() / 1024) + ' KB de ' + Math.round(LIMITE_FOTOS_CHARS / 1024) + ' KB'
+      : 'Tire pela câmera ou escolha da galeria — as fotos são comprimidas antes de salvar.';
+  }
+
+  $('afFotoBtn').addEventListener('click', () => $('afFotos').click());
+  $('afFotos').addEventListener('change', async function(){
+    const files = Array.from(this.files || []);
+    this.value = '';
+    for(const f of files){
+      try{
+        const dataUrl = await comprimirFoto(f);
+        if(tamanhoFotos() + dataUrl.length > LIMITE_FOTOS_CHARS){
+          App.toastErro('Limite de fotos', 'Esta foto não coube no documento (limite do Firestore). Remova alguma antes de adicionar outra.');
+          break;
+        }
+        fotosAtuais.push(dataUrl);
+      }catch(e){ App.toastErro('Foto ignorada', e); }
+    }
+    renderFotos();
+  });
+  App.delegar($('afFotosPreview'), 'click', '[data-tirar]', (b) => {
+    fotosAtuais.splice(Number(b.dataset.tirar), 1);
+    renderFotos();
+  });
+  App.delegar($('afFotosPreview'), 'click', '[data-zoom]', (img) => {
+    const div = document.createElement('div');
+    div.className = 'foto-zoom';
+    const grande = document.createElement('img');
+    grande.src = img.src;
+    grande.alt = img.alt;
+    div.appendChild(grande);
+    div.addEventListener('click', () => div.remove());
+    document.body.appendChild(div);
+  });
+
+  // ─── Salvar ───
+  async function salvar(){
+    const seq = $('afSequencia').value.trim();
+    if(!seq){
+      App.toast('Informe a sequência do Shop9 — é o número de controle.', 'info');
+      $('afSequencia').focus();
+      return;
+    }
+    // Duplicidade é AVISO com confirmação, nunca trava: pode ser
+    // reabertura legítima da mesma sequência.
+    if(N.sequenciaDuplicada(assistencias, seq, editandoId)){
+      const ok = await App.confirmar({
+        titulo: 'Sequência já registrada',
+        mensagem: 'Já existe outra assistência com a sequência ' + seq +
+          '. Pode ser uma duplicidade — ou uma reabertura legítima.\n\nSalvar mesmo assim?',
+        confirmar: 'Salvar mesmo assim'
+      });
+      if(!ok) return;
+    }
+
+    const dados = { fotos: fotosAtuais };
+    CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
+    CAMPOS_NUMERO.forEach(([elId, campo]) => { dados[campo] = App.parseNumeroBR($(elId).value); });
+    dados.sequencia = seq;
+    dados.dataAbertura = $('afDataAbertura').value || App.hojeISO();
+    dados.dataResolucao = $('afDataResolucao').value || null;
+    dados.causa = $('afCausa').value || null;
+    dados.status = $('afStatus').value || 'Aberta';
+    dados.tipoSolucao = $('afTipoSolucao').value || null;
+    // Resolvida sem data de resolução ganha a de hoje — o gerente só
+    // muda o status e a ficha se completa sozinha.
+    if(dados.status === 'Resolvida' && !dados.dataResolucao) dados.dataResolucao = App.hojeISO();
+
+    const btn = $('afSalvarBtn');
+    btn.disabled = true;
+    $('afMsg').textContent = 'Salvando...';
+    try{
+      if(editandoId){
+        await App.comAuth(() => db.collection('assistencias').doc(editandoId).set(dados, { merge: true }));
+      } else {
+        await App.comAuth(() => db.collection('assistencias').add(dados));
+      }
+      App.toast('Assistência #' + seq + ' salva.', 'ok');
+      $('afMsg').textContent = '';
+      router.ir('Lista');
+    }catch(e){
+      console.error(e);
+      $('afMsg').textContent = 'Erro ao salvar: ' + App.erroDe(e) +
+        ' — as regras da coleção "assistencias" já foram publicadas no Console?';
+      App.toastErro('Erro ao salvar', e);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+  $('afSalvarBtn').addEventListener('click', salvar);
+
+  // ─── Exportar (a lista FILTRADA, como está na tela) ───
+  $('asstExportarBtn').addEventListener('click', () => {
+    if(typeof XLSX === 'undefined'){
+      App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou. Verifique a internet e recarregue (F5).');
+      return;
+    }
+    const lista = N.ordenarAssistencias(N.filtrarAssistencias(assistencias, filtrosAtuais()));
+    if(!lista.length){ App.toast('Nada para exportar com esses filtros.', 'info'); return; }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(N.linhasExcel(lista)), 'Assistências');
+    XLSX.writeFile(wb, 'assistencias ' + App.hojeISO() + '.xlsx');
+  });
+
+  // ─── Boot: Firebase + login + escuta ───
+  let iniciando = false;
+  function iniciar(){
+    if(iniciando) return;
+    iniciando = true;
+    setStatus('Conectando ao Firebase...');
+    App.iniciarFirebase('assistencias').then((r) => {
+      db = r.db;
+      App.montarBarraConta($('asstContaBarra'));
+      setStatus('Verificando acesso...');
+      return App.exigirLogin();
+    }).then(() => {
+      setStatus('Carregando assistências...');
+      db.collection('assistencias').onSnapshot((snap) => {
+        assistencias = [];
+        snap.forEach(doc => assistencias.push({ id: doc.id, ...doc.data() }));
+        carregou = true;
+        setStatus(assistencias.length + ' assistência(s) · atualiza sozinho');
+        renderLista();
+      }, (e) => {
+        console.error(e);
+        if(App.ehPermissaoNegada(e)){
+          setStatus('Acesso negado — as regras da coleção "assistencias" já foram publicadas no Console?');
+        } else {
+          setStatus('Erro: ' + App.erroDe(e));
+        }
+      });
+    }).catch((e) => {
+      setStatus('Erro ao iniciar: ' + App.erroDe(e));
+      App.toastErro('Erro ao iniciar', e);
+    }).then(() => { iniciando = false; });
+  }
+  window.__aoEntrar = () => { renderLista(); };
+
+  renderLista();
+  iniciar();
+})();
+</script>
+</body>
+</html>
