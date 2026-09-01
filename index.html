@@ -6304,16 +6304,10 @@ Tupan</textarea>
     const cresc = PainelNucleo.crescimentoAnual(p.total, anterior);
 
     const nomeMesCurto = (mes) => NOMES_MES_PAINEL[Number(mes.substring(5, 7)) - 1].substring(0, 3);
-    const fontesCorrente = {
-      previsao: 'previsão de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : ''),
-      vendas: 'vendas parciais de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : '') + ' (sem previsão ainda)',
-      objetivo: 'objetivo de ' + (p.corrente ? nomeMesCurto(p.corrente.mes) : '') + ' (nada lançado no mês)'
-    };
-    const partes = [];
-    if(p.realizado > 0) partes.push('vendas fechadas R$ ' + numBR(p.realizado));
-    if(p.corrente && p.corrente.fonte) partes.push(fontesCorrente[p.corrente.fonte] + ' R$ ' + numBR(p.corrente.valor));
-    if(p.futuros > 0) partes.push('metas futuras R$ ' + numBR(p.futuros));
-
+    // A composicao da conta saiu da tela a pedido (29/08/2026); a
+    // regra continua documentada no painel-nucleo.js (projecaoAnual).
+    // Os AVISOS de projecao incompleta ficam — ausencia de dado nao
+    // pode ser silenciosa.
     const avisos = [];
     if(p.fechadosSemVendas.length) avisos.push('sem vendas lançadas: ' + p.fechadosSemVendas.map(nomeMesCurto).join(', '));
     if(p.futurosSemObjetivo.length) avisos.push('sem objetivo: ' + p.futurosSemObjetivo.map(nomeMesCurto).join(', '));
@@ -6325,7 +6319,7 @@ Tupan</textarea>
       (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
 
     alvo.innerHTML = '<div class="painel-prev-grid">' +
-      bloco('Projeção de ' + painelAno, 'R$ ' + numBR(p.total), partes.join(' + ') || 'nenhum dado lançado ainda') +
+      bloco('Projeção de ' + painelAno, 'R$ ' + numBR(p.total), '') +
       bloco('Faturamento de ' + (painelAno - 1),
         anterior != null ? 'R$ ' + numBR(anterior) : '--',
         anterior != null ? '' : 'cadastre em FATURAMENTO_ANUAL (painel-nucleo.js)') +
