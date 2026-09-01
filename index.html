@@ -920,7 +920,7 @@ Tupan</textarea>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
-<script src="painel-nucleo.js?v=2"></script>
+<script src="painel-nucleo.js?v=3"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=2"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
@@ -6162,12 +6162,16 @@ Tupan</textarea>
       }
       const ano = painelAno;
       const [metasSnap, dupSnap, cancSnap] = await Promise.all([
-        App.comAuth(() => firestoreDb.collection('metasMensais')
-          .where(firebase.firestore.FieldPath.documentId(), '>=', ano + '-01')
-          .where(firebase.firestore.FieldPath.documentId(), '<=', ano + '-12').get()),
+        // A colecao INTEIRA (um doc por mes, poucas dezenas): o total
+        // do ano anterior, o "vs ano anterior" e a sazonalidade
+        // precisam dos outros anos, nao so do exibido.
+        App.comAuth(() => firestoreDb.collection('metasMensais').get()),
+        // Ate junho do ANO SEGUINTE: as notas de agora ja' vencem no
+        // ano que vem, e a linha do 1º semestre embaixo do total
+        // mostra isso sem trocar de ano.
         App.comAuth(() => firestoreDb.collection('duplicatas')
           .where('vencimento', '>=', ano + '-01-01')
-          .where('vencimento', '<=', ano + '-12-31').get()),
+          .where('vencimento', '<=', (ano + 1) + '-06-30').get()),
         // So' as canceladas, para excluir as duplicatas delas do "a
         // pagar" — baixar todas as notas do ano custaria muito mais
         // leitura para usar um campo so'.
@@ -6299,9 +6303,14 @@ Tupan</textarea>
       });
     }
     const p = PainelNucleo.projecaoAnual(entradas, hoje);
-    const anterior = PainelNucleo.FATURAMENTO_ANUAL[painelAno - 1] != null
-      ? PainelNucleo.FATURAMENTO_ANUAL[painelAno - 1] : null;
+    // O total do ano anterior vem das vendas mes a mes lancadas na
+    // propria tabela (nenhum faturamento fica escrito em codigo — o
+    // repositorio e' publico). So' vale com os 12 meses preenchidos.
+    const metas = painelDados.metas;
+    const anterior = PainelNucleo.totalAnualVendas(metas, painelAno - 1);
     const cresc = PainelNucleo.crescimentoAnual(p.total, anterior);
+    const agora = PainelNucleo.crescimentoAteAgora(metas, painelAno, hoje);
+    const saz = PainelNucleo.projecaoSazonal(metas, painelAno, hoje);
 
     const nomeMesCurto = (mes) => NOMES_MES_PAINEL[Number(mes.substring(5, 7)) - 1].substring(0, 3);
     // A composicao da conta saiu da tela a pedido (29/08/2026); a
@@ -6318,14 +6327,28 @@ Tupan</textarea>
       '<span class="num' + (classe ? ' ' + classe : '') + '">' + num + '</span>' +
       (sub ? '<span class="sub">' + sub + '</span>' : '') + '</div>';
 
+    const nomeM = (m) => NOMES_MES_PAINEL[m - 1].substring(0, 3);
     alvo.innerHTML = '<div class="painel-prev-grid">' +
-      bloco('Projeção de ' + painelAno, 'R$ ' + numBR(p.total), '') +
+      bloco('Projeção de ' + painelAno + ' (metas)', 'R$ ' + numBR(p.total), '') +
+      // As duas projecoes respondem perguntas diferentes: a de cima e'
+      // "e se as metas baterem?"; esta e' "e se o ritmo de agora
+      // seguir a sazonalidade dos ultimos anos?".
+      bloco('No ritmo atual (sazonalidade)',
+        saz ? 'R$ ' + numBR(saz.total) : '--',
+        saz ? 'média de ' + saz.anosBase.join('/') : 'precisa de um ano anterior completo na tabela') +
       bloco('Faturamento de ' + (painelAno - 1),
         anterior != null ? 'R$ ' + numBR(anterior) : '--',
-        anterior != null ? '' : 'cadastre em FATURAMENTO_ANUAL (painel-nucleo.js)') +
-      bloco('Crescimento', cresc != null ? pctBR(cresc) : '--',
+        anterior != null ? '' : 'lance as vendas de ' + (painelAno - 1) + ' na tabela (ano ◀)') +
+      bloco('Crescimento projetado', cresc != null ? pctBR(cresc) : '--',
         cresc != null ? (p.total >= anterior ? '+' : '−') + ' R$ ' + numBR(Math.abs(p.total - anterior)) + ' vs ' + (painelAno - 1) : '',
         cresc == null ? '' : (cresc < 0 ? 'neg' : 'pos')) +
+      // Fato contra fato: acumulado dos meses fechados x os MESMOS
+      // meses do ano anterior. Nao depende de meta nem de projecao.
+      bloco('Crescimento até agora', agora ? pctBR(agora.pct) : '--',
+        agora
+          ? nomeM(agora.deMes) + '–' + nomeM(agora.ateMes) + ': R$ ' + numBR(agora.atual) + ' × R$ ' + numBR(agora.anterior)
+          : 'precisa dos mesmos meses lançados nos dois anos',
+        agora == null ? '' : (agora.pct < 0 ? 'neg' : 'pos')) +
       '</div>' +
       (avisos.length ? '<p class="msg-mono" style="margin-top:8px;">⚠ Projeção incompleta — ' + escapeHtml(avisos.join(' · ')) + '.</p>' : '');
   }
@@ -6361,7 +6384,8 @@ Tupan</textarea>
       '<th scope="col">Mês</th><th scope="col">Objetivo de vendas</th>' +
       '<th scope="col">Limite de pagamento (60%)</th><th scope="col">A pagar real</th>' +
       '<th scope="col">Limite disponível</th><th scope="col">Vendas realizadas</th>' +
-      '<th scope="col">Dif. obj.</th><th scope="col">Diário realizado</th>' +
+      '<th scope="col">Dif. obj.</th><th scope="col">vs ' + (painelAno - 1) + '</th>' +
+      '<th scope="col">Diário realizado</th>' +
       '<th scope="col">Diário previsto</th><th scope="col">Dias úteis</th>' +
       '<th scope="col">Feriados</th></tr></thead><tbody>';
 
@@ -6403,6 +6427,16 @@ Tupan</textarea>
           (r.estado === 'corrente' && r.objetivoComparavel != null && meta.objetivo != null && r.objetivoComparavel !== meta.objetivo
             ? ' title="Mês em andamento: comparado ao objetivo proporcional até a data lançada (' + brl(r.objetivoComparavel) + '), não ao mês inteiro"'
             : '') + '>' + pctBR(r.difPct) + '</td>' +
+        // vs ano anterior: SO' mes fechado — parcial contra mes cheio
+        // diria a coisa errada; o corrente compara no card, pro-rata.
+        (function(){
+          const vAnt = PainelNucleo.vendasDoMes(painelDados.metas, (painelAno - 1) + '-' + String(m).padStart(2, '0'));
+          const mostra = r.estado === 'fechado' && r.vendas != null && vAnt != null && vAnt > 0;
+          const pctAnt = mostra ? r.vendas / vAnt - 1 : null;
+          return '<td class="' + (pctAnt == null ? '' : pctAnt < 0 ? 'neg' : 'pos') + '"' +
+            (mostra ? ' title="' + nomeMes + ' de ' + (painelAno - 1) + ': ' + brl(vAnt) + '"' : '') + '>' +
+            (pctAnt != null ? pctBR(pctAnt) : '') + '</td>';
+        })() +
         '<td>' + (r.diarioRealizado != null ? brl(r.diarioRealizado) : '') + '</td>' +
         '<td>' + (r.diarioPrevisto != null ? brl(r.diarioPrevisto) : '') + '</td>' +
         '<td>' + r.diasTrabalho + '</td>' +
@@ -6419,6 +6453,9 @@ Tupan</textarea>
     }
 
     const difTotal = (tot.temVendas && tot.objetivoComVendas > 0) ? tot.vendas / tot.objetivoComVendas - 1 : null;
+    // O acumulado vs ano anterior do rodape e' o mesmo do card
+    // "Crescimento até agora": meses fechados x os MESMOS meses.
+    const agoraTot = PainelNucleo.crescimentoAteAgora(painelDados.metas, painelAno, hoje);
     html += '<tr class="total">' +
       '<td>Total</td>' +
       '<td style="text-align:right;" title="Soma só dos meses com vendas lançadas — e, no mês em andamento, o objetivo proporcional aos dias úteis decorridos">' +
@@ -6426,7 +6463,26 @@ Tupan</textarea>
       '<td></td><td></td><td></td>' +
       '<td style="text-align:right;">' + (tot.temVendas ? brl(tot.vendas) : '') + '</td>' +
       '<td class="' + (difTotal == null ? '' : difTotal < 0 ? 'neg' : 'pos') + '">' + pctBR(difTotal) + '</td>' +
+      '<td class="' + (agoraTot == null ? '' : agoraTot.pct < 0 ? 'neg' : 'pos') + '"' +
+        (agoraTot ? ' title="Acumulado dos meses fechados × os mesmos meses de ' + (painelAno - 1) + ': ' + brl(agoraTot.atual) + ' × ' + brl(agoraTot.anterior) + '"' : '') + '>' +
+        (agoraTot ? pctBR(agoraTot.pct) : '') + '</td>' +
       '<td></td><td></td><td></td><td></td></tr>';
+
+    // As notas recebidas AGORA ja' vencem no ano seguinte: o 1º
+    // semestre dele aparece aqui embaixo para nao ter que ficar
+    // trocando de ano so' para ver esses pagamentos. A consulta cobre
+    // ate junho do ano seguinte, entao ausencia = zero de verdade.
+    let somaSemestre = 0;
+    const celulasSemestre = [];
+    for(let m = 1; m <= 6; m++){
+      const mesSeg = (painelAno + 1) + '-' + String(m).padStart(2, '0');
+      const v = painelDados.aPagar[mesSeg] || 0;
+      somaSemestre += v;
+      celulasSemestre.push(NOMES_MES_PAINEL[m - 1].substring(0, 3) + ' ' + brl(v));
+    }
+    html += '<tr><td colspan="12" style="text-align:left; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); padding:8px 10px;">' +
+      'A pagar — 1º semestre de ' + (painelAno + 1) + ': ' + celulasSemestre.join(' · ') +
+      ' · <strong style="color:var(--ink);">total ' + brl(somaSemestre) + '</strong></td></tr>';
 
     alvo.innerHTML = html + '</tbody></table>';
   }

@@ -244,7 +244,7 @@ Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
    cedente), o CNPJ de 15 dígitos do Bradesco, a comparação em centavos
    inteiros e — principalmente — que boleto sem par **fora da janela de
    carga** vira ⚪ indeterminado, nunca 🔴 fraude.
-10. **Painel de metas** — 57 verificações em `painel-nucleo.js`, com os
+10. **Painel de metas** — 75 verificações em `painel-nucleo.js`, com os
     números da planilha de 2026 como referência: dias de trabalho mês a
     mês (sem domingos e feriados; sábado é dia normal; feriado no
     domingo não desconta duas vezes), limite = 60% do objetivo, diários
@@ -252,9 +252,13 @@ Não precisa instalar nada. São dezesseis etapas, em quatorze frentes:
     sobre os dias úteis restantes e **nunca inventa média de amostra
     vazia**. Também a **projeção anual** (vendas dos meses fechados +
     previsão do corrente + objetivos dos futuros; mês sem dado é
-    **avisado**, nunca zero mudo) e o crescimento vs o faturamento do
-    ano anterior (`FATURAMENTO_ANUAL`, um lugar só — null sem o número,
-    nunca "0%").
+    **avisado**, nunca zero mudo) e o histórico mês a mês lançado na
+    própria tabela (`metasMensais` — nenhum faturamento fica escrito
+    em código, o repositório é público): total do ano anterior **só com
+    os 12 meses** (parcial vira null, nunca "total do ano"), crescimento
+    até agora (fechados × os mesmos meses, corrente fora) e a projeção
+    por **sazonalidade** (média de até 4 anos-base completos; mês sem
+    lançamento sai da conta inteiro, sem distorcer a proporção).
 11. **Simulador de compra** — 58 verificações em `simulador-nucleo.js`:
     a soma das parcelas **sempre bate** com o valor da compra (centavos
     inteiros, sobra na última), a **ST** como valor adicional cobrado

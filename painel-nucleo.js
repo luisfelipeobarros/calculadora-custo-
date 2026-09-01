@@ -157,15 +157,98 @@
 
   /* ============================================================
      Projecao anual e comparacao com o ano anterior
+
+     A fonte do historico e' o proprio app: as vendas mes a mes de
+     cada ano lancadas na tabela de metas (metasMensais). O total do
+     ano anterior, o crescimento ate agora e a sazonalidade saem TODOS
+     dali — nenhum numero de faturamento fica escrito em codigo (o
+     repositorio e' publico; o Firestore fica atras de login).
      ============================================================ */
 
-  // Faturamento TOTAL de anos ja' fechados, em reais. E' o UNICO lugar
-  // deste numero (mesma politica do TRIBUTOS no calculo-nucleo): na
-  // virada do ano, acrescente aqui o total do ano que fechou e o
-  // comparativo do Painel segue funcionando.
-  var FATURAMENTO_ANUAL = {
-    2025: 66311608.92
-  };
+  function pad2(m) { return String(m).padStart(2, '0'); }
+
+  // Vendas lancadas de um mes ('aaaa-mm') no mapa de metas — null
+  // quando nao ha lancamento (nunca zero: zero e' uma afirmacao).
+  function vendasDoMes(metas, mes) {
+    var d = (metas || {})[mes];
+    return (d && d.faturamento && d.faturamento.acumulado != null)
+      ? d.faturamento.acumulado : null;
+  }
+
+  // Total vendido de um ano. So' vale com os DOZE meses lancados —
+  // total parcial rotulado de "faturamento do ano" seria mentira
+  // silenciosa. Faltou mes, devolve null e a tela diz o que falta.
+  function totalAnualVendas(metas, ano) {
+    var total = 0;
+    for (var m = 1; m <= 12; m++) {
+      var v = vendasDoMes(metas, ano + '-' + pad2(m));
+      if (v == null) return null;
+      total += v;
+    }
+    return centavos(total);
+  }
+
+  // Acumulado dos meses FECHADOS do ano contra os MESMOS meses do ano
+  // anterior — crescimento de fato contra fato, sem meta e sem
+  // projecao. O mes corrente (parcial) fica de fora: parcial contra
+  // mes cheio diria a coisa errada. So' entram meses com lancamento
+  // nos DOIS anos, e a resposta diz o intervalo usado.
+  function crescimentoAteAgora(metas, ano, hoje) {
+    var mesDeHoje = String(hoje).substring(0, 7);
+    var atual = 0, anterior = 0, meses = [];
+    for (var m = 1; m <= 12; m++) {
+      var mes = ano + '-' + pad2(m);
+      if (mes >= mesDeHoje) break;
+      var v = vendasDoMes(metas, mes);
+      var va = vendasDoMes(metas, (ano - 1) + '-' + pad2(m));
+      if (v == null || va == null) continue;
+      atual += v; anterior += va; meses.push(m);
+    }
+    if (!meses.length || !(anterior > 0)) return null;
+    return {
+      atual: centavos(atual), anterior: centavos(anterior),
+      pct: atual / anterior - 1,
+      deMes: meses[0], ateMes: meses[meses.length - 1]
+    };
+  }
+
+  // "No ritmo atual": projecao pela SAZONALIDADE historica. O peso de
+  // cada mes no ano (media de ate 4 anos anteriores COMPLETOS) diz
+  // quanto do ano costuma estar vendido ate aqui; a projecao e' o
+  // vendido nos meses fechados dividido pelo peso acumulado deles.
+  // Sem ano-base completo ou sem mes fechado lancado -> null.
+  function projecaoSazonal(metas, ano, hoje) {
+    var pesos = null, anosBase = [];
+    for (var a = ano - 1; a >= ano - 4; a--) {
+      var tot = totalAnualVendas(metas, a);
+      if (tot == null || !(tot > 0)) continue;
+      anosBase.push(a);
+      if (!pesos) pesos = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      for (var m = 1; m <= 12; m++) {
+        pesos[m - 1] += vendasDoMes(metas, a + '-' + pad2(m)) / tot;
+      }
+    }
+    if (!pesos) return null;
+    for (var i = 0; i < 12; i++) pesos[i] /= anosBase.length;
+
+    var mesDeHoje = String(hoje).substring(0, 7);
+    var vendido = 0, pesoAcum = 0, mesesUsados = 0;
+    for (var m2 = 1; m2 <= 12; m2++) {
+      var mes = ano + '-' + pad2(m2);
+      if (mes >= mesDeHoje) break;
+      var v = vendasDoMes(metas, mes);
+      // Mes fechado sem lancamento sai da conta INTEIRO (do vendido e
+      // do peso): a proporcao continua honesta.
+      if (v == null) continue;
+      vendido += v; pesoAcum += pesos[m2 - 1]; mesesUsados++;
+    }
+    if (!mesesUsados || !(pesoAcum > 0)) return null;
+    return {
+      total: centavos(vendido / pesoAcum),
+      mesesUsados: mesesUsados,
+      anosBase: anosBase.slice().reverse()
+    };
+  }
 
   // A projecao do ano, composta por tres fatias (regra combinada em
   // 21/08/2026):
@@ -219,13 +302,16 @@
 
   var PainelNucleo = {
     LIMITE_DO_OBJETIVO: LIMITE_DO_OBJETIVO,
-    FATURAMENTO_ANUAL: FATURAMENTO_ANUAL,
     ultimoDiaDoMes: ultimoDiaDoMes,
     diasUteis: diasUteis,
     diasDeTrabalho: diasDeTrabalho,
     resumoDoMes: resumoDoMes,
     projecaoAnual: projecaoAnual,
-    crescimentoAnual: crescimentoAnual
+    crescimentoAnual: crescimentoAnual,
+    vendasDoMes: vendasDoMes,
+    totalAnualVendas: totalAnualVendas,
+    crescimentoAteAgora: crescimentoAteAgora,
+    projecaoSazonal: projecaoSazonal
   };
 
   global.PainelNucleo = PainelNucleo;

@@ -249,8 +249,95 @@ eq('crescimento = total / anterior - 1',
 eq('queda sai negativa', P.crescimentoAnual(50, 100), -0.5);
 eq('sem ano anterior: null, nunca 0%', P.crescimentoAnual(100, null), null);
 eq('anterior zero nao divide', P.crescimentoAnual(100, 0), null);
-eq('o faturamento de 2025 mora no nucleo (um lugar so)',
-  P.FATURAMENTO_ANUAL[2025], 66311608.92);
+
+// ── Historico mes a mes (metasMensais): total anual, crescimento ──
+// ate agora e a projecao por sazonalidade. Nenhum faturamento fica
+// escrito em codigo: a fonte e' o que o usuario lancou na tabela.
+
+// Constroi o mapa no MESMO formato dos documentos do Firestore.
+function metasDe(pares){
+  const m = {};
+  Object.keys(pares).forEach(mes => {
+    m[mes] = { faturamento: { acumulado: pares[mes], ate: P.ultimoDiaDoMes(mes) } };
+  });
+  return m;
+}
+function anoCheio(ano, porMes){ // porMes: [12 valores]
+  const pares = {};
+  for(let m = 1; m <= 12; m++) pares[ano + '-' + String(m).padStart(2, '0')] = porMes[m - 1];
+  return pares;
+}
+
+eq('vendasDoMes: sem lancamento -> null, nunca zero',
+  P.vendasDoMes(metasDe({}), '2025-03'), null);
+eq('vendasDoMes: com lancamento devolve o valor',
+  P.vendasDoMes(metasDe({ '2025-03': 123.45 }), '2025-03'), 123.45);
+
+{
+  const cheio = metasDe(anoCheio(2025, [100,100,100,100,100,100,100,100,100,100,100,100]));
+  eq('totalAnualVendas soma os 12 meses', P.totalAnualVendas(cheio, 2025), 1200);
+  const semJun = metasDe(anoCheio(2025, [100,100,100,100,100,100,100,100,100,100,100,100]));
+  delete semJun['2025-06'];
+  eq('faltou um mes -> null (total parcial rotulado de anual seria mentira)',
+    P.totalAnualVendas(semJun, 2025), null);
+}
+
+{
+  // 2025 completo a 100/mes; 2026 jan-jul a 110 e agosto (corrente em
+  // 15/08) tambem lancado — o corrente NAO pode entrar.
+  const pares = Object.assign(
+    anoCheio(2025, [100,100,100,100,100,100,100,100,100,100,100,100]),
+    { '2026-01':110, '2026-02':110, '2026-03':110, '2026-04':110,
+      '2026-05':110, '2026-06':110, '2026-07':110, '2026-08':500 });
+  const g = P.crescimentoAteAgora(metasDe(pares), 2026, '2026-08-15');
+  eq('crescimento ate agora: jan-jul x jan-jul, corrente FORA',
+    [g.atual, g.anterior, g.deMes, g.ateMes], [770, 700, 1, 7]);
+  eq('  ...com o pct de fato contra fato', Math.round(g.pct * 1000) / 1000, 0.1);
+}
+{
+  // Mes sem lancamento num dos anos sai da conta DOS DOIS lados.
+  const pares = Object.assign(
+    anoCheio(2025, [100,100,100,100,100,100,100,100,100,100,100,100]),
+    { '2026-01':110, '2026-03':110 }); // fevereiro/2026 nao lancado
+  const g = P.crescimentoAteAgora(metasDe(pares), 2026, '2026-04-01');
+  eq('mes faltando sai da conta dos dois anos', [g.atual, g.anterior], [220, 200]);
+}
+eq('sem meses comparaveis -> null, nunca 0%',
+  P.crescimentoAteAgora(metasDe({ '2026-01': 100 }), 2026, '2026-03-01'), null);
+
+{
+  // Sazonalidade de 2025: jan pesa 10%, fev 30%, o resto 60%.
+  const base2025 = anoCheio(2025, [100,300,60,60,60,60,60,60,60,60,60,60]);
+  const m1 = metasDe(Object.assign({}, base2025, { '2026-01': 150, '2026-02': 450 }));
+  const s1 = P.projecaoSazonal(m1, 2026, '2026-03-10');
+  eq('sazonalidade: vendido 600 sobre 40% do ano -> projeta 1.500',
+    [s1.total, s1.anosBase], [1500, [2025]]);
+
+  // Ano-base INCOMPLETO nao entra na media.
+  const m2 = metasDe(Object.assign({}, base2025,
+    { '2024-01': 999 }, { '2026-01': 150, '2026-02': 450 }));
+  const s2 = P.projecaoSazonal(m2, 2026, '2026-03-10');
+  eq('ano-base incompleto fica fora da media', s2.anosBase, [2025]);
+
+  // Dois anos-base completos: a media dos pesos e' que vale.
+  const m3 = metasDe(Object.assign({},
+    anoCheio(2024, [200,200,60,60,60,60,60,60,60,60,60,60]), // total 1.000: jan 20%, fev 20%
+    base2025,                                                 // total 1.000: jan 10%, fev 30%
+    { '2026-01': 150, '2026-02': 450 }));
+  const s3 = P.projecaoSazonal(m3, 2026, '2026-03-10');
+  eq('dois anos-base: media dos pesos (15% + 25% = 40%) -> 1.500 tambem',
+    [s3.total, s3.anosBase], [1500, [2024, 2025]]);
+
+  // Mes fechado sem lancamento sai da conta inteiro (vendido E peso).
+  const m4 = metasDe(Object.assign({}, base2025, { '2026-01': 150 }));
+  const s4 = P.projecaoSazonal(m4, 2026, '2026-03-10'); // fev fechado, nao lancado
+  eq('mes fechado sem lancamento nao distorce a proporcao', s4.total, 1500);
+
+  eq('sem ano-base completo -> null',
+    P.projecaoSazonal(metasDe({ '2026-01': 150 }), 2026, '2026-03-10'), null);
+  eq('sem mes fechado lancado -> null',
+    P.projecaoSazonal(metasDe(base2025), 2026, '2026-01-10'), null);
+}
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;
