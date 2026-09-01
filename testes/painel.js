@@ -339,5 +339,29 @@ eq('sem meses comparaveis -> null, nunca 0%',
     P.projecaoSazonal(metasDe(base2025), 2026, '2026-01-10'), null);
 }
 
+// ── A pagar por semana de pagamento (sab-sex) dentro do mes ──
+// A regra combinada em 30/08/2026: cada semana soma SO os vencimentos
+// do proprio mes (a soma das semanas fecha com o "A pagar real"), e a
+// semana que cruza a virada aparece nos dois meses, cada um com a sua
+// parte. Agosto/2026 comeca num sabado; setembro comeca numa terca.
+{
+  const porDia = { '2026-08-01': 100, '2026-08-07': 50, '2026-08-10': 200,
+                   '2026-08-31': 400, '2026-09-01': 70 };
+  const ago = P.semanasDoMes(porDia, '2026-08');
+  eq('agosto comeca no proprio sabado: 1a semana 01-07 cheia',
+    [ago[0].ini, ago[0].fim, ago[0].valor, ago[0].parcial],
+    ['2026-08-01', '2026-08-07', 150, false]);
+  eq('a semana seguinte pega o dia 10', ago[1].valor, 200);
+  eq('a ultima semana de agosto cruza para setembro (parcial)',
+    [ago[ago.length - 1].ini, ago[ago.length - 1].fim, ago[ago.length - 1].parcial],
+    ['2026-08-29', '2026-09-04', true]);
+  eq('  ...e soma SO a parte de agosto (o 31/08)', ago[ago.length - 1].valor, 400);
+  eq('a soma das semanas fecha com o total do mes',
+    ago.reduce((s, x) => s + x.valor, 0), 750);
+  const set = P.semanasDoMes(porDia, '2026-09');
+  eq('a MESMA semana aparece em setembro com a parte DELE (01/09)',
+    [set[0].ini, set[0].valor, set[0].parcial], ['2026-08-29', 70, true]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

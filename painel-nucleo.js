@@ -293,6 +293,36 @@
     };
   }
 
+  // O "A pagar real" de um mes dividido pelas SEMANAS DE PAGAMENTO
+  // (sabado a sexta — a mesma regra do filtro "Pgto semana"). Cada
+  // semana soma SO os vencimentos do proprio mes: a soma das semanas
+  // fecha exatamente com o total do mes, e a semana que cruza a
+  // virada aparece nos dois meses, cada um com a sua parte (marcada
+  // com parcial:true).
+  //
+  // porDia: { 'aaaa-mm-dd': valor } — vencimentos ja somados por dia.
+  function semanasDoMes(porDia, mes) {
+    var iniMes = mes + '-01', fimMes = ultimoDiaDoMes(mes);
+    var dow = new Date(iniMes + 'T12:00:00').getDay(); // 0=dom ... 6=sab
+    var sab = somarDias(iniMes, -((dow + 1) % 7));     // sabado da semana do dia 1
+    var semanas = [];
+    for (var s = sab; s <= fimMes; s = somarDias(s, 7)) {
+      var fimSem = somarDias(s, 6);
+      var de = s < iniMes ? iniMes : s;
+      var ate = fimSem > fimMes ? fimMes : fimSem;
+      var valor = 0;
+      for (var d = de; d <= ate; d = somarDias(d, 1)) {
+        valor += (porDia && porDia[d]) || 0;
+      }
+      semanas.push({
+        ini: s, fim: fimSem,
+        valor: centavos(valor),
+        parcial: s < iniMes || fimSem > fimMes
+      });
+    }
+    return semanas;
+  }
+
   // total / ano anterior - 1. Null quando falta um dos lados — sem
   // numero do ano anterior nao existe crescimento, nem "0%".
   function crescimentoAnual(total, faturamentoAnterior) {
@@ -311,7 +341,8 @@
     vendasDoMes: vendasDoMes,
     totalAnualVendas: totalAnualVendas,
     crescimentoAteAgora: crescimentoAteAgora,
-    projecaoSazonal: projecaoSazonal
+    projecaoSazonal: projecaoSazonal,
+    semanasDoMes: semanasDoMes
   };
 
   global.PainelNucleo = PainelNucleo;
