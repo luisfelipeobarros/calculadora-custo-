@@ -305,15 +305,18 @@ Não precisa instalar nada. São dezenove etapas, em quinze frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 28 verificações em
+15. **Assistências e reclamações** — 35 verificações em
     `assistencias-nucleo.js`: as listas de status/causa/solução e a cor
     do badge (status desconhecido cai no **vermelho**, nunca parece
     resolvido), o resumo dos cartões (em aberto = tudo que não está
     resolvido; custos só do mês corrente; líquido = custo −
     ressarcimento), o filtro (busca em cliente **e** sequência, sem
     acento), a **duplicidade de sequência** (outro documento avisa; o
-    próprio em edição não conta) e a exportação (linha sem dinheiro sai
-    com líquido em branco, não "0"; fotos exportam como contagem).
+    próprio em edição não conta), o **termo de acordo** no mesmo campo
+    das fotos (marcado com `{termo:true}`; documento antigo só com
+    strings continua funcionando, e juntar/separar fecham o ciclo) e a
+    exportação (linha sem dinheiro sai com líquido em branco, não "0";
+    fotos exportam como contagem, termo como "sim").
 
 Rode antes de publicar qualquer alteração.
 

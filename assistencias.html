@@ -175,6 +175,19 @@
         <p class="empty-note" id="afFotosMsg" style="display:block;"></p>
       </div>
 
+      <!-- Termo de acordo: mora no MESMO campo `fotos` do documento
+           (marcado com {termo:true}); a separação é só de tela, para
+           a consulta achar o termo sem caçar entre as fotos. -->
+      <div style="margin-top:14px;">
+        <label style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Termo de acordo (escaneado)</label>
+        <div style="margin-top:6px;">
+          <button type="button" class="btn secondary" id="afTermoBtn">📄 Anexar termo de acordo</button>
+          <input type="file" id="afTermo" accept="image/*" multiple style="display:none;">
+        </div>
+        <div class="af-fotos" id="afTermoPreview"></div>
+        <p class="empty-note" id="afTermoMsg" style="display:block;"></p>
+      </div>
+
       <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
         <button type="button" class="btn" id="afSalvarBtn" style="flex:1;">💾 Salvar</button>
       </div>
@@ -191,7 +204,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=21"></script>
-<script src="assistencias-nucleo.js?v=1"></script>
+<script src="assistencias-nucleo.js?v=2"></script>
 <script>
 (() => {
   'use strict';
@@ -204,7 +217,8 @@
   let assistencias = [];      // cache vivo (onSnapshot), cada item com .id
   let carregou = false;
   let editandoId = null;      // null = nova
-  let fotosAtuais = [];       // dataURLs (base64) da ficha aberta
+  let fotosAtuais = [];       // dataURLs (base64) das fotos do problema
+  let termoAtuais = [];       // dataURLs do termo de acordo (mesmo campo no Firestore)
   let filtroStatus = '';
 
   const setStatus = (t) => { $('asstConexao').textContent = t; };
@@ -266,7 +280,11 @@
           (a.produto ? ' · ' + escapeHtml(a.produto) : '') +
           (a.causa ? ' · ' + escapeHtml(a.causa) : '') +
           (a.custoLoja != null ? ' · custo ' + brl(a.custoLoja) : '') +
-          ((a.fotos || []).length ? ' · 📷 ' + a.fotos.length : '') + '</div>' +
+          (() => {
+            const fs = N.separarFotos(a.fotos);
+            return (fs.problema.length ? ' · 📷 ' + fs.problema.length : '') +
+              (fs.termo.length ? ' · 📄 termo' : '');
+          })() + '</div>' +
       '</div>').join('');
   }
 
@@ -297,7 +315,9 @@
   function abrirFicha(id){
     const a = id ? assistencias.find(x => x.id === id) : null;
     editandoId = a ? a.id : null;
-    fotosAtuais = (a && a.fotos ? a.fotos.slice() : []);
+    const fs = N.separarFotos(a && a.fotos);
+    fotosAtuais = fs.problema;
+    termoAtuais = fs.termo;
     $('afTitulo').textContent = a ? 'Assistência #' + (a.sequencia || '') : 'Nova assistência';
     CAMPOS_TEXTO.forEach(([elId, campo]) => { $(elId).value = (a && a[campo]) || ''; });
     CAMPOS_NUMERO.forEach(([elId, campo]) => {
@@ -322,8 +342,10 @@
   // O limite do Firestore é 1 MB por documento; cada foto vira JPEG de
   // no máx. 800px de largura com qualidade 0.7 (~60–120 KB em base64).
   // O teto de 700 mil caracteres deixa folga para o resto do documento.
+  // Fotos e termo dividem o mesmo documento, então o teto é dos dois
+  // somados.
   const LIMITE_FOTOS_CHARS = 700000;
-  const tamanhoFotos = () => fotosAtuais.reduce((s, f) => s + f.length, 0);
+  const tamanhoFotos = () => fotosAtuais.concat(termoAtuais).reduce((s, f) => s + f.length, 0);
 
   function comprimirFoto(file){
     return new Promise((resolve, reject) => {
@@ -343,36 +365,55 @@
     });
   }
 
+  const miniaturas = (lista, rotulo, attrTirar) => lista.map((f, i) =>
+    '<div class="foto"><img src="' + f + '" alt="' + rotulo + ' ' + (i + 1) + '" data-zoom="' + i + '">' +
+    '<button type="button" class="tirar" ' + attrTirar + '="' + i + '"' +
+    ' aria-label="Remover ' + rotulo.toLowerCase() + ' ' + (i + 1) + '">×</button></div>').join('');
+
   function renderFotos(){
-    $('afFotosPreview').innerHTML = fotosAtuais.map((f, i) =>
-      '<div class="foto"><img src="' + f + '" alt="Foto ' + (i + 1) + '" data-zoom="' + i + '">' +
-      '<button type="button" class="tirar" data-tirar="' + i + '" aria-label="Remover foto ' + (i + 1) + '">×</button></div>').join('');
+    $('afFotosPreview').innerHTML = miniaturas(fotosAtuais, 'Foto', 'data-tirar');
     $('afFotosMsg').textContent = fotosAtuais.length
-      ? fotosAtuais.length + ' foto(s) · ' + Math.round(tamanhoFotos() / 1024) + ' KB de ' + Math.round(LIMITE_FOTOS_CHARS / 1024) + ' KB'
+      ? fotosAtuais.length + ' foto(s) · ' + Math.round(tamanhoFotos() / 1024) + ' KB de ' + Math.round(LIMITE_FOTOS_CHARS / 1024) + ' KB no total'
       : 'Tire pela câmera ou escolha da galeria — as fotos são comprimidas antes de salvar.';
+    $('afTermoPreview').innerHTML = miniaturas(termoAtuais, 'Termo página', 'data-tirar-termo');
+    $('afTermoMsg').textContent = termoAtuais.length
+      ? termoAtuais.length + ' página(s) do termo anexada(s)'
+      : 'Escaneie/fotografe o termo assinado quando finalizar a assistência.';
   }
 
-  $('afFotoBtn').addEventListener('click', () => $('afFotos').click());
-  $('afFotos').addEventListener('change', async function(){
-    const files = Array.from(this.files || []);
-    this.value = '';
+  // O mesmo funil para os dois anexos: comprime, respeita o teto do
+  // documento (fotos + termo somados) e avisa o que não coube.
+  async function receberImagens(input, destino, rotulo){
+    const files = Array.from(input.files || []);
+    input.value = '';
     for(const f of files){
       try{
         const dataUrl = await comprimirFoto(f);
         if(tamanhoFotos() + dataUrl.length > LIMITE_FOTOS_CHARS){
-          App.toastErro('Limite de fotos', 'Esta foto não coube no documento (limite do Firestore). Remova alguma antes de adicionar outra.');
+          App.toastErro('Limite de anexos', rotulo + ' não coube no documento (limite do Firestore). Remova algum anexo antes de adicionar outro.');
           break;
         }
-        fotosAtuais.push(dataUrl);
-      }catch(e){ App.toastErro('Foto ignorada', e); }
+        destino.push(dataUrl);
+      }catch(e){ App.toastErro(rotulo + ' ignorada', e); }
     }
     renderFotos();
-  });
+  }
+
+  $('afFotoBtn').addEventListener('click', () => $('afFotos').click());
+  $('afFotos').addEventListener('change', function(){ receberImagens(this, fotosAtuais, 'A foto'); });
+  $('afTermoBtn').addEventListener('click', () => $('afTermo').click());
+  $('afTermo').addEventListener('change', function(){ receberImagens(this, termoAtuais, 'A página do termo'); });
+
   App.delegar($('afFotosPreview'), 'click', '[data-tirar]', (b) => {
     fotosAtuais.splice(Number(b.dataset.tirar), 1);
     renderFotos();
   });
-  App.delegar($('afFotosPreview'), 'click', '[data-zoom]', (img) => {
+  App.delegar($('afTermoPreview'), 'click', '[data-tirar-termo]', (b) => {
+    termoAtuais.splice(Number(b.dataset.tirarTermo), 1);
+    renderFotos();
+  });
+
+  const abrirZoom = (img) => {
     const div = document.createElement('div');
     div.className = 'foto-zoom';
     const grande = document.createElement('img');
@@ -381,7 +422,9 @@
     div.appendChild(grande);
     div.addEventListener('click', () => div.remove());
     document.body.appendChild(div);
-  });
+  };
+  App.delegar($('afFotosPreview'), 'click', '[data-zoom]', abrirZoom);
+  App.delegar($('afTermoPreview'), 'click', '[data-zoom]', abrirZoom);
 
   // ─── Salvar ───
   async function salvar(){
@@ -403,7 +446,9 @@
       if(!ok) return;
     }
 
-    const dados = { fotos: fotosAtuais };
+    // Fotos do problema + termo de acordo no MESMO campo (o termo vai
+    // marcado com {termo:true}; a separação é do núcleo).
+    const dados = { fotos: N.juntarFotos(fotosAtuais, termoAtuais) };
     CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
     CAMPOS_NUMERO.forEach(([elId, campo]) => { dados[campo] = App.parseNumeroBR($(elId).value); });
     dados.sequencia = seq;

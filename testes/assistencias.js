@@ -81,15 +81,38 @@ eq('sequencia vazia nunca avisa', N.sequenciaDuplicada(lista, '  ', null), false
 eq('espacos nas pontas nao enganam a comparacao',
   N.sequenciaDuplicada(lista, ' 100 ', null), true);
 
+// ── Fotos do problema x termo de acordo (mesmo campo) ────────
+// O termo entra no MESMO array `fotos`, marcado com {termo:true} —
+// nada novo no Firestore; a separacao e' so' de tela/exportacao.
+
+{
+  const misto = ['fotoA', { termo: true, img: 'termoPag1' }, 'fotoB',
+    { termo: true, img: 'termoPag2' }];
+  eq('separa problema e termo do mesmo array',
+    N.separarFotos(misto), { problema: ['fotoA', 'fotoB'], termo: ['termoPag1', 'termoPag2'] });
+  eq('documento antigo (so strings) continua funcionando',
+    N.separarFotos(['a', 'b']), { problema: ['a', 'b'], termo: [] });
+  eq('lixo no array e ignorado, nunca quebra',
+    N.separarFotos([null, { termo: true }, 42, '']), { problema: [], termo: [] });
+  eq('juntar e separar fecham o ciclo sem perder nada',
+    N.separarFotos(N.juntarFotos(['f1'], ['t1', 't2'])),
+    { problema: ['f1'], termo: ['t1', 't2'] });
+  eq('sem fotos nenhuma: vazio dos dois lados',
+    N.separarFotos(undefined), { problema: [], termo: [] });
+}
+
 // ── Exportacao ───────────────────────────────────────────────
 
 {
   const linhas = N.linhasExcel([
-    { sequencia: '100', custoLoja: 500, ressarcimentoFabrica: 200, fotos: ['x', 'y'] },
+    { sequencia: '100', custoLoja: 500, ressarcimentoFabrica: 200,
+      fotos: ['x', 'y', { termo: true, img: 't' }] },
     { sequencia: '101' } // sem dinheiro nenhum
   ]);
   eq('liquido calculado quando ha dinheiro', linhas[0]['Custo líquido (R$)'], 300);
-  eq('fotos exportam como CONTAGEM, nao como base64', linhas[0]['Fotos'], 2);
+  eq('fotos exportam como CONTAGEM, so as do problema', linhas[0]['Fotos'], 2);
+  eq('termo anexado sai como "sim"', linhas[0]['Termo de acordo'], 'sim');
+  eq('sem termo: coluna em branco', linhas[1]['Termo de acordo'], '');
   eq('linha sem dinheiro sai com liquido em branco, nao "0"',
     linhas[1]['Custo líquido (R$)'], '');
 }

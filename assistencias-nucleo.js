@@ -108,8 +108,32 @@
     });
   }
 
+  // As fotos do problema e o TERMO DE ACORDO escaneado dividem o
+  // MESMO campo `fotos` do documento (decisao de 02/09/2026: nada
+  // novo no Firestore). O termo entra como { termo: true, img } e a
+  // foto do problema continua string pura — compatibilidade com tudo
+  // que ja foi salvo. Este par separa/junta para a tela e a
+  // exportacao; lixo (objeto sem img, tipos estranhos) e' ignorado.
+  function separarFotos(fotos) {
+    var problema = [], termo = [];
+    (fotos || []).forEach(function (f) {
+      if (f && typeof f === 'object' && f.termo === true) {
+        if (typeof f.img === 'string' && f.img) termo.push(f.img);
+      } else if (typeof f === 'string' && f) {
+        problema.push(f);
+      }
+    });
+    return { problema: problema, termo: termo };
+  }
+  function juntarFotos(problema, termo) {
+    return (problema || []).concat((termo || []).map(function (img) {
+      return { termo: true, img: img };
+    }));
+  }
+
   function linhasExcel(lista) {
     return (lista || []).map(function (a) {
+      var fotos = separarFotos(a.fotos);
       return {
         'Sequência': a.sequencia || '',
         'Abertura': a.dataAbertura || '',
@@ -133,7 +157,8 @@
           ? App.centavos((a.custoLoja || 0) - (a.ressarcimentoFabrica || 0)) : '',
         'Resolução': a.dataResolucao || '',
         'Responsável': a.responsavel || '',
-        'Fotos': (a.fotos || []).length
+        'Fotos': fotos.problema.length,
+        'Termo de acordo': fotos.termo.length ? 'sim' : ''
       };
     });
   }
@@ -147,6 +172,8 @@
     filtrarAssistencias: filtrarAssistencias,
     ordenarAssistencias: ordenarAssistencias,
     sequenciaDuplicada: sequenciaDuplicada,
+    separarFotos: separarFotos,
+    juntarFotos: juntarFotos,
     linhasExcel: linhasExcel
   };
 
