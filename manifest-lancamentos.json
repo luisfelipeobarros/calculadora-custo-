@@ -10,7 +10,7 @@
   "theme_color": "#2B5B8A",
   "lang": "pt-BR",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-lancamentos-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-lancamentos-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
