@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lançamentos</title>
+<link rel="manifest" href="manifest-lancamentos.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#2B5B8A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lançamentos">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Design system comum aos apps da empresa. Ver app-shared.css -->
+<link rel="stylesheet" href="app-shared.css?v=15">
+<style>
+  /* Somente o que é exclusivo do app de Lançamentos. Otimizado para
+     digitação em sequência no desktop; funciona no celular também. */
+  .wrap{ padding:20px 14px 60px; max-width:1200px; margin:0 auto; }
+  header.top{ max-width:1200px; }
+
+  .lc-form-grid{ display:grid; grid-template-columns:repeat(6, 1fr); gap:10px; align-items:end; }
+  .lc-campo{ min-width:0; }
+  .lc-campo label{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+  .lc-campo input, .lc-campo select{ width:100%; box-sizing:border-box; padding:8px 9px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13.5px; }
+  .lc-c2{ grid-column:span 2; }
+  .lc-c3{ grid-column:span 3; }
+  .lc-c6{ grid-column:1 / -1; }
+  @media (max-width:760px){
+    .lc-form-grid{ grid-template-columns:1fr 1fr; }
+    .lc-c2, .lc-c3{ grid-column:span 2; }
+  }
+
+  .lc-tipo{ display:flex; gap:6px; }
+  .lc-tipo button{ flex:1; font-family:var(--font-mono); font-size:12px; padding:8px 4px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink-soft); cursor:pointer; white-space:nowrap; }
+  .lc-tipo button[aria-pressed="true"].t-saida{ background:#F7E2DF; border-color:var(--loss); color:var(--loss); font-weight:700; }
+  .lc-tipo button[aria-pressed="true"].t-entrada{ background:#E1EFE6; border-color:var(--profit); color:var(--profit); font-weight:700; }
+  .lc-tipo button[aria-pressed="true"].t-transf{ background:var(--azul-fundo); border-color:var(--azul); color:var(--azul); font-weight:700; }
+
+  .lc-partida{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
+  .lc-partida strong{ color:var(--ink); }
+
+  .lc-filtros{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px; }
+  .lc-filtros input, .lc-filtros select{ padding:7px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
+  .lc-filtros input[type="search"]{ flex:1; min-width:150px; font-family:var(--font-body); font-size:13px; }
+
+  .lc-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  .lc-table th{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); text-align:left; padding:6px 8px; border-bottom:2px solid var(--ink); white-space:nowrap; }
+  .lc-table td{ padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .lc-table tr:nth-child(even) td{ background:var(--stripe2); }
+  .lc-table td.num{ font-family:var(--font-mono); text-align:right; white-space:nowrap; }
+  .lc-table tr.lc-pendente td{ background:#F5EAD2; }
+  .lc-dc{ font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); white-space:nowrap; }
+
+  .lc-badge-pend{ font-family:var(--font-mono); font-size:11px; font-weight:700; color:#8A6414; background:#F5EAD2; border:1.5px solid #8A6414; border-radius:10px; padding:3px 10px; }
+
+  .lc-rodape{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:8px; display:flex; gap:16px; flex-wrap:wrap; }
+  .lc-rodape strong{ color:var(--ink); }
+
+  .lc-cad-table input[type="text"]{ width:100%; box-sizing:border-box; padding:5px 6px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:12px; background:#fff; color:var(--ink); }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1>Lançamentos</h1>
+      <p>PARTIDAS DOBRADAS · EXPORTAÇÃO PARA O CONTADOR</p>
+    </div>
+    <nav class="telas" aria-label="Telas do aplicativo">
+      <button class="btn secondary" id="lcNavLancamentos">📒 Lançamentos</button>
+      <button class="btn secondary" id="lcNavCadastros">⚙ Cadastros</button>
+      <div id="lcContaBarra"></div>
+      <div class="stamp">Uso interno</div>
+    </nav>
+  </header>
+
+  <div class="barra-status">
+    <span id="lcConexao" role="status" aria-live="polite">Conectando...</span>
+  </div>
+
+  <main id="conteudo">
+
+  <!-- ═══════════ LANÇAMENTOS ═══════════ -->
+  <div id="viewLancamentosLc">
+
+    <div class="card">
+      <h2 id="lcFormTitulo">Novo lançamento</h2>
+      <div class="lc-form-grid" style="margin-top:10px;">
+        <div class="lc-campo"><label for="lcData">Data</label>
+          <input id="lcData" type="date"></div>
+        <div class="lc-campo"><label for="lcValor">Valor (R$)</label>
+          <input id="lcValor" inputmode="decimal" placeholder="0,00"></div>
+        <div class="lc-campo lc-c2"><label for="lcBanco">Banco</label>
+          <select id="lcBanco"></select></div>
+        <div class="lc-campo lc-c2"><label id="lcTipoRotulo">Tipo</label>
+          <div class="lc-tipo" role="group" aria-labelledby="lcTipoRotulo">
+            <button type="button" class="t-saida" data-tipo="saida" aria-pressed="true">↑ Saiu</button>
+            <button type="button" class="t-entrada" data-tipo="entrada" aria-pressed="false">↓ Entrou</button>
+            <button type="button" class="t-transf" data-tipo="transferencia" aria-pressed="false">⇄ Transf.</button>
+          </div></div>
+        <div class="lc-campo lc-c3" id="lcCampoCategoria"><label for="lcCategoria">Categoria</label>
+          <select id="lcCategoria"></select></div>
+        <div class="lc-campo lc-c3" id="lcCampoDestino" style="display:none;"><label for="lcBancoDestino">Banco de destino</label>
+          <select id="lcBancoDestino"></select></div>
+        <div class="lc-campo lc-c3"><label for="lcHistorico">Histórico</label>
+          <input id="lcHistorico" autocomplete="off" placeholder="Ex.: Valor ref a Compesa"></div>
+        <div class="lc-campo lc-c2"><label for="lcFornecedor">Fornecedor (opcional)</label>
+          <input id="lcFornecedor" autocomplete="off"></div>
+        <div class="lc-campo"><label for="lcNumeroDoc">Nº doc (opcional)</label>
+          <input id="lcNumeroDoc" autocomplete="off"></div>
+        <div class="lc-campo lc-c3">
+          <span class="lc-partida" id="lcPartidaPreview"></span></div>
+        <div class="lc-campo lc-c3" style="display:flex; gap:8px;">
+          <button type="button" class="btn" id="lcSalvarBtn" style="flex:1;">💾 Salvar lançamento</button>
+          <button type="button" class="btn secondary" id="lcCancelarEdicaoBtn" style="display:none;">✕ Cancelar edição</button>
+        </div>
+      </div>
+      <div class="empty-note" id="lcFormMsg" style="display:block; margin-top:6px;"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Lançamentos do mês</h2>
+        <span id="lcPendenciasBadge"></span>
+        <button type="button" class="btn secondary" id="lcExportarBtn">⬇ Exportar mês para o contador</button>
+      </div>
+      <div class="lc-filtros" style="margin-top:10px;">
+        <label class="sr-only" for="lcMesFiltro">Mês</label>
+        <input id="lcMesFiltro" type="month">
+        <label class="sr-only" for="lcBancoFiltro">Banco</label>
+        <select id="lcBancoFiltro"><option value="">— banco —</option></select>
+        <label class="sr-only" for="lcTipoFiltro">Tipo</label>
+        <select id="lcTipoFiltro">
+          <option value="">— tipo —</option>
+          <option value="saida">Saída</option>
+          <option value="entrada">Entrada</option>
+          <option value="transferencia">Transferência</option>
+        </select>
+        <label class="sr-only" for="lcCategoriaFiltro">Categoria</label>
+        <select id="lcCategoriaFiltro"><option value="">— categoria —</option></select>
+        <label class="sr-only" for="lcBusca">Buscar</label>
+        <input id="lcBusca" type="search" placeholder="Buscar no histórico ou fornecedor...">
+      </div>
+      <div class="tabela-rolavel" id="lcLista"></div>
+      <div class="lc-rodape" id="lcTotais"></div>
+      <div class="empty-note" id="lcListaMsg" style="display:block;"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ CADASTROS ═══════════ -->
+  <div id="viewCadastrosLc" style="display:none;">
+    <div class="card">
+      <h2>Contadores da exportação</h2>
+      <p class="nota-explicativa">
+        Continuam de onde pararam entre exportações. Antes da PRIMEIRA exportação, alinhe com a
+        numeração atual do contador (o próximo número livre, não o último usado).
+      </p>
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin-top:8px;">
+        <div class="lc-campo"><label for="lcProxLancamento">Próximo nº de lançamento (col. 1)</label>
+          <input id="lcProxLancamento" inputmode="numeric" style="width:170px; padding:8px 9px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono);"></div>
+        <div class="lc-campo"><label for="lcProxLinha">Próximo sequencial de linha (col. 19)</label>
+          <input id="lcProxLinha" inputmode="numeric" style="width:170px; padding:8px 9px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono);"></div>
+        <button type="button" class="btn secondary" id="lcSalvarContadoresBtn">💾 Salvar contadores</button>
+      </div>
+      <div class="empty-note" id="lcContadoresMsg" style="display:block;"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Bancos</h2>
+      <div class="tabela-rolavel" id="lcCadBancos"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h2>Categorias</h2>
+      <p class="nota-explicativa">Os selects do formulário só mostram itens ativos. Não invente contas: use as do plano do contador.</p>
+      <div class="tabela-rolavel" id="lcCadCategorias"></div>
+    </div>
+  </div>
+
+  </main>
+  <footer class="note">Lançamentos contábeis · partidas montadas pelo app · uso interno.</footer>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="app-shared.js?v=21"></script>
+<script src="lancamentos-nucleo.js?v=1"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = App.$;
+  const escapeHtml = App.escapeHtml;
+  const brl = App.brl;
+  const N = LancamentosNucleo;
+
+  let db = null;
+  let bancos = {};        // id -> doc (onSnapshot)
+  let categorias = {};    // id -> doc (onSnapshot)
+  let lancamentos = [];   // do mês filtrado (onSnapshot por mês)
+  let carregouCadastros = false;
+  let carregouLancamentos = false;
+  let tipoAtual = 'saida';
+  let editandoLcId = null;
+  let pararLancamentos = null; // cancela a escuta do mês anterior
+
+  const setStatus = (t) => { $('lcConexao').textContent = t; };
+  const mesAtual = () => App.hojeISO().substring(0, 7);
+
+  const router = App.criarRouter({
+    views: { Lancamentos: 'viewLancamentosLc', Cadastros: 'viewCadastrosLc' },
+    padrao: 'Lancamentos'
+  });
+  $('lcNavLancamentos').addEventListener('click', () => router.ir('Lancamentos'));
+  $('lcNavCadastros').addEventListener('click', () => router.ir('Cadastros'));
+
+  // ─── Selects a partir dos cadastros ───
+  const bancosAtivos = () => Object.keys(bancos).filter(id => bancos[id].ativo !== false)
+    .sort((a, b) => bancos[a].nome.localeCompare(bancos[b].nome, 'pt-BR'));
+  const categoriasAtivas = (direcao) => Object.keys(categorias)
+    .filter(id => categorias[id].ativo !== false && categorias[id].direcao === direcao)
+    // Mais usadas primeiro dentro de cada grupo: é o que acelera a
+    // digitação em sequência (usoJulho veio do levantamento real).
+    .sort((a, b) => categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
+      (categorias[b].usoJulho || 0) - (categorias[a].usoJulho || 0));
+
+  function encherSelectBancos(el, comVazio){
+    el.innerHTML = (comVazio ? '<option value="">— banco —</option>' : '') +
+      bancosAtivos().map(id => '<option value="' + escapeHtml(id) + '">' +
+        escapeHtml(bancos[id].nome) + '</option>').join('');
+  }
+
+  function encherSelectCategorias(el, direcao, comVazio){
+    const ids = categoriasAtivas(direcao);
+    const grupos = {};
+    ids.forEach(id => { (grupos[categorias[id].grupo] = grupos[categorias[id].grupo] || []).push(id); });
+    el.innerHTML = (comVazio ? '<option value="">— categoria —</option>' : '') +
+      Object.keys(grupos).sort((a, b) => a.localeCompare(b, 'pt-BR')).map(g =>
+        '<optgroup label="' + escapeHtml(g) + '">' +
+        grupos[g].map(id => '<option value="' + escapeHtml(id) + '">' +
+          escapeHtml(categorias[id].nome) + '</option>').join('') +
+        '</optgroup>').join('');
+  }
+
+  function montarSelects(){
+    const bSel = $('lcBanco').value, dSel = $('lcBancoDestino').value;
+    encherSelectBancos($('lcBanco'), false);
+    encherSelectBancos($('lcBancoDestino'), false);
+    if(bSel) $('lcBanco').value = bSel;
+    if(dSel) $('lcBancoDestino').value = dSel;
+    encherSelectCategorias($('lcCategoria'), tipoAtual === 'entrada' ? 'entrada' : 'saida', false);
+    encherSelectBancos($('lcBancoFiltro'), true);
+    // Filtro de categoria cobre as duas direções.
+    const cf = $('lcCategoriaFiltro').value;
+    $('lcCategoriaFiltro').innerHTML = '<option value="">— categoria —</option>' +
+      Object.keys(categorias).sort((a, b) => categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+        .map(id => '<option value="' + escapeHtml(id) + '">' + escapeHtml(categorias[id].nome) + '</option>').join('');
+    if(cf) $('lcCategoriaFiltro').value = cf;
+    atualizarPreview();
+  }
+
+  // ─── Tipo (3 botões) ───
+  App.delegar(document.querySelector('.lc-tipo'), 'click', 'button[data-tipo]', (b) => {
+    tipoAtual = b.dataset.tipo;
+    document.querySelectorAll('.lc-tipo button').forEach(x =>
+      x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    const transf = tipoAtual === 'transferencia';
+    $('lcCampoCategoria').style.display = transf ? 'none' : 'block';
+    $('lcCampoDestino').style.display = transf ? 'block' : 'none';
+    if(!transf) encherSelectCategorias($('lcCategoria'), tipoAtual === 'entrada' ? 'entrada' : 'saida', false);
+    atualizarPreview();
+  });
+
+  // ─── Preview da partida (só informativo) ───
+  function partidaDoFormulario(){
+    return N.montarPartidas(tipoAtual,
+      bancos[$('lcBanco').value] || null,
+      tipoAtual === 'transferencia' ? null : (categorias[$('lcCategoria').value] || null),
+      tipoAtual === 'transferencia' ? (bancos[$('lcBancoDestino').value] || null) : null);
+  }
+  function atualizarPreview(){
+    const p = partidaDoFormulario();
+    $('lcPartidaPreview').innerHTML = p
+      ? 'Partida: <strong>D ' + escapeHtml(p.debito) + '</strong> / <strong>C ' + escapeHtml(p.credito) + '</strong>'
+      : '';
+  }
+  ['lcBanco', 'lcCategoria', 'lcBancoDestino'].forEach(id =>
+    $(id).addEventListener('change', atualizarPreview));
+
+  // ─── Salvar (novo ou edição) ───
+  async function salvarLancamento(){
+    const data = $('lcData').value;
+    const valor = App.parseNumeroBR($('lcValor').value);
+    const partida = partidaDoFormulario();
+    if(!partida){
+      App.toast(tipoAtual === 'transferencia'
+        ? 'Escolha os dois bancos (origem e destino diferentes).'
+        : 'Escolha o banco e a categoria.', 'info');
+      return;
+    }
+    // Sem data ou valor GRAVA mesmo assim (vira pendência amarela na
+    // lista) — o fluxo real dela inclui lançar primeiro e completar
+    // depois; só a exportação exige tudo preenchido.
+    const doc = {
+      data: data || null,
+      valor: valor != null && valor > 0 ? valor : null,
+      bancoId: $('lcBanco').value,
+      tipo: tipoAtual,
+      categoriaId: tipoAtual === 'transferencia' ? null : $('lcCategoria').value,
+      bancoDestinoId: tipoAtual === 'transferencia' ? $('lcBancoDestino').value : null,
+      historico: $('lcHistorico').value.trim(),
+      fornecedor: $('lcFornecedor').value.trim() || null,
+      numeroDoc: $('lcNumeroDoc').value.trim() || null,
+      contaDebito: partida.debito,
+      contaCredito: partida.credito,
+      mes: (data || App.hojeISO()).substring(0, 7)
+    };
+    if(!doc.historico){
+      App.toast('Escreva o histórico — é ele que o contador lê.', 'info');
+      $('lcHistorico').focus();
+      return;
+    }
+    const btn = $('lcSalvarBtn');
+    btn.disabled = true;
+    try{
+      if(editandoLcId){
+        await App.comAuth(() => db.collection('lancamentos').doc(editandoLcId).set(doc, { merge: true }));
+        App.toast('Lançamento atualizado.', 'ok');
+        cancelarEdicao();
+      } else {
+        doc.criadoEm = firebase.firestore.FieldValue.serverTimestamp();
+        await App.comAuth(() => db.collection('lancamentos').add(doc));
+        App.toast('Salvo.', 'ok');
+        // Mantém data e banco (lançamentos em sequência) e volta ao valor.
+        $('lcValor').value = '';
+        $('lcHistorico').value = '';
+        $('lcFornecedor').value = '';
+        $('lcNumeroDoc').value = '';
+        $('lcValor').focus();
+      }
+      if(doc.mes !== $('lcMesFiltro').value){
+        $('lcMesFiltro').value = doc.mes;
+        escutarLancamentos();
+      }
+    }catch(e){
+      App.toastErro('Erro ao salvar', e);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+  $('lcSalvarBtn').addEventListener('click', salvarLancamento);
+
+  function cancelarEdicao(){
+    editandoLcId = null;
+    $('lcFormTitulo').textContent = 'Novo lançamento';
+    $('lcCancelarEdicaoBtn').style.display = 'none';
+    $('lcSalvarBtn').textContent = '💾 Salvar lançamento';
+    $('lcValor').value = '';
+    $('lcHistorico').value = '';
+    $('lcFornecedor').value = '';
+    $('lcNumeroDoc').value = '';
+  }
+  $('lcCancelarEdicaoBtn').addEventListener('click', cancelarEdicao);
+
+  function abrirEdicao(id){
+    const l = lancamentos.find(x => x.id === id);
+    if(!l) return;
+    editandoLcId = id;
+    $('lcFormTitulo').textContent = 'Editando lançamento';
+    $('lcCancelarEdicaoBtn').style.display = 'inline-block';
+    $('lcSalvarBtn').textContent = '💾 Salvar alterações';
+    $('lcData').value = l.data || '';
+    $('lcValor').value = l.valor != null ? l.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+    $('lcBanco').value = l.bancoId || '';
+    tipoAtual = l.tipo || 'saida';
+    document.querySelectorAll('.lc-tipo button').forEach(x =>
+      x.setAttribute('aria-pressed', x.dataset.tipo === tipoAtual ? 'true' : 'false'));
+    const transf = tipoAtual === 'transferencia';
+    $('lcCampoCategoria').style.display = transf ? 'none' : 'block';
+    $('lcCampoDestino').style.display = transf ? 'block' : 'none';
+    if(!transf){
+      encherSelectCategorias($('lcCategoria'), tipoAtual === 'entrada' ? 'entrada' : 'saida', false);
+      $('lcCategoria').value = l.categoriaId || '';
+    } else {
+      $('lcBancoDestino').value = l.bancoDestinoId || '';
+    }
+    $('lcHistorico').value = l.historico || '';
+    $('lcFornecedor').value = l.fornecedor || '';
+    $('lcNumeroDoc').value = l.numeroDoc || '';
+    atualizarPreview();
+    window.scrollTo(0, 0);
+  }
+
+  // ─── Lista ───
+  const filtrosAtuais = () => ({
+    mes: $('lcMesFiltro').value,
+    bancoId: $('lcBancoFiltro').value,
+    tipo: $('lcTipoFiltro').value,
+    categoriaId: $('lcCategoriaFiltro').value,
+    termo: $('lcBusca').value
+  });
+
+  function renderLista(){
+    if(!carregouCadastros || !carregouLancamentos){
+      $('lcListaMsg').textContent = 'Carregando...';
+      return;
+    }
+    const lista = N.filtrarLancamentos(lancamentos, filtrosAtuais())
+      .slice().sort((a, b) => String(b.data || '9999').localeCompare(String(a.data || '9999')));
+    const t = N.totaisDoFiltro(lista);
+    $('lcPendenciasBadge').innerHTML = t.pendencias
+      ? '<span class="lc-badge-pend">⚠ ' + t.pendencias + ' pendência(s)</span>' : '';
+
+    if(!lista.length){
+      $('lcLista').innerHTML = '';
+      $('lcTotais').innerHTML = '';
+      $('lcListaMsg').textContent = lancamentos.length
+        ? 'Nada com esses filtros.' : 'Nenhum lançamento neste mês ainda.';
+      return;
+    }
+    $('lcListaMsg').textContent = '';
+
+    let html = '<table class="lc-table"><thead><tr>' +
+      '<th scope="col">Data</th><th scope="col">Banco</th><th scope="col">Categoria / destino</th>' +
+      '<th scope="col">Histórico</th><th scope="col">Fornecedor</th>' +
+      '<th scope="col" style="text-align:right;">Valor</th><th scope="col">D/C</th>' +
+      '<th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>';
+    lista.forEach(l => {
+      const banco = bancos[l.bancoId] || {};
+      const alvo = l.tipo === 'transferencia'
+        ? '→ ' + ((bancos[l.bancoDestinoId] || {}).nome || '?')
+        : ((categorias[l.categoriaId] || {}).nome || '?');
+      html += '<tr' + (N.pendente(l) ? ' class="lc-pendente" title="Pendência: complete a data e o valor antes de exportar"' : '') + '>' +
+        '<td style="white-space:nowrap;">' + (l.data ? App.fmtData(l.data) : '<strong style="color:#8A6414;">sem data</strong>') + '</td>' +
+        '<td>' + escapeHtml(banco.nome || '?') + '</td>' +
+        '<td>' + escapeHtml(alvo) + '</td>' +
+        '<td>' + escapeHtml(l.historico || '') + '</td>' +
+        '<td>' + escapeHtml(l.fornecedor || '') + '</td>' +
+        '<td class="num">' + (l.valor != null ? brl(l.valor) : '<strong style="color:#8A6414;">—</strong>') + '</td>' +
+        '<td class="lc-dc">D ' + escapeHtml(l.contaDebito || '') + '<br>C ' + escapeHtml(l.contaCredito || '') + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button type="button" class="acao-mini" data-editar="' + escapeHtml(l.id) + '" title="Editar" aria-label="Editar lançamento">✏️</button> ' +
+          '<button type="button" class="acao-mini perigo" data-excluir="' + escapeHtml(l.id) + '" title="Excluir" aria-label="Excluir lançamento">🗑️</button>' +
+        '</td></tr>';
+    });
+    $('lcLista').innerHTML = html + '</tbody></table>';
+    $('lcTotais').innerHTML =
+      '<span><strong>' + t.qtd + '</strong> lançamento(s)</span>' +
+      '<span>saídas <strong>' + brl(t.saidas) + '</strong></span>' +
+      '<span>entradas <strong>' + brl(t.entradas) + '</strong></span>' +
+      (t.transferencias ? '<span>transferências <strong>' + brl(t.transferencias) + '</strong></span>' : '');
+  }
+
+  ['lcBancoFiltro', 'lcTipoFiltro', 'lcCategoriaFiltro'].forEach(id =>
+    $(id).addEventListener('change', renderLista));
+  $('lcBusca').addEventListener('input', App.debounce(renderLista, 250));
+  $('lcMesFiltro').addEventListener('change', escutarLancamentos);
+
+  App.delegar($('lcLista'), 'click', '[data-editar]', (b) => abrirEdicao(b.dataset.editar));
+  App.delegar($('lcLista'), 'click', '[data-excluir]', (b) => {
+    const l = lancamentos.find(x => x.id === b.dataset.excluir);
+    if(!l) return;
+    App.confirmar({
+      titulo: 'Excluir lançamento',
+      mensagem: (l.historico || '(sem histórico)') + '\n' +
+        (l.valor != null ? brl(l.valor) : 'sem valor') + ' · ' + (l.data ? App.fmtData(l.data) : 'sem data') +
+        '\n\nEssa ação não pode ser desfeita.',
+      confirmar: 'Excluir',
+      perigo: true
+    }).then(ok => {
+      if(!ok) return;
+      App.comAuth(() => db.collection('lancamentos').doc(l.id).delete())
+        .then(() => App.toast('Excluído.', 'ok'))
+        .catch(e => App.toastErro('Erro ao excluir', e));
+    });
+  });
+
+  // ─── Exportação ───
+  $('lcExportarBtn').addEventListener('click', async () => {
+    if(typeof XLSX === 'undefined'){
+      App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou. Verifique a internet e recarregue (F5).');
+      return;
+    }
+    const mes = $('lcMesFiltro').value;
+    const doMes = lancamentos.filter(l => l.mes === mes);
+    if(!doMes.length){ App.toast('Nenhum lançamento em ' + mes + '.', 'info'); return; }
+    // Pendência TRAVA: a numeração é contínua, não dá para reexportar
+    // "consertado" depois sem furar a sequência do contador.
+    const pend = doMes.filter(N.pendente).length;
+    if(pend){
+      App.toastErro('Exportação bloqueada', pend + ' lançamento(s) sem data ou valor. Complete as pendências (amarelas na lista) antes de exportar.');
+      return;
+    }
+    const grupos = N.agruparPorArquivo(doMes, bancos);
+    const nomes = Object.keys(grupos).map(id => N.nomeArquivo(bancos[id] || {}, mes));
+    const ok = await App.confirmar({
+      titulo: 'Exportar ' + mes + ' para o contador',
+      mensagem: doMes.length + ' lançamento(s) em ' + nomes.length + ' arquivo(s):\n' + nomes.join('\n') +
+        '\n\nOs contadores de numeração avançam e NÃO voltam — exporte uma vez só por mês.',
+      confirmar: 'Exportar'
+    });
+    if(!ok) return;
+
+    const btn = $('lcExportarBtn');
+    btn.disabled = true;
+    try{
+      // Os contadores avançam numa TRANSACTION: duas exportações ao
+      // mesmo tempo não furam a sequência.
+      const ref = db.collection('config').doc('contadoresExportacao');
+      const resultado = await App.comAuth(() => db.runTransaction(async (tx) => {
+        const doc = await tx.get(ref);
+        const c = doc.exists ? doc.data() : { proxLancamento: 1, proxLinha: 1 };
+        let cont = { lancamento: c.proxLancamento || 1, linha: c.proxLinha || 1 };
+        const arquivos = [];
+        // Ordem estável de bancos (alfabética) para a numeração ser
+        // reproduzível.
+        Object.keys(grupos).sort((a, b) =>
+          ((bancos[a] || {}).nome || a).localeCompare((bancos[b] || {}).nome || b, 'pt-BR'))
+          .forEach(id => {
+            const r = N.linhasExportacao(grupos[id], cont);
+            arquivos.push({ nome: N.nomeArquivo(bancos[id] || {}, mes), linhas: r.linhas });
+            cont = { lancamento: r.proximoLancamento, linha: r.proximaLinha };
+          });
+        tx.set(ref, { proxLancamento: cont.lancamento, proxLinha: cont.linha }, { merge: true });
+        return arquivos;
+      }));
+      resultado.forEach(a => {
+        const ws = XLSX.utils.aoa_to_sheet(a.linhas);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Lançamentos');
+        XLSX.writeFile(wb, a.nome);
+      });
+      App.toast(resultado.length + ' arquivo(s) exportado(s).', 'ok');
+      carregarContadores();
+    }catch(e){
+      App.toastErro('Erro na exportação', e);
+    }finally{
+      btn.disabled = false;
+    }
+  });
+
+  // ─── Cadastros ───
+  async function carregarContadores(){
+    try{
+      const doc = await App.comAuth(() => db.collection('config').doc('contadoresExportacao').get());
+      const c = doc.exists ? doc.data() : {};
+      $('lcProxLancamento').value = c.proxLancamento != null ? c.proxLancamento : 1;
+      $('lcProxLinha').value = c.proxLinha != null ? c.proxLinha : 1;
+    }catch(e){ $('lcContadoresMsg').textContent = 'Erro ao carregar: ' + App.erroDe(e); }
+  }
+  $('lcSalvarContadoresBtn').addEventListener('click', async () => {
+    const pl = parseInt($('lcProxLancamento').value, 10);
+    const pn = parseInt($('lcProxLinha').value, 10);
+    if(!(pl >= 1) || !(pn >= 1)){ App.toast('Os dois contadores precisam ser números a partir de 1.', 'info'); return; }
+    try{
+      await App.comAuth(() => db.collection('config').doc('contadoresExportacao')
+        .set({ proxLancamento: pl, proxLinha: pn }, { merge: true }));
+      App.toast('Contadores salvos.', 'ok');
+    }catch(e){ App.toastErro('Erro ao salvar', e); }
+  });
+
+  function renderCadastros(){
+    if(!carregouCadastros) return;
+    const linhaCad = (id, d, colExtra, attr) =>
+      '<tr>' +
+      '<td><input type="text" value="' + escapeHtml(d.nome) + '" data-' + attr + '-nome="' + escapeHtml(id) + '" aria-label="Nome"></td>' +
+      '<td><input type="text" value="' + escapeHtml(d.conta) + '" data-' + attr + '-conta="' + escapeHtml(id) + '" aria-label="Conta contábil" style="width:120px;"></td>' +
+      colExtra +
+      '<td style="text-align:center;"><input type="checkbox" data-' + attr + '-ativo="' + escapeHtml(id) + '"' +
+        (d.ativo !== false ? ' checked' : '') + ' aria-label="Ativo"></td></tr>';
+
+    $('lcCadBancos').innerHTML = '<table class="lc-table lc-cad-table"><thead><tr>' +
+      '<th scope="col">Nome</th><th scope="col">Conta</th><th scope="col">Tipo</th><th scope="col">Ativo</th></tr></thead><tbody>' +
+      Object.keys(bancos).sort((a, b) => bancos[a].nome.localeCompare(bancos[b].nome, 'pt-BR'))
+        .map(id => linhaCad(id, bancos[id],
+          '<td style="font-family:var(--font-mono); font-size:11px;">' + escapeHtml(bancos[id].tipo || '') + '</td>', 'bco'))
+        .join('') + '</tbody></table>';
+
+    $('lcCadCategorias').innerHTML = '<table class="lc-table lc-cad-table"><thead><tr>' +
+      '<th scope="col">Nome</th><th scope="col">Conta</th><th scope="col">Grupo · direção</th><th scope="col">Ativo</th></tr></thead><tbody>' +
+      Object.keys(categorias).sort((a, b) =>
+        categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
+        categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+        .map(id => linhaCad(id, categorias[id],
+          '<td style="font-family:var(--font-mono); font-size:11px;">' + escapeHtml(categorias[id].grupo) +
+          ' · ' + (categorias[id].direcao === 'entrada' ? '↓ entrada' : '↑ saída') + '</td>', 'cat'))
+        .join('') + '</tbody></table>';
+  }
+
+  function gravarCadastro(colecao, id, campos){
+    App.comAuth(() => db.collection(colecao).doc(id).set(campos, { merge: true }))
+      .catch(e => App.toastErro('Erro ao gravar', e));
+  }
+  App.delegar($('lcCadBancos'), 'change', '[data-bco-nome]', (i) => gravarCadastro('bancos', i.dataset.bcoNome, { nome: i.value.trim() }));
+  App.delegar($('lcCadBancos'), 'change', '[data-bco-conta]', (i) => gravarCadastro('bancos', i.dataset.bcoConta, { conta: i.value.trim() }));
+  App.delegar($('lcCadBancos'), 'change', '[data-bco-ativo]', (i) => gravarCadastro('bancos', i.dataset.bcoAtivo, { ativo: i.checked }));
+  App.delegar($('lcCadCategorias'), 'change', '[data-cat-nome]', (i) => gravarCadastro('categorias', i.dataset.catNome, { nome: i.value.trim() }));
+  App.delegar($('lcCadCategorias'), 'change', '[data-cat-conta]', (i) => gravarCadastro('categorias', i.dataset.catConta, { conta: i.value.trim() }));
+  App.delegar($('lcCadCategorias'), 'change', '[data-cat-ativo]', (i) => gravarCadastro('categorias', i.dataset.catAtivo, { ativo: i.checked }));
+
+  // ─── Escutas e seed ───
+  function escutarLancamentos(){
+    if(pararLancamentos) pararLancamentos();
+    const mes = $('lcMesFiltro').value || mesAtual();
+    carregouLancamentos = false;
+    renderLista();
+    pararLancamentos = db.collection('lancamentos').where('mes', '==', mes)
+      .onSnapshot(snap => {
+        lancamentos = [];
+        snap.forEach(doc => lancamentos.push({ id: doc.id, ...doc.data() }));
+        carregouLancamentos = true;
+        renderLista();
+      }, e => {
+        console.error(e);
+        setStatus(App.ehPermissaoNegada(e)
+          ? 'Acesso negado — as regras das coleções de lançamentos já foram publicadas no Console?'
+          : 'Erro: ' + App.erroDe(e));
+      });
+  }
+
+  // Primeira carga: coleções vazias ganham o seed (acentuação já
+  // corrigida no núcleo). Roda uma vez e nunca sobrescreve cadastro.
+  async function semearSePreciso(){
+    const bSnap = await App.comAuth(() => db.collection('bancos').limit(1).get());
+    if(bSnap.empty){
+      const batch = db.batch();
+      Object.keys(N.SEED_BANCOS).forEach(id => batch.set(db.collection('bancos').doc(id), N.SEED_BANCOS[id]));
+      await App.comAuth(() => batch.commit());
+    }
+    const cSnap = await App.comAuth(() => db.collection('categorias').limit(1).get());
+    if(cSnap.empty){
+      const batch = db.batch();
+      Object.keys(N.SEED_CATEGORIAS).forEach(id => batch.set(db.collection('categorias').doc(id), N.SEED_CATEGORIAS[id]));
+      await App.comAuth(() => batch.commit());
+    }
+  }
+
+  let iniciando = false;
+  function iniciar(){
+    if(iniciando) return;
+    iniciando = true;
+    setStatus('Conectando ao Firebase...');
+    App.iniciarFirebase('lancamentos').then(r => {
+      db = r.db;
+      App.montarBarraConta($('lcContaBarra'));
+      setStatus('Verificando acesso...');
+      return App.exigirLogin();
+    }).then(() => semearSePreciso()).then(() => {
+      setStatus('Pronto · atualiza sozinho');
+      db.collection('bancos').onSnapshot(snap => {
+        bancos = {};
+        snap.forEach(doc => { bancos[doc.id] = doc.data(); });
+        carregouCadastros = true;
+        montarSelects();
+        renderCadastros();
+        renderLista();
+      });
+      db.collection('categorias').onSnapshot(snap => {
+        categorias = {};
+        snap.forEach(doc => { categorias[doc.id] = doc.data(); });
+        carregouCadastros = true;
+        montarSelects();
+        renderCadastros();
+        renderLista();
+      });
+      escutarLancamentos();
+      carregarContadores();
+    }).catch(e => {
+      setStatus('Erro ao iniciar: ' + App.erroDe(e));
+      App.toastErro('Erro ao iniciar', e);
+    }).then(() => { iniciando = false; });
+  }
+  window.__aoEntrar = () => { renderLista(); };
+
+  $('lcData').value = App.hojeISO();
+  $('lcMesFiltro').value = mesAtual();
+  renderLista();
+  iniciar();
+})();
+</script>
+</body>
+</html>

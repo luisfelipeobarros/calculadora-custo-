@@ -7,6 +7,7 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, notas canceladas |
 | `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
+| `lancamentos.html` | Lançamentos contábeis + exportação para o contador |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
 | `app-shared.css` | Design system comum aos apps |
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
@@ -196,7 +197,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São dezenove etapas, em quinze frentes:
+Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -317,6 +318,19 @@ Não precisa instalar nada. São dezenove etapas, em quinze frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
+16. **Lançamentos contábeis** — 44 verificações em
+    `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
+    (saída = D categoria / C banco; entrada = D banco / C categoria;
+    transferência = D destino / C origem — dado faltando não monta
+    partida pela metade), pendência (sem data ou valor **trava a
+    exportação**, que estoura em vez de queimar numeração com linha
+    lixo), em qual arquivo a transferência sai (**banco de movimento**,
+    como na amostra real do contador; empate fica na origem), o layout
+    de 19 colunas (sem cabeçalho, duas linhas por lançamento com D
+    primeiro, nº com 8 dígitos, histórico em maiúsculas, contadores
+    das colunas 1 e 19 **contínuos entre exportações**) e os seeds com
+    a acentuação corrigida (os JSONs de origem vieram com UTF-8 lido
+    como Latin-1).
 
 Rode antes de publicar qualquer alteração.
 

@@ -130,6 +130,23 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
+    // Lancamentos contabeis (lancamentos.html): bancos e categorias
+    // (seed + cadastro), os lancamentos com as partidas montadas pelo
+    // app e o doc de config com os contadores continuos da exportacao
+    // (config/contadoresExportacao). Colecoes proprias do app.
+    match /bancos/{id} {
+      allow read, write: if autenticado();
+    }
+    match /categorias/{id} {
+      allow read, write: if autenticado();
+    }
+    match /lancamentos/{id} {
+      allow read, write: if autenticado();
+    }
+    match /config/{id} {
+      allow read, write: if autenticado();
+    }
+
     // Metas mensais do Painel da Calculadora (um documento por mes,
     // id 'aaaa-mm'): objetivo de vendas, feriados e o faturamento
     // acumulado lancado a mao. Tudo digitado pelos proprios usuarios;

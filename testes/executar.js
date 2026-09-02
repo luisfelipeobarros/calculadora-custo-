@@ -4,9 +4,9 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao dezenove etapas, em
-  quinze frentes (a lista canonica, com o que cada uma cobre, esta'
-  no README, secao "Rodando os testes"):
+  Nao precisa instalar nada — so' o Node. Sao vinte e duas etapas,
+  em dezesseis frentes (a lista canonica, com o que cada uma cobre,
+  esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
@@ -32,6 +32,9 @@
                          de desatualizacao por fabricante.
   - assistencias.js    — app de assistencias/reclamacoes: resumo,
                          filtro, duplicidade de sequencia e exportacao.
+  - lancamentos.js     — lancamentos contabeis: partidas dobradas,
+                         pendencias, arquivo da transferencia e o
+                         layout de 19 colunas do contador.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -44,9 +47,11 @@ const etapas = [
   ['Estrutura: index.html', 'validar-html.js', ['index.html']],
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
   ['Estrutura: assistencias.html', 'validar-html.js', ['assistencias.html']],
+  ['Estrutura: lancamentos.html', 'validar-html.js', ['lancamentos.html']],
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
   ['Carga em DOM: assistencias.html', 'carregar-em-dom.js', ['assistencias.html']],
+  ['Carga em DOM: lancamentos.html', 'carregar-em-dom.js', ['lancamentos.html']],
   ['Helpers de app-shared.js', 'helpers.js', []],
   ['Roteador de telas', 'router.js', []],
   ['Regras da tela de cotacao', 'cotacao.js', ['index.html']],
@@ -58,7 +63,8 @@ const etapas = [
   ['DANFE simplificado', 'danfe.js', []],
   ['Fiscal (NCM & ST)', 'fiscal.js', []],
   ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
-  ['Assistencias e reclamacoes', 'assistencias.js', []]
+  ['Assistencias e reclamacoes', 'assistencias.js', []],
+  ['Lancamentos contabeis', 'lancamentos.js', []]
 ];
 
 let falhou = 0;
