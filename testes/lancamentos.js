@@ -53,23 +53,31 @@ eq('tipo desconhecido nao monta', L.montarPartidas('zzz', bradesco, combustivel,
 
 // ── Pendencia ────────────────────────────────────────────────
 
-eq('sem data e pendente', L.pendente({ valor: 10 }), true);
-eq('sem valor e pendente', L.pendente({ data: '2026-07-06' }), true);
+const completo = { data: '2026-07-06', valor: 90.88,
+  contaDebito: '4.2.1.1.0036', contaCredito: '1.1.1.2.0001' };
+eq('sem data e pendente', L.pendente(Object.assign({}, completo, { data: null })), true);
+eq('sem valor e pendente', L.pendente(Object.assign({}, completo, { valor: null })), true);
 eq('valor zero e pendente (nao ha lancamento de zero)',
-  L.pendente({ data: '2026-07-06', valor: 0 }), true);
-eq('com data e valor nao e pendente', L.pendente({ data: '2026-07-06', valor: 90.88 }), false);
+  L.pendente(Object.assign({}, completo, { valor: 0 })), true);
+eq('sem a partida montada e pendente (pagamento sem conta mapeada)',
+  L.pendente({ data: '2026-07-06', valor: 90.88 }), true);
+eq('completo nao e pendente', L.pendente(completo), false);
 
 // ── Filtro e totais ──────────────────────────────────────────
 
 const lista = [
   { id: 'a', mes: '2026-07', data: '2026-07-06', valor: 90.88, tipo: 'saida',
-    bancoId: 'bradesco', categoriaId: 'agua', historico: 'Valor ref a Compesa', fornecedor: 'Compesa' },
+    bancoId: 'bradesco', categoriaId: 'agua', historico: 'Valor ref a Compesa', fornecedor: 'Compesa',
+    contaDebito: '4.2.1.1.0036', contaCredito: '1.1.1.2.0001' },
   { id: 'b', mes: '2026-07', data: '2026-07-01', valor: 174673, tipo: 'transferencia',
-    bancoId: 'pagueveloz', bancoDestinoId: 'bradesco', historico: 'Transf PagueVeloz/Bradesco' },
+    bancoId: 'pagueveloz', bancoDestinoId: 'bradesco', historico: 'Transf PagueVeloz/Bradesco',
+    contaDebito: '1.1.1.2.0001', contaCredito: '1.1.1.4.0006' },
   { id: 'c', mes: '2026-07', data: null, valor: null, tipo: 'saida',
-    bancoId: 'bradesco', categoriaId: 'energia', historico: 'Conta de luz Neo Energia' },
+    bancoId: 'bradesco', categoriaId: 'energia', historico: 'Conta de luz Neo Energia',
+    contaDebito: '4.2.1.1.0034', contaCredito: '1.1.1.2.0001' },
   { id: 'd', mes: '2026-08', data: '2026-08-02', valor: 50, tipo: 'entrada',
-    bancoId: 'itau', categoriaId: 'receb_clientes', historico: 'Recebimento' }
+    bancoId: 'itau', categoriaId: 'receb_clientes', historico: 'Recebimento',
+    contaDebito: '1.1.1.2.0002', contaCredito: '1.1.2.1.0001' }
 ];
 
 eq('filtro por mes', L.filtrarLancamentos(lista, { mes: '2026-07' }).length, 3);
@@ -146,6 +154,80 @@ eq('nome com acento preservado',
   try{ L.linhasExportacao([{ historico: 'sem data' }], { lancamento: 1, linha: 1 }); }
   catch(e){ estourou = true; }
   eq('lancamento pendente na exportacao estoura, nunca exporta lixo', estourou, true);
+}
+
+// ── Pagamento do Controle de Notas vira lancamento ───────────
+
+const mapa = { fornecedor: 'forn_mercadoria', juros: 'juros',
+  internas: { folha: 'salarios' } };
+const bancosPag = { bradesco: { conta: '1.1.1.2.0001', tipo: 'movimento' } };
+const categoriasPag = {
+  forn_mercadoria: { conta: '2.1.1.1.0001' },
+  juros: { conta: '4.2.4.1.0002' },
+  salarios: { conta: '2.1.4.1.0001' }
+};
+
+{
+  // Duplicata de 1.000 paga com 1.030: principal + juros de 30.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'fornecedor', id: 'ABC1', data: '2026-09-02', valor: 1000,
+    valorPago: 1030, bancoId: 'bradesco',
+    historico: 'PAGTO CERBRAS NF 375912', fornecedor: 'CERBRAS', numeroDoc: '375912'
+  }, mapa, bancosPag, categoriasPag);
+  eq('paga com juros: DOIS lancamentos', docs.length, 2);
+  eq('ids DETERMINISTICOS (pagar de novo nao duplica; desfazer sabe o que apagar)',
+    docs.map(d => d.id), ['dup_ABC1', 'jurosdup_ABC1']);
+  eq('principal: valor da DIVIDA e partida D fornecedor / C banco',
+    [docs[0].doc.valor, docs[0].doc.contaDebito, docs[0].doc.contaCredito],
+    [1000, '2.1.1.1.0001', '1.1.1.2.0001']);
+  eq('juros: a DIFERENCA, na conta de juros',
+    [docs[1].doc.valor, docs[1].doc.contaDebito, docs[1].doc.historico],
+    [30, '4.2.4.1.0002', 'JUROS PAGTO CERBRAS NF 375912']);
+  eq('mes derivado da data do pagamento', docs[0].doc.mes, '2026-09');
+  eq('origem gravada para rastreio', docs[0].doc.origemId, 'dup_ABC1');
+}
+{
+  // Interno mapeado (folha -> salarios), pago sem juros: um doc so'.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'interno', id: 'X9', data: '2026-09-05', valor: 5000,
+    valorPago: 5000, bancoId: 'bradesco',
+    historico: 'PAGTO FOLHA', categoriaInterna: 'folha'
+  }, mapa, bancosPag, categoriasPag);
+  eq('interno sem juros: um lancamento (int_)', docs.map(d => d.id), ['int_X9']);
+  eq('categoria interna mapeada -> conta de salarios',
+    docs[0].doc.contaDebito, '2.1.4.1.0001');
+}
+{
+  // Sem mapa/banco o PAGAMENTO nao trava: o doc nasce sem partida e
+  // fica pendente no app de Lancamentos.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'interno', id: 'Y1', data: '2026-09-05', valor: 100,
+    valorPago: 100, bancoId: null,
+    historico: 'PAGTO SEGURANCA', categoriaInterna: 'seguranca'
+  }, mapa, bancosPag, categoriasPag);
+  eq('sem mapa: doc criado SEM partida', [docs[0].doc.contaDebito, docs[0].doc.contaCredito], [null, null]);
+  eq('  ...e por isso pendente (a exportacao barra)', L.pendente(docs[0].doc), true);
+}
+{
+  // Sujeira de float no valor pago nao inventa juros de meio centavo.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'fornecedor', id: 'Z', data: '2026-09-02', valor: 1000,
+    valorPago: 1000.004, bancoId: 'bradesco', historico: 'PAGTO X'
+  }, mapa, bancosPag, categoriasPag);
+  eq('diferenca que arredonda para zero nao vira juros', docs.length, 1);
+}
+
+// As categorias internas espelhadas aqui TEM que existir no
+// controle-notas.html — se uma categoria mudar la', este teste grita.
+{
+  const fs = require('fs');
+  const path = require('path');
+  const htmlControle = fs.readFileSync(path.resolve(__dirname, '..', 'controle-notas.html'), 'utf8');
+  const sumidas = L.CATEGORIAS_CONTROLE
+    .map(c => c.valor)
+    .filter(v => htmlControle.indexOf("valor: '" + v + "'") === -1);
+  eq('todas as categorias do espelho existem no controle-notas.html',
+    sumidas.join(',') || 'nenhuma sumida', 'nenhuma sumida');
 }
 
 // ── Seeds com acentuacao corrigida ───────────────────────────

@@ -172,6 +172,18 @@
       <div class="empty-note" id="lcContadoresMsg" style="display:block;"></div>
     </div>
 
+    <!-- O pagamento marcado no Controle de Notas vira lançamento aqui
+         sozinho; este mapa diz QUAL categoria contábil cada tipo de
+         pagamento usa. Sem mapa, o lançamento chega pendente. -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Mapa de contas — pagamentos do Controle de Notas</h2>
+      <p class="nota-explicativa">
+        Fornecedor, juros e cada categoria de pagamento interno apontam para uma categoria
+        contábil deste app. Pagamento sem mapa chega como pendência amarela na lista.
+      </p>
+      <div class="tabela-rolavel" id="lcMapaContas"></div>
+    </div>
+
     <div class="card" style="margin-top:16px;">
       <h2>Bancos</h2>
       <div class="tabela-rolavel" id="lcCadBancos"></div>
@@ -192,8 +204,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=21"></script>
-<script src="lancamentos-nucleo.js?v=1"></script>
+<script src="app-shared.js?v=22"></script>
+<script src="lancamentos-nucleo.js?v=2"></script>
 <script>
 (() => {
   'use strict';
@@ -442,7 +454,8 @@
         '<td style="white-space:nowrap;">' + (l.data ? App.fmtData(l.data) : '<strong style="color:#8A6414;">sem data</strong>') + '</td>' +
         '<td>' + escapeHtml(banco.nome || '?') + '</td>' +
         '<td>' + escapeHtml(alvo) + '</td>' +
-        '<td>' + escapeHtml(l.historico || '') + '</td>' +
+        '<td>' + escapeHtml(l.historico || '') +
+          (l.origemId ? ' <span title="Criado pelo pagamento no Controle de Notas" style="font-size:10px;">🔗</span>' : '') + '</td>' +
         '<td>' + escapeHtml(l.fornecedor || '') + '</td>' +
         '<td class="num">' + (l.valor != null ? brl(l.valor) : '<strong style="color:#8A6414;">—</strong>') + '</td>' +
         '<td class="lc-dc">D ' + escapeHtml(l.contaDebito || '') + '<br>C ' + escapeHtml(l.contaCredito || '') + '</td>' +
@@ -567,8 +580,57 @@
     }catch(e){ App.toastErro('Erro ao salvar', e); }
   });
 
+  // ─── Mapa de contas dos pagamentos do Controle de Notas ───
+  let mapaContas = null; // config/contasContabeis: {fornecedor, juros, internas:{}}
+
+  async function carregarMapaContas(){
+    try{
+      const doc = await App.comAuth(() => db.collection('config').doc('contasContabeis').get());
+      mapaContas = doc.exists ? doc.data() : {};
+      renderMapaContas();
+    }catch(e){ console.error(e); }
+  }
+
+  function renderMapaContas(){
+    if(!carregouCadastros || mapaContas === null) return;
+    const opcoes = (selecionado) => '<option value="">— sem mapa (fica pendente) —</option>' +
+      Object.keys(categorias).sort((a, b) =>
+        categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
+        categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+        .map(id => '<option value="' + escapeHtml(id) + '"' + (id === selecionado ? ' selected' : '') + '>' +
+          escapeHtml(categorias[id].grupo + ' · ' + categorias[id].nome) + '</option>').join('');
+    const linha = (rotulo, chave, selecionado) =>
+      '<tr><td>' + escapeHtml(rotulo) + '</td>' +
+      '<td><select data-mapa="' + escapeHtml(chave) + '" aria-label="Categoria contábil de ' + escapeHtml(rotulo) + '"' +
+      ' style="width:100%; padding:6px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:12px; background:#fff; color:var(--ink);">' +
+      opcoes(selecionado) + '</select></td></tr>';
+
+    let html = '<table class="lc-table"><thead><tr>' +
+      '<th scope="col">Pagamento</th><th scope="col">Categoria contábil</th></tr></thead><tbody>';
+    html += linha('Juros (valor pago acima do devido)', 'juros', mapaContas.juros || '');
+    N.CATEGORIAS_CONTROLE.forEach(c => {
+      html += c.valor === 'fornecedor'
+        ? linha(c.rotulo, 'fornecedor', mapaContas.fornecedor || '')
+        : linha('Interno · ' + c.rotulo, 'interna:' + c.valor, (mapaContas.internas || {})[c.valor] || '');
+    });
+    $('lcMapaContas').innerHTML = html + '</tbody></table>';
+  }
+
+  App.delegar($('lcMapaContas'), 'change', '[data-mapa]', (sel) => {
+    const chave = sel.dataset.mapa;
+    const valor = sel.value || null;
+    const campos = chave.startsWith('interna:')
+      ? { internas: Object.assign({}, mapaContas.internas, { [chave.substring(8)]: valor }) }
+      : { [chave]: valor };
+    mapaContas = Object.assign({}, mapaContas, campos);
+    App.comAuth(() => db.collection('config').doc('contasContabeis').set(campos, { merge: true }))
+      .then(() => App.toast('Mapa salvo.', 'ok'))
+      .catch(e => App.toastErro('Erro ao salvar o mapa', e));
+  });
+
   function renderCadastros(){
     if(!carregouCadastros) return;
+    renderMapaContas();
     const linhaCad = (id, d, colExtra, attr) =>
       '<tr>' +
       '<td><input type="text" value="' + escapeHtml(d.nome) + '" data-' + attr + '-nome="' + escapeHtml(id) + '" aria-label="Nome"></td>' +
@@ -673,6 +735,7 @@
       });
       escutarLancamentos();
       carregarContadores();
+      carregarMapaContas();
     }).catch(e => {
       setStatus('Erro ao iniciar: ' + App.erroDe(e));
       App.toastErro('Erro ao iniciar', e);

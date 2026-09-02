@@ -1504,13 +1504,13 @@
      Exporta
      ============================================================ */
 
-  // So' entra aqui o que algum dos dois apps (ou os testes) realmente
-  // usa. num, norm, abrirModal, iniciarAuth, authPronto, sair, usuario e
-  // aoMudarUsuario existem e sao usados INTERNAMENTE — por
-  // tabelaItensNota, rotularFornecedor, confirmar/avisar/pedirLogin,
-  // iniciarFirebase, exigirLogin e montarBarraConta. Estavam exportados
-  // sem nenhum consumidor de fora; se um dia algum app precisar, e' so'
-  // devolver.
+  // So' entra aqui o que algum dos apps (ou os testes) realmente usa.
+  // num, norm, iniciarAuth, authPronto, sair, usuario e aoMudarUsuario
+  // existem e sao usados INTERNAMENTE — por tabelaItensNota,
+  // rotularFornecedor, confirmar/avisar/pedirLogin, iniciarFirebase,
+  // exigirLogin e montarBarraConta. abrirModal foi exportado em
+  // 02/09/2026: o dialogo de pagamento do Controle de Notas (data +
+  // banco + valor + observacao) e' um modal proprio.
   global.App = {
     FIREBASE_CONFIG: FIREBASE_CONFIG,
     DEBOUNCE_BUSCA: DEBOUNCE_BUSCA,
@@ -1545,6 +1545,7 @@
     confirmar: confirmar,
     pedirData: pedirData,
     pedirTexto: pedirTexto,
+    abrirModal: abrirModal,
     avisar: avisar,
 
     iniciarFirebase: iniciarFirebase,

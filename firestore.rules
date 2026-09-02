@@ -56,6 +56,11 @@ service cloud.firestore {
         || (request.resource.data[campo] is string
             && request.resource.data[campo].size() <= tamanhoMax);
     }
+    function numeroValido(campo) {
+      return !mudou(campo)
+        || request.resource.data.get(campo, null) == null
+        || request.resource.data[campo] is number;
+    }
 
     // ------------------------------------------------------------
     // Colecoes alimentadas pelo Apps Script (importacao de XML).
@@ -90,10 +95,13 @@ service cloud.firestore {
       allow create, delete: if false;
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento', 'obsPagamento'])
+             .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento', 'obsPagamento',
+                       'bancoPagamento', 'valorPago'])
         && boolValido('pago')
         && boolValido('pagoEmLote')
         && textoValido('obsPagamento', 200)
+        && textoValido('bancoPagamento', 40)
+        && numeroValido('valorPago')
         && dataISOValida('dataPagamento')
         && dataISOValida('vencimento');
     }

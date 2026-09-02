@@ -121,15 +121,108 @@
     return null;
   }
 
-  // Pendência = não pode ir para o contador. Sem data válida ou sem
-  // valor positivo, o lançamento fica amarelo na lista e TRAVA a
-  // exportação do mês (a numeração contínua não permite reexportar
-  // "consertado" depois).
+  // Pendência = não pode ir para o contador. Sem data válida, sem
+  // valor positivo OU sem a partida montada (acontece quando um
+  // pagamento chega do Controle de Notas sem a conta mapeada), o
+  // lançamento fica amarelo na lista e TRAVA a exportação do mês (a
+  // numeração contínua não permite reexportar "consertado" depois).
   function pendente(l) {
     if (!l) return true;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(l.data || ''))) return true;
     if (l.valor == null || !(l.valor > 0)) return true;
+    if (!l.contaDebito || !l.contaCredito) return true;
     return false;
+  }
+
+  /* ============================================================
+     2b. Pagamentos vindos do Controle de Notas
+     ============================================================ */
+
+  // As categorias de pagamento interno do Controle de Notas, para o
+  // mapa de contas dos Cadastros. E' um ESPELHO da lista de la' —
+  // um teste textual confere que cada valor continua existindo no
+  // controle-notas.html (se uma categoria mudar la', o teste grita).
+  var CATEGORIAS_CONTROLE = [
+    { valor: 'fornecedor', rotulo: 'Fornecedor (duplicatas)' },
+    { valor: 'advogada', rotulo: 'Advogada' },
+    { valor: 'a-lf-pa', rotulo: 'A LF PA' },
+    { valor: 'agencia-t1-mkt', rotulo: 'Agência T1 MKT' },
+    { valor: 'almocos', rotulo: 'Almoços' },
+    { valor: 'contador', rotulo: 'Contador' },
+    { valor: 'diarias', rotulo: 'Diárias' },
+    { valor: 'diego', rotulo: 'Diego' },
+    { valor: 'empilhadeiras', rotulo: 'Empilhadeiras' },
+    { valor: 'emprestimos', rotulo: 'Empréstimos' },
+    { valor: 'energia', rotulo: 'Energia' },
+    { valor: 'estacionamentos', rotulo: 'Estacionamentos' },
+    { valor: 'folha', rotulo: 'Folha de Pagamento' },
+    { valor: 'gilson', rotulo: 'Gilson' },
+    { valor: 'imposto-mensal', rotulo: 'Imposto Mensal' },
+    { valor: 'impostos-folha', rotulo: 'Impostos Folha' },
+    { valor: 'parcelamentos-imposto', rotulo: 'Parcelamentos Imposto' },
+    { valor: 'moab', rotulo: 'Moab' },
+    { valor: 'passagens', rotulo: 'Passagens' },
+    { valor: 'policiais', rotulo: 'Policiais' },
+    { valor: 'seguranca', rotulo: 'Segurança' },
+    { valor: 'trafego-pago', rotulo: 'Tráfego Pago' },
+    { valor: 'vem', rotulo: 'VEM' },
+    { valor: 'vr', rotulo: 'VR' },
+    { valor: 'outro', rotulo: 'Outros' }
+  ];
+
+  // Um pagamento marcado no Controle de Notas vira lançamento(s) aqui
+  // — com ID DETERMINÍSTICO: pagar duas vezes não duplica, e desfazer
+  // o pagamento sabe exatamente o que apagar.
+  //
+  // pag: { tipo: 'fornecedor'|'interno', id, data ('aaaa-mm-dd'),
+  //        valor (o da divida), valorPago (o que passou no banco),
+  //        bancoId, historico, fornecedor?, numeroDoc?,
+  //        categoriaInterna? (so' interno) }
+  // mapa (config/contasContabeis): { fornecedor: categoriaId,
+  //        juros: categoriaId, internas: { folha: categoriaId, ... } }
+  //
+  // Devolve [{ id, doc }]: o principal e, se valorPago > valor, um
+  // segundo lançamento com a DIFERENÇA como juros. Mapa ou banco
+  // faltando NÃO impede o pagamento: o doc sai sem partida e vira
+  // pendência amarela aqui no app — quem entende de conta resolve.
+  function lancamentosDePagamento(pag, mapa, bancos, categorias) {
+    var m = mapa || {};
+    var catId = pag.tipo === 'fornecedor'
+      ? (m.fornecedor || null)
+      : ((m.internas || {})[pag.categoriaInterna] || null);
+    var banco = (bancos || {})[pag.bancoId] || null;
+    var prefixo = (pag.tipo === 'fornecedor' ? 'dup_' : 'int_') + pag.id;
+
+    function docDe(valor, categoriaId, historico) {
+      var categoria = categoriaId ? (categorias || {})[categoriaId] : null;
+      var partida = montarPartidas('saida', banco, categoria, null);
+      return {
+        data: pag.data || null,
+        valor: valor,
+        bancoId: pag.bancoId || null,
+        tipo: 'saida',
+        categoriaId: categoriaId,
+        bancoDestinoId: null,
+        historico: historico,
+        fornecedor: pag.fornecedor || null,
+        numeroDoc: pag.numeroDoc || null,
+        contaDebito: partida ? partida.debito : null,
+        contaCredito: partida ? partida.credito : null,
+        mes: String(pag.data || '').substring(0, 7) || null,
+        origemId: prefixo
+      };
+    }
+
+    var docs = [{ id: prefixo, doc: docDe(pag.valor, catId, pag.historico) }];
+    var juros = (pag.valorPago != null && pag.valor != null)
+      ? App.centavos(pag.valorPago - pag.valor) : 0;
+    if (juros > 0) {
+      docs.push({
+        id: 'juros' + prefixo,
+        doc: docDe(juros, m.juros || null, 'JUROS ' + (pag.historico || ''))
+      });
+    }
+    return docs;
   }
 
   /* ============================================================
@@ -271,6 +364,8 @@
     SEED_CATEGORIAS: SEED_CATEGORIAS,
     montarPartidas: montarPartidas,
     pendente: pendente,
+    CATEGORIAS_CONTROLE: CATEGORIAS_CONTROLE,
+    lancamentosDePagamento: lancamentosDePagamento,
     filtrarLancamentos: filtrarLancamentos,
     totaisDoFiltro: totaisDoFiltro,
     bancoDoArquivo: bancoDoArquivo,

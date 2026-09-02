@@ -318,7 +318,7 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-16. **Lançamentos contábeis** — 44 verificações em
+16. **Lançamentos contábeis** — 57 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
     transferência = D destino / C origem — dado faltando não monta
@@ -328,9 +328,14 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     como na amostra real do contador; empate fica na origem), o layout
     de 19 colunas (sem cabeçalho, duas linhas por lançamento com D
     primeiro, nº com 8 dígitos, histórico em maiúsculas, contadores
-    das colunas 1 e 19 **contínuos entre exportações**) e os seeds com
+    das colunas 1 e 19 **contínuos entre exportações**), os seeds com
     a acentuação corrigida (os JSONs de origem vieram com UTF-8 lido
-    como Latin-1).
+    como Latin-1) e a ponte com o Controle de Notas: **pagamento vira
+    lançamento** com id determinístico (pagar de novo não duplica;
+    desfazer sabe o que apagar), valor pago acima do devido vira
+    **juros** em lançamento próprio, sem mapa de conta o doc nasce
+    pendente (nunca trava o pagamento), e o espelho das categorias
+    internas é conferido **textualmente** contra o controle-notas.html.
 
 Rode antes de publicar qualquer alteração.
 
