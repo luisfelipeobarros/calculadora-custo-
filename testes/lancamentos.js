@@ -216,6 +216,16 @@ const categoriasPag = {
   }, mapa, bancosPag, categoriasPag);
   eq('diferenca que arredonda para zero nao vira juros', docs.length, 1);
 }
+{
+  // Pago MENOS que o devido (desconto negociado): o que conta para o
+  // extrato e' o que SAIU do banco — o principal e' o valor pago.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'fornecedor', id: 'D1', data: '2026-09-02', valor: 1000,
+    valorPago: 950, bancoId: 'bradesco', historico: 'PAGTO COM DESCONTO'
+  }, mapa, bancosPag, categoriasPag);
+  eq('desconto: um lancamento so, com o valor que saiu do banco',
+    [docs.length, docs[0].doc.valor], [1, 950]);
+}
 
 // As categorias internas espelhadas aqui TEM que existir no
 // controle-notas.html — se uma categoria mudar la', este teste grita.

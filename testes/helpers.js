@@ -74,6 +74,20 @@ conferir('toNum decimal', App.toNum('12.5'), 12.5);
 // --- datas: a aritmetica que decide atraso e vencimento ---
 conferir('fmtData ISO', App.fmtData('2026-07-27'), '27/07/2026');
 conferir('fmtData vazia', App.fmtData(''), '--');
+// O fallback ESCAPADO: fmtData e' interpolado direto em innerHTML em
+// ~10 pontos dos apps — valor fora do padrao nao pode voltar cru.
+conferir('fmtData com lixo volta ESCAPADO (fecha o furo de XSS)',
+  App.fmtData('<img src=x>'), '&lt;img src=x&gt;');
+
+// --- dinheiro a brasileira (campos de valor grande) ---
+// parseNumeroBR mantem "1.234" = 1,234 de proposito (precos unitarios
+// de fornecedor); parseDinheiroBR le "1.234" como milhar — e' ele que
+// os campos de DINHEIRO usam (o bug corrompia >= 1000 nas assistencias).
+conferir('parseDinheiroBR 25.000 = vinte e cinco mil', App.parseDinheiroBR('25.000'), 25000);
+conferir('parseDinheiroBR com R$', App.parseDinheiroBR('R$ 2.500.000'), 2500000);
+conferir('parseDinheiroBR com centavos nao muda', App.parseDinheiroBR('1.234,56'), 1234.56);
+conferir('parseDinheiroBR decimal simples nao muda', App.parseDinheiroBR('64.9'), 64.9);
+conferir('parseDinheiroBR nulo', App.parseDinheiroBR(null), null);
 conferir('somarDias vira o mes', App.somarDias('2026-01-31', 1), '2026-02-01');
 conferir('somarDias ano bissexto', App.somarDias('2028-02-28', 1), '2028-02-29');
 conferir('somarDias nao bissexto', App.somarDias('2026-02-28', 1), '2026-03-01');

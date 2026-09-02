@@ -213,7 +213,7 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 89 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 95 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -295,7 +295,7 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     de cadastro (`grupoCadastravel`), que espelha o regex do
     `firestore.rules`: item sem NCM ou UF desconhecida não ganha
     formulário, senão o salvamento morreria em permission-denied.
-14. **Concorrentes em lote (planilha)** — 33 verificações em
+14. **Concorrentes em lote (planilha)** — 37 verificações em
     `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
     ordem/acento/caixa, preço com sujeira de float → centavos inteiros,
     linha ruim **contada com motivo**, nunca engolida), a consulta de
@@ -306,7 +306,7 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 35 verificações em
+15. **Assistências e reclamações** — 44 verificações em
     `assistencias-nucleo.js`: as listas de status/causa/solução e a cor
     do badge (status desconhecido cai no **vermelho**, nunca parece
     resolvido), o resumo dos cartões (em aberto = tudo que não está
@@ -318,7 +318,7 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-16. **Lançamentos contábeis** — 57 verificações em
+16. **Lançamentos contábeis** — 58 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
     transferência = D destino / C origem — dado faltando não monta

@@ -60,6 +60,11 @@
       for (var i = 0; i < CAMPOS_CATALOGO.length; i++) {
         var campo = CAMPOS_CATALOGO[i][0];
         if (map[campo] !== -1) continue;
+        // Sinonimo guloso pegava a coluna errada: "Código de Barras"
+        // virava a chave do catalogo e "Preço de Custo" virava o preco
+        // de venda. As duas exclusoes fecham os casos reais.
+        if (campo === 'codigo' && texto.indexOf('barra') !== -1) continue;
+        if (campo === 'preco' && texto.indexOf('custo') !== -1) continue;
         var bate = CAMPOS_CATALOGO[i][1].some(function (p) { return texto.indexOf(p) !== -1; });
         if (bate) { map[campo] = idx; break; }
       }
@@ -67,11 +72,14 @@
     return map;
   }
 
-  // '64.900000000000006' -> 6490; '36,90' -> 3690. Arredonda para 2
-  // casas ANTES de virar centavo — a sujeira de float da planilha
-  // morre aqui e o resto do fluxo so' ve inteiro.
+  // '64.900000000000006' -> 6490; '36,90' -> 3690; '1.234' (milhar a
+  // brasileira, sem centavos) -> 123400. Arredonda para 2 casas ANTES
+  // de virar centavo — a sujeira de float da planilha morre aqui e o
+  // resto do fluxo so' ve inteiro. parseDinheiroBR, nao parseNumeroBR:
+  // preco de VENDA formatado como "1.234" e' mil e pouco, nao R$ 1,23
+  // (auditoria de 02/09/2026).
   function precoParaCentavos(v) {
-    var n = App.parseNumeroBR(v);
+    var n = App.parseDinheiroBR(v);
     if (n == null || !(n > 0)) return null;
     return Math.round(n * 100);
   }
@@ -110,6 +118,7 @@
     }
 
     var itens = [], ignoradas = [];
+    var codigosVistos = Object.create(null);
     for (var r = headerIdx + 1; r < rows.length; r++) {
       var row = rows[r];
       if (!row || row.every(function (c) { return c === '' || c == null; })) continue;
@@ -120,6 +129,11 @@
       if (!nome) { ignoradas.push({ linha: linhaHumana, motivo: 'sem nome' }); continue; }
       if (precoCent == null) { ignoradas.push({ linha: linhaHumana, motivo: 'sem preço', nome: nome }); continue; }
       if (!codigo) { ignoradas.push({ linha: linhaHumana, motivo: 'sem código', nome: nome }); continue; }
+      // O catalogo inteiro e' chaveado pelo codigo: uma segunda linha
+      // com o mesmo codigo duplicaria buscas, selecao e diff. A
+      // PRIMEIRA vale; a repetida e' contada, nunca engolida.
+      if (codigosVistos[codigo]) { ignoradas.push({ linha: linhaHumana, motivo: 'código repetido', nome: nome }); continue; }
+      codigosVistos[codigo] = true;
       itens.push({
         codigo: codigo,
         nome: nome,

@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos apps da empresa. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=15">
+<link rel="stylesheet" href="app-shared.css?v=16">
 <style>
   /* Somente o que é exclusivo do app de Assistências. Feito para o
      CELULAR primeiro: os gerentes usam no telefone, na loja. */
@@ -203,8 +203,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=22"></script>
-<script src="assistencias-nucleo.js?v=2"></script>
+<script src="app-shared.js?v=23"></script>
+<script src="assistencias-nucleo.js?v=3"></script>
 <script>
 (() => {
   'use strict';
@@ -219,6 +219,9 @@
   let editandoId = null;      // null = nova
   let fotosAtuais = [];       // dataURLs (base64) das fotos do problema
   let termoAtuais = [];       // dataURLs do termo de acordo (mesmo campo no Firestore)
+  let outrosAnexos = [];      // entradas do campo fotos em formato desconhecido — preservadas no salvar
+  let fichaToken = 0;         // invalida uploads em andamento quando outra ficha abre
+  let fichaAbertaJson = null; // foto do documento no momento em que a ficha abriu (detector de conflito)
   let filtroStatus = '';
 
   const setStatus = (t) => { $('asstConexao').textContent = t; };
@@ -276,7 +279,7 @@
         '<div class="linha1"><span class="seq">#' + escapeHtml(a.sequencia || '—') + '</span>' +
           '<span class="badge-st ' + N.classeStatus(a.status) + '">' + escapeHtml(a.status || 'Aberta') + '</span></div>' +
         '<div class="cliente">' + escapeHtml(a.cliente || '(sem cliente)') + '</div>' +
-        '<div class="meta">' + App.fmtData(a.dataAbertura) +
+        '<div class="meta">' + escapeHtml(App.fmtData(a.dataAbertura)) +
           (a.produto ? ' · ' + escapeHtml(a.produto) : '') +
           (a.causa ? ' · ' + escapeHtml(a.causa) : '') +
           (a.custoLoja != null ? ' · custo ' + brl(a.custoLoja) : '') +
@@ -314,15 +317,28 @@
 
   function abrirFicha(id){
     const a = id ? assistencias.find(x => x.id === id) : null;
+    // Documento que sumiu entre o render e o toque (excluido por outro
+    // gerente) NAO pode virar ficha nova em branco: salvar criaria um
+    // documento novo achando que editava.
+    if(id && !a){
+      App.toast('Essa assistência não está mais na lista — pode ter sido alterada ou excluída.', 'info');
+      return;
+    }
     editandoId = a ? a.id : null;
+    fichaToken++; // upload de foto da ficha anterior ainda em andamento morre aqui
+    fichaAbertaJson = a ? JSON.stringify(a) : null;
     const fs = N.separarFotos(a && a.fotos);
     fotosAtuais = fs.problema;
     termoAtuais = fs.termo;
+    outrosAnexos = fs.outros;
     $('afTitulo').textContent = a ? 'Assistência #' + (a.sequencia || '') : 'Nova assistência';
     CAMPOS_TEXTO.forEach(([elId, campo]) => { $(elId).value = (a && a[campo]) || ''; });
     CAMPOS_NUMERO.forEach(([elId, campo]) => {
+      // SEMPRE com as duas casas ("25.000,00"): sem elas, "25.000"
+      // voltava do parse como 25 — era o bug que corrompia qualquer
+      // valor >= 1000 num simples abrir-e-salvar.
       $(elId).value = a && a[campo] != null
-        ? a[campo].toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : '';
+        ? a[campo].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
     });
     $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
     $('afDataResolucao').value = (a && a.dataResolucao) || '';
@@ -352,21 +368,41 @@
       const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
-        const esc = Math.min(1, 800 / img.width);
-        const c = document.createElement('canvas');
-        c.width = Math.round(img.width * esc);
-        c.height = Math.round(img.height * esc);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
         URL.revokeObjectURL(url);
-        resolve(c.toDataURL('image/jpeg', 0.7));
+        // Dimensão zero (SVG sem tamanho, decode esquisito) geraria um
+        // canvas 0x0 e um "data:," salvo como se fosse foto.
+        if(!img.width || !img.height){ reject(new Error('A imagem veio sem dimensões — tente outro formato.')); return; }
+        // Largura E altura limitadas: um scan comprido (700x5000) na
+        // regra antiga passava inteiro e estourava o documento sozinho
+        // (e o Safari devolve canvas em branco acima da área máxima).
+        const esc = Math.min(1, 800 / img.width, 1600 / img.height);
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * esc));
+        c.height = Math.max(1, Math.round(img.height * esc));
+        const ctx = c.getContext('2d');
+        // JPEG não tem transparência: sem este fundo, PNG transparente
+        // (scanner de termo) virava um retângulo PRETO ilegível.
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        const dataUrl = c.toDataURL('image/jpeg', 0.7);
+        if(dataUrl.indexOf('data:image/jpeg') !== 0 || dataUrl.length < 100){
+          reject(new Error('A conversão da imagem falhou neste navegador.'));
+          return;
+        }
+        resolve(dataUrl);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não consegui ler a imagem.')); };
       img.src = url;
     });
   }
 
+  // escapeHtml no src: o campo fotos é gravável por qualquer conta
+  // autenticada — uma string maliciosa quebraria o atributo e rodaria
+  // script no navegador dos gerentes (XSS armazenado). Num dataURL
+  // legítimo o escape não muda um caractere.
   const miniaturas = (lista, rotulo, attrTirar) => lista.map((f, i) =>
-    '<div class="foto"><img src="' + f + '" alt="' + rotulo + ' ' + (i + 1) + '" data-zoom="' + i + '">' +
+    '<div class="foto"><img src="' + escapeHtml(f) + '" alt="' + rotulo + ' ' + (i + 1) + '" data-zoom="' + i + '">' +
     '<button type="button" class="tirar" ' + attrTirar + '="' + i + '"' +
     ' aria-label="Remover ' + rotulo.toLowerCase() + ' ' + (i + 1) + '">×</button></div>').join('');
 
@@ -382,27 +418,43 @@
   }
 
   // O mesmo funil para os dois anexos: comprime, respeita o teto do
-  // documento (fotos + termo somados) e avisa o que não coube.
-  async function receberImagens(input, destino, rotulo){
+  // documento (fotos + termo somados) e avisa o que não coube. O
+  // fichaToken mata o upload se OUTRA ficha abrir no meio da
+  // compressão — sem ele, as fotos iam parar no array órfão da ficha
+  // anterior e sumiam sem erro.
+  let recebendoImagens = false;
+  async function receberImagens(input, tipo, rotulo){
     const files = Array.from(input.files || []);
     input.value = '';
-    for(const f of files){
-      try{
-        const dataUrl = await comprimirFoto(f);
-        if(tamanhoFotos() + dataUrl.length > LIMITE_FOTOS_CHARS){
-          App.toastErro('Limite de anexos', rotulo + ' não coube no documento (limite do Firestore). Remova algum anexo antes de adicionar outro.');
-          break;
-        }
-        destino.push(dataUrl);
-      }catch(e){ App.toastErro(rotulo + ' ignorada', e); }
+    if(!files.length) return;
+    if(recebendoImagens){
+      App.toast('Aguarde as fotos anteriores terminarem de processar.', 'info');
+      return;
     }
-    renderFotos();
+    recebendoImagens = true;
+    const meuToken = fichaToken;
+    try{
+      for(const f of files){
+        try{
+          const dataUrl = await comprimirFoto(f);
+          if(fichaToken !== meuToken) return; // outra ficha abriu: descarta
+          if(tamanhoFotos() + dataUrl.length > LIMITE_FOTOS_CHARS){
+            App.toastErro('Limite de anexos', rotulo + ' não coube no documento (limite do Firestore). Remova algum anexo antes de adicionar outro.');
+            break;
+          }
+          (tipo === 'termo' ? termoAtuais : fotosAtuais).push(dataUrl);
+        }catch(e){ App.toastErro(rotulo + ' ignorada', e); }
+      }
+      if(fichaToken === meuToken) renderFotos();
+    }finally{
+      recebendoImagens = false;
+    }
   }
 
   $('afFotoBtn').addEventListener('click', () => $('afFotos').click());
-  $('afFotos').addEventListener('change', function(){ receberImagens(this, fotosAtuais, 'A foto'); });
+  $('afFotos').addEventListener('change', function(){ receberImagens(this, 'foto', 'A foto'); });
   $('afTermoBtn').addEventListener('click', () => $('afTermo').click());
-  $('afTermo').addEventListener('change', function(){ receberImagens(this, termoAtuais, 'A página do termo'); });
+  $('afTermo').addEventListener('change', function(){ receberImagens(this, 'termo', 'A página do termo'); });
 
   App.delegar($('afFotosPreview'), 'click', '[data-tirar]', (b) => {
     fotosAtuais.splice(Number(b.dataset.tirar), 1);
@@ -420,7 +472,10 @@
     grande.src = img.src;
     grande.alt = img.alt;
     div.appendChild(grande);
-    div.addEventListener('click', () => div.remove());
+    const fechar = () => { div.remove(); document.removeEventListener('keydown', aoTeclar); };
+    const aoTeclar = (ev) => { if(ev.key === 'Escape') fechar(); };
+    div.addEventListener('click', fechar);
+    document.addEventListener('keydown', aoTeclar);
     document.body.appendChild(div);
   };
   App.delegar($('afFotosPreview'), 'click', '[data-zoom]', abrirZoom);
@@ -428,43 +483,67 @@
 
   // ─── Salvar ───
   async function salvar(){
-    const seq = $('afSequencia').value.trim();
-    if(!seq){
-      App.toast('Informe a sequência do Shop9 — é o número de controle.', 'info');
-      $('afSequencia').focus();
-      return;
-    }
-    // Duplicidade é AVISO com confirmação, nunca trava: pode ser
-    // reabertura legítima da mesma sequência.
-    if(N.sequenciaDuplicada(assistencias, seq, editandoId)){
-      const ok = await App.confirmar({
-        titulo: 'Sequência já registrada',
-        mensagem: 'Já existe outra assistência com a sequência ' + seq +
-          '. Pode ser uma duplicidade — ou uma reabertura legítima.\n\nSalvar mesmo assim?',
-        confirmar: 'Salvar mesmo assim'
-      });
-      if(!ok) return;
-    }
-
-    // Fotos do problema + termo de acordo no MESMO campo (o termo vai
-    // marcado com {termo:true}; a separação é do núcleo).
-    const dados = { fotos: N.juntarFotos(fotosAtuais, termoAtuais) };
-    CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
-    CAMPOS_NUMERO.forEach(([elId, campo]) => { dados[campo] = App.parseNumeroBR($(elId).value); });
-    dados.sequencia = seq;
-    dados.dataAbertura = $('afDataAbertura').value || App.hojeISO();
-    dados.dataResolucao = $('afDataResolucao').value || null;
-    dados.causa = $('afCausa').value || null;
-    dados.status = $('afStatus').value || 'Aberta';
-    dados.tipoSolucao = $('afTipoSolucao').value || null;
-    // Resolvida sem data de resolução ganha a de hoje — o gerente só
-    // muda o status e a ficha se completa sozinha.
-    if(dados.status === 'Resolvida' && !dados.dataResolucao) dados.dataResolucao = App.hojeISO();
-
+    // Travado JA' — antes das confirmações: com o modal aberto o botão
+    // ficava clicável e dois toques criavam dois documentos.
     const btn = $('afSalvarBtn');
+    if(btn.disabled) return;
     btn.disabled = true;
-    $('afMsg').textContent = 'Salvando...';
     try{
+      const seq = $('afSequencia').value.trim();
+      if(!seq){
+        App.toast('Informe a sequência do Shop9 — é o número de controle.', 'info');
+        $('afSequencia').focus();
+        return;
+      }
+      // Duplicidade é AVISO com confirmação, nunca trava: pode ser
+      // reabertura legítima da mesma sequência.
+      if(N.sequenciaDuplicada(assistencias, seq, editandoId)){
+        const ok = await App.confirmar({
+          titulo: 'Sequência já registrada',
+          mensagem: 'Já existe outra assistência com a sequência ' + seq +
+            '. Pode ser uma duplicidade — ou uma reabertura legítima.\n\nSalvar mesmo assim?',
+          confirmar: 'Salvar mesmo assim'
+        });
+        if(!ok) return;
+      }
+      // Conflito: alguém salvou esta MESMA assistência enquanto a ficha
+      // estava aberta aqui. Salvar por cima apagaria o trabalho do
+      // outro (fotos, termo, status) sem ninguém perceber.
+      if(editandoId && fichaAbertaJson){
+        const agora = assistencias.find(x => x.id === editandoId);
+        if(JSON.stringify(agora || null) !== fichaAbertaJson){
+          const ok = await App.confirmar({
+            titulo: 'Alterada por outra pessoa',
+            mensagem: 'Esta assistência foi alterada (ou excluída) por outra pessoa enquanto a ficha estava aberta. ' +
+              'Salvar agora SUBSTITUI o que a outra pessoa fez.\n\nPara ver a versão dela, cancele e reabra a ficha.',
+            confirmar: 'Salvar por cima',
+            perigo: true
+          });
+          if(!ok) return;
+        }
+      }
+
+      // Fotos do problema + termo de acordo no MESMO campo (o termo vai
+      // marcado com {termo:true}); anexos em formato desconhecido são
+      // devolvidos intactos — regravar sem eles seria apagá-los.
+      const dados = { fotos: N.juntarFotos(fotosAtuais, termoAtuais, outrosAnexos) };
+      CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
+      // parseDinheiroBR, não parseNumeroBR: "25.000" aqui é vinte e
+      // cinco mil (a leitura antiga corrompia valores >= 1000).
+      CAMPOS_NUMERO.forEach(([elId, campo]) => { dados[campo] = N.parseDinheiroBR($(elId).value); });
+      dados.sequencia = seq;
+      dados.dataAbertura = $('afDataAbertura').value || App.hojeISO();
+      dados.dataResolucao = $('afDataResolucao').value || null;
+      dados.causa = $('afCausa').value || null;
+      dados.status = $('afStatus').value || 'Aberta';
+      dados.tipoSolucao = $('afTipoSolucao').value || null;
+      // Resolvida sem data de resolução ganha a de hoje; e voltar o
+      // status limpa a data — assistência aberta com data de resolução
+      // estragaria qualquer relatório de tempo de atendimento.
+      if(dados.status === 'Resolvida' && !dados.dataResolucao) dados.dataResolucao = App.hojeISO();
+      if(dados.status !== 'Resolvida') dados.dataResolucao = null;
+
+      $('afMsg').textContent = 'Salvando...';
       if(editandoId){
         await App.comAuth(() => db.collection('assistencias').doc(editandoId).set(dados, { merge: true }));
       } else {
@@ -531,6 +610,7 @@
   }
   window.__aoEntrar = () => { renderLista(); };
 
+  router.iniciar(); // sincroniza o #hash — sem isto o Voltar do celular ficava inerte
   renderLista();
   iniciar();
 })();

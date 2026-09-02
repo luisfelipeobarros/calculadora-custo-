@@ -135,7 +135,24 @@
   function fmtData(v) {
     if (!v) return '--';
     var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : String(v);
+    // O fallback ESCAPADO fecha de uma vez todos os pontos que
+    // interpolam fmtData(...) direto em innerHTML (auditoria de
+    // 02/09/2026): um valor fora do padrao vinha cru e era um furo de
+    // XSS em ~10 lugares. Data valida nao muda um caractere.
+    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : escapeHtml(String(v));
+  }
+
+  // Dinheiro digitado a brasileira. parseNumeroBR mantem, de
+  // proposito, a ambiguidade historica "1.234" = 1,234 (precos
+  // unitarios de planilha de fornecedor). Em campo de DINHEIRO
+  // grande (objetivo de vendas, catalogo de precos, custo de
+  // assistencia), "25.000" sem virgula e' vinte e cinco mil — use
+  // ESTE nos campos assim.
+  function parseDinheiroBR(v) {
+    if (typeof v === 'string' && /^\s*(R\$\s*)?\d{1,3}(\.\d{3})+\s*$/.test(v)) {
+      return parseNumeroBR(v.replace(/\./g, ''));
+    }
+    return parseNumeroBR(v);
   }
 
   // Meio-dia evita que fuso horario empurre a data para o dia anterior.
@@ -303,6 +320,11 @@
   // Modal generico. Devolve uma Promise com o valor passado a resolver().
   // opcoes.obrigatorio = true: nao fecha com Esc nem clicando no fundo
   // (usado no login de entrada, que nao pode ser dispensado).
+  // Pilha dos modais abertos: com dois empilhados (um confirm e o
+  // login por cima), o Esc fechava OS DOIS de uma vez — cada modal
+  // tinha seu proprio keydown no document. So' o do topo reage.
+  var _pilhaModais = [];
+
   function abrirModal(construir, opcoes) {
     var op = opcoes || {};
     return new Promise(function (resolve) {
@@ -319,13 +341,17 @@
       function fechar(valor) {
         if (fechado) return;
         fechado = true;
+        var i = _pilhaModais.indexOf(fechar);
+        if (i !== -1) _pilhaModais.splice(i, 1);
         document.removeEventListener('keydown', aoTeclar, true);
         if (fundo.parentNode) fundo.parentNode.removeChild(fundo);
         if (focoAnterior && focoAnterior.focus) focoAnterior.focus();
         resolve(valor);
       }
+      _pilhaModais.push(fechar);
 
       function aoTeclar(ev) {
+        if (_pilhaModais[_pilhaModais.length - 1] !== fechar) return; // outro modal esta' por cima
         if (ev.key === 'Escape' && !op.obrigatorio) { ev.preventDefault(); fechar(null); return; }
         if (ev.key !== 'Tab') return;
         // Prende o Tab dentro do modal.
@@ -1106,6 +1132,10 @@
     if (prazos.length) resumo.push('prazo ' + prazos.join('/'));
     if (comPrazo > 0) {
       resumo.push('prazo médio ' + Math.round(somaPonderada / comPrazo) + ' dias');
+    } else if (prazos.length) {
+      // Parcelas com valor zero/ausente nao tem peso: cai para a
+      // media simples em vez de omitir a linha do lado do "prazo".
+      resumo.push('prazo médio ' + Math.round(prazos.reduce(function (s, d) { return s + d; }, 0) / prazos.length) + ' dias');
     }
     resumo.push('total ' + brl(total));
 
@@ -1546,6 +1576,7 @@
     pedirData: pedirData,
     pedirTexto: pedirTexto,
     abrirModal: abrirModal,
+    parseDinheiroBR: parseDinheiroBR,
     avisar: avisar,
 
     iniciarFirebase: iniciarFirebase,

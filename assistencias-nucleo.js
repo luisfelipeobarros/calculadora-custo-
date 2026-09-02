@@ -112,24 +112,39 @@
   // MESMO campo `fotos` do documento (decisao de 02/09/2026: nada
   // novo no Firestore). O termo entra como { termo: true, img } e a
   // foto do problema continua string pura — compatibilidade com tudo
-  // que ja foi salvo. Este par separa/junta para a tela e a
-  // exportacao; lixo (objeto sem img, tipos estranhos) e' ignorado.
+  // que ja foi salvo.
+  //
+  // Entrada em formato DESCONHECIDO vai para `outros` e o juntar a
+  // devolve intacta: como a ficha regrava o array inteiro, "ignorar"
+  // na leitura seria APAGAR na gravacao (auditoria de 02/09/2026).
+  // So' null/undefined/'' morrem de verdade. E `fotos` que nem array
+  // seja nao derruba a lista — vira vazio.
   function separarFotos(fotos) {
-    var problema = [], termo = [];
-    (fotos || []).forEach(function (f) {
-      if (f && typeof f === 'object' && f.termo === true) {
-        if (typeof f.img === 'string' && f.img) termo.push(f.img);
+    var problema = [], termo = [], outros = [];
+    if (!Array.isArray(fotos)) fotos = [];
+    fotos.forEach(function (f) {
+      if (f && typeof f === 'object' && f.termo === true &&
+          typeof f.img === 'string' && f.img) {
+        termo.push(f.img);
       } else if (typeof f === 'string' && f) {
         problema.push(f);
+      } else if (f != null && f !== '') {
+        outros.push(f);
       }
     });
-    return { problema: problema, termo: termo };
+    return { problema: problema, termo: termo, outros: outros };
   }
-  function juntarFotos(problema, termo) {
-    return (problema || []).concat((termo || []).map(function (img) {
-      return { termo: true, img: img };
-    }));
+  function juntarFotos(problema, termo, outros) {
+    return (problema || []).concat(
+      (termo || []).map(function (img) { return { termo: true, img: img }; }),
+      outros || []);
   }
+
+  // Dinheiro digitado a brasileira: "25.000" sem virgula e' vinte e
+  // cinco mil. A leitura errada (parseNumeroBR) corrompia valores
+  // >= 1000 a cada salvamento da ficha. A regra canonica mora no
+  // app-shared (App.parseDinheiroBR) — este e' so' o atalho local.
+  function parseDinheiroBR(v) { return App.parseDinheiroBR(v); }
 
   function linhasExcel(lista) {
     return (lista || []).map(function (a) {
@@ -174,6 +189,7 @@
     sequenciaDuplicada: sequenciaDuplicada,
     separarFotos: separarFotos,
     juntarFotos: juntarFotos,
+    parseDinheiroBR: parseDinheiroBR,
     linhasExcel: linhasExcel
   };
 

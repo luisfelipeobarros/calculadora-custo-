@@ -165,13 +165,15 @@ eq('e nao sobrou inputDate na pagina', /inputDate/.test(html), false);
 
 // "Nenhum item nesse filtro" e' uma afirmacao: nao pode aparecer
 // enquanto as colecoes ainda estao chegando.
-eq('renderPagamentos espera as duas colecoes',
-  /if\(!carregouDuplicatas \|\| !carregouPgtosInternos\)\{\s*\$\('tabelaPag'\)/.test(html), true);
+eq('renderPagamentos espera as tres colecoes (incluindo as notas)',
+  /if\(!carregouDuplicatas \|\| !carregouPgtosInternos \|\| !carregouNotas\)\{\s*\$\('tabelaPag'\)/.test(html), true);
 
-// A recorrencia sai do documento, nao da linha da tabela — a linha nao
-// carrega parcelaAtual/parcelasTotal.
-eq('recorrencia em lote parte do documento',
-  /var doc = pgtoInternoPorId\(id\);/.test(html), true);
+// A recorrencia sai do documento, nao da linha da tabela — e o
+// documento e' capturado ANTES da gravacao (docsRecorrentes): pago, o
+// interno fora da janela some das escutas e a corrente morreria.
+eq('recorrencia em lote parte do documento capturado antes',
+  /docsRecorrentes\[id\] = pgtoInternoPorId\(id\);/.test(html) &&
+  /var doc = docsRecorrentes\[id\];/.test(html), true);
 
 // Selecao em massa por indice, nao por varredura.
 eq('a selecao usa o indice por id', /pagPorId\.get\(id\)/.test(html), true);

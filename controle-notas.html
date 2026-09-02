@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=15">
+<link rel="stylesheet" href="app-shared.css?v=16">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -553,14 +553,14 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=22"></script>
+<script src="app-shared.js?v=23"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=1"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=2"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que o app de Lançamentos usa. -->
-<script src="lancamentos-nucleo.js?v=2"></script>
+<script src="lancamentos-nucleo.js?v=3"></script>
 <script>
   // Em file:// o Chrome bloqueia new Worker(), e o pdf.js cai no "fake
   // worker" na thread principal — e' o comportamento de producao do
@@ -737,7 +737,7 @@
       carregouNotas = true;
       invalidarMapaForn();
       setStatus(resumoCarga());
-      renderAtual();
+      agendarRender();
     }
 
     function receberEm(mapa){
@@ -773,10 +773,14 @@
     assinaturas.push(qNotas.onSnapshot(receberEm(mapaRecentes), aoFalhar('notas')));
 
     // 2) Canceladas de qualquer epoca — a tela de canceladas nao pode
-    //    ficar incompleta so' porque a nota e' antiga.
-    assinaturas.push(
-      col.where('status', '==', 'cancelada')
-         .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas')));
+    //    ficar incompleta so' porque a nota e' antiga. Com o historico
+    //    completo carregado a consulta 1 ja' traz TUDO: manter esta
+    //    dobraria a leitura de cada cancelada sem ganho nenhum.
+    if(!carregarTudo){
+      assinaturas.push(
+        col.where('status', '==', 'cancelada')
+           .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas')));
+    }
 
     // Duplicatas: mesma logica de mapa por consulta.
     var colDup = db.collection('duplicatas');
@@ -793,7 +797,7 @@
       invalidarMapaForn();
       setStatus(resumoCarga());
       atualizarAvisoJanela();
-      renderAtual();
+      agendarRender();
     }
 
     function receberDupEm(mapa){
@@ -838,7 +842,7 @@
       });
       pagamentosInternos = Object.keys(porId).map(function(k){ return porId[k]; });
       carregouPgtosInternos = true;
-      renderAtual();
+      agendarRender();
     }
 
     function receberPgtoEm(mapa){
@@ -995,17 +999,38 @@
   });
 
   $('kpiReceber').addEventListener('click', function(){ router.ir('Importar'); });
-  $('kpiAtrasadas').addEventListener('click', function(){ setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
-  $('kpiHoje').addEventListener('click', function(){ setFiltroPag('hoje'); router.ir('Pagamentos'); });
-  $('kpiSemana').addEventListener('click', function(){ setFiltroPag('semana'); router.ir('Pagamentos'); });
-  $('kpiFimMes').addEventListener('click', function(){ setFiltroPag('pendentes'); router.ir('Pagamentos'); });
+  // Os cartoes contam duplicatas + pagamentos internos: a tela que
+  // eles abrem precisa do escopo "todos", senao o numero do cartao e a
+  // lista mostravam contagens diferentes para a mesma pergunta.
+  $('kpiAtrasadas').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
+  $('kpiHoje').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('hoje'); router.ir('Pagamentos'); });
+  $('kpiSemana').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('semana'); router.ir('Pagamentos'); });
+  $('kpiFimMes').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('pendentes'); router.ir('Pagamentos'); });
 
   // Redesenha SO' a tela aberta. Antes, marcar uma duplicata como paga
   // redesenhava as quatro telas, inclusive as tres invisiveis.
+  // Os onSnapshot chegam em rajada (4-5 escutas, e o Apps Script
+  // importando dispara dezenas): coalescer num unico render por frame
+  // corta o retrabalho e as trocas de DOM no meio de um clique.
+  var renderAgendado = false;
+  function agendarRender(){
+    if(renderAgendado) return;
+    renderAgendado = true;
+    requestAnimationFrame(function(){
+      renderAgendado = false;
+      renderAtual();
+    });
+  }
+
   function renderAtual(){
     if(!carregouNotas && !carregouDuplicatas) return;
     var ativo = document.activeElement;
     var chaveFoco = (ativo && ativo.dataset) ? ativo.dataset.previsao : null;
+    // O numero da nota devolvida e' digitado direto na tabela de
+    // Canceladas: um snapshot no meio da digitacao reconstruia o input
+    // vazio e comia o texto. Valor E foco voltam apos o render.
+    var devFoco = (ativo && ativo.dataset) ? ativo.dataset.devolucaoDe : null;
+    var devValor = devFoco != null ? ativo.value : null;
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
@@ -1017,6 +1042,10 @@
     if(chaveFoco){
       var volta = document.querySelector('[data-previsao="' + CSS.escape(chaveFoco) + '"]');
       if(volta) volta.focus();
+    }
+    if(devFoco != null){
+      var voltaDev = document.querySelector('[data-devolucao-de="' + CSS.escape(devFoco) + '"]');
+      if(voltaDev){ voltaDev.value = devValor; voltaDev.focus(); }
     }
   }
 
@@ -1932,7 +1961,13 @@
 
   // ─── Selecao em massa ───────────────────────────────────────
 
+  // Durante a gravacao em lote a barra fica como esta: o re-render do
+  // primeiro bloco limpava a selecao e escondia a barra — levando
+  // junto o botao que mostrava o progresso "Gravando... N/M".
+  var gravandoLote = false;
+
   function atualizarBarraSelecao(){
+    if(gravandoLote) return;
     var ids = Object.keys(selecionados);
     if(!ids.length){
       $('barraSelecao').style.display = 'none';
@@ -1987,13 +2022,20 @@
   // "Pagar" e "Prorrogar" faziam esta mesma dança duas vezes, com a
   // unica diferenca sendo o que cada uma escreve no documento.
   //
+  // Os itens sao CONGELADOS aqui, antes do primeiro commit: o
+  // batch.commit aplica a escrita localmente na hora, o onSnapshot
+  // redesenha a tela e o pagPorId (montado da lista FILTRADA) perde
+  // os itens recem-pagos — era assim que o lote pagava tudo mas nao
+  // criava nenhum lancamento contabil nem recorrencia (auditoria de
+  // 02/09/2026).
+  //
   // camposDe(item) devolve os campos a gravar, ou null para pular — id
-  // sem item conhecido nao vai para colecao nenhuma. Antes o `else`
-  // mandava para `duplicatas` por padrao, o que gravaria no documento
-  // errado se a lista tivesse mudado embaixo.
-  // depoisDoBloco(pedaco) e' opcional e pode devolver Promise.
+  // sem item conhecido nao vai para colecao nenhuma.
+  // depoisDoBloco(pedaco, itensPorId) e' opcional, pode devolver Promise.
   function gravarSelecionados(ids, botao, verbo, camposDe, depoisDoBloco){
     var estado = { gravadas: 0 };
+    var itensPorId = new Map();
+    ids.forEach(function(id){ itensPorId.set(id, pagPorId.get(id)); });
 
     function bloco(i){
       if(i >= ids.length) return Promise.resolve();
@@ -2002,14 +2044,17 @@
       return App.comAuth(function(){
         var batch = db.batch();
         pedaco.forEach(function(id){
-          var c = camposDe(pagPorId.get(id));
+          var c = camposDe(itensPorId.get(id));
           if(c) batch.set(db.collection(c.colecao).doc(id), c.dados, { merge:true });
         });
         return batch.commit();
       }).then(function(){
-        return depoisDoBloco ? depoisDoBloco(pedaco) : null;
-      }).then(function(){
+        // O bloco JA' esta gravado: conta antes do pos-processamento,
+        // senao uma falha ali fazia a mensagem de erro dizer "0 de N
+        // gravados" com N pagamentos ja' no banco.
         estado.gravadas += pedaco.length;
+        return depoisDoBloco ? depoisDoBloco(pedaco, itensPorId) : null;
+      }).then(function(){
         return bloco(i + LOTE_FIRESTORE);
       });
     }
@@ -2027,6 +2072,8 @@
     // observacao iguais para todas. O "total pago" e' OPCIONAL — se
     // vier maior que a soma, a diferenca vira UM lançamento de juros
     // (ratear juros entre dezenas de boletos seria inventar numero).
+    if(pagandoId) return;
+    pagandoId = 'lote';
     var somaLote = somaSelecionada(ids);
     carregarContabil().then(function(contabil){
       return pedirPagamento({
@@ -2044,6 +2091,19 @@
         btn.disabled = true;
         var dataPgto = r.data;
         var recorrenciasCriadas = [];
+        // Documentos dos recorrentes capturados ANTES de gravar: pago,
+        // o interno fora da janela some das escutas e pgtoInternoPorId
+        // deixa de acha-lo — a corrente do parcelamento morreria.
+        var docsRecorrentes = Object.create(null);
+        ids.forEach(function(id){
+          var it = pagPorId.get(id);
+          if(it && it._tipo === 'interno' && it.recorrente){
+            docsRecorrentes[id] = pgtoInternoPorId(id);
+          }
+        });
+        // A barra de selecao nao pode sumir no meio: e' nela que mora o
+        // botao com o progresso "Gravando... N/M".
+        gravandoLote = true;
 
         var t = gravarSelecionados(ids, btn, 'Gravando', function(item){
           if(!item) return null;
@@ -2052,12 +2112,14 @@
           return item._tipo === 'interno'
             ? { colecao:'pagamentosInternos', dados: base }
             : { colecao:'duplicatas', dados: Object.assign({ pagoEmLote:true }, base) };
-        }, function(pedaco){
+        }, function(pedaco, itensPorId){
           // 1) Cada pagamento do bloco vira lançamento contabil (id
-          // deterministico: repetir o lote nao duplica).
+          // deterministico: repetir o lote nao duplica). Os itens vem
+          // do mapa CONGELADO — o pagPorId ja' foi redesenhado sem
+          // eles a esta altura.
           var pares = [];
           pedaco.forEach(function(id){
-            var item = pagPorId.get(id);
+            var item = itensPorId.get(id);
             if(!item) return;
             pares = pares.concat(LancamentosNucleo.lancamentosDePagamento({
               tipo: item._tipo === 'interno' ? 'interno' : 'fornecedor',
@@ -2070,13 +2132,14 @@
           });
           return gravarLancamentosDePagamento(pares).then(function(){
             // 2) Recorrencia so' faz sentido para pagamento interno, e
-            // tem que partir do DOCUMENTO, nao da linha da tabela: a
-            // linha nao carrega parcelaAtual/parcelasTotal, entao um
-            // parcelamento 3/12 pago em lote perdia a contagem.
+            // tem que partir do DOCUMENTO, nao da linha da tabela. O
+            // documento tambem foi capturado ANTES da gravacao
+            // (docsRecorrentes): um interno fora da janela de 12 meses
+            // some das escutas assim que vira pago.
             return Promise.all(pedaco.map(function(id){
-              var item = pagPorId.get(id);
+              var item = itensPorId.get(id);
               if(!item || item._tipo !== 'interno' || !item.recorrente) return null;
-              var doc = pgtoInternoPorId(id);
+              var doc = docsRecorrentes[id];
               if(!doc) return null;
               return criarProximoRecorrente(doc).then(function(proxVenc){
                 if(proxVenc) recorrenciasCriadas.push(proxVenc);
@@ -2125,8 +2188,14 @@
         }).then(function(){
           btn.disabled = false;
           btn.textContent = '✓ Marcar como pagas';
+          gravandoLote = false;
+          pagandoId = null;
+          atualizarBarraSelecao();
         });
       });
+    }).then(function(){
+      // Cancelou o dialogo (ou o carregamento falhou): libera a trava.
+      if(!gravandoLote) pagandoId = null;
     });
   });
 
@@ -2195,10 +2264,11 @@
 
   function renderPagamentos(){
     // Mesma razao dos cartoes do Painel: "Nenhum item nesse filtro" e'
-    // uma AFIRMACAO, e enquanto as duas colecoes nao chegaram nao ha' o
-    // que afirmar. Sem esta guarda a tela dizia que nao havia nada a
-    // pagar durante a carga.
-    if(!carregouDuplicatas || !carregouPgtosInternos){
+    // uma AFIRMACAO, e enquanto as colecoes nao chegaram nao ha' o que
+    // afirmar. As NOTAS tambem entram na guarda: dupDaNotaCancelada e
+    // dupRecebida leem notasPorChave — sem elas, duplicata de nota
+    // cancelada aparecia como a pagar durante a carga.
+    if(!carregouDuplicatas || !carregouPgtosInternos || !carregouNotas){
       $('tabelaPag').innerHTML = '<p class="nota-explicativa">Carregando pagamentos...</p>';
       $('totalPag').textContent = '';
       return;
@@ -2426,7 +2496,19 @@
   var carregandoContabil = null;
 
   function carregarContabil(){
-    if(cadContabil) return Promise.resolve(cadContabil);
+    if(cadContabil){
+      // Bancos e categorias mudam raramente (ficam em cache), mas o
+      // MAPA de contas e' editado no app de Lançamentos no meio do dia
+      // — reler o doc (1 leitura) evita pagamento pendente por mapa
+      // velho. Se a releitura falhar, vale o cache.
+      var cache = cadContabil;
+      return App.comAuth(function(){
+        return db.collection('config').doc('contasContabeis').get();
+      }).then(function(d){
+        cache.mapa = d.exists ? d.data() : {};
+        return cache;
+      }).catch(function(){ return cache; });
+    }
     if(carregandoContabil) return carregandoContabil;
     carregandoContabil = App.comAuth(function(){
       return Promise.all([
@@ -2441,14 +2523,15 @@
       return cadContabil;
     }).catch(function(e){
       // Cadastro contabil indisponivel (regras ainda nao publicadas,
-      // colecoes vazias) nao pode travar o PAGAMENTO: segue sem banco
-      // e o lançamento nasce pendente no app de Lançamentos.
+      // rede) nao pode travar o PAGAMENTO: segue sem banco e o
+      // lançamento nasce pendente no app de Lançamentos. O fallback
+      // NAO entra no cache — um blip de rede no primeiro clique
+      // condenava a sessao inteira a pagar sem banco.
       console.error('Cadastro contabil indisponivel:', e);
-      cadContabil = { bancos: {}, categorias: {}, mapa: {} };
-      return cadContabil;
+      return { bancos: {}, categorias: {}, mapa: {} };
     }).then(function(c){ carregandoContabil = null; return c; });
     // O bug de 02/09/2026: sem este return, o PRIMEIRO clique em pagar
-    // recebia undefined e morria no .then. Um teste agora trava isso.
+    // recebia undefined e morria no .then. Um teste trava isso.
     return carregandoContabil;
   }
 
@@ -2456,9 +2539,18 @@
     if(!pares.length) return Promise.resolve();
     return App.comAuth(function(){
       var batch = db.batch();
+      var ids = Object.create(null);
+      pares.forEach(function(p){ ids[p.id] = true; });
       pares.forEach(function(p){
         var doc = Object.assign({}, p.doc, { criadoEm: firebase.firestore.FieldValue.serverTimestamp() });
         batch.set(db.collection('lancamentos').doc(p.id), doc);
+        // Re-pagamento SEM juros por cima de um pagamento que teve
+        // juros deixava o lancamento de juros orfao: se o par de juros
+        // nao esta neste lote, apaga o que existir (delete de doc
+        // inexistente e' inocuo).
+        if(p.id.indexOf('juros') !== 0 && !ids['juros' + p.id]){
+          batch.delete(db.collection('lancamentos').doc('juros' + p.id));
+        }
       });
       return batch.commit();
     });
@@ -2504,13 +2596,16 @@
       var banco = document.createElement('select');
       banco.style.cssText = estilo;
       var idsBancos = Object.keys(o.bancos || {}).filter(function(id){ return o.bancos[id].ativo !== false; })
-        .sort(function(a, b){ return o.bancos[a].nome.localeCompare(o.bancos[b].nome, 'pt-BR'); });
+        .sort(function(a, b){ return String(o.bancos[a].nome || '').localeCompare(String(o.bancos[b].nome || ''), 'pt-BR'); });
       banco.innerHTML = idsBancos.length
-        ? idsBancos.map(function(id){ return '<option value="' + escapeHtml(id) + '">' + escapeHtml(o.bancos[id].nome) + '</option>'; }).join('')
+        ? idsBancos.map(function(id){ return '<option value="' + escapeHtml(id) + '">' + escapeHtml(o.bancos[id].nome || id) + '</option>'; }).join('')
         : '<option value="">(sem bancos cadastrados — o lançamento fica pendente)</option>';
       var lembrado = null;
       try{ lembrado = localStorage.getItem('ultimoBancoPag'); }catch(e){}
-      if(lembrado && o.bancos[lembrado]) banco.value = lembrado;
+      // Contra os ATIVOS, nao contra todos: banco lembrado que foi
+      // inativado caia em silencio na primeira opcao da lista e o
+      // pagamento saia creditado no banco errado.
+      if(lembrado && idsBancos.indexOf(lembrado) !== -1) banco.value = lembrado;
       campo('Banco', banco);
 
       var valor = document.createElement('input');
@@ -2536,7 +2631,7 @@
       obs.placeholder = 'acordo, direto pra fábrica... (opcional)';
       if(o.sugestoes && o.sugestoes.length){
         var dl = document.createElement('datalist');
-        dl.id = 'pagObsSugestoes';
+        dl.id = 'pagObs_' + Date.now(); // unico: dois modais empilhados nao disputam o mesmo id
         o.sugestoes.forEach(function(s){ var op = document.createElement('option'); op.value = s; dl.appendChild(op); });
         obs.setAttribute('list', dl.id);
         caixa.appendChild(dl);
@@ -2562,6 +2657,15 @@
         if(!o.valorOpcional && (v == null || !(v > 0))){
           erro.textContent = 'Informe o valor pago.'; erro.style.display = ''; valor.focus(); return;
         }
+        // No lote, total MENOR que a soma nao tem representacao: os
+        // lancamentos sairiam com o valor cheio e a conciliacao
+        // bancaria ficaria furada. Desconto negociado se paga
+        // individualmente (la' o valor menor vale como o que saiu).
+        if(o.valorOpcional && v != null && o.valorBase != null && v < o.valorBase){
+          erro.textContent = 'Menor que a soma das selecionadas (' + brl(o.valorBase) +
+            '). Para desconto, pague o boleto com desconto individualmente.';
+          erro.style.display = ''; valor.focus(); return;
+        }
         try{ if(banco.value) localStorage.setItem('ultimoBancoPag', banco.value); }catch(e){}
         fechar({ data: data.value, bancoId: banco.value || null, valorPago: v, obs: obs.value.trim() || null });
       });
@@ -2578,22 +2682,45 @@
   // valor, observacao) e grava o pagamento + o lançamento contabil.
   // Desfazer limpa os campos DAQUELE pagamento e apaga os lançamentos
   // gerados por ele.
+  // Reentrancia dos botoes de pagar: um snapshot no meio do dialogo
+  // re-renderiza a tabela e o `b.disabled` vira no-op num no' orfao —
+  // dois cliques abriam dois dialogos e gravavam duas vezes. A trava
+  // vive fora do DOM.
+  var pagandoId = null;
+
   App.delegar($('tabelaPag'), 'click', '.btn-pagar[data-dup]', function(b){
     var id = b.dataset.dup;
+    if(pagandoId) return;
     var marcado = b.dataset.pago !== '1'; // o clique inverte o estado atual
     var d = null;
     for(var i = 0; i < duplicatas.length; i++){ if(duplicatas[i].id === id){ d = duplicatas[i]; break; } }
     if(!d) return;
 
     if(!marcado){
-      b.disabled = true;
-      atualizarDuplicata(id, { pago:false, dataPagamento:null, obsPagamento:null, bancoPagamento:null, valorPago:null })
-        .then(function(){ return apagarLancamentosDePagamento(['dup_' + id]); })
-        .catch(function(e){ App.toastErro('Erro ao desfazer', e); })
-        .then(function(){ b.disabled = false; });
+      pagandoId = id;
+      // Confirmacao: desfazer tambem APAGA o lancamento contabil (e
+      // qualquer ajuste feito nele no app de Lançamentos) — nao pode
+      // acontecer num clique acidental. E os lancamentos morrem ANTES
+      // de despagar: se o delete falhar, nada fica pela metade.
+      App.confirmar({
+        titulo: 'Desfazer o pagamento',
+        mensagem: fornecedorDaDuplicata(d) + ' · ' + brl(d.valor) +
+          '\n\nIsso apaga também o lançamento contábil gerado por este pagamento (e qualquer ajuste feito nele).',
+        confirmar: 'Desfazer',
+        perigo: true
+      }).then(function(ok){
+        if(!ok) return null;
+        return apagarLancamentosDePagamento(['dup_' + id])
+          .then(function(){
+            return atualizarDuplicata(id, { pago:false, dataPagamento:null, obsPagamento:null,
+              bancoPagamento:null, valorPago:null, pagoEmLote:false });
+          });
+      }).catch(function(e){ App.toastErro('Erro ao desfazer', e); })
+        .then(function(){ pagandoId = null; });
       return;
     }
 
+    pagandoId = id;
     carregarContabil().then(function(c){
       return pedirPagamento({
         titulo: 'Confirmar pagamento',
@@ -2610,37 +2737,48 @@
           historico: 'PAGTO ' + fornecedorDaDuplicata(d) + (d.numeroNota ? ' NF ' + d.numeroNota : ''),
           fornecedor: d.nomeEmitente || null, numeroDoc: d.numeroNota || null
         }, c.mapa, c.bancos, c.categorias);
-        atualizarDuplicata(id, { pago:true, dataPagamento:r.data, obsPagamento:r.obs,
+        return atualizarDuplicata(id, { pago:true, dataPagamento:r.data, obsPagamento:r.obs,
             bancoPagamento:r.bancoId, valorPago:r.valorPago })
           .then(function(){ return gravarLancamentosDePagamento(pares); })
           .then(function(){
             var dif = App.centavos((r.valorPago || 0) - (d.valor || 0));
             App.toast('Pago' + (dif > 0 ? ' com juros de ' + brl(dif) : '') + ' — lançamento contábil criado.', 'ok');
-          })
-          .catch(function(e){ App.toastErro('Erro ao gravar o pagamento', e); })
-          .then(function(){ b.disabled = false; });
+          });
       });
-    });
+    }).catch(function(e){ App.toastErro('Erro ao gravar o pagamento', e); })
+      .then(function(){ pagandoId = null; });
   });
 
   // Pagamento interno: mesmo dialogo (com recorrencia preservada)
   App.delegar($('tabelaPag'), 'click', '.btn-pagar[data-pgto]', function(b){
     var id = b.dataset.pgto;
+    if(pagandoId) return;
     var marcado = b.dataset.pago !== '1';
     var pgto = pgtoInternoPorId(id);
     if(!pgto) return;
 
     if(!marcado){
-      b.disabled = true;
-      App.comAuth(function(){
-        return db.collection('pagamentosInternos').doc(id).set(
-          { pago:false, dataPagamento:null, obsPagamento:null, bancoPagamento:null, valorPago:null }, { merge:true });
-      }).then(function(){ return apagarLancamentosDePagamento(['int_' + id]); })
-        .catch(function(e){ App.toastErro('Erro ao desfazer', e); })
-        .then(function(){ b.disabled = false; });
+      pagandoId = id;
+      App.confirmar({
+        titulo: 'Desfazer o pagamento',
+        mensagem: (pgto.descricao || 'Pagamento interno') + ' · ' + brl(pgto.valor) +
+          '\n\nIsso apaga também o lançamento contábil gerado por este pagamento (e qualquer ajuste feito nele).',
+        confirmar: 'Desfazer',
+        perigo: true
+      }).then(function(ok){
+        if(!ok) return null;
+        return apagarLancamentosDePagamento(['int_' + id]).then(function(){
+          return App.comAuth(function(){
+            return db.collection('pagamentosInternos').doc(id).set(
+              { pago:false, dataPagamento:null, obsPagamento:null, bancoPagamento:null, valorPago:null }, { merge:true });
+          });
+        });
+      }).catch(function(e){ App.toastErro('Erro ao desfazer', e); })
+        .then(function(){ pagandoId = null; });
       return;
     }
 
+    pagandoId = id;
     carregarContabil().then(function(c){
       return pedirPagamento({
         titulo: 'Confirmar pagamento',
@@ -2650,14 +2788,13 @@
         sugestoes: sugestoesObs()
       }).then(function(r){
         if(!r) return;
-        b.disabled = true;
         var pares = LancamentosNucleo.lancamentosDePagamento({
           tipo: 'interno', id: id, data: r.data, valor: pgto.valor || 0,
           valorPago: r.valorPago, bancoId: r.bancoId,
           historico: 'PAGTO ' + (pgto.descricao || 'PAGAMENTO INTERNO'),
           categoriaInterna: pgto.categoria || 'outro'
         }, c.mapa, c.bancos, c.categorias);
-        App.comAuth(function(){
+        return App.comAuth(function(){
           return db.collection('pagamentosInternos').doc(id).set(
             { pago:true, dataPagamento:r.data, obsPagamento:r.obs,
               bancoPagamento:r.bancoId, valorPago:r.valorPago }, { merge:true });
@@ -2669,11 +2806,10 @@
               });
             }
             App.toast('Pago — lançamento contábil criado.', 'ok');
-          })
-          .catch(function(e){ App.toastErro('Erro ao gravar o pagamento', e); })
-          .then(function(){ b.disabled = false; });
+          });
       });
-    });
+    }).catch(function(e){ App.toastErro('Erro ao gravar o pagamento', e); })
+      .then(function(){ pagandoId = null; });
   });
 
   // ─── Observacao do pagamento ────────────────────────────────
@@ -3922,20 +4058,29 @@
     };
   }
 
+  var danfeChaveAberta = null;
+
   function abrirDanfe(chave){
     var n = notasPorChave[chave];
     if(!n){ App.toastErro('Nota não carregada', 'Recarregue a página e tente de novo.'); return; }
+    danfeChaveAberta = chave;
     document.body.classList.add('danfe-aberto');
     $('danfeView').style.display = '';
     $('danfeView').scrollTop = 0;
     $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, itensCache[chave] || { carregando: true }));
     carregarItensNota(chave).then(function(dados){
-      // So' atualiza se o DANFE aberto ainda e' o desta nota.
-      if(document.body.classList.contains('danfe-aberto')) $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, dados));
+      // So' atualiza se o DANFE aberto ainda e' O DESTA NOTA: checar
+      // apenas "tem danfe aberto" deixava a resposta atrasada da nota
+      // A sobrescrever o documento da nota B — quem imprimisse naquele
+      // instante levava a nota errada para o papel.
+      if(danfeChaveAberta === chave){
+        $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, dados));
+      }
     });
   }
 
   function fecharDanfe(){
+    danfeChaveAberta = null;
     $('danfeView').style.display = 'none';
     document.body.classList.remove('danfe-aberto');
   }

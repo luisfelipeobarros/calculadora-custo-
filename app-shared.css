@@ -815,6 +815,10 @@
     padding:22px 24px;
     width:min(460px, 100%);
     box-shadow:0 12px 40px rgba(32,43,34,0.28);
+    /* Mensagem longa (o diff da substituicao de planilha) num celular:
+       sem isto, os botoes ficavam cortados fora da tela. */
+    max-height:calc(100vh - 40px);
+    overflow:auto;
   }
   .modal-caixa h2{
     font-family:var(--font-display);

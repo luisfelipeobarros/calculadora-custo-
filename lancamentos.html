@@ -16,7 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos apps da empresa. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=15">
+<link rel="stylesheet" href="app-shared.css?v=16">
 <style>
   /* Somente o que é exclusivo do app de Lançamentos. Otimizado para
      digitação em sequência no desktop; funciona no celular também. */
@@ -204,8 +204,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=22"></script>
-<script src="lancamentos-nucleo.js?v=2"></script>
+<script src="app-shared.js?v=23"></script>
+<script src="lancamentos-nucleo.js?v=3"></script>
 <script>
 (() => {
   'use strict';
@@ -235,13 +235,15 @@
   $('lcNavCadastros').addEventListener('click', () => router.ir('Cadastros'));
 
   // ─── Selects a partir dos cadastros ───
+  // Os (x || '') nos sorts: um cadastro gravado sem nome/grupo não
+  // pode derrubar a tela inteira dentro do callback do snapshot.
   const bancosAtivos = () => Object.keys(bancos).filter(id => bancos[id].ativo !== false)
-    .sort((a, b) => bancos[a].nome.localeCompare(bancos[b].nome, 'pt-BR'));
+    .sort((a, b) => String(bancos[a].nome || '').localeCompare(String(bancos[b].nome || ''), 'pt-BR'));
   const categoriasAtivas = (direcao) => Object.keys(categorias)
     .filter(id => categorias[id].ativo !== false && categorias[id].direcao === direcao)
     // Mais usadas primeiro dentro de cada grupo: é o que acelera a
     // digitação em sequência (usoJulho veio do levantamento real).
-    .sort((a, b) => categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
+    .sort((a, b) => String(categorias[a].grupo || '').localeCompare(String(categorias[b].grupo || ''), 'pt-BR') ||
       (categorias[b].usoJulho || 0) - (categorias[a].usoJulho || 0));
 
   function encherSelectBancos(el, comVazio){
@@ -263,17 +265,22 @@
   }
 
   function montarSelects(){
+    // TODAS as seleções preservadas: um snapshot no meio da digitação
+    // remontava o select de categoria e a escolha voltava calada para
+    // a primeira opção — gravava na conta errada.
     const bSel = $('lcBanco').value, dSel = $('lcBancoDestino').value;
+    const cSel = $('lcCategoria').value;
     encherSelectBancos($('lcBanco'), false);
     encherSelectBancos($('lcBancoDestino'), false);
     if(bSel) $('lcBanco').value = bSel;
     if(dSel) $('lcBancoDestino').value = dSel;
     encherSelectCategorias($('lcCategoria'), tipoAtual === 'entrada' ? 'entrada' : 'saida', false);
+    if(cSel) $('lcCategoria').value = cSel;
     encherSelectBancos($('lcBancoFiltro'), true);
     // Filtro de categoria cobre as duas direções.
     const cf = $('lcCategoriaFiltro').value;
     $('lcCategoriaFiltro').innerHTML = '<option value="">— categoria —</option>' +
-      Object.keys(categorias).sort((a, b) => categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+      Object.keys(categorias).sort((a, b) => String(categorias[a].nome || '').localeCompare(String(categorias[b].nome || ''), 'pt-BR'))
         .map(id => '<option value="' + escapeHtml(id) + '">' + escapeHtml(categorias[id].nome) + '</option>').join('');
     if(cf) $('lcCategoriaFiltro').value = cf;
     atualizarPreview();
@@ -333,7 +340,11 @@
       numeroDoc: $('lcNumeroDoc').value.trim() || null,
       contaDebito: partida.debito,
       contaCredito: partida.credito,
-      mes: (data || App.hojeISO()).substring(0, 7)
+      // Edicao que APAGA a data mantem o mes original: cair para o mes
+      // corrente tirava o lançamento da lista (e da trava de
+      // exportacao) do mes a que ele pertence.
+      mes: data ? data.substring(0, 7)
+        : (editandoLcId && (lancamentos.find(x => x.id === editandoLcId) || {}).mes) || App.hojeISO().substring(0, 7)
     };
     if(!doc.historico){
       App.toast('Escreva o histórico — é ele que o contador lê.', 'info');
@@ -379,6 +390,19 @@
     $('lcHistorico').value = '';
     $('lcFornecedor').value = '';
     $('lcNumeroDoc').value = '';
+    $('lcFormMsg').textContent = '';
+    // Data e tipo tambem voltam ao padrao: editar um lançamento de
+    // julho deixava a data em julho, e o proximo lançamento novo caia
+    // num mes ja' fechado sem ninguem perceber. (O banco fica — esse
+    // e' o atalho legitimo da digitação em sequência.)
+    $('lcData').value = App.hojeISO();
+    tipoAtual = 'saida';
+    document.querySelectorAll('.lc-tipo button').forEach(x =>
+      x.setAttribute('aria-pressed', x.dataset.tipo === 'saida' ? 'true' : 'false'));
+    $('lcCampoCategoria').style.display = 'block';
+    $('lcCampoDestino').style.display = 'none';
+    encherSelectCategorias($('lcCategoria'), 'saida', false);
+    atualizarPreview();
   }
   $('lcCancelarEdicaoBtn').addEventListener('click', cancelarEdicao);
 
@@ -407,6 +431,9 @@
     $('lcHistorico').value = l.historico || '';
     $('lcFornecedor').value = l.fornecedor || '';
     $('lcNumeroDoc').value = l.numeroDoc || '';
+    $('lcFormMsg').textContent = l.origemId
+      ? '🔗 Este lançamento veio de um pagamento do Controle de Notas — mudanças feitas aqui não voltam para lá, e desfazer o pagamento lá apaga este lançamento.'
+      : '';
     atualizarPreview();
     window.scrollTo(0, 0);
   }
@@ -422,6 +449,11 @@
 
   function renderLista(){
     if(!carregouCadastros || !carregouLancamentos){
+      // Sem limpar, a tabela do MES ANTERIOR ficava clicavel sob o
+      // "Carregando..." durante a troca de mes.
+      $('lcLista').innerHTML = '';
+      $('lcTotais').innerHTML = '';
+      $('lcPendenciasBadge').innerHTML = '';
       $('lcListaMsg').textContent = 'Carregando...';
       return;
     }
@@ -503,28 +535,53 @@
       return;
     }
     const mes = $('lcMesFiltro').value;
-    const doMes = lancamentos.filter(l => l.mes === mes);
-    if(!doMes.length){ App.toast('Nenhum lançamento em ' + mes + '.', 'info'); return; }
-    // Pendência TRAVA: a numeração é contínua, não dá para reexportar
-    // "consertado" depois sem furar a sequência do contador.
-    const pend = doMes.filter(N.pendente).length;
-    if(pend){
-      App.toastErro('Exportação bloqueada', pend + ' lançamento(s) sem data ou valor. Complete as pendências (amarelas na lista) antes de exportar.');
-      return;
-    }
-    const grupos = N.agruparPorArquivo(doMes, bancos);
-    const nomes = Object.keys(grupos).map(id => N.nomeArquivo(bancos[id] || {}, mes));
+    // Valida com o estado ATUAL só para montar a confirmação; tudo é
+    // RECALCULADO depois do "ok" — a lista pode mudar (um pagamento
+    // marcado no Controle de Notas) enquanto o diálogo está aberto.
+    const validar = () => {
+      const doMes = lancamentos.filter(l => l.mes === mes);
+      if(!doMes.length) return { erro: 'Nenhum lançamento em ' + mes + '.' };
+      // Pendência TRAVA: a numeração é contínua, não dá para
+      // reexportar "consertado" depois sem furar a sequência.
+      const pend = doMes.filter(N.pendente).length;
+      if(pend) return { erro: pend + ' lançamento(s) sem data, valor ou conta mapeada. Complete as pendências (amarelas na lista) antes de exportar.' };
+      return { doMes, grupos: N.agruparPorArquivo(doMes, bancos) };
+    };
+    let v = validar();
+    if(v.erro){ App.toastErro('Exportação bloqueada', v.erro); return; }
+
+    // Mês já exportado? Aviso FORTE: exportar de novo gera numeração
+    // nova para as mesmas linhas e o contador contabiliza em dobro.
+    let jaExportado = null;
+    try{
+      const cfg = await App.comAuth(() => db.collection('config').doc('contadoresExportacao').get());
+      jaExportado = cfg.exists ? ((cfg.data().mesesExportados || {})[mes] || null) : null;
+    }catch(e){ /* sem leitura, segue sem o aviso */ }
+
+    const nomes = Object.keys(v.grupos).map(id => N.nomeArquivo(bancos[id] || {}, mes));
     const ok = await App.confirmar({
       titulo: 'Exportar ' + mes + ' para o contador',
-      mensagem: doMes.length + ' lançamento(s) em ' + nomes.length + ' arquivo(s):\n' + nomes.join('\n') +
-        '\n\nOs contadores de numeração avançam e NÃO voltam — exporte uma vez só por mês.',
-      confirmar: 'Exportar'
+      mensagem: (jaExportado
+          ? '⚠ ESTE MÊS JÁ FOI EXPORTADO em ' + App.fmtData(jaExportado.em) + ' (' + jaExportado.linhas +
+            ' linha(s)). Exportar de novo gera NUMERAÇÃO NOVA para os mesmos lançamentos — se os dois arquivos ' +
+            'chegarem ao contador, o mês é contabilizado em dobro.\n\n'
+          : '') +
+        v.doMes.length + ' lançamento(s) em ' + nomes.length + ' arquivo(s):\n' + nomes.join('\n') +
+        '\n\nOs contadores de numeração avançam e NÃO voltam. Se o navegador perguntar sobre múltiplos downloads, permita.',
+      confirmar: jaExportado ? 'Exportar MESMO ASSIM' : 'Exportar',
+      perigo: !!jaExportado
     });
     if(!ok) return;
 
     const btn = $('lcExportarBtn');
     btn.disabled = true;
     try{
+      // Recalcula DEPOIS da confirmação (a lista pode ter mudado) —
+      // inclusive as pendências, que podem ter surgido nesse meio.
+      v = validar();
+      if(v.erro){ App.toastErro('Exportação bloqueada', v.erro); return; }
+      const grupos = v.grupos;
+
       // Os contadores avançam numa TRANSACTION: duas exportações ao
       // mesmo tempo não furam a sequência.
       const ref = db.collection('config').doc('contadoresExportacao');
@@ -533,6 +590,7 @@
         const c = doc.exists ? doc.data() : { proxLancamento: 1, proxLinha: 1 };
         let cont = { lancamento: c.proxLancamento || 1, linha: c.proxLinha || 1 };
         const arquivos = [];
+        let totalLinhas = 0;
         // Ordem estável de bancos (alfabética) para a numeração ser
         // reproduzível.
         Object.keys(grupos).sort((a, b) =>
@@ -540,18 +598,34 @@
           .forEach(id => {
             const r = N.linhasExportacao(grupos[id], cont);
             arquivos.push({ nome: N.nomeArquivo(bancos[id] || {}, mes), linhas: r.linhas });
+            totalLinhas += r.linhas.length;
             cont = { lancamento: r.proximoLancamento, linha: r.proximaLinha };
           });
-        tx.set(ref, { proxLancamento: cont.lancamento, proxLinha: cont.linha }, { merge: true });
+        const meses = (doc.exists && doc.data().mesesExportados) || {};
+        meses[mes] = { em: App.hojeISO(), linhas: totalLinhas };
+        tx.set(ref, { proxLancamento: cont.lancamento, proxLinha: cont.linha, mesesExportados: meses }, { merge: true });
         return arquivos;
       }));
-      resultado.forEach(a => {
-        const ws = XLSX.utils.aoa_to_sheet(a.linhas);
+
+      // Os workbooks são MONTADOS todos antes do primeiro download:
+      // uma falha na montagem não deixa metade dos arquivos no disco.
+      const prontos = resultado.map(a => {
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Lançamentos');
-        XLSX.writeFile(wb, a.nome);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(a.linhas), 'Lançamentos');
+        return { nome: a.nome, wb };
       });
-      App.toast(resultado.length + ' arquivo(s) exportado(s).', 'ok');
+      const falhas = [];
+      prontos.forEach(p => {
+        try{ XLSX.writeFile(p.wb, p.nome); }
+        catch(e){ console.error(e); falhas.push(p.nome); }
+      });
+      if(falhas.length){
+        App.toastErro('Download falhou',
+          falhas.length + ' arquivo(s) não desceram: ' + falhas.join(', ') +
+          '. ATENÇÃO: os contadores JÁ avançaram — para gerar de novo, ajuste-os em Cadastros de volta ao valor anterior.');
+      } else {
+        App.toast(prontos.length + ' arquivo(s) exportado(s). Confira a pasta de downloads (o navegador pode ter pedido permissão para múltiplos arquivos).', 'ok');
+      }
       carregarContadores();
     }catch(e){
       App.toastErro('Erro na exportação', e);
@@ -595,8 +669,8 @@
     if(!carregouCadastros || mapaContas === null) return;
     const opcoes = (selecionado) => '<option value="">— sem mapa (fica pendente) —</option>' +
       Object.keys(categorias).sort((a, b) =>
-        categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
-        categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+        String(categorias[a].grupo || '').localeCompare(String(categorias[b].grupo || ''), 'pt-BR') ||
+        String(categorias[a].nome || '').localeCompare(String(categorias[b].nome || ''), 'pt-BR'))
         .map(id => '<option value="' + escapeHtml(id) + '"' + (id === selecionado ? ' selected' : '') + '>' +
           escapeHtml(categorias[id].grupo + ' · ' + categorias[id].nome) + '</option>').join('');
     const linha = (rotulo, chave, selecionado) =>
@@ -630,6 +704,12 @@
 
   function renderCadastros(){
     if(!carregouCadastros) return;
+    // Digitando num campo de cadastro, o eco do proprio change (via
+    // snapshot) reconstruia as tabelas e comia o texto + o foco. Com o
+    // foco dentro de um dos containers, o re-render espera.
+    if($('lcCadBancos').contains(document.activeElement) ||
+       $('lcCadCategorias').contains(document.activeElement) ||
+       $('lcMapaContas').contains(document.activeElement)) return;
     renderMapaContas();
     const linhaCad = (id, d, colExtra, attr) =>
       '<tr>' +
@@ -641,7 +721,7 @@
 
     $('lcCadBancos').innerHTML = '<table class="lc-table lc-cad-table"><thead><tr>' +
       '<th scope="col">Nome</th><th scope="col">Conta</th><th scope="col">Tipo</th><th scope="col">Ativo</th></tr></thead><tbody>' +
-      Object.keys(bancos).sort((a, b) => bancos[a].nome.localeCompare(bancos[b].nome, 'pt-BR'))
+      Object.keys(bancos).sort((a, b) => String(bancos[a].nome || '').localeCompare(String(bancos[b].nome || ''), 'pt-BR'))
         .map(id => linhaCad(id, bancos[id],
           '<td style="font-family:var(--font-mono); font-size:11px;">' + escapeHtml(bancos[id].tipo || '') + '</td>', 'bco'))
         .join('') + '</tbody></table>';
@@ -649,8 +729,8 @@
     $('lcCadCategorias').innerHTML = '<table class="lc-table lc-cad-table"><thead><tr>' +
       '<th scope="col">Nome</th><th scope="col">Conta</th><th scope="col">Grupo · direção</th><th scope="col">Ativo</th></tr></thead><tbody>' +
       Object.keys(categorias).sort((a, b) =>
-        categorias[a].grupo.localeCompare(categorias[b].grupo, 'pt-BR') ||
-        categorias[a].nome.localeCompare(categorias[b].nome, 'pt-BR'))
+        String(categorias[a].grupo || '').localeCompare(String(categorias[b].grupo || ''), 'pt-BR') ||
+        String(categorias[a].nome || '').localeCompare(String(categorias[b].nome || ''), 'pt-BR'))
         .map(id => linhaCad(id, categorias[id],
           '<td style="font-family:var(--font-mono); font-size:11px;">' + escapeHtml(categorias[id].grupo) +
           ' · ' + (categorias[id].direcao === 'entrada' ? '↓ entrada' : '↑ saída') + '</td>', 'cat'))
@@ -745,6 +825,7 @@
 
   $('lcData').value = App.hojeISO();
   $('lcMesFiltro').value = mesAtual();
+  router.iniciar(); // sincroniza o #hash — sem isto o Voltar do navegador ficava inerte
   renderLista();
   iniciar();
 })();

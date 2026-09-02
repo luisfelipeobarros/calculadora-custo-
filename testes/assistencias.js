@@ -89,17 +89,39 @@ eq('espacos nas pontas nao enganam a comparacao',
   const misto = ['fotoA', { termo: true, img: 'termoPag1' }, 'fotoB',
     { termo: true, img: 'termoPag2' }];
   eq('separa problema e termo do mesmo array',
-    N.separarFotos(misto), { problema: ['fotoA', 'fotoB'], termo: ['termoPag1', 'termoPag2'] });
+    N.separarFotos(misto), { problema: ['fotoA', 'fotoB'], termo: ['termoPag1', 'termoPag2'], outros: [] });
   eq('documento antigo (so strings) continua funcionando',
-    N.separarFotos(['a', 'b']), { problema: ['a', 'b'], termo: [] });
-  eq('lixo no array e ignorado, nunca quebra',
-    N.separarFotos([null, { termo: true }, 42, '']), { problema: [], termo: [] });
+    N.separarFotos(['a', 'b']), { problema: ['a', 'b'], termo: [], outros: [] });
+  // Formato DESCONHECIDO vai para `outros` e sobrevive ao salvar —
+  // como a ficha regrava o array inteiro, ignorar seria APAGAR. So'
+  // null/undefined/'' morrem de verdade.
+  eq('entrada desconhecida e PRESERVADA em outros (null e vazio morrem)',
+    N.separarFotos([null, { termo: true }, 42, '', { img: 'legado' }]),
+    { problema: [], termo: [], outros: [{ termo: true }, 42, { img: 'legado' }] });
+  eq('juntar devolve os desconhecidos intactos no fim',
+    N.juntarFotos(['f1'], ['t1'], [{ img: 'legado' }]),
+    ['f1', { termo: true, img: 't1' }, { img: 'legado' }]);
   eq('juntar e separar fecham o ciclo sem perder nada',
     N.separarFotos(N.juntarFotos(['f1'], ['t1', 't2'])),
-    { problema: ['f1'], termo: ['t1', 't2'] });
-  eq('sem fotos nenhuma: vazio dos dois lados',
-    N.separarFotos(undefined), { problema: [], termo: [] });
+    { problema: ['f1'], termo: ['t1', 't2'], outros: [] });
+  eq('sem fotos nenhuma: vazio dos tres lados',
+    N.separarFotos(undefined), { problema: [], termo: [], outros: [] });
+  eq('fotos que nem array e (doc corrompido) nao derruba a lista',
+    N.separarFotos('lixo'), { problema: [], termo: [], outros: [] });
 }
+
+// ── Dinheiro digitado a brasileira (o bug dos >= 1000) ───────
+// "25.000" formatado sem centavos era relido como 25 — cada
+// abrir-e-salvar da ficha dividia o valor por mil.
+eq('25.000 e vinte e cinco mil', N.parseDinheiroBR('25.000'), 25000);
+eq('1.234 (milhar) e mil duzentos e trinta e quatro', N.parseDinheiroBR('1.234'), 1234);
+eq('2.500.000 inteiro', N.parseDinheiroBR('2.500.000'), 2500000);
+eq('com centavos continua igual', N.parseDinheiroBR('1.234,56'), 1234.56);
+eq('decimal simples com ponto nao muda', N.parseDinheiroBR('64.9'), 64.9);
+eq('vazio -> null', N.parseDinheiroBR(''), null);
+// E o round-trip que corrompia: renderizado com 2 casas, relido igual.
+eq('round-trip do render com 2 casas fecha',
+  N.parseDinheiroBR((25000).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })), 25000);
 
 // ── Exportacao ───────────────────────────────────────────────
 

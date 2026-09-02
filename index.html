@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos dois apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=15">
+<link rel="stylesheet" href="app-shared.css?v=16">
 
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. As larguras
@@ -916,7 +916,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=22"></script>
+<script src="app-shared.js?v=23"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -924,7 +924,7 @@ Tupan</textarea>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=2"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
-<script src="concorrentes-nucleo.js?v=1"></script>
+<script src="concorrentes-nucleo.js?v=2"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2395,12 +2395,16 @@ Tupan</textarea>
     // restaurar direto de um link deixaria a tela vazia.
     naoRestauraveis: ['Comparar', 'PesquisaLote'],
     aoEntrar: {
+      // Todos esperam o Firebase: o router.iniciar() roda SINCRONO na
+      // carga, antes de firestoreDb existir — sem o await, abrir o app
+      // direto em #Notas/#Concorrentes (o hash sobrevive ao F5) exibia
+      // "Firebase não conectado" para sempre (auditoria de 02/09/2026).
       Painel:       () => carregarPainel(),
-      Produtos:     () => atualizarListaSalvos(),
-      Historico:    () => carregarHistorico(),
-      Concorrentes: () => { carregarHistoricoConcorrentes(); renderLotePlanilha(); },
-      Notas:        () => carregarNotasEmitidas(false),
-      Fiscal:       () => carregarFiscal(false)
+      Produtos:     () => promessaFirebase.then(() => atualizarListaSalvos()),
+      Historico:    () => promessaFirebase.then(() => carregarHistorico()),
+      Concorrentes: () => promessaFirebase.then(() => { carregarHistoricoConcorrentes(); renderLotePlanilha(); }),
+      Notas:        () => promessaFirebase.then(() => carregarNotasEmitidas(false)),
+      Fiscal:       () => promessaFirebase.then(() => carregarFiscal(false))
     },
     aoTrocar: (nome) => {
       const botoes = {
@@ -2563,6 +2567,10 @@ Tupan</textarea>
     loteSomenteLeitura = false;
     loteOrigemPlanilha = false;
     loteSoPendentes = false;
+    // As lojas da pesquisa ANTERIOR vazavam para a previa da nova
+    // tabela (colunas de uma execucao, dados de outra) — auditoria de
+    // 02/09/2026. A previa nasce das lojas do campo, como a contagem.
+    loteLojas = lojasDoCampo();
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').disabled = false;
     $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
@@ -2619,11 +2627,13 @@ Tupan</textarea>
   }
 
   // Menor preço já encontrado nesta linha — é ele que leva o 🏆, igual
-  // ao que a pesquisa individual faz na coluna Preço.
+  // ao que a pesquisa individual faz na coluna Preço. Só as lojas
+  // VISÍVEIS entram: um índice órfão de execução antiga dava o troféu
+  // a um preço que não estava em coluna nenhuma.
   function menorPrecoDaLinha(item){
     let menor = null;
-    Object.keys(item.porLoja).forEach(k=>{
-      const r = item.porLoja[k];
+    lojasAtuais().forEach((_, lojaIdx)=>{
+      const r = item.porLoja[lojaIdx];
       if(r && !r.pendente && r.preco != null && (menor === null || r.preco < menor)) menor = r.preco;
     });
     return menor;
@@ -2980,13 +2990,25 @@ Tupan</textarea>
       // histórico busca de novo, em vez de mostrar o cache anterior.
       if(loteDocId) delete pesquisasPorPedido[loteDocId];
       // Origem planilha: atualiza o índice local de "última pesquisa
-      // por código" (o painel por fabricante lê dele) e encerra o
-      // progresso anti-F5 — o trabalho está salvo no Firestore.
+      // por código" (o painel por fabricante lê dele). O preço
+      // registrado é o do CATÁLOGO, não o editado na tabela — o motivo
+      // "preço mudou" compara catálogo de hoje × catálogo de quando
+      // pesquisou; registrar o editado marcava o produto como
+      // desatualizado no instante seguinte à pesquisa.
       if(loteOrigemPlanilha){
+        const precoCatalogo = Object.create(null);
+        ((catalogoLote && catalogoLote.itens) || []).forEach(c => { precoCatalogo[c.codigo] = c.precoCent; });
         itensParaSalvar.forEach(it => {
-          if(it.codigo) registrarUltimaPesquisa(it.codigo, it.nossoPreco);
+          if(it.codigo) registrarUltimaPesquisa(it.codigo,
+            precoCatalogo[it.codigo] != null ? precoCatalogo[it.codigo] / 100 : it.nossoPreco);
         });
-        limparProgressoLote();
+        // O progresso anti-F5 só morre quando TUDO foi pesquisado:
+        // salvar uma varredura parcial apagava a retomada dos que
+        // faltavam (auditoria de 02/09/2026).
+        const tudoPesquisado = loteItens.every(it =>
+          loteLojas.every((_, li) => it.porLoja[li] && !it.porLoja[li].pendente));
+        if(tudoPesquisado) limparProgressoLote();
+        else App.toast('Pesquisa parcial salva — a retomada dos produtos que faltam continua disponível na aba Concorrentes.', 'info');
       }
       $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
       carregarHistoricoConcorrentes();
@@ -3050,6 +3072,10 @@ Tupan</textarea>
     snap.forEach(doc => {
       const d = doc.data();
       if(!d.codigo) return;
+      // Pesquisas de PEDIDOS do histórico também têm código, mas o
+      // meuPreco delas é o preço de venda do produto salvo — comparar
+      // com o catálogo gerava "preço mudou" falso no painel inteiro.
+      if(d.origemPedido !== ROTULO_ORIGEM_PLANILHA) return;
       const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
       const atual = idx[d.codigo];
       if(!atual || (quando && (!atual.data || quando > atual.data))){
@@ -3116,9 +3142,15 @@ Tupan</textarea>
 
   async function renderLotePlanilha(){
     const prog = lerLS(PROGRESSO_LS);
-    if(prog && prog.itens && prog.itens.length){
-      const feitos = prog.itens.filter(it =>
-        (prog.lojas||[]).every((_, li) => it.porLoja && it.porLoja[li] && !it.porLoja[li].pendente)).length;
+    // O localStorage pode voltar corrompido (escrita parcial, esquema
+    // antigo): formato inesperado é descartado, nunca derruba a aba.
+    if(prog && Array.isArray(prog.itens) && prog.itens.length){
+      // Sem a lista de lojas não dá para afirmar "concluído":
+      // [].every() é true e o banner diria "100 de 100" sobre nada.
+      const feitos = (Array.isArray(prog.lojas) && prog.lojas.length)
+        ? prog.itens.filter(it =>
+            prog.lojas.every((_, li) => it.porLoja && it.porLoja[li] && !it.porLoja[li].pendente)).length
+        : 0;
       $('retomarLoteAviso').innerHTML =
         '<div class="empty-note" style="display:block; border:1.5px solid var(--brick); border-radius:4px; padding:8px 10px; margin-bottom:8px;">' +
         '⏸ Pesquisa de planilha interrompida — ' + feitos + ' de ' + prog.itens.length + ' produto(s) concluído(s). ' +
@@ -3128,7 +3160,11 @@ Tupan</textarea>
       $('retomarLoteAviso').innerHTML = '';
     }
 
-    if(!catalogoLote || !catalogoLote.itens || !catalogoLote.itens.length){
+    // Formato inesperado do localStorage (itens que não é array, índice
+    // que não é objeto) é tratado como ausência — nunca derruba a aba.
+    if(catalogoLote && !Array.isArray(catalogoLote.itens)) catalogoLote = null;
+    if(ultimaPorCodigo !== null && (typeof ultimaPorCodigo !== 'object' || Array.isArray(ultimaPorCodigo))) ultimaPorCodigo = null;
+    if(!catalogoLote || !catalogoLote.itens.length){
       $('importarCatalogoBtn').textContent = '📄 Importar planilha';
       $('catalogoStatus').textContent = 'Nenhuma planilha importada ainda.';
       $('painelFabricantes').innerHTML = '';
@@ -3186,8 +3222,8 @@ Tupan</textarea>
 
   function produtosFiltradosCat(){
     const termo = normalizarTexto(($('filtroProdutoCat') && $('filtroProdutoCat').value) || '');
-    const min = App.parseNumeroBR(($('precoMinCat') && $('precoMinCat').value) || '');
-    const max = App.parseNumeroBR(($('precoMaxCat') && $('precoMaxCat').value) || '');
+    const min = App.parseDinheiroBR(($('precoMinCat') && $('precoMinCat').value) || '');
+    const max = App.parseDinheiroBR(($('precoMaxCat') && $('precoMaxCat').value) || '');
     return catalogoLote.itens.filter(it =>
       (it.fabricante || '(sem fabricante)') === fabricanteAberto &&
       (!termo || normalizarTexto(it.nome).includes(termo) || normalizarTexto(it.codigo).includes(termo)) &&
@@ -3379,6 +3415,10 @@ Tupan</textarea>
       snap.forEach(doc => {
         const d = doc.data();
         if(!d.codigo) return;
+        // Pedidos do histórico também gravam fabricante null: sem este
+        // filtro, o grupo "(sem fabricante)" misturava pesquisas que
+        // não são da planilha.
+        if(d.origemPedido !== ROTULO_ORIGEM_PLANILHA) return;
         const quando = (d.data && d.data.toDate) ? d.data.toDate() : null;
         const atual = porCodigo[d.codigo];
         if(!atual || (quando && (!atual.quando || quando > atual.quando))){
@@ -3410,12 +3450,18 @@ Tupan</textarea>
 
   App.delegar($('retomarLoteAviso'), 'click', '#retomarLoteBtn', ()=>{
     const prog = lerLS(PROGRESSO_LS);
-    if(!prog || !prog.itens || !prog.itens.length){ renderLotePlanilha(); return; }
+    if(!prog || !Array.isArray(prog.itens) || !prog.itens.length){ renderLotePlanilha(); return; }
     loteDocId = null;
     prepararTelaLote(prog.nome || ROTULO_ORIGEM_PLANILHA);
     loteOrigemPlanilha = true;
     loteSoPendentes = true; // o laço pula quem já tem resposta de todas as lojas
-    if(prog.lojas && prog.lojas.length) $('lojasBusca').value = prog.lojas.join('\n');
+    if(Array.isArray(prog.lojas) && prog.lojas.length){
+      $('lojasBusca').value = prog.lojas.join('\n');
+      // As COLUNAS têm que ser as lojas do progresso: o porLoja
+      // restaurado é indexado por elas — sem esta linha, as lojas da
+      // pesquisa anterior desenhavam colunas com os preços trocados.
+      loteLojas = prog.lojas;
+    }
     loteItens = prog.itens;
     $('iniciarLoteBtn').textContent = '▶ Retomar pesquisa';
     $('pesqLoteMsg').textContent = 'Retomada: os produtos já concluídos serão pulados.';
@@ -3609,7 +3655,7 @@ Tupan</textarea>
           ? (soNaoRecebidas && !termo && !termoProduto && !dataDe && !dataAte
               ? 'Nenhuma nota pendente de entrada no ERP nos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias.'
               : 'Nada encontrado com esses filtros.')
-          : 'Nenhuma nota nos últimos 120 dias (a carga inicial do Apps Script já rodou?).') + '</p>';
+          : 'Nenhuma nota nos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias (a carga inicial do Apps Script já rodou?).') + '</p>';
       $('maisNotasBtn'+suf).style.display = 'none';
       return;
     }
@@ -3771,9 +3817,12 @@ Tupan</textarea>
     };
   }
 
+  let danfeChaveAberta = null;
+
   function abrirDanfe(chave){
     const n = (notasEmitidasCache || []).find(x => x.chave === chave);
     if(!n){ App.toastErro('Nota não encontrada', 'Recarregue a lista e tente de novo.'); return; }
+    danfeChaveAberta = chave;
     document.body.classList.add('danfe-aberto');
     $('danfeView').style.display = '';
     $('danfeView').scrollTop = 0;
@@ -3789,13 +3838,16 @@ Tupan</textarea>
       .then(snap => { vencCache[chave] = { lista: snap.docs.map(d => d.data()) }; })
       .catch(e => { console.error('Erro ao carregar vencimentos:', e); vencCache[chave] = { lista: [], erro: App.erroDe(e) }; })
       .then(()=>{
-        if(document.body.classList.contains('danfe-aberto')){
+        // So' se o DANFE aberto ainda e' O DESTA nota — a resposta
+        // atrasada da nota A nao pode sobrescrever o documento da B.
+        if(danfeChaveAberta === chave){
           $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, vencCache[chave].lista || []));
         }
       });
   }
 
   $('fecharDanfeBtn').addEventListener('click', ()=>{
+    danfeChaveAberta = null;
     $('danfeView').style.display = 'none';
     document.body.classList.remove('danfe-aberto');
   });
@@ -6153,15 +6205,19 @@ Tupan</textarea>
       return;
     }
     if(painelCarregandoAno === painelAno) return;
-    painelCarregandoAno = painelAno;
+    // O ano e' capturado JA': com dois cliques rapidos no ◀, duas
+    // cargas ficam em voo e a que terminar por ultimo vence — sem a
+    // captura, o resultado de 2026 podia ser rotulado como 2025 e a
+    // tela travava em "Carregando..." para sempre.
+    const ano = painelAno;
+    painelCarregandoAno = ano;
     renderPainel(); // mostra "carregando" enquanto as consultas rodam
     try{
       await promessaFirebase;
       if(!firestoreDb){
-        painelDados = { ano: painelAno, semFirebase: true };
+        painelDados = { ano: ano, semFirebase: true };
         return;
       }
-      const ano = painelAno;
       const [metasSnap, dupSnap, cancSnap] = await Promise.all([
         // A colecao INTEIRA (um doc por mes, poucas dezenas): o total
         // do ano anterior, o "vs ano anterior" e a sazonalidade
@@ -6197,10 +6253,13 @@ Tupan</textarea>
       });
       painelDados = { ano, metas, aPagar, aPagarDia };
     }catch(e){
-      painelDados = { ano: painelAno, erro: App.erroDe(e) };
+      painelDados = { ano: ano, erro: App.erroDe(e) };
     }finally{
       painelCarregandoAno = null;
-      renderPainel();
+      // O usuario pode ter trocado de ano enquanto esta carga rodava:
+      // recarrega para o ano EXIBIDO em vez de deixar a tela presa.
+      if(ano !== painelAno) carregarPainel();
+      else renderPainel();
     }
   }
 
@@ -6234,7 +6293,10 @@ Tupan</textarea>
       $('prevFaturado').value = fat ? numBR(fat.acumulado) : '';
     }
     if(document.activeElement !== $('prevAte')){
-      $('prevAte').value = (fat && fat.ate) ? fat.ate : App.somarDias(hoje, -1);
+      // "Ontem" no dia 1º cairia no mês anterior — e o próprio salvar
+      // recusa data fora do mês. No dia 1º, o padrão é hoje mesmo.
+      const ontem = App.somarDias(hoje, -1);
+      $('prevAte').value = (fat && fat.ate) ? fat.ate : (ontem >= mes + '-01' ? ontem : hoje);
     }
 
     const alvo = $('prevResultado');
@@ -6529,7 +6591,7 @@ Tupan</textarea>
 
   $('prevSalvarBtn').addEventListener('click', () => {
     const mes = mesAtualISO();
-    const v = parseNumeroBR($('prevFaturado').value);
+    const v = App.parseDinheiroBR($('prevFaturado').value);
     const ate = $('prevAte').value;
     if(v == null){ App.toastErro('Valor em falta', 'Informe o faturado acumulado.'); return; }
     if(!ate || ate.substring(0, 7) !== mes){
@@ -6546,18 +6608,23 @@ Tupan</textarea>
     renderPainel();
   });
 
+  // parseDinheiroBR nos campos de DINHEIRO grande: "6.470.000" digitado
+  // sem centavos é seis milhões e meio, não R$ 6,47.
   App.delegar($('tabelaPainel'), 'change', 'input[data-objetivo]', inp => {
-    const v = parseNumeroBR(inp.value);
+    const v = App.parseDinheiroBR(inp.value);
     salvarMeta(inp.dataset.objetivo, { objetivo: v });
   });
   App.delegar($('tabelaPainel'), 'change', 'input[data-vendas]', inp => {
     const mes = inp.dataset.vendas;
-    const v = parseNumeroBR(inp.value);
+    const v = App.parseDinheiroBR(inp.value);
     if(v == null){ salvarMeta(mes, { faturamento: null }); return; }
     // Mes fechado: o valor e' o total do mes. Mes corrente: e' o mesmo
-    // acumulado do card de previsao, valendo ate ontem.
+    // acumulado do card de previsao, valendo ate ontem — e no dia 1º,
+    // hoje (ontem cairia fora do mes e zeraria a previsao).
+    const hoje = App.hojeISO();
+    const ontem = App.somarDias(hoje, -1);
     const ate = mes === mesAtualISO()
-      ? App.somarDias(App.hojeISO(), -1)
+      ? (ontem >= mes + '-01' ? ontem : hoje)
       : PainelNucleo.ultimoDiaDoMes(mes);
     salvarMeta(mes, { faturamento: { acumulado: v, ate } });
   });
@@ -6593,7 +6660,7 @@ Tupan</textarea>
     await atualizarListaSalvos();
     if(router.atual() === 'Painel') carregarPainel(true);
     if(router.atual() === 'Historico') carregarHistorico();
-    if(router.atual() === 'Concorrentes') carregarHistoricoConcorrentes();
+    if(router.atual() === 'Concorrentes'){ carregarHistoricoConcorrentes(); renderLotePlanilha(); }
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
   };
 

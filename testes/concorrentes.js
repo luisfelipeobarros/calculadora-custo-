@@ -53,6 +53,8 @@ eq('sem coluna de codigo -> erro explicito (o codigo e a chave de tudo)',
 
 eq('64.900000000000006 vira 64,90 em centavos', C.precoParaCentavos('64.900000000000006'), 6490);
 eq('virgula decimal aceita', C.precoParaCentavos('36,90'), 3690);
+eq('1.234 (milhar sem centavos) e R$ 1.234, nao R$ 1,23',
+  C.precoParaCentavos('1.234'), 123400);
 eq('preco vazio -> null', C.precoParaCentavos(''), null);
 eq('preco zero nao vale (nao ha venda a zero)', C.precoParaCentavos('0'), null);
 
@@ -63,12 +65,25 @@ eq('preco zero nao vale (nao ha venda a zero)', C.precoParaCentavos('0'), null);
     ['840', 'PISO A', 'M²', '36.9', 'CERAL'],
     ['841', '', 'M²', '10', 'CERAL'],          // sem nome
     ['842', 'PISO B', 'M²', '', 'CERAL'],      // sem preco
-    ['', 'PISO C', 'M²', '10', 'CERAL']        // sem codigo
+    ['', 'PISO C', 'M²', '10', 'CERAL'],       // sem codigo
+    ['840', 'PISO A DE NOVO', 'M²', '40', 'CERAL'] // codigo repetido
   ]);
-  eq('so a linha completa entra', r.itens.length, 1);
-  eq('as tres ruins sao contadas com motivo',
-    r.ignoradas.map(i => i.motivo), ['sem nome', 'sem preço', 'sem código']);
+  eq('so a linha completa (e inedita) entra', r.itens.length, 1);
+  eq('as quatro ruins sao contadas com motivo',
+    r.ignoradas.map(i => i.motivo), ['sem nome', 'sem preço', 'sem código', 'código repetido']);
   eq('  ...com o numero da linha da planilha', r.ignoradas[0].linha, 3);
+  eq('no codigo repetido, a PRIMEIRA linha vale', r.itens[0].precoCent, 3690);
+}
+
+// Sinonimo guloso: "Código de Barras" nao pode virar a chave, nem
+// "Preço de Custo" virar o preco de venda.
+{
+  const r = C.lerCatalogo([
+    ['Código de Barras', 'Código Produto', 'Nome Produto', 'Preço de Custo', 'Preço de Venda'],
+    ['789100012345', '840', 'PISO A', '20,00', '36,90']
+  ]);
+  eq('"Código de Barras" nao rouba a coluna de codigo', r.itens[0].codigo, '840');
+  eq('"Preço de Custo" nao rouba o preco de venda', r.itens[0].precoCent, 3690);
 }
 
 // ── 4. Consulta de busca sem a notacao interna ───────────────
