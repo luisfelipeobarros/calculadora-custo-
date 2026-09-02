@@ -2447,6 +2447,9 @@
       cadContabil = { bancos: {}, categorias: {}, mapa: {} };
       return cadContabil;
     }).then(function(c){ carregandoContabil = null; return c; });
+    // O bug de 02/09/2026: sem este return, o PRIMEIRO clique em pagar
+    // recebia undefined e morria no .then. Um teste agora trava isso.
+    return carregandoContabil;
   }
 
   function gravarLancamentosDePagamento(pares){

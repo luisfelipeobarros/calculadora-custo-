@@ -142,6 +142,21 @@ eq('pagas: pendente fica de fora', comFiltro('pagas', false, '2026-07-01'), fals
 eq('todas: deixa tudo passar', comFiltro('todas', true, '2026-01-01'), true);
 eq('todas: inclusive sem vencimento', comFiltro('todas', false, null), true);
 
+// ── carregarContabil devolve Promise no primeiro uso ─────────
+// O bug de 02/09/2026: a funcao montava a promessa em
+// carregandoContabil mas nao a DEVOLVIA — o primeiro clique em pagar
+// recebia undefined e morria no .then, derrubando a tela.
+{
+  const fonte = extrair('carregarContabil');
+  const resultado = new Function('App', 'db',
+    'var cadContabil = null, carregandoContabil = null;\n' + fonte +
+    '\nreturn carregarContabil();')(
+    { comAuth: () => Promise.resolve([{ forEach(){} }, { forEach(){} }, { exists: false }]) },
+    null);
+  eq('carregarContabil devolve uma Promise no PRIMEIRO uso',
+    typeof (resultado && resultado.then), 'function');
+}
+
 // ── Guardas de estrutura ─────────────────────────────────────
 // Prorrogar tem que usar pedirData. Com confirmar (que promete um
 // booleano) a data escolhida virava `false` e o botao nao fazia nada.
