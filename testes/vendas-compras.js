@@ -19,16 +19,17 @@ const fs = require('fs');
 const path = require('path');
 const html = fs.readFileSync(path.resolve(__dirname, '..', 'controle-notas.html'), 'utf8');
 
-function extrair(nome){
-  const i = html.indexOf('function ' + nome + '(');
-  if(i === -1) throw new Error('nao achei ' + nome + ' em controle-notas.html');
-  let d = 0, j = html.indexOf('{', i);
-  for(; j < html.length; j++){
-    if(html[j] === '{') d++;
-    else if(html[j] === '}'){ d--; if(d === 0) break; }
+function extrairDe(texto, nome, origem){
+  const i = texto.indexOf('function ' + nome + '(');
+  if(i === -1) throw new Error('nao achei ' + nome + ' em ' + origem);
+  let d = 0, j = texto.indexOf('{', i);
+  for(; j < texto.length; j++){
+    if(texto[j] === '{') d++;
+    else if(texto[j] === '}'){ d--; if(d === 0) break; }
   }
-  return html.slice(i, j + 1);
+  return texto.slice(i, j + 1);
 }
+const extrair = (nome) => extrairDe(html, nome, 'controle-notas.html');
 
 const m = new Function(
   "var IGNORAR_VINCULO = '__ignorar';\n" +
@@ -139,6 +140,20 @@ const duplicatas = [
   const megao = r.linhas[0];
   eq('ano inteiro soma todos os meses (venda 1900, compra 400+1234)',
     [megao.vendido, megao.comprado], [1900, 1634]);
+}
+
+// ── Espelho: o dashboard usa as MESMAS funcoes ───────────────
+// A area logada do dashboard.html carrega uma COPIA de chaveMarca,
+// marcaDoVinculo e cruzarVendasCompras. Copia diverge em silencio;
+// este teste compara os dois arquivos caractere a caractere — quem
+// mudar a regra num lado e esquecer o outro quebra aqui.
+
+{
+  const htmlDash = fs.readFileSync(path.resolve(__dirname, '..', 'dashboard.html'), 'utf8');
+  ['chaveMarca', 'marcaDoVinculo', 'cruzarVendasCompras'].forEach((nome) => {
+    eq('copia fiel no dashboard.html: ' + nome,
+      extrairDe(htmlDash, nome, 'dashboard.html') === extrair(nome), true);
+  });
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');

@@ -349,7 +349,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezoito frentes:
     viram um nome só — o caso real "Outros"/"OUTROS") e os destaques
     automáticos calculados por regra, sem IA.
 
-18. **Vendas × Compras** — 15 verificações extraídas do
+18. **Vendas × Compras** — 18 verificações extraídas do
     `controle-notas.html`: o cruzamento da planilha pública de vendas
     com as notas (compra pela **emissão**) e as duplicatas pagas
     (pagamento pela **data do pagamento**), por marca da planilha. O
@@ -358,7 +358,10 @@ Não precisa instalar nada. São vinte e seis etapas, em dezoito frentes:
     caixa/acento, nota cancelada fica fora dos dois lados, valorPago
     tem fallback no valor da parcela, quem não tem vínculo vai para
     "sem vínculo" (nunca somado em silêncio) e o "não comparar" sai
-    da conta somado em ignorados.
+    da conta somado em ignorados. A área logada do `dashboard.html`
+    usa uma **cópia fiel** dessas funções — o teste compara os dois
+    arquivos textualmente, então mudar num lado e esquecer o outro
+    quebra aqui.
 
 Rode antes de publicar qualquer alteração.
 

@@ -61,8 +61,9 @@
        em cima, fornecedores + combo embaixo — os quatro blocos se
        encontram num cruzamento so' (alinhado, como no Power BI). */
     .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
-      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza cresc" "destaques destaques"; }
+      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza cresc" "vxp vxp" "destaques destaques"; }
     .bloco.b-destaques{ grid-area:destaques; }
+    .bloco.b-vxp{ grid-area:vxp; }
     .bloco.b-tabcat{ grid-area:tabcat; }
     .bloco.b-partcat{ grid-area:partcat; }
     .bloco.b-combomes{ grid-area:combomes; }
@@ -79,7 +80,16 @@
   /* Ordem de empilhamento no celular (pedida no layout) */
   .b-combomes{ order:1; } .b-partcat{ order:2; }
   .b-tabcat{ order:3; } .b-tabforn{ order:4; } .b-pizza{ order:5; } .b-cresc{ order:6; }
-  .b-destaques{ order:7; }
+  .b-vxp{ order:7; } .b-destaques{ order:8; }
+  .vxp-pos{ color:#1e7e34; font-weight:700; }
+  .vxp-neg{ color:var(--vermelho); font-weight:700; }
+  .vxp-login{ max-width:340px; margin:12px auto; display:flex; flex-direction:column; gap:8px; }
+  .vxp-login input{ min-height:44px; padding:0 10px; font-size:15px; border:2px solid var(--preto); }
+  .vxp-login button, .vxp-entrar{ min-height:44px; padding:0 16px; font-size:15px; font-weight:700;
+    border:2px solid var(--preto); background:var(--preto); color:#fff; cursor:pointer; }
+  .vxp-rodape{ text-align:center; margin-top:8px; font-size:12px; color:var(--cinza); }
+  .vxp-rodape button{ border:none; background:none; color:var(--cinza); text-decoration:underline;
+    cursor:pointer; font-size:12px; padding:4px; }
   .destaque-item{ display:flex; gap:10px; align-items:flex-start; padding:8px 4px;
     border-bottom:1px solid var(--linha); font-size:14px; line-height:1.45; }
   .destaque-item:last-child{ border-bottom:none; }
@@ -182,6 +192,11 @@
       <span class="sub-periodo" id="crescPeriodo"></span>
       <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
       <div class="estado" id="crescVazio" style="display:none; padding:24px;"></div>
+    </div>
+    <div class="bloco b-vxp">
+      <h2>Vendas × Compras × Pagamentos</h2>
+      <span class="sub-periodo" id="vxpSub"></span>
+      <div id="vxpConteudo"></div>
     </div>
     <div class="bloco b-destaques">
       <h2>Destaques automáticos</h2>
@@ -496,6 +511,102 @@
     return out;
   }
 
+  // ═══ VENDAS × COMPRAS (cópia fiel do controle-notas.html) ═════
+  // As três funções abaixo são IDÊNTICAS às do Controle de Notas —
+  // um teste compara os dois arquivos textualmente, então qualquer
+  // mudança tem que ser feita NOS DOIS.
+  const IGNORAR_VINCULO = '__ignorar';
+
+  // "Megaó" na planilha e "MEGAO" no vinculo sao a MESMA marca: a
+  // chave ignora caixa e acento (a licao do Outros/OUTROS do
+  // dashboard vale aqui tambem).
+  function chaveMarca(nome){
+    return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  // O vinculo por ROTULO vence o por CNPJ: e' ele que separa a Vetrus
+  // (mesmo CNPJ, duas marcas, decididas pelo produto da nota).
+  function marcaDoVinculo(cnpj, rotulo, vinculos){
+    var v = vinculos || {};
+    if(v.porRotulo && v.porRotulo[rotulo] != null) return v.porRotulo[rotulo];
+    if(v.porCnpj && cnpj && v.porCnpj[cnpj] != null) return v.porCnpj[cnpj];
+    return null;
+  }
+
+  // O cruzamento em si. Puro de proposito (recebe tudo, inclusive a
+  // funcao de rotular) — e' o que o teste trava:
+  // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
+  // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
+  // - pago: duplicatas pagas no periodo, pelo valorPago (sem ele, o
+  //   valor da parcela). Duplicata de nota cancelada fica fora;
+  //   duplicata sem a nota carregada classifica pelo proprio nome;
+  // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
+  // - compra/pagamento sem vinculo nenhum vai para semVinculo.
+  function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
+    function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
+    function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
+
+    var porMarca = Object.create(null);
+    function garantir(marca){
+      var ch = chaveMarca(marca);
+      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, pago: 0 };
+      return porMarca[ch];
+    }
+
+    (vendas || []).forEach(function(v){
+      if(!noPeriodo(v.ano, v.mes)) return;
+      garantir(v.fornecedor).vendido += v.faturamento || 0;
+    });
+
+    var semVinculo = Object.create(null);
+    var ignorados = { comprado: 0, pago: 0 };
+    var notasPorId = Object.create(null);
+    notas.forEach(function(n){ notasPorId[n.id] = n; });
+
+    function produtosDe(n){ return Array.isArray(n.produtosResumo) ? n.produtosResumo : null; }
+    function classificar(cnpj, nome, produtos){
+      var rotulo = rotular(nome || '', produtos);
+      return { rotulo: rotulo, cnpj: cnpj, marca: marcaDoVinculo(cnpj, rotulo, vinculos) };
+    }
+    function somar(cls, campo, valor){
+      if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
+      if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
+      var s = semVinculo[cls.rotulo];
+      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, pago: 0 };
+      if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
+      s[campo] += valor;
+    }
+
+    notas.forEach(function(n){
+      if((n.status || 'ativa') === 'cancelada') return;
+      var d = anoMesISO(n.dataEmissao);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      somar(classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n)), 'comprado', n.valorTotal || 0);
+    });
+
+    duplicatas.forEach(function(dup){
+      if(dup.pago !== true) return;
+      var d = anoMesISO(dup.dataPagamento);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      var n = notasPorId[dup.chaveAcesso];
+      if(n && (n.status || 'ativa') === 'cancelada') return;
+      var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
+                  : classificar(null, dup.nomeEmitente, null);
+      somar(cls, 'pago', dup.valorPago != null ? dup.valorPago : (dup.valor || 0));
+    });
+
+    var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
+    linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
+    var soltos = Object.keys(semVinculo).map(function(k){
+      var s = semVinculo[k];
+      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, pago: s.pago };
+    });
+    soltos.sort(function(a, b){ return (b.comprado + b.pago) - (a.comprado + a.pago); });
+    var totais = { vendido: 0, comprado: 0, pago: 0 };
+    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.pago += l.pago; });
+    return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
+  }
+
   // ═══ FORMATAÇÃO pt-BR ═════════════════════════════════════════
   const fmtNum = (v, casas = 2) => v == null ? '—'
     : v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -605,6 +716,7 @@
     renderMensais();
     renderPizzaFornecedores();
     renderCrescimentoAnual();
+    renderVxp();
     renderDestaques();
   }
 
@@ -992,6 +1104,160 @@
     }
   }
 
+  // ═══ VENDAS × PAGAMENTOS — a área logada do dashboard ═════════
+  // O bloco só mostra números depois do login (o MESMO usuário/senha
+  // do Controle de Notas): a página é pública, mas compras e
+  // pagamentos moram no Firestore e as regras de lá exigem
+  // autenticação. O SDK do Firebase (e o app-shared.js, que traz a
+  // regra da Vetrus e a conexão) só é baixado quando alguém pede para
+  // entrar — quem só olha as vendas não paga esse peso.
+  const VXP_SDK = [
+    'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
+    'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
+    'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
+    'app-shared.js?v=23'
+  ];
+  const vxp = { fase: 'fora', erro: null, db: null, auth: null,
+    notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
+  let vxpSdkPromise = null;
+
+  // Lembra que este navegador já entrou uma vez: na próxima visita o
+  // SDK carrega sozinho e a sessão salva volta sem pedir senha.
+  const vxpLembrar = {
+    tem(){ try{ return localStorage.getItem('vxpEntrar') === '1'; }catch(e){ return false; } },
+    marcar(v){ try{ v ? localStorage.setItem('vxpEntrar', '1') : localStorage.removeItem('vxpEntrar'); }catch(e){} }
+  };
+
+  function vxpCarregarSdk(){
+    if(vxpSdkPromise) return vxpSdkPromise;
+    vxpSdkPromise = VXP_SDK.reduce((cadeia, src) => cadeia.then(() => new Promise((ok, falha) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = ok;
+      s.onerror = () => falha(new Error('Falha ao carregar ' + src));
+      document.head.appendChild(s);
+    })), Promise.resolve());
+    return vxpSdkPromise;
+  }
+
+  function vxpIniciar(){
+    if(vxp.fase !== 'fora' && vxp.fase !== 'erro') return;
+    vxp.fase = 'sdk'; vxp.erro = null; renderVxp();
+    vxpCarregarSdk()
+      .then(() => window.App.iniciarFirebase('dashboard'))
+      .then((r) => {
+        vxp.db = r.db;
+        vxp.auth = r.app.auth();
+        // A primeira notificação é o Firebase terminando de restaurar
+        // (ou não) a sessão salva neste navegador.
+        return new Promise((res) => {
+          const parar = vxp.auth.onAuthStateChanged((u) => { parar(); res(u); });
+        });
+      })
+      .then((u) => { if(u) return vxpBaixar(); vxp.fase = 'login'; renderVxp(); })
+      .catch((e) => { vxp.fase = 'erro'; vxp.erro = (e && e.message) || String(e); renderVxp(); });
+  }
+
+  function vxpEntrar(usuario, senha){
+    vxp.fase = 'logando'; vxp.erro = null; renderVxp();
+    vxp.auth.signInWithEmailAndPassword(window.App.usuarioParaEmail(usuario), senha)
+      .then(() => { vxpLembrar.marcar(true); return vxpBaixar(); })
+      .catch(() => { vxp.fase = 'login'; vxp.erro = 'Usuário ou senha inválidos.'; renderVxp(); });
+  }
+
+  function vxpSair(){
+    vxpLembrar.marcar(false);
+    if(vxp.auth) vxp.auth.signOut().catch(() => {});
+    vxp.fase = 'login'; vxp.erro = null;
+    vxp.notas = []; vxp.duplicatas = [];
+    renderVxp();
+  }
+
+  function vxpBaixar(){
+    vxp.fase = 'carregando'; renderVxp();
+    // Janela: do primeiro ano da planilha em diante — é o que a
+    // comparação consegue usar.
+    const anos = linhasTodas.map(l => l.ano);
+    const ini = (anos.length ? Math.min.apply(null, anos) : new Date().getFullYear() - 1) + '-01-01';
+    return Promise.all([
+      vxp.db.collection('notas').where('dataEmissao', '>=', ini).get(),
+      vxp.db.collection('duplicatas').where('dataPagamento', '>=', ini).get(),
+      vxp.db.collection('config').doc('vendasCompras').get()
+    ]).then(([ns, ds, cfg]) => {
+      vxp.notas = ns.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      vxp.duplicatas = ds.docs.map(d => d.data());
+      const c = cfg.exists ? cfg.data() : null;
+      vxp.vinculos = { porRotulo: (c && c.porRotulo) || {}, porCnpj: (c && c.porCnpj) || {} };
+      vxp.fase = 'pronto';
+      renderVxp();
+    }).catch((e) => {
+      if(window.App.ehPermissaoNegada(e)){
+        vxp.fase = 'login'; vxp.erro = 'Esta conta não tem acesso aos dados.';
+      } else {
+        vxp.fase = 'erro'; vxp.erro = (e && e.message) || String(e);
+      }
+      renderVxp();
+    });
+  }
+
+  function renderVxp(){
+    const alvo = $('vxpConteudo');
+    const sub = $('vxpSub');
+    if(!alvo) return;
+
+    if(vxp.fase !== 'pronto'){
+      sub.textContent = 'Compras e pagamentos exigem login — só as vendas desta página são públicas';
+      if(vxp.fase === 'fora'){
+        alvo.innerHTML = '<div class="estado" style="padding:20px;">' +
+          '<button type="button" class="vxp-entrar" id="vxpBtnIniciar">🔒 Entrar para ver</button></div>';
+      } else if(vxp.fase === 'sdk' || vxp.fase === 'logando' || vxp.fase === 'carregando'){
+        alvo.innerHTML = '<div class="estado" style="padding:20px;">' +
+          (vxp.fase === 'carregando' ? 'Buscando compras e pagamentos...' : 'Carregando...') + '</div>';
+      } else if(vxp.fase === 'login'){
+        alvo.innerHTML = '<form class="vxp-login" id="vxpForm">' +
+          (vxp.erro ? '<p class="estado erro" style="padding:0; font-size:13px;">' + escapeHtml(vxp.erro) + '</p>' : '') +
+          '<label class="sub-periodo" for="vxpUser" style="text-align:left; margin:0;">Usuário (o mesmo do Controle de Notas)</label>' +
+          '<input id="vxpUser" autocomplete="username" required>' +
+          '<label class="sub-periodo" for="vxpSenha" style="text-align:left; margin:0;">Senha</label>' +
+          '<input id="vxpSenha" type="password" autocomplete="current-password" required>' +
+          '<button type="submit">Entrar</button></form>';
+      } else {
+        alvo.innerHTML = '<div class="estado erro" style="padding:20px;">' + escapeHtml(vxp.erro || 'Erro.') + '</div>' +
+          '<div class="vxp-rodape"><button type="button" id="vxpBtnIniciar">tentar de novo</button></div>';
+      }
+      return;
+    }
+
+    const r = cruzarVendasCompras(linhasTodas, vxp.notas, vxp.duplicatas, vxp.vinculos,
+      window.App.rotularFornecedor, anoSel, mesSel || null);
+    sub.textContent = (mesSel ? MESES[mesSel - 1] + '/' + anoSel : 'Ano ' + anoSel) +
+      ' · compra pela emissão da nota, pagamento pela data do pagamento · ignora os filtros de fornecedor/categoria';
+    const saldo = (v) => '<td class="' + (v > 0 ? 'vxp-pos' : (v < 0 ? 'vxp-neg' : '')) + '">' + fmtNum(v) + '</td>';
+    let html = '<div class="rolagem"><table><thead><tr>' +
+      '<th>Fornecedor</th><th>Vendido</th><th>Comprado</th><th>Venda − Compra</th>' +
+      '<th>Pago</th><th>Venda − Pago</th></tr></thead><tbody>';
+    r.linhas.forEach((l) => {
+      html += '<tr><td>' + escapeHtml(l.marca) + '</td>' +
+        '<td>' + fmtNum(l.vendido) + '</td><td>' + fmtNum(l.comprado) + '</td>' +
+        saldo(l.vendido - l.comprado) +
+        '<td>' + fmtNum(l.pago) + '</td>' + saldo(l.vendido - l.pago) + '</tr>';
+    });
+    html += '<tr class="total"><td>Total</td><td>' + fmtNum(r.totais.vendido) + '</td>' +
+      '<td>' + fmtNum(r.totais.comprado) + '</td>' + saldo(r.totais.vendido - r.totais.comprado) +
+      '<td>' + fmtNum(r.totais.pago) + '</td>' + saldo(r.totais.vendido - r.totais.pago) +
+      '</tr></tbody></table></div>';
+    if(r.semVinculo.length){
+      html += '<p class="sub-periodo" style="margin-top:8px; text-align:left;">Sem vínculo (fora da conta — configure na tela Vendas do Controle de Notas): ' +
+        r.semVinculo.map((s) => escapeHtml(s.rotulo) + ' (' + fmtNum(s.comprado + s.pago) + ')').join(' · ') + '</p>';
+    }
+    if(r.ignorados.comprado || r.ignorados.pago){
+      html += '<p class="sub-periodo" style="text-align:left;">Marcados "não comparar": ' +
+        fmtNum(r.ignorados.comprado) + ' comprados e ' + fmtNum(r.ignorados.pago) + ' pagos no período.</p>';
+    }
+    html += '<div class="vxp-rodape"><button type="button" id="vxpBtnSair">sair da área logada</button></div>';
+    alvo.innerHTML = html;
+  }
+
   function iniciar(){
     $('filtroMes').addEventListener('change', function(){ mesSel = Number(this.value) || 0; sincronizarFiltrosUi(); renderTudo(); });
     $('filtroForn').addEventListener('change', function(){ fornSel = this.value; sincronizarFiltrosUi(); renderTudo(); });
@@ -1008,6 +1274,22 @@
         renderCrescimentoAnual();
       }));
     $('recarregarDadosBtn').addEventListener('click', carregarDados);
+
+    // Área logada: cliques e o formulário de login (o conteúdo é
+    // redesenhado a cada render, então a escuta fica no contêiner).
+    $('vxpConteudo').addEventListener('click', function(e){
+      if(e.target && e.target.id === 'vxpBtnIniciar') vxpIniciar();
+      if(e.target && e.target.id === 'vxpBtnSair') vxpSair();
+    });
+    $('vxpConteudo').addEventListener('submit', function(e){
+      if(e.target && e.target.id === 'vxpForm'){
+        e.preventDefault();
+        vxpEntrar($('vxpUser').value, $('vxpSenha').value);
+      }
+    });
+    // Quem já entrou uma vez neste navegador volta logado sozinho.
+    if(vxpLembrar.tem()) vxpIniciar();
+
     carregarDados();
   }
 
