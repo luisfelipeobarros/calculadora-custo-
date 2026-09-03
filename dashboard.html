@@ -58,17 +58,18 @@
   .grafico-caixa{ position:relative; height:220px; }
   @media (min-width:960px){
     .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
-      grid-template-areas: "tabcat partcat" "tabcat fatmes" "tabforn fatmes" "tabforn margmes"; }
+      grid-template-areas: "tabcat partcat" "tabcat combomes" "tabforn combomes"; }
     .bloco.b-tabcat{ grid-area:tabcat; }
     .bloco.b-partcat{ grid-area:partcat; }
-    .bloco.b-fatmes{ grid-area:fatmes; }
-    .bloco.b-margmes{ grid-area:margmes; }
+    .bloco.b-combomes{ grid-area:combomes; }
     .bloco.b-tabforn{ grid-area:tabforn; }
     .grafico-caixa{ height:250px; }
+    .b-combomes .grafico-caixa{ height:320px; }
   }
   /* Ordem de empilhamento no celular (pedida no layout) */
-  .b-fatmes{ order:1; } .b-margmes{ order:2; } .b-partcat{ order:3; }
-  .b-tabcat{ order:4; } .b-tabforn{ order:5; }
+  .b-combomes{ order:1; } .b-partcat{ order:2; }
+  .b-tabcat{ order:3; } .b-tabforn{ order:4; }
+  .b-combomes .grafico-caixa{ height:260px; }
 
   /* ── Tabelas ── */
   .rolagem{ overflow:auto; max-height:400px; }
@@ -136,13 +137,9 @@
       <h2>Categorias</h2>
       <div class="grafico-caixa"><canvas id="gPartCat"></canvas></div>
     </div>
-    <div class="bloco b-fatmes">
-      <h2>Faturamento</h2>
-      <div class="grafico-caixa"><canvas id="gFatMes"></canvas></div>
-    </div>
-    <div class="bloco b-margmes">
-      <h2>Margem por mês</h2>
-      <div class="grafico-caixa"><canvas id="gMargMes"></canvas></div>
+    <div class="bloco b-combomes">
+      <h2>Faturamento × Margem por mês</h2>
+      <div class="grafico-caixa"><canvas id="gComboMes"></canvas></div>
     </div>
     <div class="bloco b-tabforn">
       <h2>Por fornecedor</h2>
@@ -297,27 +294,34 @@
 
   // Rótulos desenhados em cima das barras (plugin próprio: a única
   // biblioteca permitida é o Chart.js).
+  // Rotula todos os datasets: `formatadores[i]` por dataset (o combo
+  // tem barra E linha), ou `formatar` para o caso simples. Cada
+  // formatador pode trazer a cor do texto em `cor`.
   const rotulosBarras = {
     id: 'rotulosBarras',
     afterDatasetsDraw(chart, args, opts){
       const ctx = chart.ctx;
-      const ds = chart.data.datasets[0];
-      const meta = chart.getDatasetMeta(0);
       ctx.save();
       // 14px em negrito: a 11px condensada os rotulos ficavam pequenos
       // e "borrados" no celular.
       ctx.font = opts.fonte || '700 14px "Barlow Condensed", sans-serif';
-      ctx.fillStyle = '#111';
-      meta.data.forEach((el, i) => {
-        const txt = opts.formatar ? opts.formatar(ds.data[i], i) : '';
-        if(!txt) return;
-        if(chart.options.indexAxis === 'y'){
-          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-          ctx.fillText(txt, el.x + 5, el.y);
-        } else {
-          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-          ctx.fillText(txt, el.x, el.y - 3);
-        }
+      chart.data.datasets.forEach((ds, di) => {
+        const conf = (opts.formatadores && opts.formatadores[di]) ||
+          (di === 0 && opts.formatar ? { formatar: opts.formatar } : null);
+        if(!conf) return;
+        const meta = chart.getDatasetMeta(di);
+        ctx.fillStyle = conf.cor || '#111';
+        meta.data.forEach((el, i) => {
+          const txt = conf.formatar ? conf.formatar(ds.data[i], i) : '';
+          if(!txt) return;
+          if(chart.options.indexAxis === 'y'){
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(txt, el.x + 5, el.y);
+          } else {
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+            ctx.fillText(txt, el.x, el.y - (ds.type === 'line' ? 7 : 3));
+          }
+        });
       });
       ctx.restore();
     }
@@ -420,29 +424,53 @@
   }
 
   function renderMensais(){
-    // Os gráficos mensais respeitam ano/fornecedor/categoria mas NÃO o
-    // mês: com um mês filtrado, a barra dele acende e as demais
-    // esmaecem — sumir com o resto tiraria o contexto do ano.
+    // Combo num gráfico só (pedido de 03/09/2026): FATURAMENTO em
+    // barras (grandeza em R$) e MARGEM em linha (taxa em %) — a
+    // convenção financeira; eixos separados e escondidos, com a linha
+    // ancorada na faixa de cima para os rótulos não brigarem com os
+    // das barras. Respeita ano/fornecedor/categoria mas NÃO o mês:
+    // mês filtrado acende a barra e esmaece as demais.
     const s = seriesMensais(filtrarLinhas(linhasTodas, filtrosSemMes()));
     const cores = MESES.map((_, i) => (!mesSel || mesSel === i + 1) ? AZUL : AZUL_FRACO);
-    const barras = (id, dados, formatar) => novoChart(id, {
-      type: 'bar',
-      data: { labels: MESES, datasets: [{ data: dados, backgroundColor: cores, maxBarThickness: 48 }] },
+    const maxFat = Math.max(1, ...s.faturamento.map(v => v || 0));
+    const margens = s.margem.filter(v => v != null);
+    const maxMarg = margens.length ? Math.max(...margens) : 0.01;
+    const minMarg = margens.length ? Math.min(0, ...margens) : 0;
+    novoChart('gComboMes', {
+      data: {
+        labels: MESES,
+        datasets: [
+          { type: 'line', label: 'Margem (%)', data: s.margem, yAxisID: 'yMargem',
+            borderColor: '#2B3990', backgroundColor: '#2B3990', borderWidth: 2.5,
+            pointRadius: 3.5, pointHoverRadius: 4, spanGaps: false, tension: 0.15 },
+          { type: 'bar', label: 'Faturamento (R$)', data: s.faturamento, yAxisID: 'yFat',
+            backgroundColor: cores, maxBarThickness: 48 }
+        ]
+      },
       options: {
         responsive: true, maintainAspectRatio: false,
-        layout: { padding: { top: 22 } },
-        // Clicar num mês filtra por ele (clicar de novo limpa) — a
-        // barra escolhida acende e as demais esmaecem.
+        layout: { padding: { top: 24 } },
+        // Clicar num mês (barra ou ponto) filtra por ele; de novo, limpa.
         onClick: (ev, els) => { if(els.length) alternarMes(els[0].index + 1); },
         onHover: cursorDeBarra,
-        plugins: { legend: { display: false }, tooltip: { enabled: false },
-          rotulosBarras: { formatar } },
-        scales: { y: { display: false }, x: { grid: { display: false }, ticks: { font: { size: 12 } } } }
+        plugins: {
+          legend: { display: true, position: 'top',
+            labels: { boxWidth: 14, font: { family: "'Barlow Condensed', sans-serif", size: 13, weight: 700 } } },
+          tooltip: { enabled: false },
+          rotulosBarras: { formatadores: [
+            { formatar: v => v == null ? '' : fmtPct(v), cor: '#2B3990' },
+            { formatar: v => v == null ? '' : fmtMi(v) }
+          ] }
+        },
+        scales: {
+          // Barras usam os ~62% de baixo; a linha, a faixa de cima.
+          yFat: { display: false, beginAtZero: true, suggestedMax: maxFat * 1.6 },
+          yMargem: { display: false, min: minMarg - (maxMarg - minMarg || 0.01) * 4, suggestedMax: maxMarg * 1.12 },
+          x: { grid: { display: false }, ticks: { font: { size: 12 } } }
+        }
       },
       plugins: [rotulosBarras]
     });
-    barras('gFatMes', s.faturamento, v => v == null ? '' : fmtMi(v));
-    barras('gMargMes', s.margem, v => v == null ? '' : fmtPct(v));
   }
 
   // ═══ FILTROS ══════════════════════════════════════════════════
