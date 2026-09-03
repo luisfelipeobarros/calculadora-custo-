@@ -61,13 +61,14 @@
        em cima, fornecedores + combo embaixo — os quatro blocos se
        encontram num cruzamento so' (alinhado, como no Power BI). */
     .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
-      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza pizza"; }
+      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza cresc"; }
     .bloco.b-tabcat{ grid-area:tabcat; }
     .bloco.b-partcat{ grid-area:partcat; }
     .bloco.b-combomes{ grid-area:combomes; }
     .bloco.b-tabforn{ grid-area:tabforn; }
     .bloco.b-pizza{ grid-area:pizza; }
-    .b-pizza .grafico-caixa{ height:360px; }
+    .bloco.b-cresc{ grid-area:cresc; }
+    .b-pizza .grafico-caixa, .b-cresc .grafico-caixa{ height:360px; }
     .grafico-caixa{ height:250px; }
     /* O combo preenche o bloco inteiro (a linha dele acompanha a
        altura da tabela de fornecedores) — sem faixa branca sobrando. */
@@ -76,8 +77,14 @@
   }
   /* Ordem de empilhamento no celular (pedida no layout) */
   .b-combomes{ order:1; } .b-partcat{ order:2; }
-  .b-tabcat{ order:3; } .b-tabforn{ order:4; } .b-pizza{ order:5; }
-  .b-pizza .grafico-caixa{ height:320px; }
+  .b-tabcat{ order:3; } .b-tabforn{ order:4; } .b-pizza{ order:5; } .b-cresc{ order:6; }
+  .b-pizza .grafico-caixa, .b-cresc .grafico-caixa{ height:320px; }
+  .mini-toggle{ display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
+  .mini-toggle button{ min-height:34px; padding:0 12px; font-family:'Barlow Condensed', sans-serif;
+    font-size:13px; font-weight:700; text-transform:uppercase; cursor:pointer;
+    border:2px solid var(--preto); background:#fff; color:var(--preto); }
+  .mini-toggle button[aria-pressed="true"]{ background:var(--preto); color:#fff; }
+  .sub-periodo{ display:block; text-align:center; font-size:12px; color:var(--cinza); margin-bottom:4px; }
   .b-combomes .grafico-caixa{ height:260px; }
   .b-combomes h2{ margin-bottom:0; } /* a legenda do gráfico cola no título */
 
@@ -158,6 +165,16 @@
     <div class="bloco b-pizza">
       <h2>Market share por fornecedor</h2>
       <div class="grafico-caixa"><canvas id="gPizzaForn"></canvas></div>
+    </div>
+    <div class="bloco b-cresc">
+      <h2>Crescimento anual</h2>
+      <div class="mini-toggle" role="group" aria-label="Visão do crescimento">
+        <button type="button" data-visao="categoria" aria-pressed="true">Categoria</button>
+        <button type="button" data-visao="fornecedor" aria-pressed="false">Fornecedor</button>
+      </div>
+      <span class="sub-periodo" id="crescPeriodo"></span>
+      <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
+      <div class="estado" id="crescVazio" style="display:none; padding:24px;"></div>
     </div>
   </div>
 
@@ -305,6 +322,55 @@
     return fatias;
   }
 
+  // Crescimento anual por categoria/fornecedor no PERÍODO COMPARÁVEL:
+  // os meses considerados são os que o ano selecionado tem preenchidos
+  // (com faturamento), comparados aos MESMOS meses do ano anterior —
+  // nunca ano cheio contra ano parcial. Com um mês específico (mes),
+  // compara mês × mesmo mês.
+  //
+  // Devolve { periodo: {de, ate, anoAnterior} | null, itens }, com
+  // cada item { nome, atual, anterior, cresc, novo }:
+  //   - cresc = atual/anterior − 1;
+  //   - sem ano anterior naquele nome → novo:true e cresc null (nunca
+  //     um % infinito);
+  //   - quem zerou aparece com −100%;
+  //   - sem NENHUM dado do ano anterior no período → periodo null (a
+  //     tela avisa em vez de desenhar um gráfico vazio).
+  function crescimentoAnual(linhas, ano, campo, mes){
+    let mesesSet;
+    if(mes){
+      mesesSet = new Set([mes]);
+    } else {
+      mesesSet = new Set(linhas.filter(l => l.ano === ano && l.faturamento > 0).map(l => l.mes));
+    }
+    if(!mesesSet.size) return { periodo: null, itens: [] };
+    const meses = [...mesesSet].sort((a, b) => a - b);
+
+    const atualPor = new Map(), antPor = new Map();
+    const soma = (mapa, l) => mapa.set(l[campo] || '', (mapa.get(l[campo] || '') || 0) + l.faturamento);
+    linhas.forEach(l => {
+      if(!mesesSet.has(l.mes)) return;
+      if(l.ano === ano) soma(atualPor, l);
+      else if(l.ano === ano - 1) soma(antPor, l);
+    });
+    if(![...antPor.values()].some(v => v > 0)) return { periodo: null, itens: [] };
+
+    const nomes = new Set([...atualPor.keys(), ...antPor.keys()]);
+    const itens = [...nomes].map(nome => {
+      const atual = atualPor.get(nome) || 0;
+      const anterior = antPor.get(nome) || 0;
+      if(!(atual > 0) && !(anterior > 0)) return null;
+      return { nome, atual, anterior,
+        novo: !(anterior > 0),
+        cresc: anterior > 0 ? atual / anterior - 1 : null };
+    }).filter(Boolean).sort((a, b) => {
+      const ca = a.novo ? Infinity : a.cresc;
+      const cb = b.novo ? Infinity : b.cresc;
+      return cb - ca || b.atual - a.atual;
+    });
+    return { periodo: { de: meses[0], ate: meses[meses.length - 1], anoAnterior: ano - 1 }, itens };
+  }
+
   // ═══ FORMATAÇÃO pt-BR ═════════════════════════════════════════
   const fmtNum = (v, casas = 2) => v == null ? '—'
     : v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -349,8 +415,11 @@
           const txt = conf.formatar ? conf.formatar(ds.data[i], i) : '';
           if(!txt) return;
           if(chart.options.indexAxis === 'y'){
-            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-            ctx.fillText(txt, el.x + 5, el.y);
+            // Barra negativa cresce para a ESQUERDA: o rotulo vai na
+            // ponta dela (a esquerda), nao dentro do grafico.
+            const neg = typeof ds.data[i] === 'number' && ds.data[i] < 0;
+            ctx.textAlign = neg ? 'right' : 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(txt, el.x + (neg ? -5 : 5), el.y);
           } else {
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillText(txt, el.x, el.y - (ds.type === 'line' ? 7 : 3));
@@ -391,6 +460,79 @@
     renderPartCat(filtradas);
     renderMensais();
     renderPizzaFornecedores();
+    renderCrescimentoAnual();
+  }
+
+  let crescVisao = 'categoria';
+
+  function renderCrescimentoAnual(){
+    // Respeita categoria/fornecedor filtrados; o ANO define o par
+    // (2026 × 2025) e o mês filtrado muda a pergunta: julho × julho.
+    const base = filtrarLinhas(linhasTodas, { fornecedor: fornSel, categoria: catSel });
+    const r = crescimentoAnual(base, anoSel, crescVisao, mesSel || null);
+    const vazio = $('crescVazio');
+    const caixa = $('gCrescAnual').parentElement;
+
+    if(!r.periodo){
+      caixa.style.display = 'none';
+      vazio.style.display = '';
+      vazio.textContent = 'Sem dados de ' + (anoSel - 1) + ' no período para comparar.';
+      $('crescPeriodo').textContent = '';
+      if(charts.gCrescAnual){ charts.gCrescAnual.destroy(); delete charts.gCrescAnual; }
+      return;
+    }
+    caixa.style.display = '';
+    vazio.style.display = 'none';
+    $('crescPeriodo').textContent = (r.periodo.de === r.periodo.ate
+      ? MESES[r.periodo.de - 1] + ' ' + anoSel + ' × ' + MESES[r.periodo.de - 1] + ' ' + r.periodo.anoAnterior
+      : MESES[r.periodo.de - 1] + '–' + MESES[r.periodo.ate - 1] + ' ' + anoSel +
+        ' × ' + MESES[r.periodo.de - 1] + '–' + MESES[r.periodo.ate - 1] + ' ' + r.periodo.anoAnterior) +
+      (crescVisao === 'fornecedor' ? ' · 12 maiores' : '');
+
+    // Fornecedor: só os 12 maiores do período (30 barras é confete).
+    let itens = r.itens;
+    if(crescVisao === 'fornecedor' && itens.length > 12){
+      itens = itens.slice().sort((a, b) => b.atual - a.atual).slice(0, 12)
+        .sort((a, b) => ((b.novo ? Infinity : b.cresc) - (a.novo ? Infinity : a.cresc)) || b.atual - a.atual);
+    }
+
+    // "Novo" (sem ano anterior) não tem %: entra com a barra no teto
+    // dos crescimentos reais e o rótulo "novo".
+    const reais = itens.filter(i => !i.novo).map(i => i.cresc);
+    const teto = reais.length ? Math.max(0.1, ...reais.map(Math.abs)) : 0.5;
+    const valores = itens.map(i => i.novo ? teto * 1.15 : i.cresc);
+    const cores = itens.map(i => i.novo ? '#0d8ee9' : (i.cresc >= 0 ? '#2E9E5B' : '#D91F26'));
+
+    novoChart('gCrescAnual', {
+      type: 'bar',
+      data: { labels: itens.map(i => i.nome),
+        datasets: [{ data: valores, backgroundColor: cores, maxBarThickness: 24 }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        layout: { padding: { right: 64, left: 6 } },
+        onClick: (ev, els) => {
+          if(!els.length) return;
+          const it = itens[els[0].index];
+          if(it) (crescVisao === 'categoria' ? alternarCategoria : alternarFornecedor)(it.nome);
+        },
+        onHover: cursorDeBarra,
+        plugins: { legend: { display: false }, tooltip: { enabled: false },
+          rotulosBarras: { fonte: '700 13px "Barlow Condensed", sans-serif',
+            formatar: (v, i) => {
+              const it = itens[i];
+              if(!it) return '';
+              if(it.novo) return 'novo';
+              return (it.cresc >= 0 ? '+' : '') + fmtPct(it.cresc);
+            } } },
+        scales: {
+          x: { display: false,
+            min: Math.min(0, ...valores) * 1.3 - 0.02,
+            max: Math.max(0.02, ...valores) * 1.3 },
+          y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+        }
+      },
+      plugins: [rotulosBarras]
+    });
   }
 
   // Paleta fixa das fatias; a "Demais" é sempre cinza.
@@ -637,6 +779,13 @@
       mesSel = 0; fornSel = ''; catSel = '';
       sincronizarFiltrosUi(); renderTudo();
     });
+    document.querySelectorAll('.mini-toggle button').forEach(b =>
+      b.addEventListener('click', () => {
+        crescVisao = b.dataset.visao;
+        document.querySelectorAll('.mini-toggle button').forEach(x =>
+          x.setAttribute('aria-pressed', String(x === b)));
+        renderCrescimentoAnual();
+      }));
     $('recarregarDadosBtn').addEventListener('click', carregarDados);
     carregarDados();
   }

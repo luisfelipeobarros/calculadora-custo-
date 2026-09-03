@@ -36,7 +36,8 @@ const m = new Function(
   extrair('seriesMensais') + '\n' +
   extrair('participacaoCategorias') + '\n' +
   extrair('marketShareFornecedores') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores };'
+  extrair('crescimentoAnual') + '\n' +
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual };'
 )();
 
 let problemas = 0;
@@ -165,6 +166,43 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
     Math.round(ms.reduce((s, f) => s + f.pct, 0) * 1000) / 1000, 1);
   eq('sem faturamento: pizza vazia (nao divide por zero)',
     m.marketShareFornecedores([], 3), []);
+}
+
+// ── Crescimento anual no PERÍODO COMPARÁVEL ──────────────────
+
+{
+  const l = (ano, mes, categoria, fat) =>
+    ({ ano, mes, fornecedor: 'F', categoria, quantidade: 1, faturamento: fat, lucro: 1 });
+  // 2025 cheio (jan..mar); 2026 preenchido só até fevereiro.
+  const dados = [
+    l(2025, 1, 'Cerâmica', 100), l(2025, 2, 'Cerâmica', 100), l(2025, 3, 'Cerâmica', 999),
+    l(2025, 1, 'Telhas', 50), l(2025, 2, 'Telhas', 50),
+    l(2026, 1, 'Cerâmica', 120), l(2026, 2, 'Cerâmica', 124),
+    l(2026, 1, 'Argamassa', 80) // nova em 2026
+    // Telhas zerou em 2026
+  ];
+  const r = m.crescimentoAnual(dados, 2026, 'categoria', null);
+  eq('o período comparável é o preenchido do ano selecionado (jan–fev)',
+    [r.periodo.de, r.periodo.ate, r.periodo.anoAnterior], [1, 2, 2025]);
+  const porNome = {};
+  r.itens.forEach(i => { porNome[i.nome] = i; });
+  eq('crescimento compara SÓ os mesmos meses (244/200 − 1 = 22%, mar/2025 fora)',
+    Math.round(porNome['Cerâmica'].cresc * 100) / 100, 0.22);
+  eq('categoria nova vira "novo", nunca % infinito',
+    [porNome['Argamassa'].novo, porNome['Argamassa'].cresc], [true, null]);
+  eq('quem zerou aparece com −100%', porNome['Telhas'].cresc, -1);
+  eq('ordenado da maior alta para a maior queda (novos no topo)',
+    r.itens.map(i => i.nome), ['Argamassa', 'Cerâmica', 'Telhas']);
+
+  // Mês específico: julho × julho.
+  const dadosJul = [l(2025, 7, 'Cerâmica', 200), l(2026, 7, 'Cerâmica', 300)];
+  const rj = m.crescimentoAnual(dadosJul, 2026, 'categoria', 7);
+  eq('com mês filtrado, compara mês × mesmo mês (+50%)',
+    [rj.periodo.de, rj.periodo.ate, rj.itens[0].cresc], [7, 7, 0.5]);
+
+  // Sem NADA do ano anterior no período: aviso, não gráfico vazio.
+  eq('sem ano anterior -> periodo null (a tela avisa)',
+    m.crescimentoAnual([l(2026, 1, 'Cerâmica', 100)], 2026, 'categoria', null).periodo, null);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
