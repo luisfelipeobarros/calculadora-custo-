@@ -61,7 +61,8 @@
        em cima, fornecedores + combo embaixo — os quatro blocos se
        encontram num cruzamento so' (alinhado, como no Power BI). */
     .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
-      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza cresc"; }
+      grid-template-areas: "tabcat partcat" "tabforn combomes" "pizza cresc" "destaques destaques"; }
+    .bloco.b-destaques{ grid-area:destaques; }
     .bloco.b-tabcat{ grid-area:tabcat; }
     .bloco.b-partcat{ grid-area:partcat; }
     .bloco.b-combomes{ grid-area:combomes; }
@@ -78,6 +79,12 @@
   /* Ordem de empilhamento no celular (pedida no layout) */
   .b-combomes{ order:1; } .b-partcat{ order:2; }
   .b-tabcat{ order:3; } .b-tabforn{ order:4; } .b-pizza{ order:5; } .b-cresc{ order:6; }
+  .b-destaques{ order:7; }
+  .destaque-item{ display:flex; gap:10px; align-items:flex-start; padding:8px 4px;
+    border-bottom:1px solid var(--linha); font-size:14px; line-height:1.45; }
+  .destaque-item:last-child{ border-bottom:none; }
+  .destaque-item .ic{ flex:0 0 auto; font-size:17px; }
+  .destaque-item strong{ font-variant-numeric:tabular-nums; }
   .b-pizza .grafico-caixa, .b-cresc .grafico-caixa{ height:320px; }
   .mini-toggle{ display:flex; gap:4px; justify-content:center; margin-bottom:4px; }
   .mini-toggle button{ min-height:34px; padding:0 12px; font-family:'Barlow Condensed', sans-serif;
@@ -176,6 +183,11 @@
       <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
       <div class="estado" id="crescVazio" style="display:none; padding:24px;"></div>
     </div>
+    <div class="bloco b-destaques">
+      <h2>Destaques automáticos</h2>
+      <span class="sub-periodo" id="destaquesSub"></span>
+      <div id="listaDestaques"></div>
+    </div>
   </div>
 
   <div class="rodape" id="rodapeDash" style="display:none;">
@@ -224,7 +236,7 @@
     const mapa = { ano: 'ano', mes: 'mes', fornecedor: 'fornecedor', categoria: 'categoria',
       quantidade: 'quantidade', faturamento: 'faturamento', lucrobruto: 'lucro' };
     cols.forEach((c, i) => {
-      const rot = String(c.label || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      const rot = String(c.label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
       if(mapa[rot] != null) idx[mapa[rot]] = i;
     });
     const cel = (linha, i) => {
@@ -371,6 +383,110 @@
     return { periodo: { de: meses[0], ate: meses[meses.length - 1], anoAnterior: ano - 1 }, itens };
   }
 
+  // A planilha traz o MESMO nome com grafias diferentes ("Outros" em
+  // 2025, "OUTROS" em 2026) — e o agrupamento por texto exato criava
+  // um fornecedor "novo" fantasma. Nomes que só diferem em
+  // maiúsculas/acentos viram UM, exibido na grafia mais frequente.
+  function canonizarNomes(linhas){
+    const canonico = (campo) => {
+      const freq = new Map(); // chave normalizada -> { grafia -> contagem }
+      linhas.forEach(l => {
+        const chave = String(l[campo] || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if(!freq.has(chave)) freq.set(chave, new Map());
+        const g = freq.get(chave);
+        g.set(l[campo], (g.get(l[campo]) || 0) + 1);
+      });
+      const escolha = new Map();
+      freq.forEach((grafias, chave) => {
+        let melhor = null, n = -1;
+        grafias.forEach((qtd, grafia) => { if(qtd > n){ n = qtd; melhor = grafia; } });
+        escolha.set(chave, melhor);
+      });
+      linhas.forEach(l => {
+        const chave = String(l[campo] || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        l[campo] = escolha.get(chave);
+      });
+    };
+    canonico('fornecedor');
+    canonico('categoria');
+    return linhas;
+  }
+
+  // Destaques automáticos: achados calculados por REGRA (sem IA) sobre
+  // o ano selecionado — o último mês, o acumulado comparável e os
+  // desvios que merecem atenção. Devolve dados estruturados; quem
+  // escreve o texto é a tela. Cada regra só entra quando há base:
+  // nada de destaque inventado sobre dado que não existe.
+  function destaquesAutomaticos(linhas, ano){
+    const out = [];
+    const doAno = linhas.filter(l => l.ano === ano);
+    const meses = [...new Set(doAno.filter(l => l.faturamento > 0).map(l => l.mes))].sort((a, b) => a - b);
+    if(!meses.length) return out;
+    const ult = meses[meses.length - 1];
+
+    // 1) O último mês: fechamento, vs mês anterior e vs mesmo mês do
+    // ano passado.
+    const kUlt = resumoKpis(doAno.filter(l => l.mes === ult));
+    const mesAnt = meses.length > 1 ? meses[meses.length - 2] : null;
+    const kAnt = mesAnt ? resumoKpis(doAno.filter(l => l.mes === mesAnt)) : null;
+    const kAnoAnt = resumoKpis(linhas.filter(l => l.ano === ano - 1 && l.mes === ult));
+    out.push({ tipo: 'mes', mes: ult, fat: kUlt.faturamento, margem: kUlt.margem,
+      mesAnterior: mesAnt,
+      vsMesAnterior: (kAnt && kAnt.faturamento > 0) ? kUlt.faturamento / kAnt.faturamento - 1 : null,
+      vsAnoAnterior: kAnoAnt.faturamento > 0 ? kUlt.faturamento / kAnoAnt.faturamento - 1 : null });
+
+    // 2) Recorde do ano (só vale a pena dizer com 2+ meses).
+    if(meses.length > 1){
+      let recMes = meses[0], recFat = -1;
+      meses.forEach(m => {
+        const f = resumoKpis(doAno.filter(l => l.mes === m)).faturamento;
+        if(f > recFat){ recFat = f; recMes = m; }
+      });
+      out.push({ tipo: 'recorde', mes: recMes, fat: recFat, ehUltimo: recMes === ult });
+    }
+
+    // 3) Maior alta e maior queda por categoria no período comparável.
+    const cCat = crescimentoAnual(linhas, ano, 'categoria', null);
+    if(cCat.periodo){
+      const reais = cCat.itens.filter(i => !i.novo);
+      const alta = reais.find(i => i.cresc > 0);
+      const queda = reais.slice().reverse().find(i => i.cresc < 0);
+      if(alta) out.push({ tipo: 'altaCategoria', nome: alta.nome, cresc: alta.cresc });
+      if(queda) out.push({ tipo: 'quedaCategoria', nome: queda.nome, cresc: queda.cresc });
+    }
+
+    // 4) Idem por fornecedor, só entre os RELEVANTES (>= 3% do
+    // período) — variação gigante de fornecedor minúsculo é ruído.
+    const cForn = crescimentoAnual(linhas, ano, 'fornecedor', null);
+    if(cForn.periodo){
+      const totalAtual = cForn.itens.reduce((s, i) => s + i.atual, 0);
+      const relevantes = cForn.itens.filter(i => !i.novo && i.atual >= totalAtual * 0.03);
+      const alta = relevantes.find(i => i.cresc > 0);
+      const queda = relevantes.slice().reverse().find(i => i.cresc < 0);
+      if(alta) out.push({ tipo: 'altaFornecedor', nome: alta.nome, cresc: alta.cresc });
+      if(queda) out.push({ tipo: 'quedaFornecedor', nome: queda.nome, cresc: queda.cresc });
+
+      // 5) Fornecedores novos com participação que importa (>= 2%).
+      const novos = cForn.itens.filter(i => i.novo && i.atual >= totalAtual * 0.02).map(i => i.nome);
+      if(novos.length) out.push({ tipo: 'novos', nomes: novos });
+    }
+
+    // 6) O fornecedor que derruba a média: share >= 5% do ano e margem
+    // 4+ pontos abaixo da geral. Entre os que se enquadram, o pior.
+    const geral = resumoKpis(doAno);
+    if(geral.faturamento > 0 && geral.margem != null){
+      const grupos = agruparPor(doAno, 'fornecedor').lista
+        .filter(g => g.faturamento >= geral.faturamento * 0.05 &&
+                     g.margem != null && g.margem < geral.margem - 0.04)
+        .sort((a, b) => a.margem - b.margem);
+      if(grupos.length){
+        out.push({ tipo: 'margemBaixa', nome: grupos[0].nome, margem: grupos[0].margem,
+          share: grupos[0].faturamento / geral.faturamento, margemGeral: geral.margem });
+      }
+    }
+    return out;
+  }
+
   // ═══ FORMATAÇÃO pt-BR ═════════════════════════════════════════
   const fmtNum = (v, casas = 2) => v == null ? '—'
     : v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -480,6 +596,7 @@
     renderMensais();
     renderPizzaFornecedores();
     renderCrescimentoAnual();
+    renderDestaques();
   }
 
   let crescVisao = 'categoria';
@@ -559,6 +676,61 @@
       },
       plugins: [rotulosBarras]
     });
+  }
+
+  // Os destaques olham o ANO inteiro selecionado, de propósito
+  // ignorando mês/fornecedor/categoria filtrados: são a leitura do
+  // negócio, não do recorte — o subtítulo deixa isso dito.
+  function renderDestaques(){
+    const alvo = $('listaDestaques');
+    const achados = destaquesAutomaticos(linhasTodas, anoSel);
+    $('destaquesSub').textContent = 'Calculados por regra sobre ' + anoSel + ' completo (sem IA e sem filtros)';
+    if(!achados.length){
+      alvo.innerHTML = '<div class="estado" style="padding:16px;">Sem dados em ' + anoSel + ' para destacar.</div>';
+      return;
+    }
+    const pctS = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') +
+      (Math.abs(v) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+    const mi = (v) => 'R$ ' + fmtMi(v).replace(' M', ' mi');
+    const mesN = (m) => MESES_CHEIOS[m - 1];
+    const linhasHtml = achados.map(d => {
+      let ic = '•', txt = '';
+      if(d.tipo === 'mes'){
+        ic = '📅';
+        txt = '<strong>' + mesN(d.mes) + '</strong> fechou com <strong>' + mi(d.fat) +
+          '</strong> e margem de <strong>' + fmtPct(d.margem) + '</strong>';
+        const partes = [];
+        if(d.vsMesAnterior != null) partes.push(pctS(d.vsMesAnterior) + ' sobre ' + mesN(d.mesAnterior));
+        if(d.vsAnoAnterior != null) partes.push(pctS(d.vsAnoAnterior) + ' sobre ' + mesN(d.mes) + ' do ano anterior');
+        if(partes.length) txt += ' — ' + partes.join(' e ');
+        txt += '.';
+      } else if(d.tipo === 'recorde'){
+        ic = '🏆';
+        txt = d.ehUltimo
+          ? 'O último mês é o <strong>melhor do ano</strong> até aqui.'
+          : 'Melhor mês do ano até aqui: <strong>' + mesN(d.mes) + '</strong> (' + mi(d.fat) + ').';
+      } else if(d.tipo === 'altaCategoria' || d.tipo === 'altaFornecedor'){
+        ic = '📈';
+        txt = (d.tipo === 'altaCategoria' ? 'Categoria' : 'Fornecedor') + ' que mais cresce: <strong>' +
+          escapeHtml(d.nome) + '</strong> (' + pctS(d.cresc) + ' no período comparável).';
+      } else if(d.tipo === 'quedaCategoria' || d.tipo === 'quedaFornecedor'){
+        ic = '📉';
+        txt = 'Maior queda entre ' + (d.tipo === 'quedaCategoria' ? 'as categorias' : 'os fornecedores relevantes') +
+          ': <strong>' + escapeHtml(d.nome) + '</strong> (' + pctS(d.cresc) + ').';
+      } else if(d.tipo === 'novos'){
+        ic = '🆕';
+        txt = (d.nomes.length === 1 ? 'Fornecedor novo com participação relevante: '
+          : 'Fornecedores novos com participação relevante: ') +
+          '<strong>' + d.nomes.map(escapeHtml).join(', ') + '</strong> (sem vendas no mesmo período do ano anterior).';
+      } else if(d.tipo === 'margemBaixa'){
+        ic = '⚠️';
+        txt = '<strong>' + escapeHtml(d.nome) + '</strong> tem ' + fmtPct(d.share) +
+          ' do faturamento com margem de <strong>' + fmtPct(d.margem) +
+          '</strong> — bem abaixo dos ' + fmtPct(d.margemGeral) + ' gerais.';
+      }
+      return '<div class="destaque-item"><span class="ic">' + ic + '</span><span>' + txt + '</span></div>';
+    });
+    alvo.innerHTML = linhasHtml.join('');
   }
 
   // Paleta fixa das fatias; a "Demais" é sempre cinza.
@@ -777,7 +949,7 @@
       const resp = await fetch(URL_GVIZ);
       if(!resp.ok) throw new Error('HTTP ' + resp.status);
       const texto = await resp.text();
-      linhasTodas = linhasDaResposta(parseGvizTexto(texto));
+      linhasTodas = canonizarNomes(linhasDaResposta(parseGvizTexto(texto)));
       if(!linhasTodas.length) throw new Error('A aba "dados" veio vazia.');
       montarFiltros();
       $('estadoCarga').style.display = 'none';

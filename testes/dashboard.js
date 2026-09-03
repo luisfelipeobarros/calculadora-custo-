@@ -37,7 +37,9 @@ const m = new Function(
   extrair('participacaoCategorias') + '\n' +
   extrair('marketShareFornecedores') + '\n' +
   extrair('crescimentoAnual') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual };'
+  extrair('canonizarNomes') + '\n' +
+  extrair('destaquesAutomaticos') + '\n' +
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, canonizarNomes, destaquesAutomaticos };'
 )();
 
 let problemas = 0;
@@ -203,6 +205,69 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   // Sem NADA do ano anterior no período: aviso, não gráfico vazio.
   eq('sem ano anterior -> periodo null (a tela avisa)',
     m.crescimentoAnual([l(2026, 1, 'Cerâmica', 100)], 2026, 'categoria', null).periodo, null);
+}
+
+// ── Canonização de nomes (o caso real "Outros"/"OUTROS") ─────
+
+{
+  const l = (ano, mes, forn, cat, fat) =>
+    ({ ano, mes, fornecedor: forn, categoria: cat, quantidade: 1, faturamento: fat, lucro: 1 });
+  // A planilha real: "Outros" em 2025, "OUTROS" em 2026 — mesmo
+  // fornecedor, grafia diferente. Sem canonizar, 2026 vira "novo".
+  const dados = [
+    l(2025, 1, 'Outros', 'Outros', 100), l(2025, 2, 'Outros', 'Outros', 100),
+    l(2026, 1, 'OUTROS', 'Outros', 120), l(2026, 2, 'OUTROS', 'Outros', 130)
+  ];
+  m.canonizarNomes(dados);
+  eq('grafias que só diferem em maiúsculas viram UM nome',
+    [...new Set(dados.map(d => d.fornecedor))], ['Outros']);
+  const r = m.crescimentoAnual(dados, 2026, 'fornecedor', null);
+  eq('canonizado, o fornecedor deixa de aparecer como "novo"',
+    [r.itens[0].novo, Math.round(r.itens[0].cresc * 100) / 100], [false, 0.25]);
+
+  const acentos = [
+    l(2026, 1, 'A', 'Cerâmica', 10), l(2026, 1, 'B', 'CERAMICA', 10),
+    l(2026, 1, 'A', 'Cerâmica', 10)
+  ];
+  m.canonizarNomes(acentos);
+  eq('acento também não separa; vence a grafia mais frequente',
+    [...new Set(acentos.map(d => d.categoria))], ['Cerâmica']);
+  const distintos = [l(2026, 1, 'PAMESA', 'X', 10), l(2026, 1, 'POINTER', 'Y', 10)];
+  m.canonizarNomes(distintos);
+  eq('nomes realmente diferentes ficam como estão',
+    distintos.map(d => d.fornecedor), ['PAMESA', 'POINTER']);
+}
+
+// ── Destaques automáticos (regra, sem IA) ────────────────────
+
+{
+  const l = (ano, mes, forn, cat, fat, lucro) =>
+    ({ ano, mes, fornecedor: forn, categoria: cat, quantidade: 1, faturamento: fat, lucro });
+  const dados = [
+    l(2025, 1, 'A', 'Cerâmica', 100, 20), l(2025, 1, 'B', 'Telhas', 100, 10),
+    l(2025, 2, 'A', 'Cerâmica', 100, 20), l(2025, 2, 'B', 'Telhas', 100, 10),
+    l(2026, 1, 'A', 'Cerâmica', 150, 30), l(2026, 1, 'B', 'Telhas', 80, 8),
+    l(2026, 2, 'A', 'Cerâmica', 200, 40), l(2026, 2, 'B', 'Telhas', 70, 7),
+    l(2026, 2, 'C', 'Argamassa', 50, 5) // novo em 2026, 9% do período
+  ];
+  const d = m.destaquesAutomaticos(dados, 2026);
+  eq('a sequência dos achados é estável (mês, recorde, categorias, fornecedores, novos, margem)',
+    d.map(x => x.tipo),
+    ['mes', 'recorde', 'altaCategoria', 'quedaCategoria', 'altaFornecedor', 'quedaFornecedor', 'novos', 'margemBaixa']);
+  const mes = d[0];
+  eq('o último mês fecha com a soma certa e a margem pela regra de ouro',
+    [mes.mes, mes.fat, mes.margem], [2, 320, 0.1625]);
+  eq('compara com o mesmo mês do ano anterior (320/200 − 1 = 60%)',
+    Math.round(mes.vsAnoAnterior * 100) / 100, 0.6);
+  eq('o recorde sabe quando é o próprio último mês',
+    [d[1].mes, d[1].ehUltimo], [2, true]);
+  eq('maior alta e maior queda de categoria no período comparável',
+    [d[2].nome, d[2].cresc, d[3].nome, d[3].cresc], ['Cerâmica', 0.75, 'Telhas', -0.25]);
+  eq('fornecedor novo relevante entra na lista de novos', d[6].nomes, ['C']);
+  eq('a margem destoante aponta o pior entre os grandes',
+    [d[7].nome, d[7].margem], ['B', 0.1]);
+  eq('ano sem dado nenhum: nenhum destaque inventado',
+    m.destaquesAutomaticos(dados, 2030), []);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
