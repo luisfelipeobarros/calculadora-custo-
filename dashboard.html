@@ -415,11 +415,30 @@
           const txt = conf.formatar ? conf.formatar(ds.data[i], i) : '';
           if(!txt) return;
           if(chart.options.indexAxis === 'y'){
-            // Barra negativa cresce para a ESQUERDA: o rotulo vai na
-            // ponta dela (a esquerda), nao dentro do grafico.
+            ctx.textBaseline = 'middle';
             const neg = typeof ds.data[i] === 'number' && ds.data[i] < 0;
-            ctx.textAlign = neg ? 'right' : 'left'; ctx.textBaseline = 'middle';
-            ctx.fillText(txt, el.x + (neg ? -5 : 5), el.y);
+            if(!neg){
+              ctx.textAlign = 'left';
+              ctx.fillText(txt, el.x + 5, el.y);
+            } else {
+              // Barra negativa: o rotulo MEDE onde cabe — fora da ponta
+              // esquerda; senao DENTRO da barra (branco); senao a
+              // direita do zero. No celular a folga fixa nao bastava e
+              // os numeros caiam por cima dos nomes.
+              const textW = ctx.measureText(txt).width;
+              if(el.x - 6 - textW >= chart.chartArea.left){
+                ctx.textAlign = 'right';
+                ctx.fillText(txt, el.x - 5, el.y);
+              } else if((el.base - el.x) >= textW + 12){
+                const cor = ctx.fillStyle;
+                ctx.textAlign = 'right'; ctx.fillStyle = '#fff';
+                ctx.fillText(txt, el.base - 6, el.y);
+                ctx.fillStyle = cor;
+              } else {
+                ctx.textAlign = 'left';
+                ctx.fillText(txt, el.base + 5, el.y);
+              }
+            }
           } else {
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillText(txt, el.x, el.y - (ds.type === 'line' ? 7 : 3));
@@ -513,9 +532,10 @@
         datasets: [{ data: valores, backgroundColor: cores, maxBarThickness: 24 }] },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        // Folga dos DOIS lados: rótulo de alta sai pela direita, o de
-        // queda pela esquerda — nenhum invade os nomes do eixo.
-        layout: { padding: { right: 78, left: 78 } },
+        // Folga só à direita (altas); as quedas usam o posicionamento
+        // inteligente do plugin — a folga fixa à esquerda roubava
+        // largura útil no celular e ainda assim estourava.
+        layout: { padding: { right: 78, left: 8 } },
         onClick: (ev, els) => {
           if(!els.length) return;
           const it = itens[els[0].index];
