@@ -57,19 +57,23 @@
   .bloco h2{ margin:0 0 8px; font-size:17px; font-weight:800; text-align:center; color:#222; }
   .grafico-caixa{ position:relative; height:220px; }
   @media (min-width:960px){
+    /* DUAS linhas com costura unica: tabela de categorias + participacao
+       em cima, fornecedores + combo embaixo — os quatro blocos se
+       encontram num cruzamento so' (alinhado, como no Power BI). */
     .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
-      grid-template-areas: "tabcat partcat" "tabcat combomes" "tabforn combomes"; }
+      grid-template-areas: "tabcat partcat" "tabforn combomes"; }
     .bloco.b-tabcat{ grid-area:tabcat; }
     .bloco.b-partcat{ grid-area:partcat; }
     .bloco.b-combomes{ grid-area:combomes; }
     .bloco.b-tabforn{ grid-area:tabforn; }
     .grafico-caixa{ height:250px; }
-    .b-combomes .grafico-caixa{ height:320px; }
+    .b-combomes .grafico-caixa{ height:340px; }
   }
   /* Ordem de empilhamento no celular (pedida no layout) */
   .b-combomes{ order:1; } .b-partcat{ order:2; }
   .b-tabcat{ order:3; } .b-tabforn{ order:4; }
   .b-combomes .grafico-caixa{ height:260px; }
+  .b-combomes h2{ margin-bottom:0; } /* a legenda do gráfico cola no título */
 
   /* ── Tabelas ── */
   .rolagem{ overflow:auto; max-height:400px; }
@@ -449,13 +453,16 @@
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        layout: { padding: { top: 24 } },
+        layout: { padding: { top: 0 } },
         // Clicar num mês (barra ou ponto) filtra por ele; de novo, limpa.
         onClick: (ev, els) => { if(els.length) alternarMes(els[0].index + 1); },
         onHover: cursorDeBarra,
         plugins: {
-          legend: { display: true, position: 'top',
-            labels: { boxWidth: 14, font: { family: "'Barlow Condensed', sans-serif", size: 13, weight: 700 } } },
+          // Legenda pequena e colada no título; a linha da margem fica
+          // ancorada mais para baixo (escala) para não encostar nela.
+          legend: { display: true, position: 'top', align: 'center',
+            labels: { boxWidth: 10, boxHeight: 10, padding: 6,
+              font: { family: "'Barlow Condensed', sans-serif", size: 11, weight: 700 } } },
           tooltip: { enabled: false },
           rotulosBarras: { formatadores: [
             { formatar: v => v == null ? '' : fmtPct(v), cor: '#2B3990' },
@@ -465,7 +472,7 @@
         scales: {
           // Barras usam os ~62% de baixo; a linha, a faixa de cima.
           yFat: { display: false, beginAtZero: true, suggestedMax: maxFat * 1.6 },
-          yMargem: { display: false, min: minMarg - (maxMarg - minMarg || 0.01) * 4, suggestedMax: maxMarg * 1.12 },
+          yMargem: { display: false, min: minMarg - (maxMarg - minMarg || 0.01) * 3.2, suggestedMax: maxMarg * 1.45 },
           x: { grid: { display: false }, ticks: { font: { size: 12 } } }
         }
       },
