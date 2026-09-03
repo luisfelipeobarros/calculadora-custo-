@@ -310,8 +310,10 @@
     : v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
   const fmtPct = (v) => v == null ? '—' : (v * 100).toLocaleString('pt-BR',
     { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  // "6,71 M": duas casas (pedido de 03/09/2026) e o sufixo curto para
+  // o rótulo não ficar apertado entre as barras.
   const fmtMi = (v) => v == null ? '' : (v / 1e6).toLocaleString('pt-BR',
-    { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' Mi';
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' M';
   const escapeHtml = (s) => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
