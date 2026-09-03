@@ -128,10 +128,25 @@
   .rodape{ margin-top:18px; text-align:center; color:var(--cinza); font-size:12px; }
   .rodape button{ min-height:44px; padding:0 14px; margin-left:8px; border:2px solid var(--preto);
     background:#fff; cursor:pointer; font-weight:600; }
+
+  /* ── Portão de login: o relatório inteiro só aparece logado. O
+     que protege os DADOS são as regras do Firestore; este portão
+     esconde a interface e evita qualquer busca antes de entrar. ── */
+  #telaLogin{ display:none; }
+  body:not(.logado) #telaLogin{ display:block; }
+  body:not(.logado) .wrap > :not(#telaLogin){ display:none; }
 </style>
 </head>
 <body>
 <div class="wrap">
+
+  <div id="telaLogin">
+    <div class="bloco" style="max-width:380px; margin:60px auto;">
+      <h2>Relatório de vendas</h2>
+      <span class="sub-periodo">Acesso restrito — entre com o usuário do sistema</span>
+      <div id="loginConteudo"><div class="estado">Carregando...</div></div>
+    </div>
+  </div>
 
   <div class="topo">
     <!-- Logo vetorial embutida (remake fiel do arquivo original; um
@@ -208,6 +223,7 @@
   <div class="rodape" id="rodapeDash" style="display:none;">
     <span id="rodapeInfo"></span>
     <button type="button" id="recarregarDadosBtn">↻ Recarregar dados</button>
+    <button type="button" id="sairBtn">Sair</button>
   </div>
 </div>
 
@@ -1104,13 +1120,12 @@
     }
   }
 
-  // ═══ VENDAS × PAGAMENTOS — a área logada do dashboard ═════════
-  // O bloco só mostra números depois do login (o MESMO usuário/senha
-  // do Controle de Notas): a página é pública, mas compras e
-  // pagamentos moram no Firestore e as regras de lá exigem
-  // autenticação. O SDK do Firebase (e o app-shared.js, que traz a
-  // regra da Vetrus e a conexão) só é baixado quando alguém pede para
-  // entrar — quem só olha as vendas não paga esse peso.
+  // ═══ LOGIN E VENDAS × PAGAMENTOS ══════════════════════════════
+  // O relatório INTEIRO fica atrás do login (o mesmo usuário/senha
+  // do Controle de Notas): nada é buscado nem desenhado antes de
+  // entrar. O que protege compras e pagamentos são as regras do
+  // Firestore; o portão esconde também as vendas da interface —
+  // quem tem o link não vê nada sem conta.
   const VXP_SDK = [
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
@@ -1120,13 +1135,6 @@
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
   let vxpSdkPromise = null;
-
-  // Lembra que este navegador já entrou uma vez: na próxima visita o
-  // SDK carrega sozinho e a sessão salva volta sem pedir senha.
-  const vxpLembrar = {
-    tem(){ try{ return localStorage.getItem('vxpEntrar') === '1'; }catch(e){ return false; } },
-    marcar(v){ try{ v ? localStorage.setItem('vxpEntrar', '1') : localStorage.removeItem('vxpEntrar'); }catch(e){} }
-  };
 
   function vxpCarregarSdk(){
     if(vxpSdkPromise) return vxpSdkPromise;
@@ -1140,37 +1148,62 @@
     return vxpSdkPromise;
   }
 
-  function vxpIniciar(){
-    if(vxp.fase !== 'fora' && vxp.fase !== 'erro') return;
-    vxp.fase = 'sdk'; vxp.erro = null; renderVxp();
+  function renderLogin(fase, msg){
+    const alvo = $('loginConteudo');
+    if(!alvo) return;
+    if(fase === 'carregando'){
+      alvo.innerHTML = '<div class="estado">Conectando...</div>';
+    } else if(fase === 'form'){
+      alvo.innerHTML = '<form class="vxp-login" id="loginForm">' +
+        (msg ? '<p class="estado erro" style="padding:0; font-size:13px;">' + escapeHtml(msg) + '</p>' : '') +
+        '<label class="sub-periodo" for="loginUser" style="text-align:left; margin:0;">Usuário (o mesmo do Controle de Notas)</label>' +
+        '<input id="loginUser" autocomplete="username" required>' +
+        '<label class="sub-periodo" for="loginSenha" style="text-align:left; margin:0;">Senha</label>' +
+        '<input id="loginSenha" type="password" autocomplete="current-password" required>' +
+        '<button type="submit">Entrar</button></form>';
+      const u = $('loginUser');
+      if(u) u.focus();
+    } else {
+      alvo.innerHTML = '<div class="estado erro">' + escapeHtml(msg || 'Erro.') + '</div>' +
+        '<div class="vxp-rodape"><button type="button" id="loginTentarBtn">tentar de novo</button></div>';
+    }
+  }
+
+  function iniciarLogin(){
+    renderLogin('carregando');
     vxpCarregarSdk()
       .then(() => window.App.iniciarFirebase('dashboard'))
       .then((r) => {
         vxp.db = r.db;
         vxp.auth = r.app.auth();
         // A primeira notificação é o Firebase terminando de restaurar
-        // (ou não) a sessão salva neste navegador.
+        // (ou não) a sessão salva neste navegador: quem já entrou uma
+        // vez volta direto, sem digitar senha de novo.
         return new Promise((res) => {
           const parar = vxp.auth.onAuthStateChanged((u) => { parar(); res(u); });
         });
       })
-      .then((u) => { if(u) return vxpBaixar(); vxp.fase = 'login'; renderVxp(); })
-      .catch((e) => { vxp.fase = 'erro'; vxp.erro = (e && e.message) || String(e); renderVxp(); });
+      .then((u) => { if(u) aoLogar(); else renderLogin('form'); })
+      .catch((e) => renderLogin('erro', (e && e.message) || String(e)));
   }
 
-  function vxpEntrar(usuario, senha){
-    vxp.fase = 'logando'; vxp.erro = null; renderVxp();
+  function entrar(usuario, senha){
+    renderLogin('carregando');
     vxp.auth.signInWithEmailAndPassword(window.App.usuarioParaEmail(usuario), senha)
-      .then(() => { vxpLembrar.marcar(true); return vxpBaixar(); })
-      .catch(() => { vxp.fase = 'login'; vxp.erro = 'Usuário ou senha inválidos.'; renderVxp(); });
+      .then(aoLogar)
+      .catch(() => renderLogin('form', 'Usuário ou senha inválidos.'));
   }
 
-  function vxpSair(){
-    vxpLembrar.marcar(false);
-    if(vxp.auth) vxp.auth.signOut().catch(() => {});
-    vxp.fase = 'login'; vxp.erro = null;
-    vxp.notas = []; vxp.duplicatas = [];
-    renderVxp();
+  function aoLogar(){
+    document.body.classList.add('logado');
+    vxp.fase = 'carregando';
+    carregarDados();
+    vxpBaixar();
+  }
+
+  function sair(){
+    (vxp.auth ? vxp.auth.signOut().catch(() => {}) : Promise.resolve())
+      .then(() => location.reload());
   }
 
   function vxpBaixar(){
@@ -1191,11 +1224,10 @@
       vxp.fase = 'pronto';
       renderVxp();
     }).catch((e) => {
-      if(window.App.ehPermissaoNegada(e)){
-        vxp.fase = 'login'; vxp.erro = 'Esta conta não tem acesso aos dados.';
-      } else {
-        vxp.fase = 'erro'; vxp.erro = (e && e.message) || String(e);
-      }
+      vxp.fase = 'erro';
+      vxp.erro = window.App.ehPermissaoNegada(e)
+        ? 'Esta conta não tem acesso a compras e pagamentos.'
+        : (e && e.message) || String(e);
       renderVxp();
     });
   }
@@ -1206,24 +1238,12 @@
     if(!alvo) return;
 
     if(vxp.fase !== 'pronto'){
-      sub.textContent = 'Compras e pagamentos exigem login — só as vendas desta página são públicas';
-      if(vxp.fase === 'fora'){
-        alvo.innerHTML = '<div class="estado" style="padding:20px;">' +
-          '<button type="button" class="vxp-entrar" id="vxpBtnIniciar">🔒 Entrar para ver</button></div>';
-      } else if(vxp.fase === 'sdk' || vxp.fase === 'logando' || vxp.fase === 'carregando'){
-        alvo.innerHTML = '<div class="estado" style="padding:20px;">' +
-          (vxp.fase === 'carregando' ? 'Buscando compras e pagamentos...' : 'Carregando...') + '</div>';
-      } else if(vxp.fase === 'login'){
-        alvo.innerHTML = '<form class="vxp-login" id="vxpForm">' +
-          (vxp.erro ? '<p class="estado erro" style="padding:0; font-size:13px;">' + escapeHtml(vxp.erro) + '</p>' : '') +
-          '<label class="sub-periodo" for="vxpUser" style="text-align:left; margin:0;">Usuário (o mesmo do Controle de Notas)</label>' +
-          '<input id="vxpUser" autocomplete="username" required>' +
-          '<label class="sub-periodo" for="vxpSenha" style="text-align:left; margin:0;">Senha</label>' +
-          '<input id="vxpSenha" type="password" autocomplete="current-password" required>' +
-          '<button type="submit">Entrar</button></form>';
-      } else {
+      sub.textContent = 'Compras e pagamentos vêm do mesmo banco do Controle de Notas';
+      if(vxp.fase === 'erro'){
         alvo.innerHTML = '<div class="estado erro" style="padding:20px;">' + escapeHtml(vxp.erro || 'Erro.') + '</div>' +
-          '<div class="vxp-rodape"><button type="button" id="vxpBtnIniciar">tentar de novo</button></div>';
+          '<div class="vxp-rodape"><button type="button" id="vxpBtnTentar">tentar de novo</button></div>';
+      } else {
+        alvo.innerHTML = '<div class="estado" style="padding:20px;">Buscando compras e pagamentos...</div>';
       }
       return;
     }
@@ -1254,7 +1274,6 @@
       html += '<p class="sub-periodo" style="text-align:left;">Marcados "não comparar": ' +
         fmtNum(r.ignorados.comprado) + ' comprados e ' + fmtNum(r.ignorados.pago) + ' pagos no período.</p>';
     }
-    html += '<div class="vxp-rodape"><button type="button" id="vxpBtnSair">sair da área logada</button></div>';
     alvo.innerHTML = html;
   }
 
@@ -1274,23 +1293,26 @@
         renderCrescimentoAnual();
       }));
     $('recarregarDadosBtn').addEventListener('click', carregarDados);
+    $('sairBtn').addEventListener('click', sair);
 
-    // Área logada: cliques e o formulário de login (o conteúdo é
-    // redesenhado a cada render, então a escuta fica no contêiner).
-    $('vxpConteudo').addEventListener('click', function(e){
-      if(e.target && e.target.id === 'vxpBtnIniciar') vxpIniciar();
-      if(e.target && e.target.id === 'vxpBtnSair') vxpSair();
-    });
-    $('vxpConteudo').addEventListener('submit', function(e){
-      if(e.target && e.target.id === 'vxpForm'){
+    // O formulário de login é redesenhado a cada estado, então as
+    // escutas ficam no contêiner.
+    $('loginConteudo').addEventListener('submit', function(e){
+      if(e.target && e.target.id === 'loginForm'){
         e.preventDefault();
-        vxpEntrar($('vxpUser').value, $('vxpSenha').value);
+        entrar($('loginUser').value, $('loginSenha').value);
       }
     });
-    // Quem já entrou uma vez neste navegador volta logado sozinho.
-    if(vxpLembrar.tem()) vxpIniciar();
+    $('loginConteudo').addEventListener('click', function(e){
+      if(e.target && e.target.id === 'loginTentarBtn') iniciarLogin();
+    });
+    $('vxpConteudo').addEventListener('click', function(e){
+      if(e.target && e.target.id === 'vxpBtnTentar') vxpBaixar();
+    });
 
-    carregarDados();
+    // O portão: nada é buscado nem desenhado antes do login —
+    // carregarDados() só roda dentro de aoLogar().
+    iniciarLogin();
   }
 
   // No navegador de verdade, liga tudo; no DOM simulado dos testes
