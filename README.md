@@ -338,7 +338,7 @@ Não precisa instalar nada. São vinte e cinco etapas, em dezessete frentes:
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
 
-17. **Dashboard de vendas** — 47 verificações extraídas do próprio
+17. **Dashboard de vendas** — 48 verificações extraídas do próprio
     `dashboard.html` (o teste mede o código que roda na tela): o
     desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
     (ordem e acento não importam), a **regra de ouro** da margem

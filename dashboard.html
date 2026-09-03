@@ -424,17 +424,25 @@
     if(!meses.length) return out;
     const ult = meses[meses.length - 1];
 
-    // 1) O último mês: fechamento, e a variação do VALOR do lucro
-    // bruto vs mês anterior e vs mesmo mês do ano passado — em reais,
-    // não em pontos de margem (a margem o leitor já viu ao lado).
+    // 1) O último mês: a linha de fechamento e, para cada base de
+    // comparação (mês anterior e mesmo mês do ano anterior), a
+    // variação do faturamento E a do lucro bruto lado a lado, com as
+    // margens de/para — é o par que revela o movimento da margem
+    // (venda caiu 20% mas lucro caiu 5%? a margem SUBIU).
     const kUlt = resumoKpis(doAno.filter(l => l.mes === ult));
     const mesAnt = meses.length > 1 ? meses[meses.length - 2] : null;
     const kAnt = mesAnt ? resumoKpis(doAno.filter(l => l.mes === mesAnt)) : null;
     const kAnoAnt = resumoKpis(linhas.filter(l => l.ano === ano - 1 && l.mes === ult));
-    out.push({ tipo: 'mes', mes: ult, fat: kUlt.faturamento, margem: kUlt.margem,
-      mesAnterior: mesAnt,
-      lucroVsMesAnterior: (kAnt && kAnt.lucro > 0) ? kUlt.lucro / kAnt.lucro - 1 : null,
-      lucroVsAnoAnterior: kAnoAnt.lucro > 0 ? kUlt.lucro / kAnoAnt.lucro - 1 : null });
+    out.push({ tipo: 'mes', mes: ult, fat: kUlt.faturamento, margem: kUlt.margem });
+    const comparar = (contra, kBase, mesBase, anoBase) => {
+      if(!kBase || !(kBase.faturamento > 0)) return;
+      out.push({ tipo: 'comparaMes', contra, mesBase, anoBase,
+        fatVar: kUlt.faturamento / kBase.faturamento - 1,
+        lucroVar: kBase.lucro > 0 ? kUlt.lucro / kBase.lucro - 1 : null,
+        margemDe: kBase.margem, margemPara: kUlt.margem });
+    };
+    comparar('mesAnterior', kAnt, mesAnt, ano);
+    comparar('anoAnterior', kAnoAnt, ult, ano - 1);
 
     // 2) Recorde do ano (só vale a pena dizer com 2+ meses).
     if(meses.length > 1){
@@ -691,7 +699,7 @@
       return;
     }
     const pctS = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') +
-      (Math.abs(v) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+      (Math.abs(v) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
     const mi = (v) => 'R$ ' + fmtMi(v).replace(' M', ' mi');
     const mesN = (m) => MESES_CHEIOS[m - 1];
     const linhasHtml = achados.map(d => {
@@ -699,11 +707,25 @@
       if(d.tipo === 'mes'){
         ic = '📅';
         txt = '<strong>' + mesN(d.mes) + '</strong> fechou com <strong>' + mi(d.fat) +
-          '</strong> e margem de <strong>' + fmtPct(d.margem) + '</strong>';
-        const partes = [];
-        if(d.lucroVsMesAnterior != null) partes.push(pctS(d.lucroVsMesAnterior) + ' sobre ' + mesN(d.mesAnterior));
-        if(d.lucroVsAnoAnterior != null) partes.push(pctS(d.lucroVsAnoAnterior) + ' sobre ' + mesN(d.mes) + ' do ano anterior');
-        if(partes.length) txt += ' — <strong>lucro bruto</strong> (em R$) ' + partes.join(' e ');
+          '</strong> e margem de <strong>' + fmtPct(d.margem) + '</strong>.';
+      } else if(d.tipo === 'comparaMes'){
+        ic = d.contra === 'mesAnterior' ? '🔁' : '📆';
+        txt = 'Sobre ' + mesN(d.mesBase) +
+          (d.contra === 'anoAnterior' ? ' de ' + d.anoBase : '') +
+          ': faturamento <strong>' + pctS(d.fatVar) + '</strong>' +
+          (d.lucroVar != null ? ', lucro bruto <strong>' + pctS(d.lucroVar) + '</strong>' : '');
+        if(d.margemDe != null && d.margemPara != null){
+          // O veredito em pontos percentuais: é ele que traduz o par
+          // faturamento × lucro em "a margem melhorou ou piorou".
+          const dif = (d.margemPara - d.margemDe) * 100;
+          const pp = Math.abs(dif).toLocaleString('pt-BR',
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' p.p.';
+          if(dif >= 0.1) txt += ' — a margem <strong>subiu ' + pp + '</strong> (de ' +
+            fmtPct(d.margemDe) + ' para ' + fmtPct(d.margemPara) + ')';
+          else if(dif <= -0.1) txt += ' — a margem <strong>caiu ' + pp + '</strong> (de ' +
+            fmtPct(d.margemDe) + ' para ' + fmtPct(d.margemPara) + ')';
+          else txt += ' — margem praticamente estável (' + fmtPct(d.margemPara) + ')';
+        }
         txt += '.';
       } else if(d.tipo === 'recorde'){
         ic = '🏆';

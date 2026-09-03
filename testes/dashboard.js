@@ -251,26 +251,30 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
     l(2026, 2, 'C', 'Argamassa', 50, 5) // novo em 2026, 9% do período
   ];
   const d = m.destaquesAutomaticos(dados, 2026);
-  eq('a sequência dos achados é estável (mês, recorde, categorias, fornecedores, novos, margem)',
+  eq('a sequência dos achados é estável (mês, comparações, recorde, categorias, fornecedores, novos, margem)',
     d.map(x => x.tipo),
-    ['mes', 'recorde', 'altaCategoria', 'quedaCategoria', 'altaFornecedor', 'quedaFornecedor', 'novos', 'margemBaixa']);
+    ['mes', 'comparaMes', 'comparaMes', 'recorde', 'altaCategoria', 'quedaCategoria',
+     'altaFornecedor', 'quedaFornecedor', 'novos', 'margemBaixa']);
   const mes = d[0];
   eq('o último mês fecha com a soma certa e a margem pela regra de ouro',
     [mes.mes, mes.fat, mes.margem], [2, 320, 0.1625]);
-  // A variação do mês é do VALOR do lucro bruto (pedido de 03/09/2026:
-  // "deixe claro que é o valor do lucro, não a margem") — nunca do
-  // faturamento nem de pontos de margem.
-  eq('variação vs mês anterior é do lucro em R$ (52/38 − 1 = 37%)',
-    Math.round(mes.lucroVsMesAnterior * 100) / 100, 0.37);
-  eq('variação vs mesmo mês do ano anterior é do lucro em R$ (52/30 − 1 = 73%)',
-    Math.round(mes.lucroVsAnoAnterior * 100) / 100, 0.73);
+  // As comparações trazem faturamento E lucro bruto lado a lado
+  // (pedido de 03/09/2026): é o par que revela o movimento da margem —
+  // venda caindo mais que o lucro significa margem SUBINDO.
+  const arred = (v) => v == null ? null : Math.round(v * 100) / 100;
+  eq('vs mês anterior: variação do faturamento (320/230) e do lucro (52/38), cada uma a sua',
+    [d[1].contra, arred(d[1].fatVar), arred(d[1].lucroVar)], ['mesAnterior', 0.39, 0.37]);
+  eq('vs mesmo mês do ano anterior: faturamento +60% e lucro +73%',
+    [d[2].contra, arred(d[2].fatVar), arred(d[2].lucroVar)], ['anoAnterior', 0.6, 0.73]);
+  eq('as margens de/para acompanham para o veredito em p.p. (15% -> 16,25%)',
+    [d[2].margemDe, d[2].margemPara], [0.15, 0.1625]);
   eq('o recorde sabe quando é o próprio último mês',
-    [d[1].mes, d[1].ehUltimo], [2, true]);
+    [d[3].mes, d[3].ehUltimo], [2, true]);
   eq('maior alta e maior queda de categoria no período comparável',
-    [d[2].nome, d[2].cresc, d[3].nome, d[3].cresc], ['Cerâmica', 0.75, 'Telhas', -0.25]);
-  eq('fornecedor novo relevante entra na lista de novos', d[6].nomes, ['C']);
+    [d[4].nome, d[4].cresc, d[5].nome, d[5].cresc], ['Cerâmica', 0.75, 'Telhas', -0.25]);
+  eq('fornecedor novo relevante entra na lista de novos', d[8].nomes, ['C']);
   eq('a margem destoante aponta o pior entre os grandes',
-    [d[7].nome, d[7].margem], ['B', 0.1]);
+    [d[9].nome, d[9].margem], ['B', 0.1]);
   eq('ano sem dado nenhum: nenhum destaque inventado',
     m.destaquesAutomaticos(dados, 2030), []);
 }
