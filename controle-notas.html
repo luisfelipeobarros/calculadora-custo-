@@ -23,7 +23,7 @@
   /* Somente o que e' exclusivo do Controle de Notas. */
   .wrap{ padding:28px 20px 60px; }
   header.top, footer.note,
-  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas, #viewDda{
+  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas, #viewDda, #viewVendas{
     max-width:1700px;
     margin-left:auto;
     margin-right:auto;
@@ -268,6 +268,7 @@
       <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
       <button class="btn secondary" id="navSimulador">🧪 Simulador</button>
+      <button class="btn secondary" id="navVendas">📈 Vendas</button>
       <!-- Sem link para a Calculadora: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
            cruzado navegava DENTRO da janela do app errado, recarregando
@@ -527,6 +528,45 @@
         </label>
       </div>
       <div id="resultadoSim"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ VENDAS × COMPRAS ═══════════ -->
+  <div id="viewVendas" style="display:none;">
+    <div class="card">
+      <h2>Vendas × Compras × Pagamentos</h2>
+      <p class="nota-explicativa">
+        Cruza as <strong>vendas</strong> da planilha do dashboard com as <strong>compras</strong>
+        (notas emitidas no período) e os <strong>pagamentos</strong> (duplicatas pagas no período)
+        de cada fornecedor. Compra conta pela data de emissão da nota; pagamento, pela data em que
+        foi pago — com prazos de 60/90 dias, o pago do mês se refere a compras de meses anteriores,
+        então "Venda − Compra" é a leitura comercial e "Venda − Pago" é a de caixa.
+        O app carrega 12 meses de duplicatas: para períodos mais antigos, use
+        "carregar histórico completo" na barra de cima.
+      </p>
+      <div class="filtros">
+        <label class="sr-only" for="periodoVendas">Período</label>
+        <select id="periodoVendas"></select>
+        <button type="button" class="acao-mini" id="btnRecarregarVendas">🔄 Recarregar vendas</button>
+        <span id="statusVendas" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
+      </div>
+      <div id="tabelaVendasCompras"></div>
+    </div>
+
+    <div class="card" style="margin-top:18px;">
+      <h2>Vínculo fornecedor ↔ planilha</h2>
+      <p class="nota-explicativa">
+        Diga a qual marca da planilha pertence cada fornecedor das notas. "Outros" soma na linha
+        Outros da planilha; "não comparar" tira da conta (serviços e despesas). A Vetrus já vem
+        separada por produto (Pamesa / Stela), então o vínculo dela é pelo rótulo, não pelo CNPJ.
+        As escolhas só são gravadas quando você clica em <strong>Salvar vínculos</strong>.
+      </p>
+      <div class="filtros">
+        <label class="sr-only" for="buscaVinculo">Buscar fornecedor</label>
+        <input type="search" id="buscaVinculo" placeholder="Buscar fornecedor ou CNPJ...">
+        <button type="button" class="btn" id="btnSalvarVinculos" disabled>Salvar vínculos</button>
+      </div>
+      <div id="tabelaVinculos"></div>
     </div>
   </div>
 
@@ -951,12 +991,417 @@
     });
   }
 
+  // ─── Vendas × Compras ───────────────────────────────────────
+  // Cruza a planilha publica de vendas (a MESMA do dashboard) com as
+  // notas (compras, pela data de emissao) e as duplicatas pagas
+  // (pagamentos, pela data do pagamento). O vinculo fornecedor ->
+  // marca da planilha mora em config/vendasCompras e e' editado aqui.
+
+  var URL_GVIZ_VENDAS = 'https://docs.google.com/spreadsheets/d/1i-BufQCqSfovPEwdGz8bzmhW07ZxQNqyX3TQjX4K3Ac' +
+    '/gviz/tq?tqx=out:json&headers=1&sheet=dados';
+  var IGNORAR_VINCULO = '__ignorar';
+  var MESES_VC = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+  // A resposta do gviz NAO e' JSON puro: vem embrulhada em
+  // setResponse(...). O recorte vai do primeiro "(" ao ULTIMO ")" —
+  // parenteses DENTRO do JSON nao podem quebrar o recorte.
+  function parseGvizTexto(texto){
+    var ini = texto.indexOf('(');
+    var fim = texto.lastIndexOf(')');
+    if(ini === -1 || fim === -1 || fim <= ini) throw new Error('Resposta do gviz fora do formato esperado.');
+    return JSON.parse(texto.substring(ini + 1, fim));
+  }
+
+  // Versao enxuta da leitura do dashboard: so' ano, mes, fornecedor e
+  // faturamento. Colunas casadas pelo ROTULO (a ordem da planilha pode
+  // mudar); linha sem ano/mes validos e' descartada.
+  function linhasVendasDaResposta(json){
+    var cols = (json.table && json.table.cols) || [];
+    var idx = { ano: 0, mes: 1, fornecedor: 2, faturamento: 5 };
+    var mapa = { ano: 'ano', mes: 'mes', fornecedor: 'fornecedor', faturamento: 'faturamento' };
+    cols.forEach(function(c, i){
+      var rot = String(c.label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      if(mapa[rot] != null) idx[mapa[rot]] = i;
+    });
+    function cel(linha, i){
+      var c = linha.c && linha.c[i];
+      return c && c.v != null ? c.v : null;
+    }
+    var linhas = [];
+    ((json.table && json.table.rows) || []).forEach(function(r){
+      var ano = Number(cel(r, idx.ano));
+      var mes = Number(cel(r, idx.mes));
+      if(!(ano >= 2000) || !(mes >= 1 && mes <= 12)) return;
+      linhas.push({ ano: ano, mes: mes,
+        fornecedor: String(cel(r, idx.fornecedor) || '').trim(),
+        faturamento: Number(cel(r, idx.faturamento)) || 0 });
+    });
+    return linhas;
+  }
+
+  // "Megaó" na planilha e "MEGAO" no vinculo sao a MESMA marca: a
+  // chave ignora caixa e acento (a licao do Outros/OUTROS do
+  // dashboard vale aqui tambem).
+  function chaveMarca(nome){
+    return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  // O vinculo por ROTULO vence o por CNPJ: e' ele que separa a Vetrus
+  // (mesmo CNPJ, duas marcas, decididas pelo produto da nota).
+  function marcaDoVinculo(cnpj, rotulo, vinculos){
+    var v = vinculos || {};
+    if(v.porRotulo && v.porRotulo[rotulo] != null) return v.porRotulo[rotulo];
+    if(v.porCnpj && cnpj && v.porCnpj[cnpj] != null) return v.porCnpj[cnpj];
+    return null;
+  }
+
+  // O cruzamento em si. Puro de proposito (recebe tudo, inclusive a
+  // funcao de rotular) — e' o que o teste trava:
+  // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
+  // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
+  // - pago: duplicatas pagas no periodo, pelo valorPago (sem ele, o
+  //   valor da parcela). Duplicata de nota cancelada fica fora;
+  //   duplicata sem a nota carregada classifica pelo proprio nome;
+  // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
+  // - compra/pagamento sem vinculo nenhum vai para semVinculo.
+  function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
+    function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
+    function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
+
+    var porMarca = Object.create(null);
+    function garantir(marca){
+      var ch = chaveMarca(marca);
+      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, pago: 0 };
+      return porMarca[ch];
+    }
+
+    (vendas || []).forEach(function(v){
+      if(!noPeriodo(v.ano, v.mes)) return;
+      garantir(v.fornecedor).vendido += v.faturamento || 0;
+    });
+
+    var semVinculo = Object.create(null);
+    var ignorados = { comprado: 0, pago: 0 };
+    var notasPorId = Object.create(null);
+    notas.forEach(function(n){ notasPorId[n.id] = n; });
+
+    function produtosDe(n){ return Array.isArray(n.produtosResumo) ? n.produtosResumo : null; }
+    function classificar(cnpj, nome, produtos){
+      var rotulo = rotular(nome || '', produtos);
+      return { rotulo: rotulo, cnpj: cnpj, marca: marcaDoVinculo(cnpj, rotulo, vinculos) };
+    }
+    function somar(cls, campo, valor){
+      if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
+      if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
+      var s = semVinculo[cls.rotulo];
+      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, pago: 0 };
+      if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
+      s[campo] += valor;
+    }
+
+    notas.forEach(function(n){
+      if((n.status || 'ativa') === 'cancelada') return;
+      var d = anoMesISO(n.dataEmissao);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      somar(classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n)), 'comprado', n.valorTotal || 0);
+    });
+
+    duplicatas.forEach(function(dup){
+      if(dup.pago !== true) return;
+      var d = anoMesISO(dup.dataPagamento);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      var n = notasPorId[dup.chaveAcesso];
+      if(n && (n.status || 'ativa') === 'cancelada') return;
+      var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
+                  : classificar(null, dup.nomeEmitente, null);
+      somar(cls, 'pago', dup.valorPago != null ? dup.valorPago : (dup.valor || 0));
+    });
+
+    var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
+    linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
+    var soltos = Object.keys(semVinculo).map(function(k){
+      var s = semVinculo[k];
+      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, pago: s.pago };
+    });
+    soltos.sort(function(a, b){ return (b.comprado + b.pago) - (a.comprado + a.pago); });
+    var totais = { vendido: 0, comprado: 0, pago: 0 };
+    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.pago += l.pago; });
+    return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
+  }
+
+  // ── Estado e IO da tela ──
+  var vendasLinhas = null, vendasErro = null, buscandoVendas = false;
+  var vinculos = { porRotulo: {}, porCnpj: {} };
+  var carregouVinculos = false, buscandoVinculos = false;
+  var periodoVendasSel = '';
+  var vinculosEdicao = {}; // rotulo -> valor escolhido e ainda nao salvo
+
+  function carregarVendas(forcar){
+    if(buscandoVendas || (vendasLinhas && !forcar)) return;
+    buscandoVendas = true;
+    vendasErro = null;
+    if(router.atual() === 'Vendas') $('statusVendas').textContent = 'Carregando vendas da planilha...';
+    fetch(URL_GVIZ_VENDAS)
+      .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(function(t){ vendasLinhas = linhasVendasDaResposta(parseGvizTexto(t)); })
+      .catch(function(e){ vendasErro = App.erroDe(e); })
+      .then(function(){
+        buscandoVendas = false;
+        if(router.atual() === 'Vendas') renderVendas();
+      });
+  }
+
+  function carregarVinculos(){
+    if(!db || carregouVinculos || buscandoVinculos) return;
+    buscandoVinculos = true;
+    App.comAuth(function(){ return db.collection('config').doc('vendasCompras').get(); })
+      .then(function(doc){
+        var d = doc && doc.exists ? doc.data() : null;
+        vinculos = { porRotulo: (d && d.porRotulo) || {}, porCnpj: (d && d.porCnpj) || {} };
+        carregouVinculos = true;
+      })
+      .catch(function(e){ App.toast('Erro ao carregar os vínculos: ' + App.erroDe(e), 'erro'); })
+      .then(function(){
+        buscandoVinculos = false;
+        if(router.atual() === 'Vendas') renderVendas();
+      });
+  }
+
+  // Todos os fornecedores das notas carregadas, agrupados pelo mesmo
+  // rotulo das outras telas (Vetrus ja' separada). Canceladas entram:
+  // aqui a nota so' serve para IDENTIFICAR o fornecedor.
+  function gruposDeFornecedores(){
+    var grupos = Object.create(null);
+    notas.forEach(function(n){
+      var rotulo = fornecedorDaNota(n) || '?';
+      var g = grupos[rotulo];
+      if(!g) g = grupos[rotulo] = { rotulo: rotulo, cnpjs: Object.create(null), total: 0 };
+      if(n.cnpjEmitente) g.cnpjs[n.cnpjEmitente] = true;
+      if(notaAtiva(n)) g.total += n.valorTotal || 0;
+    });
+    return Object.keys(grupos).map(function(k){
+      var g = grupos[k];
+      return { rotulo: g.rotulo, cnpjs: Object.keys(g.cnpjs), total: g.total };
+    }).sort(function(a, b){ return b.total - a.total; });
+  }
+
+  function marcasDaPlanilha(){
+    var vistas = Object.create(null);
+    var lista = [];
+    (vendasLinhas || []).forEach(function(v){
+      var ch = chaveMarca(v.fornecedor);
+      if(!ch || vistas[ch]) return;
+      vistas[ch] = true;
+      lista.push(v.fornecedor);
+    });
+    // Vinculos ja' gravados apontando para marca que a planilha nao
+    // tem mais continuam visiveis no select (senao pareceriam vazios).
+    var gravadas = [];
+    Object.keys(vinculos.porRotulo).forEach(function(k){ gravadas.push(vinculos.porRotulo[k]); });
+    Object.keys(vinculos.porCnpj).forEach(function(k){ gravadas.push(vinculos.porCnpj[k]); });
+    gravadas.forEach(function(marca){
+      if(marca === IGNORAR_VINCULO) return;
+      var ch = chaveMarca(marca);
+      if(!ch || vistas[ch]) return;
+      vistas[ch] = true;
+      lista.push(marca);
+    });
+    return lista.sort(function(a, b){ return a.localeCompare(b, 'pt-BR'); });
+  }
+
+  function vinculoAtualDe(grupo){
+    if(vinculosEdicao[grupo.rotulo] != null) return vinculosEdicao[grupo.rotulo];
+    var v = marcaDoVinculo(grupo.cnpjs[0] || null, grupo.rotulo, vinculos);
+    return v == null ? '' : v;
+  }
+
+  function periodoEscolhido(){
+    if(/^\d{4}-\d{1,2}$/.test(periodoVendasSel)){
+      return { ano: +periodoVendasSel.slice(0, 4), mes: +periodoVendasSel.slice(5) };
+    }
+    if(/^\d{4}$/.test(periodoVendasSel)) return { ano: +periodoVendasSel, mes: null };
+    return null;
+  }
+
+  function montarPeriodoVendas(){
+    var sel = $('periodoVendas');
+    var porAno = Object.create(null);
+    (vendasLinhas || []).forEach(function(v){
+      if(!(v.faturamento > 0)) return;
+      (porAno[v.ano] = porAno[v.ano] || Object.create(null))[v.mes] = true;
+    });
+    var anos = Object.keys(porAno).map(Number).sort(function(a, b){ return b - a; });
+    if(!anos.length){ sel.innerHTML = '<option value="">—</option>'; return; }
+    if(!periodoEscolhido() || !porAno[periodoEscolhido().ano]) periodoVendasSel = String(anos[0]);
+    var html = '';
+    anos.forEach(function(ano){
+      var meses = Object.keys(porAno[ano]).map(Number).sort(function(a, b){ return b - a; });
+      html += '<option value="' + ano + '">Ano ' + ano + ' (' + MESES_VC[meses[meses.length - 1] - 1] +
+        '–' + MESES_VC[meses[0] - 1] + ')</option>';
+      meses.forEach(function(m){
+        html += '<option value="' + ano + '-' + m + '">' + MESES_VC[m - 1] + '/' + ano + '</option>';
+      });
+    });
+    sel.innerHTML = html;
+    sel.value = periodoVendasSel;
+  }
+
+  function saldoHtml(v){
+    var cor = v > 0 ? '#2E9E5B' : (v < 0 ? '#D91F26' : 'inherit');
+    return '<span style="color:' + cor + '; font-weight:700;">' + brl(v) + '</span>';
+  }
+
+  function renderVendas(){
+    carregarVendas(false);
+    carregarVinculos();
+
+    var status = $('statusVendas');
+    if(buscandoVendas) status.textContent = 'Carregando vendas da planilha...';
+    else if(vendasErro) status.textContent = 'Erro ao ler a planilha de vendas: ' + vendasErro;
+    else if(vendasLinhas) status.textContent = vendasLinhas.length + ' linhas de venda · vínculos ' +
+      (carregouVinculos ? 'carregados' : 'carregando...');
+    else status.textContent = '';
+
+    montarPeriodoVendas();
+    var p = periodoEscolhido();
+    var alvo = $('tabelaVendasCompras');
+    if(!p){
+      alvo.innerHTML = '<p class="nota-explicativa">Sem vendas carregadas ainda.</p>';
+    } else {
+      var r = cruzarVendasCompras(vendasLinhas || [], notas, duplicatas, vinculos, rotularFornecedor, p.ano, p.mes);
+      var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+        '<th scope="col">Marca</th><th scope="col">Vendido</th><th scope="col">Comprado</th>' +
+        '<th scope="col">Venda − Compra</th><th scope="col">Pago</th><th scope="col">Venda − Pago</th>' +
+        '</tr></thead><tbody>';
+      r.linhas.forEach(function(l){
+        html += '<tr><td>' + escapeHtml(l.marca) + '</td>' +
+          '<td>' + brl(l.vendido) + '</td><td>' + brl(l.comprado) + '</td>' +
+          '<td>' + saldoHtml(l.vendido - l.comprado) + '</td>' +
+          '<td>' + brl(l.pago) + '</td>' +
+          '<td>' + saldoHtml(l.vendido - l.pago) + '</td></tr>';
+      });
+      html += '</tbody><tfoot><tr><th scope="row">Total</th>' +
+        '<td>' + brl(r.totais.vendido) + '</td><td>' + brl(r.totais.comprado) + '</td>' +
+        '<td>' + saldoHtml(r.totais.vendido - r.totais.comprado) + '</td>' +
+        '<td>' + brl(r.totais.pago) + '</td>' +
+        '<td>' + saldoHtml(r.totais.vendido - r.totais.pago) + '</td>' +
+        '</tr></tfoot></table></div>';
+      if(r.semVinculo.length){
+        html += '<p class="nota-explicativa" style="margin-top:10px;"><strong>Sem vínculo</strong> (fora da conta — configure abaixo): ' +
+          r.semVinculo.map(function(s){
+            return escapeHtml(s.rotulo) + ' (' + brl(s.comprado + s.pago) + ')';
+          }).join(' · ') + '</p>';
+      }
+      if(r.ignorados.comprado || r.ignorados.pago){
+        html += '<p class="nota-explicativa">Marcados "não comparar": ' + brl(r.ignorados.comprado) +
+          ' comprados e ' + brl(r.ignorados.pago) + ' pagos no período.</p>';
+      }
+      alvo.innerHTML = html;
+    }
+
+    renderVinculos();
+  }
+
+  function renderVinculos(){
+    // Escolhas pendentes NAO podem ser atropeladas por um snapshot que
+    // chega no meio da edicao: com edicao em curso, a tabela fica como
+    // esta' ate' salvar.
+    if(Object.keys(vinculosEdicao).length) return;
+
+    var termo = normalizarTexto($('buscaVinculo').value);
+    var grupos = gruposDeFornecedores();
+    if(termo) grupos = grupos.filter(function(g){
+      return normalizarTexto(g.rotulo).includes(termo) ||
+        g.cnpjs.some(function(c){ return c.indexOf(termo) !== -1; });
+    });
+    if(!grupos.length){
+      $('tabelaVinculos').innerHTML = '<p class="nota-explicativa">Nenhum fornecedor nas notas carregadas.</p>';
+      return;
+    }
+    var marcas = marcasDaPlanilha();
+    var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
+      '<th scope="col">Fornecedor (notas)</th><th scope="col">CNPJ(s)</th>' +
+      '<th scope="col">Comprado (janela)</th><th scope="col">Marca na planilha</th>' +
+      '</tr></thead><tbody>';
+    grupos.forEach(function(g){
+      var atual = vinculoAtualDe(g);
+      var opcoes = '<option value="">— sem vínculo —</option>';
+      marcas.forEach(function(m){
+        opcoes += '<option value="' + escapeHtml(m) + '"' + (atual === m ? ' selected' : '') + '>' +
+          escapeHtml(m) + '</option>';
+      });
+      opcoes += '<option value="' + IGNORAR_VINCULO + '"' + (atual === IGNORAR_VINCULO ? ' selected' : '') +
+        '>não comparar (serviço/despesa)</option>';
+      html += '<tr><td>' + escapeHtml(g.rotulo) + '</td>' +
+        '<td style="font-family:var(--font-mono); font-size:12px;">' + g.cnpjs.map(escapeHtml).join('<br>') + '</td>' +
+        '<td>' + brl(g.total) + '</td>' +
+        '<td><select data-vinculo="' + escapeHtml(g.rotulo) + '" aria-label="Marca de ' + escapeHtml(g.rotulo) + '">' +
+        opcoes + '</select></td></tr>';
+    });
+    html += '</tbody></table></div>';
+    $('tabelaVinculos').innerHTML = html;
+  }
+
+  function salvarVinculos(){
+    var novo = { porRotulo: {}, porCnpj: {} };
+    Object.keys(vinculos.porRotulo).forEach(function(k){ novo.porRotulo[k] = vinculos.porRotulo[k]; });
+    Object.keys(vinculos.porCnpj).forEach(function(k){ novo.porCnpj[k] = vinculos.porCnpj[k]; });
+
+    var grupos = gruposDeFornecedores();
+    var usoCnpj = Object.create(null);
+    grupos.forEach(function(g){ g.cnpjs.forEach(function(c){ usoCnpj[c] = (usoCnpj[c] || 0) + 1; }); });
+    var porRotulo = Object.create(null);
+    grupos.forEach(function(g){ porRotulo[g.rotulo] = g; });
+
+    Object.keys(vinculosEdicao).forEach(function(rotulo){
+      var g = porRotulo[rotulo];
+      if(!g) return;
+      var valor = vinculosEdicao[rotulo];
+      // Limpa o que havia para este fornecedor antes de regravar.
+      delete novo.porRotulo[rotulo];
+      // CNPJ dividido entre rotulos (o caso Vetrus) NAO pode ganhar
+      // vinculo proprio — la' o vinculo e' pelo rotulo.
+      var compartilhado = g.cnpjs.some(function(c){ return usoCnpj[c] > 1; });
+      if(!compartilhado) g.cnpjs.forEach(function(c){ delete novo.porCnpj[c]; });
+      if(valor){
+        if(compartilhado || !g.cnpjs.length) novo.porRotulo[rotulo] = valor;
+        else g.cnpjs.forEach(function(c){ novo.porCnpj[c] = valor; });
+      }
+    });
+
+    var btn = $('btnSalvarVinculos');
+    btn.disabled = true;
+    App.comAuth(function(){ return db.collection('config').doc('vendasCompras').set(novo); })
+      .then(function(){
+        vinculos = novo;
+        vinculosEdicao = {};
+        App.toast('Vínculos salvos.', 'ok');
+        renderVendas();
+      })
+      .catch(function(e){
+        btn.disabled = false;
+        App.toast('Erro ao salvar os vínculos: ' + App.erroDe(e), 'erro');
+      });
+  }
+
+  $('periodoVendas').addEventListener('change', function(){
+    periodoVendasSel = this.value;
+    renderVendas();
+  });
+  $('btnRecarregarVendas').addEventListener('click', function(){ carregarVendas(true); });
+  $('buscaVinculo').addEventListener('input', App.debounce(renderVinculos));
+  $('btnSalvarVinculos').addEventListener('click', salvarVinculos);
+  App.delegar($('tabelaVinculos'), 'change', 'select[data-vinculo]', function(sel){
+    vinculosEdicao[sel.dataset.vinculo] = sel.value;
+    $('btnSalvarVinculos').disabled = false;
+  });
+
   // ─── Navegacao ──────────────────────────────────────────────
 
   var router = App.criarRouter({
     views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
              Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas', Dda:'viewDda',
-             Simulador:'viewSimulador' },
+             Simulador:'viewSimulador', Vendas:'viewVendas' },
     padrao: 'Painel',
     aoEntrar: {
       Painel: renderPainel,
@@ -965,13 +1410,14 @@
       Fornecedores: renderFornecedores,
       Canceladas: renderCanceladas,
       Dda: renderDda,
-      Simulador: renderSimulador
+      Simulador: renderSimulador,
+      Vendas: renderVendas
     },
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
        ['Canceladas','navCanceladas'], ['Dda','navDda'],
-       ['Simulador','navSimulador']].forEach(function(par){
+       ['Simulador','navSimulador'], ['Vendas','navVendas']].forEach(function(par){
         var b = $(par[1]);
         if(par[0] === nome) b.setAttribute('aria-current', 'page');
         else b.removeAttribute('aria-current');
@@ -988,6 +1434,7 @@
   $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
   $('navDda').addEventListener('click', function(){ router.ir('Dda'); });
   $('navSimulador').addEventListener('click', function(){ router.ir('Simulador'); });
+  $('navVendas').addEventListener('click', function(){ router.ir('Vendas'); });
 
   // Imprimir o Painel: preenche a linha de contexto que so' aparece no
   // papel (o cabecalho do app some na impressao) e chama o dialogo.
@@ -1035,7 +1482,7 @@
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
                Canceladas:renderCanceladas, Dda:renderDda,
-               Simulador:renderSimulador }[router.atual()];
+               Simulador:renderSimulador, Vendas:renderVendas }[router.atual()];
     if(fn) fn();
     atualizarContadores();
 

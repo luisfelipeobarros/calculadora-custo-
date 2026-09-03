@@ -198,7 +198,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e cinco etapas, em dezessete frentes:
+Não precisa instalar nada. São vinte e seis etapas, em dezoito frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -348,6 +348,17 @@ Não precisa instalar nada. São vinte e cinco etapas, em dezessete frentes:
     a canonização de nomes (grafias que só diferem em maiúsculas/acento
     viram um nome só — o caso real "Outros"/"OUTROS") e os destaques
     automáticos calculados por regra, sem IA.
+
+18. **Vendas × Compras** — 15 verificações extraídas do
+    `controle-notas.html`: o cruzamento da planilha pública de vendas
+    com as notas (compra pela **emissão**) e as duplicatas pagas
+    (pagamento pela **data do pagamento**), por marca da planilha. O
+    vínculo por **rótulo** vence o por CNPJ (é o que separa a Vetrus:
+    mesmo CNPJ, duas marcas decididas pelo produto), marca casa sem
+    caixa/acento, nota cancelada fica fora dos dois lados, valorPago
+    tem fallback no valor da parcela, quem não tem vínculo vai para
+    "sem vínculo" (nunca somado em silêncio) e o "não comparar" sai
+    da conta somado em ignorados.
 
 Rode antes de publicar qualquer alteração.
 

@@ -4,8 +4,8 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e cinco etapas,
-  em dezessete frentes (a lista canonica, com o que cada uma cobre,
+  Nao precisa instalar nada — so' o Node. Sao vinte e seis etapas,
+  em dezoito frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
@@ -35,6 +35,9 @@
   - lancamentos.js     — lancamentos contabeis: partidas dobradas,
                          pendencias, arquivo da transferencia e o
                          layout de 19 colunas do contador.
+  - vendas-compras.js  — cruzamento vendas x compras x pagamentos por
+                         fornecedor (planilha do dashboard x notas x
+                         duplicatas pagas) e o vinculo CNPJ/rotulo.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');
@@ -67,7 +70,8 @@ const etapas = [
   ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
   ['Assistencias e reclamacoes', 'assistencias.js', []],
   ['Lancamentos contabeis', 'lancamentos.js', []],
-  ['Dashboard de vendas', 'dashboard.js', []]
+  ['Dashboard de vendas', 'dashboard.js', []],
+  ['Vendas × Compras (controle-notas)', 'vendas-compras.js', []]
 ];
 
 let falhou = 0;
