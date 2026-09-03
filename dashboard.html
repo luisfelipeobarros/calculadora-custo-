@@ -496,11 +496,15 @@
         .sort((a, b) => ((b.novo ? Infinity : b.cresc) - (a.novo ? Infinity : a.cresc)) || b.atual - a.atual);
     }
 
-    // "Novo" (sem ano anterior) não tem %: entra com a barra no teto
-    // dos crescimentos reais e o rótulo "novo".
-    const reais = itens.filter(i => !i.novo).map(i => i.cresc);
-    const teto = reais.length ? Math.max(0.1, ...reais.map(Math.abs)) : 0.5;
-    const valores = itens.map(i => i.novo ? teto * 1.15 : i.cresc);
+    // A BARRA é limitada a ±100%; o rótulo mostra o % verdadeiro. Sem
+    // o teto, um outlier (+2.388% num mês) esticava a escala inteira,
+    // as quedas viravam um fio no canto e os rótulos delas caíam por
+    // cima dos nomes (bug de 03/09/2026). "Novo" entra um degrau
+    // acima do teto, com o rótulo "novo".
+    const TETO_BARRA = 1;
+    const valores = itens.map(i => i.novo
+      ? TETO_BARRA * 1.12
+      : Math.max(-TETO_BARRA, Math.min(TETO_BARRA, i.cresc)));
     const cores = itens.map(i => i.novo ? '#0d8ee9' : (i.cresc >= 0 ? '#2E9E5B' : '#D91F26'));
 
     novoChart('gCrescAnual', {
@@ -509,7 +513,9 @@
         datasets: [{ data: valores, backgroundColor: cores, maxBarThickness: 24 }] },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-        layout: { padding: { right: 64, left: 6 } },
+        // Folga dos DOIS lados: rótulo de alta sai pela direita, o de
+        // queda pela esquerda — nenhum invade os nomes do eixo.
+        layout: { padding: { right: 78, left: 78 } },
         onClick: (ev, els) => {
           if(!els.length) return;
           const it = itens[els[0].index];
@@ -526,8 +532,8 @@
             } } },
         scales: {
           x: { display: false,
-            min: Math.min(0, ...valores) * 1.3 - 0.02,
-            max: Math.max(0.02, ...valores) * 1.3 },
+            min: Math.min(-0.1, ...valores) * 1.15,
+            max: Math.max(0.1, ...valores) * 1.15 },
           y: { grid: { display: false }, ticks: { font: { size: 12 } } }
         }
       },
