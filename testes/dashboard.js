@@ -257,8 +257,13 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   const mes = d[0];
   eq('o último mês fecha com a soma certa e a margem pela regra de ouro',
     [mes.mes, mes.fat, mes.margem], [2, 320, 0.1625]);
-  eq('compara com o mesmo mês do ano anterior (320/200 − 1 = 60%)',
-    Math.round(mes.vsAnoAnterior * 100) / 100, 0.6);
+  // A variação do mês é do VALOR do lucro bruto (pedido de 03/09/2026:
+  // "deixe claro que é o valor do lucro, não a margem") — nunca do
+  // faturamento nem de pontos de margem.
+  eq('variação vs mês anterior é do lucro em R$ (52/38 − 1 = 37%)',
+    Math.round(mes.lucroVsMesAnterior * 100) / 100, 0.37);
+  eq('variação vs mesmo mês do ano anterior é do lucro em R$ (52/30 − 1 = 73%)',
+    Math.round(mes.lucroVsAnoAnterior * 100) / 100, 0.73);
   eq('o recorde sabe quando é o próprio último mês',
     [d[1].mes, d[1].ehUltimo], [2, true]);
   eq('maior alta e maior queda de categoria no período comparável',

@@ -424,16 +424,17 @@
     if(!meses.length) return out;
     const ult = meses[meses.length - 1];
 
-    // 1) O último mês: fechamento, vs mês anterior e vs mesmo mês do
-    // ano passado.
+    // 1) O último mês: fechamento, e a variação do VALOR do lucro
+    // bruto vs mês anterior e vs mesmo mês do ano passado — em reais,
+    // não em pontos de margem (a margem o leitor já viu ao lado).
     const kUlt = resumoKpis(doAno.filter(l => l.mes === ult));
     const mesAnt = meses.length > 1 ? meses[meses.length - 2] : null;
     const kAnt = mesAnt ? resumoKpis(doAno.filter(l => l.mes === mesAnt)) : null;
     const kAnoAnt = resumoKpis(linhas.filter(l => l.ano === ano - 1 && l.mes === ult));
     out.push({ tipo: 'mes', mes: ult, fat: kUlt.faturamento, margem: kUlt.margem,
       mesAnterior: mesAnt,
-      vsMesAnterior: (kAnt && kAnt.faturamento > 0) ? kUlt.faturamento / kAnt.faturamento - 1 : null,
-      vsAnoAnterior: kAnoAnt.faturamento > 0 ? kUlt.faturamento / kAnoAnt.faturamento - 1 : null });
+      lucroVsMesAnterior: (kAnt && kAnt.lucro > 0) ? kUlt.lucro / kAnt.lucro - 1 : null,
+      lucroVsAnoAnterior: kAnoAnt.lucro > 0 ? kUlt.lucro / kAnoAnt.lucro - 1 : null });
 
     // 2) Recorde do ano (só vale a pena dizer com 2+ meses).
     if(meses.length > 1){
@@ -700,9 +701,9 @@
         txt = '<strong>' + mesN(d.mes) + '</strong> fechou com <strong>' + mi(d.fat) +
           '</strong> e margem de <strong>' + fmtPct(d.margem) + '</strong>';
         const partes = [];
-        if(d.vsMesAnterior != null) partes.push(pctS(d.vsMesAnterior) + ' sobre ' + mesN(d.mesAnterior));
-        if(d.vsAnoAnterior != null) partes.push(pctS(d.vsAnoAnterior) + ' sobre ' + mesN(d.mes) + ' do ano anterior');
-        if(partes.length) txt += ' — ' + partes.join(' e ');
+        if(d.lucroVsMesAnterior != null) partes.push(pctS(d.lucroVsMesAnterior) + ' sobre ' + mesN(d.mesAnterior));
+        if(d.lucroVsAnoAnterior != null) partes.push(pctS(d.lucroVsAnoAnterior) + ' sobre ' + mesN(d.mes) + ' do ano anterior');
+        if(partes.length) txt += ' — <strong>lucro bruto</strong> (em R$) ' + partes.join(' e ');
         txt += '.';
       } else if(d.tipo === 'recorde'){
         ic = '🏆';
