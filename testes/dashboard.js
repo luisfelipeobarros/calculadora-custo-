@@ -35,7 +35,8 @@ const m = new Function(
   extrair('agruparPor') + '\n' +
   extrair('seriesMensais') + '\n' +
   extrair('participacaoCategorias') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias };'
+  extrair('marketShareFornecedores') + '\n' +
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores };'
 )();
 
 let problemas = 0;
@@ -143,6 +144,27 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   eq('maior categoria primeiro', p[0].nome, 'Cerâmica');
   eq('sem faturamento nenhum: lista vazia (nao divide por zero)',
     m.participacaoCategorias([]), []);
+}
+
+// ── Market share por fornecedor (pizza) ──────────────────────
+
+{
+  // 15 fornecedores com faturamento decrescente; topN=3 vira 3 fatias
+  // nomeadas + a "Demais (12)".
+  const muitos = [];
+  for(let i = 1; i <= 15; i++){
+    muitos.push({ ano: 2026, mes: 1, fornecedor: 'F' + String(i).padStart(2, '0'),
+      categoria: 'X', quantidade: 1, faturamento: 1600 - i * 100, lucro: 10 });
+  }
+  const ms = m.marketShareFornecedores(muitos, 3);
+  eq('topN fatias nomeadas + a fatia Demais', ms.length, 4);
+  eq('maior fornecedor primeiro', ms[0].nome, 'F01');
+  eq('a Demais agrega os que sobraram, com a contagem no nome',
+    [ms[3].demais, ms[3].nome], [true, 'Demais (12)']);
+  eq('as participacoes fecham 100%',
+    Math.round(ms.reduce((s, f) => s + f.pct, 0) * 1000) / 1000, 1);
+  eq('sem faturamento: pizza vazia (nao divide por zero)',
+    m.marketShareFornecedores([], 3), []);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
