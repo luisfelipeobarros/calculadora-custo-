@@ -8,6 +8,7 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, notas canceladas |
 | `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
 | `lancamentos.html` | Lançamentos contábeis + exportação para o contador |
+| `dashboard.html` | Dashboard de vendas (Google Sheets, standalone — sem app-shared) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
 | `app-shared.css` | Design system comum aos apps |
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
@@ -197,7 +198,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
+Não precisa instalar nada. São vinte e cinco etapas, em dezessete frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -336,6 +337,14 @@ Não precisa instalar nada. São vinte e duas etapas, em dezesseis frentes:
     **juros** em lançamento próprio, sem mapa de conta o doc nasce
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
+
+17. **Dashboard de vendas** — 22 verificações extraídas do próprio
+    `dashboard.html` (o teste mede o código que roda na tela): o
+    desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
+    (ordem e acento não importam), a **regra de ouro** da margem
+    (soma/soma, nunca média de margens — e null sem faturamento, nunca
+    "0%"), séries mensais com mês vazio = null e a participação por
+    categoria fechando 100%.
 
 Rode antes de publicar qualquer alteração.
 

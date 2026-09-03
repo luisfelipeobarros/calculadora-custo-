@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard de Vendas — Lojão da Construção</title>
+<meta name="theme-color" content="#FFF200">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Vendas">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23FFF200' stroke='%232B3990' stroke-width='4'/%3E%3Cpath d='M14 40 V28 L24 28 24 22 32 16 50 28 V40 Z' fill='none' stroke='%232B3990' stroke-width='4' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Dashboard standalone (sem app-shared de propósito): replica o
+     visual do Power BI — cards amarelos, barras azuis, condensada em
+     caixa alta. Mobile-first: o uso principal é no celular. */
+  :root{
+    --amarelo:#FFF200; --azul:#0d8ee9; --azul-escuro:#2B3990;
+    --vermelho:#D91F26; --preto:#111; --cinza:#666; --linha:#e3e3e3;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#fff; color:var(--preto);
+    font-family:'IBM Plex Sans', system-ui, sans-serif; font-size:14px; }
+  h1,h2,.card-kpi .rotulo,.filtro-ano button,th{
+    font-family:'Barlow Condensed', 'Arial Narrow', sans-serif;
+    text-transform:uppercase; letter-spacing:.02em;
+  }
+  .wrap{ max-width:1280px; margin:0 auto; padding:10px 10px 48px; }
+
+  /* ── Topo: logo + cards ── */
+  .topo{ display:flex; gap:10px; align-items:stretch; flex-wrap:wrap; }
+  .logo{ width:84px; flex:0 0 84px; align-self:center; }
+  .logo svg{ display:block; width:100%; height:auto; }
+  .cards{ flex:1; display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; min-width:0; }
+  @media (min-width:760px){ .cards{ grid-template-columns:repeat(4, 1fr); } }
+  .card-kpi{ background:var(--amarelo); border:2.5px solid var(--preto); padding:8px 10px 10px; text-align:center; }
+  .card-kpi .rotulo{ font-weight:800; font-size:15px; line-height:1.1; }
+  .card-kpi .valor{ font-family:'Barlow Condensed', sans-serif; font-weight:800; font-size:clamp(20px, 6vw, 30px); line-height:1.15; white-space:nowrap; }
+  @media (min-width:760px){ .card-kpi .rotulo{ font-size:17px; } .card-kpi .valor{ font-size:clamp(20px, 2.4vw, 32px); } }
+
+  /* ── Filtros (sticky) ── */
+  .filtros{ position:sticky; top:0; z-index:20; background:#fff; border-bottom:2px solid var(--preto);
+    margin:10px -10px 12px; padding:8px 10px; display:flex; gap:8px; align-items:center;
+    overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .filtro-ano{ display:flex; gap:4px; flex:0 0 auto; }
+  .filtro-ano button{ min-height:44px; padding:0 16px; font-size:16px; font-weight:700; cursor:pointer;
+    border:2px solid var(--preto); background:#fff; color:var(--preto); }
+  .filtro-ano button[aria-pressed="true"]{ background:var(--preto); color:#fff; }
+  .filtros select{ min-height:44px; padding:0 8px; font-size:14px; border:2px solid var(--preto);
+    background:#fff; color:var(--preto); flex:0 0 auto; max-width:46vw; }
+
+  /* ── Grade principal ── */
+  .grade{ display:flex; flex-direction:column; gap:14px; }
+  .bloco{ border:1px solid var(--linha); padding:10px; }
+  .bloco h2{ margin:0 0 8px; font-size:17px; font-weight:800; text-align:center; color:#222; }
+  .grafico-caixa{ position:relative; height:220px; }
+  @media (min-width:960px){
+    .grade{ display:grid; grid-template-columns:minmax(360px, 5fr) 7fr; gap:14px;
+      grid-template-areas: "tabcat partcat" "tabcat fatmes" "tabforn fatmes" "tabforn margmes"; }
+    .bloco.b-tabcat{ grid-area:tabcat; }
+    .bloco.b-partcat{ grid-area:partcat; }
+    .bloco.b-fatmes{ grid-area:fatmes; }
+    .bloco.b-margmes{ grid-area:margmes; }
+    .bloco.b-tabforn{ grid-area:tabforn; }
+    .grafico-caixa{ height:250px; }
+  }
+  /* Ordem de empilhamento no celular (pedida no layout) */
+  .b-fatmes{ order:1; } .b-margmes{ order:2; } .b-partcat{ order:3; }
+  .b-tabcat{ order:4; } .b-tabforn{ order:5; }
+
+  /* ── Tabelas ── */
+  .rolagem{ overflow:auto; max-height:400px; }
+  table{ width:100%; border-collapse:collapse; font-size:12.5px; min-width:340px; }
+  th{ font-size:13px; font-weight:700; text-align:right; padding:6px 8px; border-bottom:2px solid var(--preto);
+    cursor:pointer; user-select:none; position:sticky; top:0; background:#fff; white-space:nowrap; }
+  th:first-child, td:first-child{ text-align:left; position:sticky; left:0; background:#fff; }
+  td{ padding:5px 8px; border-bottom:1px solid var(--linha); text-align:right; white-space:nowrap;
+    font-variant-numeric:tabular-nums; }
+  tr.total td{ font-weight:700; border-top:2px solid var(--preto); background:#fff; }
+  td.neg{ color:var(--vermelho); }
+
+  .estado{ text-align:center; padding:40px 16px; color:var(--cinza); font-size:15px; }
+  .estado.erro{ color:var(--vermelho); font-weight:600; }
+  .rodape{ margin-top:18px; text-align:center; color:var(--cinza); font-size:12px; }
+  .rodape button{ min-height:44px; padding:0 14px; margin-left:8px; border:2px solid var(--preto);
+    background:#fff; cursor:pointer; font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topo">
+    <!-- Logo vetorial embutida (remake fiel do arquivo original; um
+         arquivo de imagem externo quebraria o "arquivo único"). -->
+    <div class="logo" aria-label="Lojão da Construção">
+      <svg viewBox="0 0 200 200" role="img" aria-hidden="true">
+        <circle cx="100" cy="100" r="97" fill="#2B3990"/>
+        <circle cx="100" cy="100" r="90" fill="#FFF200"/>
+        <path d="M30 132 V86 L62 86 62 66 88 46 170 86 V132 Z" fill="#FFF200" stroke="#2B3990" stroke-width="9" stroke-linejoin="round"/>
+        <text x="100" y="102" text-anchor="middle" font-family="'Barlow Condensed', 'Arial Narrow', sans-serif" font-weight="800" font-size="27" fill="#D91F26">LOJÃO DA</text>
+        <text x="100" y="126" text-anchor="middle" font-family="'Barlow Condensed', 'Arial Narrow', sans-serif" font-weight="800" font-size="24" fill="#D91F26">CONSTRUÇÃO</text>
+      </svg>
+    </div>
+    <div class="cards">
+      <div class="card-kpi"><span class="rotulo">Faturamento total</span><br><span class="valor" id="kpiFat">—</span></div>
+      <div class="card-kpi"><span class="rotulo">Lucro bruto</span><br><span class="valor" id="kpiLucro">—</span></div>
+      <div class="card-kpi"><span class="rotulo">Margem</span><br><span class="valor" id="kpiMargem">—</span></div>
+      <div class="card-kpi" title="Cerâmica em m²; demais categorias em unidades">
+        <span class="rotulo">Itens vendidos</span><br><span class="valor" id="kpiItens">—</span></div>
+    </div>
+  </div>
+
+  <div class="filtros" id="barraFiltros">
+    <div class="filtro-ano" id="filtroAno" role="group" aria-label="Ano"></div>
+    <label class="sr-oculto" for="filtroMes" style="position:absolute; left:-9999px;">Mês</label>
+    <select id="filtroMes"></select>
+    <label for="filtroForn" style="position:absolute; left:-9999px;">Fornecedor</label>
+    <select id="filtroForn"></select>
+    <label for="filtroCat" style="position:absolute; left:-9999px;">Categoria</label>
+    <select id="filtroCat"></select>
+  </div>
+
+  <div class="estado" id="estadoCarga">Carregando dados da planilha...</div>
+
+  <div class="grade" id="conteudoDash" style="display:none;">
+    <div class="bloco b-tabcat">
+      <h2>Por categoria</h2>
+      <div class="rolagem" id="tabelaCategoria"></div>
+    </div>
+    <div class="bloco b-partcat">
+      <h2>Categorias</h2>
+      <div class="grafico-caixa"><canvas id="gPartCat"></canvas></div>
+    </div>
+    <div class="bloco b-fatmes">
+      <h2>Faturamento</h2>
+      <div class="grafico-caixa"><canvas id="gFatMes"></canvas></div>
+    </div>
+    <div class="bloco b-margmes">
+      <h2>Margem por mês</h2>
+      <div class="grafico-caixa"><canvas id="gMargMes"></canvas></div>
+    </div>
+    <div class="bloco b-tabforn">
+      <h2>Por fornecedor</h2>
+      <div class="rolagem" id="tabelaFornecedor"></div>
+    </div>
+  </div>
+
+  <div class="rodape" id="rodapeDash" style="display:none;">
+    <span id="rodapeInfo"></span>
+    <button type="button" id="recarregarDadosBtn">↻ Recarregar dados</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  // ═══ CONFIGURAÇÃO ═════════════════════════════════════════════
+  // ID da Google Sheet (compartilhada como "qualquer pessoa com o
+  // link — leitor"), aba "dados" com as colunas: Ano, Mes,
+  // Fornecedor, Categoria, Quantidade, Faturamento, LucroBruto.
+  const SHEET_ID = '1i-BufQCqSfovPEwdGz8bzmhW07ZxQNqyX3TQjX4K3Ac';
+  const URL_GVIZ = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
+    '/gviz/tq?tqx=out:json&headers=1&sheet=dados';
+
+  const MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  const MESES_CHEIOS = ['janeiro','fevereiro','março','abril','maio','junho',
+    'julho','agosto','setembro','outubro','novembro','dezembro'];
+  const AZUL = '#0d8ee9';
+  const AZUL_FRACO = 'rgba(13,142,233,0.25)';
+
+  // ═══ FUNÇÕES PURAS (as regras; os testes as extraem daqui) ═════
+
+  // A resposta do gviz vem embrulhada em
+  // google.visualization.Query.setResponse(...) — não é JSON puro.
+  function parseGvizTexto(texto){
+    const ini = texto.indexOf('(');
+    const fim = texto.lastIndexOf(')');
+    if(ini === -1 || fim === -1 || fim <= ini) throw new Error('Resposta do gviz fora do formato esperado.');
+    return JSON.parse(texto.substring(ini + 1, fim));
+  }
+
+  // Converte a tabela do gviz em linhas {ano, mes, fornecedor,
+  // categoria, quantidade, faturamento, lucro}. Casa as colunas pelo
+  // RÓTULO (a ordem da planilha pode mudar); sem rótulos reconhecíveis
+  // cai na ordem documentada. Linha sem ano/mês válidos é descartada.
+  function linhasDaResposta(json){
+    const cols = (json.table && json.table.cols) || [];
+    const idx = { ano: 0, mes: 1, fornecedor: 2, categoria: 3, quantidade: 4, faturamento: 5, lucro: 6 };
+    const mapa = { ano: 'ano', mes: 'mes', fornecedor: 'fornecedor', categoria: 'categoria',
+      quantidade: 'quantidade', faturamento: 'faturamento', lucrobruto: 'lucro' };
+    cols.forEach((c, i) => {
+      const rot = String(c.label || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+      if(mapa[rot] != null) idx[mapa[rot]] = i;
+    });
+    const cel = (linha, i) => {
+      const c = linha.c && linha.c[i];
+      return c && c.v != null ? c.v : null;
+    };
+    const linhas = [];
+    ((json.table && json.table.rows) || []).forEach(r => {
+      const ano = Number(cel(r, idx.ano));
+      const mes = Number(cel(r, idx.mes));
+      if(!(ano >= 2000) || !(mes >= 1 && mes <= 12)) return;
+      linhas.push({
+        ano, mes,
+        fornecedor: String(cel(r, idx.fornecedor) || '').trim(),
+        categoria: String(cel(r, idx.categoria) || '').trim(),
+        quantidade: Number(cel(r, idx.quantidade)) || 0,
+        faturamento: Number(cel(r, idx.faturamento)) || 0,
+        lucro: Number(cel(r, idx.lucro)) || 0
+      });
+    });
+    return linhas;
+  }
+
+  function filtrarLinhas(linhas, f){
+    return linhas.filter(l =>
+      (!f.ano || l.ano === f.ano) &&
+      (!f.mes || l.mes === f.mes) &&
+      (!f.fornecedor || l.fornecedor === f.fornecedor) &&
+      (!f.categoria || l.categoria === f.categoria));
+  }
+
+  // REGRA DE OURO: margem NUNCA é média de margens — sempre
+  // soma(lucro) / soma(faturamento) do conjunto. Sem faturamento não
+  // há margem (null, nunca 0%).
+  function resumoKpis(linhas){
+    let fat = 0, lucro = 0, itens = 0;
+    linhas.forEach(l => { fat += l.faturamento; lucro += l.lucro; itens += l.quantidade; });
+    return { faturamento: fat, lucro, itens, margem: fat > 0 ? lucro / fat : null };
+  }
+
+  // Agrupa por um campo (Categoria/Fornecedor): linhas ordenadas por
+  // faturamento desc + a linha Total — margem de cada grupo pela
+  // regra de ouro, nunca média.
+  function agruparPor(linhas, campo){
+    const grupos = new Map();
+    linhas.forEach(l => {
+      const chave = l[campo] || '(sem ' + campo + ')';
+      const g = grupos.get(chave) || { nome: chave, faturamento: 0, lucro: 0 };
+      g.faturamento += l.faturamento;
+      g.lucro += l.lucro;
+      grupos.set(chave, g);
+    });
+    const lista = [...grupos.values()].map(g => ({
+      ...g, margem: g.faturamento > 0 ? g.lucro / g.faturamento : null
+    })).sort((a, b) => b.faturamento - a.faturamento);
+    const total = resumoKpis(linhas);
+    return { lista, total };
+  }
+
+  // Séries mensais do ano (12 posições; mês sem dado = null, nunca
+  // zero — zero seria uma afirmação).
+  function seriesMensais(linhas){
+    const fat = Array(12).fill(null);
+    const lucro = Array(12).fill(null);
+    linhas.forEach(l => {
+      fat[l.mes - 1] = (fat[l.mes - 1] || 0) + l.faturamento;
+      lucro[l.mes - 1] = (lucro[l.mes - 1] || 0) + l.lucro;
+    });
+    const margem = fat.map((v, i) => (v != null && v > 0) ? lucro[i] / v : null);
+    return { faturamento: fat, margem };
+  }
+
+  // Participação por categoria: % do faturamento filtrado.
+  function participacaoCategorias(linhas){
+    const { lista, total } = agruparPor(linhas, 'categoria');
+    if(!(total.faturamento > 0)) return [];
+    return lista.map(g => ({ nome: g.nome, pct: g.faturamento / total.faturamento }));
+  }
+
+  // ═══ FORMATAÇÃO pt-BR ═════════════════════════════════════════
+  const fmtNum = (v, casas = 2) => v == null ? '—'
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+  const fmtPct = (v) => v == null ? '—' : (v * 100).toLocaleString('pt-BR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const fmtMi = (v) => v == null ? '' : (v / 1e6).toLocaleString('pt-BR',
+    { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' Mi';
+  const escapeHtml = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  // ═══ ESTADO E RENDER ══════════════════════════════════════════
+  let linhasTodas = [];
+  let anoSel = null, mesSel = 0, fornSel = '', catSel = '';
+  let ordem = { categoria: { campo: 'faturamento', desc: true },
+                fornecedor: { campo: 'faturamento', desc: true } };
+  const charts = {};
+  const $ = (id) => document.getElementById(id);
+
+  // Rótulos desenhados em cima das barras (plugin próprio: a única
+  // biblioteca permitida é o Chart.js).
+  const rotulosBarras = {
+    id: 'rotulosBarras',
+    afterDatasetsDraw(chart, args, opts){
+      const ctx = chart.ctx;
+      const ds = chart.data.datasets[0];
+      const meta = chart.getDatasetMeta(0);
+      ctx.save();
+      ctx.font = '700 11px "Barlow Condensed", sans-serif';
+      ctx.fillStyle = '#111';
+      meta.data.forEach((el, i) => {
+        const txt = opts.formatar ? opts.formatar(ds.data[i], i) : '';
+        if(!txt) return;
+        if(chart.options.indexAxis === 'y'){
+          ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+          ctx.fillText(txt, el.x + 5, el.y);
+        } else {
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(txt, el.x, el.y - 3);
+        }
+      });
+      ctx.restore();
+    }
+  };
+
+  function filtrosSemMes(){ return { ano: anoSel, fornecedor: fornSel, categoria: catSel }; }
+  function filtrosCompletos(){ return { ano: anoSel, mes: mesSel || null, fornecedor: fornSel, categoria: catSel }; }
+
+  function renderTudo(){
+    const filtradas = filtrarLinhas(linhasTodas, filtrosCompletos());
+    const k = resumoKpis(filtradas);
+    $('kpiFat').textContent = fmtNum(k.faturamento);
+    $('kpiLucro').textContent = fmtNum(k.lucro);
+    $('kpiMargem').textContent = fmtPct(k.margem);
+    $('kpiItens').textContent = fmtNum(k.itens);
+
+    renderTabela('tabelaCategoria', agruparPor(filtradas, 'categoria'), 'categoria', 'Categoria');
+    renderTabela('tabelaFornecedor', agruparPor(filtradas, 'fornecedor'), 'fornecedor', 'Fornecedor');
+    renderPartCat(filtradas);
+    renderMensais();
+  }
+
+  function renderTabela(alvoId, dados, chaveOrdem, rotulo){
+    const o = ordem[chaveOrdem];
+    const lista = dados.lista.slice().sort((a, b) => {
+      const va = a[o.campo], vb = b[o.campo];
+      if(typeof va === 'string') return (o.desc ? -1 : 1) * va.localeCompare(vb, 'pt-BR');
+      return (o.desc ? -1 : 1) * (((va == null ? -Infinity : va)) - ((vb == null ? -Infinity : vb)));
+    });
+    const seta = (campo) => o.campo === campo ? (o.desc ? ' ▼' : ' ▲') : '';
+    let html = '<table><thead><tr>' +
+      '<th data-ord="nome">' + rotulo + seta('nome') + '</th>' +
+      '<th data-ord="faturamento">Faturamento' + seta('faturamento') + '</th>' +
+      '<th data-ord="lucro">Lucro bruto' + seta('lucro') + '</th>' +
+      '<th data-ord="margem">Margem' + seta('margem') + '</th></tr></thead><tbody>';
+    lista.forEach(g => {
+      html += '<tr><td>' + escapeHtml(g.nome) + '</td>' +
+        '<td>' + fmtNum(g.faturamento) + '</td>' +
+        '<td class="' + (g.lucro < 0 ? 'neg' : '') + '">' + fmtNum(g.lucro) + '</td>' +
+        '<td class="' + (g.margem != null && g.margem < 0 ? 'neg' : '') + '">' + fmtPct(g.margem) + '</td></tr>';
+    });
+    html += '<tr class="total"><td>Total</td><td>' + fmtNum(dados.total.faturamento) + '</td>' +
+      '<td>' + fmtNum(dados.total.lucro) + '</td><td>' + fmtPct(dados.total.margem) + '</td></tr>';
+    $(alvoId).innerHTML = html + '</tbody></table>';
+    $(alvoId).querySelectorAll('th[data-ord]').forEach(th => {
+      th.addEventListener('click', () => {
+        const campo = th.dataset.ord;
+        if(o.campo === campo) o.desc = !o.desc;
+        else { o.campo = campo; o.desc = campo !== 'nome'; }
+        renderTabela(alvoId, dados, chaveOrdem, rotulo);
+      });
+    });
+  }
+
+  function novoChart(id, config){
+    if(charts[id]) charts[id].destroy();
+    charts[id] = new Chart($(id), config);
+  }
+
+  function renderPartCat(filtradas){
+    const parte = participacaoCategorias(filtradas);
+    novoChart('gPartCat', {
+      type: 'bar',
+      data: { labels: parte.map(p => p.nome),
+        datasets: [{ data: parte.map(p => p.pct), backgroundColor: AZUL, maxBarThickness: 26 }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        layout: { padding: { right: 56 } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false },
+          rotulosBarras: { formatar: v => fmtPct(v) } },
+        scales: { x: { display: false, max: Math.max(0.1, ...parte.map(p => p.pct)) * 1.15 },
+          y: { grid: { display: false }, ticks: { font: { size: 12 } } } }
+      },
+      plugins: [rotulosBarras]
+    });
+  }
+
+  function renderMensais(){
+    // Os gráficos mensais respeitam ano/fornecedor/categoria mas NÃO o
+    // mês: com um mês filtrado, a barra dele acende e as demais
+    // esmaecem — sumir com o resto tiraria o contexto do ano.
+    const s = seriesMensais(filtrarLinhas(linhasTodas, filtrosSemMes()));
+    const cores = MESES.map((_, i) => (!mesSel || mesSel === i + 1) ? AZUL : AZUL_FRACO);
+    const barras = (id, dados, formatar) => novoChart(id, {
+      type: 'bar',
+      data: { labels: MESES, datasets: [{ data: dados, backgroundColor: cores, maxBarThickness: 48 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
+        plugins: { legend: { display: false }, tooltip: { enabled: false },
+          rotulosBarras: { formatar } },
+        scales: { y: { display: false }, x: { grid: { display: false }, ticks: { font: { size: 11 } } } }
+      },
+      plugins: [rotulosBarras]
+    });
+    barras('gFatMes', s.faturamento, v => v == null ? '' : fmtMi(v));
+    barras('gMargMes', s.margem, v => v == null ? '' : fmtPct(v));
+  }
+
+  // ═══ FILTROS ══════════════════════════════════════════════════
+  function montarFiltros(){
+    const anos = [...new Set(linhasTodas.map(l => l.ano))].sort();
+    if(anoSel == null || !anos.includes(anoSel)) anoSel = anos[anos.length - 1] || null;
+    $('filtroAno').innerHTML = anos.map(a =>
+      '<button type="button" data-ano="' + a + '" aria-pressed="' + (a === anoSel) + '">' + a + '</button>').join('');
+    $('filtroAno').querySelectorAll('button').forEach(b =>
+      b.addEventListener('click', () => { anoSel = Number(b.dataset.ano); montarFiltros(); renderTudo(); }));
+
+    $('filtroMes').innerHTML = '<option value="0">Todos os meses</option>' +
+      MESES_CHEIOS.map((m, i) => '<option value="' + (i + 1) + '"' + (mesSel === i + 1 ? ' selected' : '') + '>' + m + '</option>').join('');
+    const fornecedores = [...new Set(linhasTodas.map(l => l.fornecedor).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    $('filtroForn').innerHTML = '<option value="">Todos os fornecedores</option>' +
+      fornecedores.map(f => '<option' + (fornSel === f ? ' selected' : '') + '>' + escapeHtml(f) + '</option>').join('');
+    const categorias = [...new Set(linhasTodas.map(l => l.categoria).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    $('filtroCat').innerHTML = '<option value="">Todas as categorias</option>' +
+      categorias.map(c => '<option' + (catSel === c ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
+  }
+
+  // ═══ CARGA ════════════════════════════════════════════════════
+  async function carregarDados(){
+    $('estadoCarga').style.display = '';
+    $('estadoCarga').className = 'estado';
+    $('estadoCarga').textContent = 'Carregando dados da planilha...';
+    $('conteudoDash').style.display = 'none';
+    $('rodapeDash').style.display = 'none';
+    try{
+      const resp = await fetch(URL_GVIZ);
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const texto = await resp.text();
+      linhasTodas = linhasDaResposta(parseGvizTexto(texto));
+      if(!linhasTodas.length) throw new Error('A aba "dados" veio vazia.');
+      montarFiltros();
+      $('estadoCarga').style.display = 'none';
+      $('conteudoDash').style.display = '';
+      $('rodapeDash').style.display = '';
+      $('rodapeInfo').textContent = 'Dados atualizados da planilha em ' +
+        new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) + '.';
+      renderTudo();
+    }catch(e){
+      console.error(e);
+      $('estadoCarga').className = 'estado erro';
+      $('estadoCarga').textContent = 'Não consegui ler a planilha (' + (e.message || e) + '). ' +
+        'Confira se a Sheet está compartilhada como "qualquer pessoa com o link — leitor", ' +
+        'se a aba se chama "dados" e se o SHEET_ID no topo do arquivo está certo. ' +
+        'Depois toque em Recarregar.';
+      $('rodapeDash').style.display = '';
+    }
+  }
+
+  function iniciar(){
+    $('filtroMes').addEventListener('change', function(){ mesSel = Number(this.value) || 0; renderTudo(); });
+    $('filtroForn').addEventListener('change', function(){ fornSel = this.value; renderTudo(); });
+    $('filtroCat').addEventListener('change', function(){ catSel = this.value; renderTudo(); });
+    $('recarregarDadosBtn').addEventListener('click', carregarDados);
+    carregarDados();
+  }
+
+  // No navegador de verdade, liga tudo; no DOM simulado dos testes
+  // (sem fetch/Chart), só as funções puras interessam.
+  if(typeof fetch === 'function' && typeof Chart !== 'undefined') iniciar();
+})();
+</script>
+</body>
+</html>
