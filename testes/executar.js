@@ -35,9 +35,10 @@
   - lancamentos.js     — lancamentos contabeis: partidas dobradas,
                          pendencias, arquivo da transferencia e o
                          layout de 19 colunas do contador.
-  - vendas-compras.js  — cruzamento vendas x compras x pagamentos por
+  - vendas-compras.js  — cruzamento vendas x compras x titulos por
                          fornecedor (planilha do dashboard x notas x
-                         duplicatas pagas) e o vinculo CNPJ/rotulo.
+                         duplicatas pelo vencimento) e o vinculo
+                         CNPJ/rotulo.
 */
 const { execFileSync } = require('child_process');
 const path = require('path');

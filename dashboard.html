@@ -209,7 +209,7 @@
       <div class="estado" id="crescVazio" style="display:none; padding:24px;"></div>
     </div>
     <div class="bloco b-vxp">
-      <h2>Vendas × Compras × Pagamentos</h2>
+      <h2>Vendas × Compras × Títulos</h2>
       <span class="sub-periodo" id="vxpSub"></span>
       <div id="vxpConteudo"></div>
     </div>
@@ -553,11 +553,14 @@
   // funcao de rotular) — e' o que o teste trava:
   // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
   // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
-  // - pago: duplicatas pagas no periodo, pelo valorPago (sem ele, o
-  //   valor da parcela). Duplicata de nota cancelada fica fora;
-  //   duplicata sem a nota carregada classifica pelo proprio nome;
+  // - titulos: duplicatas que VENCEM no periodo, pelo valor do
+  //   titulo, pagas ou nao (pedido de 04/09/2026: a comparacao nao
+  //   pode depender de o pagamento ja ter sido efetivado). Duplicata
+  //   de nota cancelada fica fora; sem a nota carregada, classifica
+  //   pelo proprio nome; sem vencimento, fica fora (nao ha mes onde
+  //   encaixar);
   // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
-  // - compra/pagamento sem vinculo nenhum vai para semVinculo.
+  // - compra/titulo sem vinculo nenhum vai para semVinculo.
   function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
     function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
     function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
@@ -565,7 +568,7 @@
     var porMarca = Object.create(null);
     function garantir(marca){
       var ch = chaveMarca(marca);
-      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, pago: 0 };
+      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, titulos: 0 };
       return porMarca[ch];
     }
 
@@ -575,7 +578,7 @@
     });
 
     var semVinculo = Object.create(null);
-    var ignorados = { comprado: 0, pago: 0 };
+    var ignorados = { comprado: 0, titulos: 0 };
     var notasPorId = Object.create(null);
     notas.forEach(function(n){ notasPorId[n.id] = n; });
 
@@ -588,7 +591,7 @@
       if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
       if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
       var s = semVinculo[cls.rotulo];
-      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, pago: 0 };
+      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, titulos: 0 };
       if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
       s[campo] += valor;
     }
@@ -601,25 +604,24 @@
     });
 
     duplicatas.forEach(function(dup){
-      if(dup.pago !== true) return;
-      var d = anoMesISO(dup.dataPagamento);
+      var d = anoMesISO(dup.vencimento);
       if(!d || !noPeriodo(d.ano, d.mes)) return;
       var n = notasPorId[dup.chaveAcesso];
       if(n && (n.status || 'ativa') === 'cancelada') return;
       var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
                   : classificar(null, dup.nomeEmitente, null);
-      somar(cls, 'pago', dup.valorPago != null ? dup.valorPago : (dup.valor || 0));
+      somar(cls, 'titulos', dup.valor || 0);
     });
 
     var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
     linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
     var soltos = Object.keys(semVinculo).map(function(k){
       var s = semVinculo[k];
-      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, pago: s.pago };
+      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, titulos: s.titulos };
     });
-    soltos.sort(function(a, b){ return (b.comprado + b.pago) - (a.comprado + a.pago); });
-    var totais = { vendido: 0, comprado: 0, pago: 0 };
-    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.pago += l.pago; });
+    soltos.sort(function(a, b){ return (b.comprado + b.titulos) - (a.comprado + a.titulos); });
+    var totais = { vendido: 0, comprado: 0, titulos: 0 };
+    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.titulos += l.titulos; });
     return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
   }
 
@@ -1214,7 +1216,7 @@
     const ini = (anos.length ? Math.min.apply(null, anos) : new Date().getFullYear() - 1) + '-01-01';
     return Promise.all([
       vxp.db.collection('notas').where('dataEmissao', '>=', ini).get(),
-      vxp.db.collection('duplicatas').where('dataPagamento', '>=', ini).get(),
+      vxp.db.collection('duplicatas').where('vencimento', '>=', ini).get(),
       vxp.db.collection('config').doc('vendasCompras').get()
     ]).then(([ns, ds, cfg]) => {
       vxp.notas = ns.docs.map(d => Object.assign({ id: d.id }, d.data()));
@@ -1226,7 +1228,7 @@
     }).catch((e) => {
       vxp.fase = 'erro';
       vxp.erro = window.App.ehPermissaoNegada(e)
-        ? 'Esta conta não tem acesso a compras e pagamentos.'
+        ? 'Esta conta não tem acesso a compras e títulos.'
         : (e && e.message) || String(e);
       renderVxp();
     });
@@ -1238,12 +1240,12 @@
     if(!alvo) return;
 
     if(vxp.fase !== 'pronto'){
-      sub.textContent = 'Compras e pagamentos vêm do mesmo banco do Controle de Notas';
+      sub.textContent = 'Compras e títulos vêm do mesmo banco do Controle de Notas';
       if(vxp.fase === 'erro'){
         alvo.innerHTML = '<div class="estado erro" style="padding:20px;">' + escapeHtml(vxp.erro || 'Erro.') + '</div>' +
           '<div class="vxp-rodape"><button type="button" id="vxpBtnTentar">tentar de novo</button></div>';
       } else {
-        alvo.innerHTML = '<div class="estado" style="padding:20px;">Buscando compras e pagamentos...</div>';
+        alvo.innerHTML = '<div class="estado" style="padding:20px;">Buscando compras e títulos...</div>';
       }
       return;
     }
@@ -1251,28 +1253,28 @@
     const r = cruzarVendasCompras(linhasTodas, vxp.notas, vxp.duplicatas, vxp.vinculos,
       window.App.rotularFornecedor, anoSel, mesSel || null);
     sub.textContent = (mesSel ? MESES[mesSel - 1] + '/' + anoSel : 'Ano ' + anoSel) +
-      ' · compra pela emissão da nota, pagamento pela data do pagamento · ignora os filtros de fornecedor/categoria';
+      ' · compra pela emissão da nota, títulos pelo vencimento (pagos ou não) · ignora os filtros de fornecedor/categoria';
     const saldo = (v) => '<td class="' + (v > 0 ? 'vxp-pos' : (v < 0 ? 'vxp-neg' : '')) + '">' + fmtNum(v) + '</td>';
     let html = '<div class="rolagem"><table><thead><tr>' +
       '<th>Fornecedor</th><th>Vendido</th><th>Comprado</th><th>Venda − Compra</th>' +
-      '<th>Pago</th><th>Venda − Pago</th></tr></thead><tbody>';
+      '<th>Títulos</th><th>Venda − Títulos</th></tr></thead><tbody>';
     r.linhas.forEach((l) => {
       html += '<tr><td>' + escapeHtml(l.marca) + '</td>' +
         '<td>' + fmtNum(l.vendido) + '</td><td>' + fmtNum(l.comprado) + '</td>' +
         saldo(l.vendido - l.comprado) +
-        '<td>' + fmtNum(l.pago) + '</td>' + saldo(l.vendido - l.pago) + '</tr>';
+        '<td>' + fmtNum(l.titulos) + '</td>' + saldo(l.vendido - l.titulos) + '</tr>';
     });
     html += '<tr class="total"><td>Total</td><td>' + fmtNum(r.totais.vendido) + '</td>' +
       '<td>' + fmtNum(r.totais.comprado) + '</td>' + saldo(r.totais.vendido - r.totais.comprado) +
-      '<td>' + fmtNum(r.totais.pago) + '</td>' + saldo(r.totais.vendido - r.totais.pago) +
+      '<td>' + fmtNum(r.totais.titulos) + '</td>' + saldo(r.totais.vendido - r.totais.titulos) +
       '</tr></tbody></table></div>';
     if(r.semVinculo.length){
       html += '<p class="sub-periodo" style="margin-top:8px; text-align:left;">Sem vínculo (fora da conta — configure na tela Vendas do Controle de Notas): ' +
-        r.semVinculo.map((s) => escapeHtml(s.rotulo) + ' (' + fmtNum(s.comprado + s.pago) + ')').join(' · ') + '</p>';
+        r.semVinculo.map((s) => escapeHtml(s.rotulo) + ' (' + fmtNum(s.comprado + s.titulos) + ')').join(' · ') + '</p>';
     }
-    if(r.ignorados.comprado || r.ignorados.pago){
+    if(r.ignorados.comprado || r.ignorados.titulos){
       html += '<p class="sub-periodo" style="text-align:left;">Marcados "não comparar": ' +
-        fmtNum(r.ignorados.comprado) + ' comprados e ' + fmtNum(r.ignorados.pago) + ' pagos no período.</p>';
+        fmtNum(r.ignorados.comprado) + ' comprados e ' + fmtNum(r.ignorados.titulos) + ' em títulos no período.</p>';
     }
     alvo.innerHTML = html;
   }

@@ -7,9 +7,11 @@
   - a leitura enxuta do gviz (colunas pelo rotulo, linha invalida fora);
   - o vinculo por ROTULO vencendo o por CNPJ (e' o que separa a Vetrus,
     mesmo CNPJ com duas marcas decididas pelo produto);
-  - o cruzamento por periodo: compra pela EMISSAO, pagamento pela data
-    do PAGAMENTO, nota cancelada fora dos dois lados;
-  - valorPago com fallback no valor da parcela;
+  - o cruzamento por periodo: compra pela EMISSAO, titulos pelo
+    VENCIMENTO — pagos ou nao (pedido de 04/09/2026: a comparacao nao
+    depende de o pagamento ja ter sido efetivado) —, nota cancelada
+    fora dos dois lados;
+  - o titulo vale pelo VALOR dele, nao pelo valorPago;
   - marca casando sem caixa/acento ("Megaó" na planilha, "MEGAO" no
     vinculo = a mesma linha);
   - quem nao tem vinculo vai para semVinculo (nunca somado em silencio)
@@ -104,11 +106,15 @@ const notas = [
   { id: 'F', cnpjEmitente: '111', nomeEmitente: 'GOLD MEGAO', dataEmissao: '2026-07-01', valorTotal: 1234 }
 ];
 const duplicatas = [
-  { chaveAcesso: 'A', pago: true, dataPagamento: '2026-08-15', valorPago: 150, valor: 160 },
-  { chaveAcesso: 'C', pago: true, dataPagamento: '2026-08-16', valor: 50 },   // nota cancelada
-  { chaveAcesso: 'ZZZ', pago: true, dataPagamento: '2026-08-17', valor: 80, nomeEmitente: 'VETRUS S/A' }, // sem a nota
-  { chaveAcesso: 'A', pago: false, dataPagamento: null, valor: 999 },
-  { chaveAcesso: 'D', pago: true, dataPagamento: '2026-08-18', valor: 30 }
+  // Paga com juros: o que conta e' o VALOR do titulo (160), nao os 150
+  // efetivamente pagos — e pelo VENCIMENTO, nao pela data do pagamento.
+  { chaveAcesso: 'A', pago: true, dataPagamento: '2026-09-02', vencimento: '2026-08-10', valorPago: 150, valor: 160 },
+  { chaveAcesso: 'C', pago: true, vencimento: '2026-08-16', valor: 50 },   // nota cancelada
+  { chaveAcesso: 'ZZZ', pago: true, vencimento: '2026-08-17', valor: 80, nomeEmitente: 'VETRUS S/A' }, // sem a nota
+  { chaveAcesso: 'A', pago: false, vencimento: '2026-08-20', valor: 40 },  // EM ABERTO: conta igual
+  { chaveAcesso: 'A', pago: false, vencimento: '2026-09-10', valor: 500 }, // vence fora do mes
+  { chaveAcesso: 'A', pago: false, vencimento: null, valor: 777 },         // sem vencimento: fora
+  { chaveAcesso: 'D', pago: true, vencimento: '2026-08-18', valor: 30 }
 ];
 
 {
@@ -117,29 +123,31 @@ const duplicatas = [
     r.linhas.map(l => l.marca), ['Megaó', 'PAMESA', 'KARINA', 'STELLA']);
   const megao = r.linhas[0];
   eq('"Megaó" da planilha e "MEGAO" do vinculo somam na MESMA linha (caixa/acento fora)',
-    [megao.vendido, megao.comprado, megao.pago], [1000, 400, 150]);
-  eq('valorPago vale mais que o valor da parcela (150, nao 160)', megao.pago, 150);
+    [megao.vendido, megao.comprado, megao.titulos], [1000, 400, 200]);
+  eq('titulo em aberto conta IGUAL ao pago, pelo valor do titulo (160 + 40, nunca o valorPago)',
+    megao.titulos, 200);
   eq('nota da Vetrus com 46x46 compra como STELLA (vinculo pelo rotulo)',
     [r.linhas[3].marca, r.linhas[3].comprado], ['STELLA', 200]);
   eq('duplicata SEM a nota carregada classifica pelo proprio nome (Vetrus sem produto -> Pamesa)',
-    [r.linhas[1].marca, r.linhas[1].pago], ['PAMESA', 80]);
-  eq('nota cancelada fora da compra E do pagamento',
-    [megao.comprado, r.totais.pago], [400, 230]);
+    [r.linhas[1].marca, r.linhas[1].titulos], ['PAMESA', 80]);
+  eq('nota cancelada e vencimento fora do mes ficam fora dos titulos',
+    r.totais.titulos, 280);
   eq('sem vinculo: agrupado a parte, nunca somado em silencio',
     r.semVinculo.map(s => [s.rotulo, s.cnpjs, s.comprado]),
     [['DESCONHECIDO LTDA', ['999'], 70]]);
   eq('"nao comparar" sai da conta, mas somado em ignorados',
-    [r.ignorados.comprado, r.ignorados.pago], [99, 30]);
+    [r.ignorados.comprado, r.ignorados.titulos], [99, 30]);
   eq('totais fecham com as linhas',
     [r.totais.vendido, r.totais.comprado], [1800, 600]);
 }
 
 {
-  // Ano inteiro (mes = null): julho entra.
+  // Ano inteiro (mes = null): julho e setembro entram; sem vencimento
+  // continua fora (nao ha mes onde encaixar).
   const r = m.cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, 2026, null);
   const megao = r.linhas[0];
-  eq('ano inteiro soma todos os meses (venda 1900, compra 400+1234)',
-    [megao.vendido, megao.comprado], [1900, 1634]);
+  eq('ano inteiro soma todos os meses (venda 1900, compra 400+1234, titulos 160+40+500)',
+    [megao.vendido, megao.comprado, megao.titulos], [1900, 1634, 700]);
 }
 
 // ── Espelho: o dashboard usa as MESMAS funcoes ───────────────

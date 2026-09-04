@@ -534,13 +534,14 @@
   <!-- ═══════════ VENDAS × COMPRAS ═══════════ -->
   <div id="viewVendas" style="display:none;">
     <div class="card">
-      <h2>Vendas × Compras × Pagamentos</h2>
+      <h2>Vendas × Compras × Títulos</h2>
       <p class="nota-explicativa">
         Cruza as <strong>vendas</strong> da planilha do dashboard com as <strong>compras</strong>
-        (notas emitidas no período) e os <strong>pagamentos</strong> (duplicatas pagas no período)
-        de cada fornecedor. Compra conta pela data de emissão da nota; pagamento, pela data em que
-        foi pago — com prazos de 60/90 dias, o pago do mês se refere a compras de meses anteriores,
-        então "Venda − Compra" é a leitura comercial e "Venda − Pago" é a de caixa.
+        (notas emitidas no período) e os <strong>títulos</strong> (duplicatas que <strong>vencem</strong>
+        no período, pagas ou não — a comparação não depende de o pagamento já ter sido efetivado)
+        de cada fornecedor. Compra conta pela data de emissão da nota; com prazos de 60/90 dias,
+        os títulos do mês se referem a compras de meses anteriores, então "Venda − Compra" é a
+        leitura comercial e "Venda − Títulos" é a de caixa programada.
         O app carrega 12 meses de duplicatas: para períodos mais antigos, use
         "carregar histórico completo" na barra de cima.
       </p>
@@ -1059,11 +1060,14 @@
   // funcao de rotular) — e' o que o teste trava:
   // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
   // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
-  // - pago: duplicatas pagas no periodo, pelo valorPago (sem ele, o
-  //   valor da parcela). Duplicata de nota cancelada fica fora;
-  //   duplicata sem a nota carregada classifica pelo proprio nome;
+  // - titulos: duplicatas que VENCEM no periodo, pelo valor do
+  //   titulo, pagas ou nao (pedido de 04/09/2026: a comparacao nao
+  //   pode depender de o pagamento ja ter sido efetivado). Duplicata
+  //   de nota cancelada fica fora; sem a nota carregada, classifica
+  //   pelo proprio nome; sem vencimento, fica fora (nao ha mes onde
+  //   encaixar);
   // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
-  // - compra/pagamento sem vinculo nenhum vai para semVinculo.
+  // - compra/titulo sem vinculo nenhum vai para semVinculo.
   function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
     function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
     function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
@@ -1071,7 +1075,7 @@
     var porMarca = Object.create(null);
     function garantir(marca){
       var ch = chaveMarca(marca);
-      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, pago: 0 };
+      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, titulos: 0 };
       return porMarca[ch];
     }
 
@@ -1081,7 +1085,7 @@
     });
 
     var semVinculo = Object.create(null);
-    var ignorados = { comprado: 0, pago: 0 };
+    var ignorados = { comprado: 0, titulos: 0 };
     var notasPorId = Object.create(null);
     notas.forEach(function(n){ notasPorId[n.id] = n; });
 
@@ -1094,7 +1098,7 @@
       if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
       if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
       var s = semVinculo[cls.rotulo];
-      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, pago: 0 };
+      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, titulos: 0 };
       if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
       s[campo] += valor;
     }
@@ -1107,25 +1111,24 @@
     });
 
     duplicatas.forEach(function(dup){
-      if(dup.pago !== true) return;
-      var d = anoMesISO(dup.dataPagamento);
+      var d = anoMesISO(dup.vencimento);
       if(!d || !noPeriodo(d.ano, d.mes)) return;
       var n = notasPorId[dup.chaveAcesso];
       if(n && (n.status || 'ativa') === 'cancelada') return;
       var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
                   : classificar(null, dup.nomeEmitente, null);
-      somar(cls, 'pago', dup.valorPago != null ? dup.valorPago : (dup.valor || 0));
+      somar(cls, 'titulos', dup.valor || 0);
     });
 
     var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
     linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
     var soltos = Object.keys(semVinculo).map(function(k){
       var s = semVinculo[k];
-      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, pago: s.pago };
+      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, titulos: s.titulos };
     });
-    soltos.sort(function(a, b){ return (b.comprado + b.pago) - (a.comprado + a.pago); });
-    var totais = { vendido: 0, comprado: 0, pago: 0 };
-    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.pago += l.pago; });
+    soltos.sort(function(a, b){ return (b.comprado + b.titulos) - (a.comprado + a.titulos); });
+    var totais = { vendido: 0, comprado: 0, titulos: 0 };
+    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.titulos += l.titulos; });
     return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
   }
 
@@ -1271,30 +1274,30 @@
       var r = cruzarVendasCompras(vendasLinhas || [], notas, duplicatas, vinculos, rotularFornecedor, p.ano, p.mes);
       var html = '<div class="tabela-rolavel"><table class="quote-table"><thead><tr>' +
         '<th scope="col">Marca</th><th scope="col">Vendido</th><th scope="col">Comprado</th>' +
-        '<th scope="col">Venda − Compra</th><th scope="col">Pago</th><th scope="col">Venda − Pago</th>' +
+        '<th scope="col">Venda − Compra</th><th scope="col">Títulos</th><th scope="col">Venda − Títulos</th>' +
         '</tr></thead><tbody>';
       r.linhas.forEach(function(l){
         html += '<tr><td>' + escapeHtml(l.marca) + '</td>' +
           '<td>' + brl(l.vendido) + '</td><td>' + brl(l.comprado) + '</td>' +
           '<td>' + saldoHtml(l.vendido - l.comprado) + '</td>' +
-          '<td>' + brl(l.pago) + '</td>' +
-          '<td>' + saldoHtml(l.vendido - l.pago) + '</td></tr>';
+          '<td>' + brl(l.titulos) + '</td>' +
+          '<td>' + saldoHtml(l.vendido - l.titulos) + '</td></tr>';
       });
       html += '</tbody><tfoot><tr><th scope="row">Total</th>' +
         '<td>' + brl(r.totais.vendido) + '</td><td>' + brl(r.totais.comprado) + '</td>' +
         '<td>' + saldoHtml(r.totais.vendido - r.totais.comprado) + '</td>' +
-        '<td>' + brl(r.totais.pago) + '</td>' +
-        '<td>' + saldoHtml(r.totais.vendido - r.totais.pago) + '</td>' +
+        '<td>' + brl(r.totais.titulos) + '</td>' +
+        '<td>' + saldoHtml(r.totais.vendido - r.totais.titulos) + '</td>' +
         '</tr></tfoot></table></div>';
       if(r.semVinculo.length){
         html += '<p class="nota-explicativa" style="margin-top:10px;"><strong>Sem vínculo</strong> (fora da conta — configure abaixo): ' +
           r.semVinculo.map(function(s){
-            return escapeHtml(s.rotulo) + ' (' + brl(s.comprado + s.pago) + ')';
+            return escapeHtml(s.rotulo) + ' (' + brl(s.comprado + s.titulos) + ')';
           }).join(' · ') + '</p>';
       }
-      if(r.ignorados.comprado || r.ignorados.pago){
+      if(r.ignorados.comprado || r.ignorados.titulos){
         html += '<p class="nota-explicativa">Marcados "não comparar": ' + brl(r.ignorados.comprado) +
-          ' comprados e ' + brl(r.ignorados.pago) + ' pagos no período.</p>';
+          ' comprados e ' + brl(r.ignorados.titulos) + ' em títulos no período.</p>';
       }
       alvo.innerHTML = html;
     }

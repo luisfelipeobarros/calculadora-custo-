@@ -351,14 +351,15 @@ Não precisa instalar nada. São vinte e seis etapas, em dezoito frentes:
 
 18. **Vendas × Compras** — 18 verificações extraídas do
     `controle-notas.html`: o cruzamento da planilha pública de vendas
-    com as notas (compra pela **emissão**) e as duplicatas pagas
-    (pagamento pela **data do pagamento**), por marca da planilha. O
+    com as notas (compra pela **emissão**) e os títulos (duplicatas
+    pelo **vencimento** no período, **pagas ou não** — a comparação
+    não depende de o pagamento ter sido efetivado, e o título vale
+    pelo valor dele, nunca pelo valorPago), por marca da planilha. O
     vínculo por **rótulo** vence o por CNPJ (é o que separa a Vetrus:
     mesmo CNPJ, duas marcas decididas pelo produto), marca casa sem
-    caixa/acento, nota cancelada fica fora dos dois lados, valorPago
-    tem fallback no valor da parcela, quem não tem vínculo vai para
-    "sem vínculo" (nunca somado em silêncio) e o "não comparar" sai
-    da conta somado em ignorados. A área logada do `dashboard.html`
+    caixa/acento, nota cancelada fica fora dos dois lados, quem não
+    tem vínculo vai para "sem vínculo" (nunca somado em silêncio) e
+    o "não comparar" sai da conta somado em ignorados. A área logada do `dashboard.html`
     usa uma **cópia fiel** dessas funções — o teste compara os dois
     arquivos textualmente, então mudar num lado e esquecer o outro
     quebra aqui.
