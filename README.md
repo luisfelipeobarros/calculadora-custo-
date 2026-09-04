@@ -5,10 +5,10 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 | Arquivo | O que é |
 |---|---|
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
-| `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, notas canceladas |
+| `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador |
 | `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
-| `lancamentos.html` | Lançamentos contábeis + exportação para o contador |
-| `dashboard.html` | Dashboard de vendas (Google Sheets, standalone — sem app-shared) |
+| `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
+| `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
 | `app-shared.css` | Design system comum aos apps |
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
@@ -198,7 +198,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e seis etapas, em dezoito frentes:
+Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em

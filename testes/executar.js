@@ -4,7 +4,7 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e seis etapas,
+  Nao precisa instalar nada — so' o Node. Sao vinte e quatro etapas,
   em dezoito frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
@@ -32,7 +32,8 @@
                          de desatualizacao por fabricante.
   - assistencias.js    — app de assistencias/reclamacoes: resumo,
                          filtro, duplicidade de sequencia e exportacao.
-  - lancamentos.js     — lancamentos contabeis: partidas dobradas,
+  - lancamentos.js     — lancamentos contabeis (telas dentro do
+                         controle-notas.html): partidas dobradas,
                          pendencias, arquivo da transferencia e o
                          layout de 19 colunas do contador.
   - vendas-compras.js  — cruzamento vendas x compras x titulos por
@@ -51,12 +52,10 @@ const etapas = [
   ['Estrutura: index.html', 'validar-html.js', ['index.html']],
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
   ['Estrutura: assistencias.html', 'validar-html.js', ['assistencias.html']],
-  ['Estrutura: lancamentos.html', 'validar-html.js', ['lancamentos.html']],
   ['Estrutura: dashboard.html', 'validar-html.js', ['dashboard.html']],
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
   ['Carga em DOM: assistencias.html', 'carregar-em-dom.js', ['assistencias.html']],
-  ['Carga em DOM: lancamentos.html', 'carregar-em-dom.js', ['lancamentos.html']],
   ['Carga em DOM: dashboard.html', 'carregar-em-dom.js', ['dashboard.html']],
   ['Helpers de app-shared.js', 'helpers.js', []],
   ['Roteador de telas', 'router.js', []],
