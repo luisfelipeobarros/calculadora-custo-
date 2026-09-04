@@ -181,10 +181,11 @@
   // mapa (config/contasContabeis): { fornecedor: categoriaId,
   //        juros: categoriaId, internas: { folha: categoriaId, ... } }
   //
-  // Devolve [{ id, doc }]: o principal e, se valorPago > valor, um
-  // segundo lançamento com a DIFERENÇA como juros. Mapa ou banco
-  // faltando NÃO impede o pagamento: o doc sai sem partida e vira
-  // pendência amarela aqui no app — quem entende de conta resolve.
+  // Devolve [{ id, doc }]: o principal e, se valorPago > valor NUM
+  // PAGAMENTO DE FORNECEDOR, um segundo lançamento com a DIFERENÇA
+  // como juros (interno variavel sai inteiro pela categoria). Mapa ou
+  // banco faltando NÃO impede o pagamento: o doc sai sem partida e
+  // vira pendência amarela aqui no app — quem entende de conta resolve.
   function lancamentosDePagamento(pag, mapa, bancos, categorias) {
     var m = mapa || {};
     var catId = pag.tipo === 'fornecedor'
@@ -216,11 +217,17 @@
     // O que conta para o extrato e' o que SAIU do banco: pago MENOS
     // que o devido (desconto negociado), o principal e' o valor pago —
     // lancar o valor cheio deixaria a conciliacao bancaria furada
-    // (auditoria de 02/09/2026). Pago a MAIS, a diferenca e' juros.
-    var principal = (pag.valorPago != null && pag.valor != null && pag.valorPago < pag.valor)
-      ? pag.valorPago : pag.valor;
+    // (auditoria de 02/09/2026). Pago a MAIS, a diferenca e' juros —
+    // mas SO para fornecedor: pagamento interno variavel (folha com
+    // horas extras, por exemplo) sai INTEIRO pela propria categoria,
+    // porque hora extra nao e' juro (pedido de 04/09/2026).
+    var interno = pag.tipo !== 'fornecedor';
+    var principal = interno
+      ? (pag.valorPago != null ? pag.valorPago : pag.valor)
+      : ((pag.valorPago != null && pag.valor != null && pag.valorPago < pag.valor)
+          ? pag.valorPago : pag.valor);
     var docs = [{ id: prefixo, doc: docDe(principal, catId, pag.historico) }];
-    var juros = (pag.valorPago != null && pag.valor != null)
+    var juros = (!interno && pag.valorPago != null && pag.valor != null)
       ? App.centavos(pag.valorPago - pag.valor) : 0;
     if (juros > 0) {
       docs.push({

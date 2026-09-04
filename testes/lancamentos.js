@@ -226,6 +226,26 @@ const categoriasPag = {
   eq('desconto: um lancamento so, com o valor que saiu do banco',
     [docs.length, docs[0].doc.valor], [1, 950]);
 }
+{
+  // Interno VARIAVEL (folha com horas extras): pago acima do previsto
+  // NAO e' juro — o valor pago sai INTEIRO pela propria categoria
+  // (pedido de 04/09/2026). Juros so existem em pagamento de
+  // fornecedor.
+  const docs = L.lancamentosDePagamento({
+    tipo: 'interno', id: 'HX', data: '2026-09-05', valor: 10000,
+    valorPago: 12000, bancoId: 'bradesco',
+    historico: 'PAGTO FOLHA', categoriaInterna: 'folha'
+  }, mapa, bancosPag, categoriasPag);
+  eq('interno pago a mais: UM lancamento, valor pago inteiro na categoria',
+    [docs.length, docs[0].doc.valor], [1, 12000]);
+  const menos = L.lancamentosDePagamento({
+    tipo: 'interno', id: 'HX2', data: '2026-09-05', valor: 10000,
+    valorPago: 9000, bancoId: 'bradesco',
+    historico: 'PAGTO FOLHA', categoriaInterna: 'folha'
+  }, mapa, bancosPag, categoriasPag);
+  eq('interno pago a menos: idem, vale o que saiu do banco',
+    [menos.length, menos[0].doc.valor], [1, 9000]);
+}
 
 // As categorias internas espelhadas aqui TEM que existir no
 // controle-notas.html — se uma categoria mudar la', este teste grita.
