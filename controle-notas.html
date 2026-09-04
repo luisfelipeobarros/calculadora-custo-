@@ -23,7 +23,7 @@
   /* Somente o que e' exclusivo do Controle de Notas. */
   .wrap{ padding:28px 20px 60px; }
   header.top, footer.note,
-  #viewPainel, #viewImportar, #viewPagamentos, #viewCanceladas, #viewDda, #viewVendas,
+  #viewPainel, #viewImportar, #viewPagamentos, #viewDda, #viewVendas,
   #viewLancamentosLc, #viewCadastrosLc{
     max-width:1700px;
     margin-left:auto;
@@ -305,15 +305,17 @@
     <button type="button" class="menu-btn" id="menuBtn" aria-expanded="false"
             aria-controls="navTelas" aria-label="Abrir menu de telas">☰</button>
     <nav class="telas" id="navTelas" aria-label="Telas do aplicativo">
+      <!-- Ordem pedida em 04/09/2026 (fluxo do dia: importar, pagar,
+           lançar). As Canceladas viraram um filtro dentro de "A
+           importar", ao lado de NF-e/NFS-e. -->
       <button class="btn secondary" id="navPainel">📊 Painel</button>
       <button class="btn secondary" id="navImportar">📥 A importar <span id="countImportar"></span></button>
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
-      <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
-      <button class="btn secondary" id="navCanceladas">🚫 Canceladas</button>
+      <button class="btn secondary" id="navLancamentos">📒 Lançamentos</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
       <button class="btn secondary" id="navSimulador">🧪 Simulador</button>
+      <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navVendas">📈 Vendas</button>
-      <button class="btn secondary" id="navLancamentos">📒 Lançamentos</button>
       <button class="btn secondary" id="navCadastros">⚙ Cadastros</button>
       <!-- Sem link para a Calculadora: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
@@ -405,34 +407,50 @@
   <!-- ═══════════ A IMPORTAR ═══════════ -->
   <div id="viewImportar" style="display:none;">
     <div class="card">
-      <h2>Notas a importar para o sistema</h2>
-      <p class="nota-explicativa">
+      <h2 id="tituloImportar">Notas a importar para o sistema</h2>
+      <p class="nota-explicativa" id="explicaImportar">
         Emitidas contra a empresa e ainda sem entrada no ERP. Somem daqui automaticamente quando o XML entra na pasta de importação.
+      </p>
+      <p class="nota-explicativa" id="explicaCanceladas" style="display:none;">
+        Marcadas manualmente na lista de importação. Cancelar tira a nota da lista e desativa as duplicatas dela.
       </p>
       <div class="filtros">
         <label class="sr-only" for="buscaImportar">Buscar nota</label>
         <input type="search" id="buscaImportar" placeholder="Buscar por emitente, número ou chave...">
+        <label class="sr-only" for="buscaCanc">Buscar nota cancelada</label>
+        <input type="search" id="buscaCanc" placeholder="Buscar por emitente ou número..." style="display:none;">
         <!-- Sem "Todas": mercadoria e serviço são fluxos diferentes, e
              misturar os dois só obrigava a filtrar depois. NF-e é o
              padrão ao abrir a tela — e é só ela que o contador do
              menu soma; NFS-e aparece aqui limitada aos últimos
-             30 dias. -->
+             30 dias. Canceladas (04/09/2026) é a mesma lista de notas
+             vista de outro ângulo, por isso é um chip e não uma tela. -->
         <button type="button" class="chip-filtro" data-tipo="nfe" aria-pressed="true">NF-e <span id="chipQtdNfe"></span></button>
         <button type="button" class="chip-filtro" data-tipo="nfse" aria-pressed="false">NFS-e <span id="chipQtdNfse"></span></button>
+        <button type="button" class="chip-filtro" data-tipo="canceladas" aria-pressed="false">🚫 Canceladas <span id="chipQtdCanc"></span></button>
         <button type="button" class="chip-filtro" id="ordDataBtn">Mais antigas primeiro</button>
       </div>
-      <div class="filtros" style="margin-top:-4px;">
-        <label class="sr-only" for="buscaProdutoImportar">Filtrar por produto</label>
-        <input type="search" id="buscaProdutoImportar" placeholder="Filtrar por produto (código ou descrição)...">
-        <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;">
-          <input type="checkbox" id="excluirProdutoImportar" style="width:15px; height:15px; cursor:pointer;">
-          mostrar as que NÃO têm esse produto
-        </label>
+      <div id="zonaImportar">
+        <div class="filtros" style="margin-top:-4px;">
+          <label class="sr-only" for="buscaProdutoImportar">Filtrar por produto</label>
+          <input type="search" id="buscaProdutoImportar" placeholder="Filtrar por produto (código ou descrição)...">
+          <label style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); display:flex; align-items:center; gap:5px; cursor:pointer;">
+            <input type="checkbox" id="excluirProdutoImportar" style="width:15px; height:15px; cursor:pointer;">
+            mostrar as que NÃO têm esse produto
+          </label>
+        </div>
+        <div id="tabelaImportar"></div>
+        <div class="rodape-total" id="totalImportar" role="status" aria-live="polite"></div>
+        <div style="text-align:center; margin-top:10px;">
+          <button type="button" class="btn secondary" id="maisImportarBtn" style="display:none;">Mostrar mais</button>
+        </div>
       </div>
-      <div id="tabelaImportar"></div>
-      <div class="rodape-total" id="totalImportar" role="status" aria-live="polite"></div>
-      <div style="text-align:center; margin-top:10px;">
-        <button type="button" class="btn secondary" id="maisImportarBtn" style="display:none;">Mostrar mais</button>
+      <div id="zonaCanceladas" style="display:none;">
+        <div id="tabelaCanc"></div>
+        <div class="rodape-total" id="totalCanc" role="status" aria-live="polite"></div>
+        <div style="text-align:center; margin-top:10px;">
+          <button type="button" class="btn secondary" id="maisCancBtn" style="display:none;">Mostrar mais</button>
+        </div>
       </div>
     </div>
   </div>
@@ -502,25 +520,6 @@
       </div>
       <div id="tabelaForn"></div>
       <div class="rodape-total" id="totalForn" role="status" aria-live="polite"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════ CANCELADAS ═══════════ -->
-  <div id="viewCanceladas" style="display:none;">
-    <div class="card">
-      <h2>Notas canceladas</h2>
-      <p class="nota-explicativa">
-        Marcadas manualmente na tela "A importar". Cancelar tira a nota da lista de importação e desativa as duplicatas dela.
-      </p>
-      <div class="filtros">
-        <label class="sr-only" for="buscaCanc">Buscar nota cancelada</label>
-        <input type="search" id="buscaCanc" placeholder="Buscar por emitente ou número...">
-      </div>
-      <div id="tabelaCanc"></div>
-      <div class="rodape-total" id="totalCanc" role="status" aria-live="polite"></div>
-      <div style="text-align:center; margin-top:10px;">
-        <button type="button" class="btn secondary" id="maisCancBtn" style="display:none;">Mostrar mais</button>
-      </div>
     </div>
   </div>
 
@@ -2163,7 +2162,7 @@
 
   var router = App.criarRouter({
     views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
-             Fornecedores:'viewFornecedores', Canceladas:'viewCanceladas', Dda:'viewDda',
+             Fornecedores:'viewFornecedores', Dda:'viewDda',
              Simulador:'viewSimulador', Vendas:'viewVendas',
              Lancamentos:'viewLancamentosLc', Cadastros:'viewCadastrosLc' },
     padrao: 'Painel',
@@ -2172,7 +2171,6 @@
       Importar: renderImportar,
       Pagamentos: renderPagamentos,
       Fornecedores: renderFornecedores,
-      Canceladas: renderCanceladas,
       Dda: renderDda,
       Simulador: renderSimulador,
       Vendas: renderVendas,
@@ -2182,7 +2180,7 @@
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
-       ['Canceladas','navCanceladas'], ['Dda','navDda'],
+       ['Dda','navDda'],
        ['Simulador','navSimulador'], ['Vendas','navVendas'],
        ['Lancamentos','navLancamentos'], ['Cadastros','navCadastros']].forEach(function(par){
         var b = $(par[1]);
@@ -2198,7 +2196,6 @@
   $('navImportar').addEventListener('click', function(){ router.ir('Importar'); });
   $('navPagamentos').addEventListener('click', function(){ router.ir('Pagamentos'); });
   $('navFornecedores').addEventListener('click', function(){ router.ir('Fornecedores'); });
-  $('navCanceladas').addEventListener('click', function(){ router.ir('Canceladas'); });
   $('navDda').addEventListener('click', function(){ router.ir('Dda'); });
   $('navSimulador').addEventListener('click', function(){ router.ir('Simulador'); });
   $('navVendas').addEventListener('click', function(){ router.ir('Vendas'); });
@@ -2250,7 +2247,7 @@
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
-               Canceladas:renderCanceladas, Dda:renderDda,
+               Dda:renderDda,
                Simulador:renderSimulador, Vendas:renderVendas,
                Lancamentos:renderLancamentos, Cadastros:renderCadastrosLc }[router.atual()];
     if(fn) fn();
@@ -2597,8 +2594,26 @@
     });
     filtroTipoImportar = chip.dataset.tipo;
     reiniciarPaginaImportar(); // lista nova, volta para a primeira página
+    limiteCanc = PAGINA_CANCELADAS;
     renderImportar();
   });
+
+  // O chip "Canceladas" troca a tela de pergunta: some o que e' so' da
+  // importacao (busca por produto, ordem, lista) e entra a lista das
+  // canceladas — mesma tela, mesmos chips no lugar. Devolve se o modo
+  // ativo e' o das canceladas.
+  function aplicarModoImportar(){
+    var canc = filtroTipoImportar === 'canceladas';
+    $('tituloImportar').textContent = canc ? 'Notas canceladas' : 'Notas a importar para o sistema';
+    $('explicaImportar').style.display = canc ? 'none' : '';
+    $('explicaCanceladas').style.display = canc ? '' : 'none';
+    $('buscaImportar').style.display = canc ? 'none' : '';
+    $('buscaCanc').style.display = canc ? '' : 'none';
+    $('ordDataBtn').style.display = canc ? 'none' : '';
+    $('zonaImportar').style.display = canc ? 'none' : '';
+    $('zonaCanceladas').style.display = canc ? '' : 'none';
+    return canc;
+  }
 
   $('ordDataBtn').addEventListener('click', function(){
     ordAntigasPrimeiro = !ordAntigasPrimeiro;
@@ -2639,6 +2654,14 @@
     pendentes.forEach(function(n){ if(ehNfse(n)) totalNfse++; else totalNfe++; });
     $('chipQtdNfe').textContent = totalNfe ? '(' + totalNfe + ')' : '';
     $('chipQtdNfse').textContent = totalNfse ? '(' + totalNfse + ')' : '';
+    var totalCanc = notas.filter(function(n){ return !notaAtiva(n); }).length;
+    $('chipQtdCanc').textContent = totalCanc ? '(' + totalCanc + ')' : '';
+
+    // Chip "Canceladas": a lista e' outra (e tem render proprio).
+    if(aplicarModoImportar()){
+      renderCanceladas();
+      return;
+    }
 
     var lista = pendentes.filter(filtroTipoImportar === 'nfse'
       ? ehNfse
