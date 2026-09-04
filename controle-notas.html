@@ -314,8 +314,8 @@
       <button class="btn secondary" id="navLancamentos">📒 Lançamentos</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
       <button class="btn secondary" id="navSimulador">🧪 Simulador</button>
-      <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navVendas">📈 Vendas</button>
+      <button class="btn secondary" id="navFornecedores">🤝 Fornecedores</button>
       <button class="btn secondary" id="navCadastros">⚙ Cadastros</button>
       <!-- Sem link para a Calculadora: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
@@ -517,6 +517,10 @@
       <div class="filtros">
         <label class="sr-only" for="buscaForn">Buscar fornecedor</label>
         <input type="search" id="buscaForn" placeholder="Buscar fornecedor...">
+        <!-- Fornecedor oculto sai da lista E da conta (pedido de
+             04/09/2026). A escolha e' compartilhada (config/) — todo
+             mundo ve a mesma lista enxuta. -->
+        <button type="button" class="chip-filtro" id="chipOcultosForn" aria-pressed="false">Mostrar ocultos <span id="chipQtdOcultosForn"></span></button>
       </div>
       <div id="tabelaForn"></div>
       <div class="rodape-total" id="totalForn" role="status" aria-live="polite"></div>
@@ -1125,6 +1129,7 @@
       setStatus('Carregando notas...');
       escutarColecoes();
       iniciarLancamentos();
+      carregarFornOcultos();
     }).catch(function(e){
       setStatus('Erro ao iniciar: ' + App.erroDe(e));
       App.toastErro('Erro ao iniciar', e);
@@ -4283,6 +4288,49 @@
     renderFornecedores();
   });
 
+  // ─── Fornecedores ocultos ───
+  // Quem nao interessa (o escritorio de advocacia, a grafica) sai da
+  // lista e da conta: a linha nem e' calculada enquanto esta' oculta.
+  // A lista mora em config/fornecedoresOcultos, compartilhada entre
+  // os usuarios; "Mostrar ocultos" traz de volta para reexibir.
+  var fornOcultos = Object.create(null);
+  var mostrarOcultosForn = false;
+
+  function carregarFornOcultos(){
+    if(!db) return;
+    App.comAuth(function(){ return db.collection('config').doc('fornecedoresOcultos').get(); })
+      .then(function(doc){
+        // Gravado como ARRAY de nomes: nome de fornecedor tem ponto e
+        // parentese, que como chave de mapa do Firestore da' problema.
+        fornOcultos = Object.create(null);
+        ((doc.exists && doc.data().nomes) || []).forEach(function(n){ fornOcultos[n] = true; });
+        if(router.atual() === 'Fornecedores') renderFornecedores();
+      })
+      .catch(function(e){ console.error('fornecedores ocultos:', e); });
+  }
+
+  function gravarFornOcultos(){
+    return App.comAuth(function(){
+      return db.collection('config').doc('fornecedoresOcultos').set({ nomes: Object.keys(fornOcultos) });
+    }).catch(function(e){ App.toastErro('Erro ao gravar a lista de ocultos', e); });
+  }
+
+  App.delegar($('tabelaForn'), 'click', '[data-ocultar]', function(b){
+    fornOcultos[b.dataset.ocultar] = true;
+    renderFornecedores();
+    gravarFornOcultos();
+  });
+  App.delegar($('tabelaForn'), 'click', '[data-reexibir]', function(b){
+    delete fornOcultos[b.dataset.reexibir];
+    renderFornecedores();
+    gravarFornOcultos();
+  });
+  $('chipOcultosForn').addEventListener('click', function(){
+    mostrarOcultosForn = !mostrarOcultosForn;
+    $('chipOcultosForn').setAttribute('aria-pressed', String(mostrarOcultosForn));
+    renderFornecedores();
+  });
+
   function renderFornecedores(){
     if(!carregouNotas || !carregouDuplicatas){
       $('tabelaForn').innerHTML = '<p class="nota-explicativa">Carregando notas e duplicatas...</p>';
@@ -4297,12 +4345,21 @@
     var linhas = mapaFornecedores().slice();
 
     if(termo) linhas = linhas.filter(function(l){ return normalizarTexto(l.fornecedor).indexOf(termo) !== -1; });
+
+    // Ocultos saem ANTES do laco de calculo: linha oculta nao paga
+    // media de compra nem prazo medio. O chip conta quantos sao.
+    var qtdOcultos = linhas.filter(function(l){ return fornOcultos[l.fornecedor]; }).length;
+    $('chipQtdOcultosForn').textContent = qtdOcultos ? '(' + qtdOcultos + ')' : '';
+    if(!mostrarOcultosForn) linhas = linhas.filter(function(l){ return !fornOcultos[l.fornecedor]; });
+
     // Mais notas primeiro: quem você mais compra aparece no topo.
     linhas.sort(function(a,b){ return b.itens.length - a.itens.length; });
 
     if(!linhas.length){
       $('tabelaForn').innerHTML = '<p class="nota-explicativa">' +
-        (termo ? 'Nenhum fornecedor com esse nome.' : 'Nenhuma nota com data de emissão no período carregado.') + '</p>';
+        (termo ? 'Nenhum fornecedor com esse nome.'
+          : (qtdOcultos ? 'Todos os fornecedores estão ocultos — use "Mostrar ocultos".'
+            : 'Nenhuma nota com data de emissão no período carregado.')) + '</p>';
       $('totalForn').textContent = '';
       return;
     }
@@ -4334,10 +4391,17 @@
       var mediaCompra = SimuladorNucleo.mediaCompraMensal(
         l.itens.map(function(x){ return x.nota; }), hoje, MESES_MEDIA_COMPRA);
 
-      html += '<tr>' +
+      var oculto = !!fornOcultos[l.fornecedor];
+      html += '<tr' + (oculto ? ' style="opacity:.55;"' : '') + '>' +
         '<td><button type="button" class="acao-mini" data-forn="' + escapeHtml(l.fornecedor) + '" ' +
           'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
-          escapeHtml(l.fornecedor) + '</td>' +
+          escapeHtml(l.fornecedor) +
+          (oculto
+            ? ' <button type="button" class="acao-mini" data-reexibir="' + escapeHtml(l.fornecedor) +
+              '" title="Voltar a mostrar" aria-label="Voltar a mostrar ' + escapeHtml(l.fornecedor) + '">↩ mostrar</button>'
+            : ' <button type="button" class="acao-mini" data-ocultar="' + escapeHtml(l.fornecedor) +
+              '" title="Ocultar da lista" aria-label="Ocultar ' + escapeHtml(l.fornecedor) + '">👁 ocultar</button>') +
+          '</td>' +
         '<td>' + (mediaCompra.qtdNotas
           ? '<strong>' + brl(mediaCompra.mediaCent / 100) + '</strong>' +
             '<div style="font-size:10px; color:var(--ink-soft);">últimos ' + MESES_MEDIA_COMPRA + ' meses · ' +
@@ -4386,6 +4450,7 @@
     $('tabelaForn').innerHTML = html + '</tbody></table></div>';
     $('totalForn').textContent = linhas.length + ' fornecedor(es) · ' +
       linhas.reduce(function(s,l){ return s + l.itens.length; }, 0) + ' nota(s) analisada(s)' +
+      (qtdOcultos && !mostrarOcultosForn ? ' · ' + qtdOcultos + ' oculto(s)' : '') +
       (carregarTudo ? '' : ' · só o que está na janela de ' + MESES_HISTORICO + ' meses');
   }
 
