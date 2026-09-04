@@ -414,6 +414,26 @@
     return { periodo: { de: meses[0], ate: meses[meses.length - 1], anoAnterior: ano - 1 }, itens };
   }
 
+  // Crescimento MÊS A MÊS de um recorte já filtrado (um fornecedor ou
+  // uma categoria): cada mês do ano × o MESMO mês do ano anterior.
+  // Mês sem venda no ano, ou sem base no ano anterior, é null — nunca
+  // 0% nem −100% inventado (o ano em curso ainda não acabou).
+  function crescimentoMensalComparado(linhas, ano){
+    const atual = new Array(12).fill(0);
+    const anterior = new Array(12).fill(0);
+    linhas.forEach(l => {
+      if(l.ano === ano) atual[l.mes - 1] += l.faturamento;
+      else if(l.ano === ano - 1) anterior[l.mes - 1] += l.faturamento;
+    });
+    let temBase = false;
+    const valores = atual.map((v, i) => {
+      if(!(v > 0) || !(anterior[i] > 0)) return null;
+      temBase = true;
+      return v / anterior[i] - 1;
+    });
+    return { valores, temBase };
+  }
+
   // A planilha traz o MESMO nome com grafias diferentes ("Outros" em
   // 2025, "OUTROS" em 2026) — e o agrupamento por texto exato criava
   // um fornecedor "novo" fantasma. Nomes que só diferem em
@@ -744,9 +764,73 @@
     // Respeita categoria/fornecedor filtrados; o ANO define o par
     // (2026 × 2025) e o mês filtrado muda a pergunta: julho × julho.
     const base = filtrarLinhas(linhasTodas, { fornecedor: fornSel, categoria: catSel });
-    const r = crescimentoAnual(base, anoSel, crescVisao, mesSel || null);
     const vazio = $('crescVazio');
     const caixa = $('gCrescAnual').parentElement;
+
+    // Com um fornecedor ou categoria filtrado, as barras viravam UMA
+    // barra num espaço enorme (pedido de 04/09/2026): aqui o gráfico
+    // muda de pergunta e vira a LINHA do crescimento mês a mês — dá
+    // para ver se o recorte está acelerando ou desacelerando ao longo
+    // do ano, sem ir filtrando mês por mês.
+    const toggleCresc = document.querySelector('.b-cresc .mini-toggle');
+    if(toggleCresc) toggleCresc.style.display = (fornSel || catSel) ? 'none' : '';
+
+    if(fornSel || catSel){
+      const nomeRecorte = [fornSel, catSel].filter(Boolean).join(' · ');
+      const m = crescimentoMensalComparado(base, anoSel);
+      if(!m.temBase){
+        caixa.style.display = 'none';
+        vazio.style.display = '';
+        vazio.textContent = 'Sem meses comparáveis com ' + (anoSel - 1) + ' para ' + nomeRecorte + '.';
+        $('crescPeriodo').textContent = '';
+        if(charts.gCrescAnual){ charts.gCrescAnual.destroy(); delete charts.gCrescAnual; }
+        return;
+      }
+      caixa.style.display = '';
+      vazio.style.display = 'none';
+      $('crescPeriodo').textContent = nomeRecorte + ' · cada mês de ' + anoSel +
+        ' × o mesmo mês de ' + (anoSel - 1);
+
+      // O PONTO é limitado a ±150% (mês de base baixa explode a
+      // escala); o rótulo mostra o % verdadeiro — a mesma regra do
+      // teto das barras.
+      const TETO_LINHA = 1.5;
+      const plotados = m.valores.map(v => v == null ? null
+        : Math.max(-1, Math.min(TETO_LINHA, v)));
+      const coresPonto = m.valores.map(v => v == null ? '#0d8ee9'
+        : (v >= 0 ? '#2E9E5B' : '#D91F26'));
+      const pctS = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') +
+        (Math.abs(v) * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+
+      novoChart('gCrescAnual', {
+        type: 'line',
+        data: { labels: MESES, datasets: [{
+          data: plotados,
+          borderColor: '#0d8ee9', borderWidth: 2.5, tension: 0.25, spanGaps: false,
+          pointBackgroundColor: coresPonto, pointBorderColor: coresPonto, pointRadius: 4.5
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          layout: { padding: { top: 26, right: 26, left: 10 } },
+          plugins: { legend: { display: false }, tooltip: { enabled: false },
+            rotulosBarras: { fonte: '700 13px "Barlow Condensed", sans-serif',
+              formatar: (v, i) => m.valores[i] == null ? '' : pctS(m.valores[i]) } },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { size: 13 } } },
+            y: { ticks: { display: false },
+              // A linha do ZERO fica visível: acima dela cresceu,
+              // abaixo caiu — é a leitura inteira do gráfico.
+              grid: { color: (c) => c.tick.value === 0 ? '#888' : 'rgba(0,0,0,0.05)' },
+              suggestedMin: Math.min(-0.1, ...plotados.filter(v => v != null)) - 0.12,
+              suggestedMax: Math.max(0.1, ...plotados.filter(v => v != null)) + 0.15 }
+          }
+        },
+        plugins: [rotulosBarras]
+      });
+      return;
+    }
+
+    const r = crescimentoAnual(base, anoSel, crescVisao, mesSel || null);
 
     if(!r.periodo){
       caixa.style.display = 'none';

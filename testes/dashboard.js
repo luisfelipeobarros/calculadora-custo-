@@ -37,9 +37,10 @@ const m = new Function(
   extrair('participacaoCategorias') + '\n' +
   extrair('marketShareFornecedores') + '\n' +
   extrair('crescimentoAnual') + '\n' +
+  extrair('crescimentoMensalComparado') + '\n' +
   extrair('canonizarNomes') + '\n' +
   extrair('destaquesAutomaticos') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, canonizarNomes, destaquesAutomaticos };'
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, crescimentoMensalComparado, canonizarNomes, destaquesAutomaticos };'
 )();
 
 let problemas = 0;
@@ -205,6 +206,23 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   // Sem NADA do ano anterior no período: aviso, não gráfico vazio.
   eq('sem ano anterior -> periodo null (a tela avisa)',
     m.crescimentoAnual([l(2026, 1, 'Cerâmica', 100)], 2026, 'categoria', null).periodo, null);
+}
+
+// ── Crescimento mês a mês de um recorte filtrado ─────────────
+
+{
+  // Com fornecedor/categoria filtrado, o gráfico de crescimento vira
+  // a LINHA mês a mês: cada mês × o mesmo mês do ano anterior.
+  const l = (ano, mes, fat) =>
+    ({ ano, mes, fornecedor: 'F', categoria: 'C', quantidade: 1, faturamento: fat, lucro: 1 });
+  const dados = [l(2025, 1, 100), l(2025, 2, 200), l(2026, 1, 150), l(2026, 3, 80)];
+  const r = m.crescimentoMensalComparado(dados, 2026);
+  eq('mês presente nos dois anos cresce (150/100 − 1 = 50%)', r.valores[0], 0.5);
+  eq('sem base no ano anterior: null, nunca % inventado', r.valores[2], null);
+  eq('sem venda no mês do ano em curso: null, nunca −100%', r.valores[1], null);
+  eq('sempre 12 posições, com a flag de base', [r.valores.length, r.temBase], [12, true]);
+  eq('nenhum mês comparável -> temBase false (a tela avisa)',
+    m.crescimentoMensalComparado([l(2026, 1, 10)], 2026).temBase, false);
 }
 
 // ── Canonização de nomes (o caso real "Outros"/"OUTROS") ─────

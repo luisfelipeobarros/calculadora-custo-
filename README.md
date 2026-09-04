@@ -338,13 +338,14 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
 
-17. **Dashboard de vendas** — 48 verificações extraídas do próprio
+17. **Dashboard de vendas** — 53 verificações extraídas do próprio
     `dashboard.html` (o teste mede o código que roda na tela): o
     desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
     (ordem e acento não importam), a **regra de ouro** da margem
     (soma/soma, nunca média de margens — e null sem faturamento, nunca
     "0%"), séries mensais com mês vazio = null, a participação por
-    categoria fechando 100%, o crescimento anual no período comparável,
+    categoria fechando 100%, o crescimento anual no período comparável
+    (e a linha mês a mês quando há fornecedor/categoria filtrado),
     a canonização de nomes (grafias que só diferem em maiúsculas/acento
     viram um nome só — o caso real "Outros"/"OUTROS") e os destaques
     automáticos calculados por regra, sem IA.
