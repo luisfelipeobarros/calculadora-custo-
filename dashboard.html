@@ -200,9 +200,16 @@
     </div>
     <div class="bloco b-cresc">
       <h2>Crescimento anual</h2>
-      <div class="mini-toggle" role="group" aria-label="Visão do crescimento">
+      <div class="mini-toggle" id="toggleVisaoCresc" role="group" aria-label="Visão do crescimento">
         <button type="button" data-visao="categoria" aria-pressed="true">Categoria</button>
         <button type="button" data-visao="fornecedor" aria-pressed="false">Fornecedor</button>
+      </div>
+      <!-- Com fornecedor/categoria filtrado, o toggle acima dá lugar a
+           este (pedido de 06/09/2026): a linha mês a mês em % (× o
+           mesmo mês do ano anterior) ou em R$ (ano × ano anterior). -->
+      <div class="mini-toggle" id="toggleModoLinha" role="group" aria-label="Modo da linha mês a mês" style="display:none;">
+        <button type="button" data-modo="pct" aria-pressed="true">% vs ano anterior</button>
+        <button type="button" data-modo="abs" aria-pressed="false">R$ mês a mês</button>
       </div>
       <span class="sub-periodo" id="crescPeriodo"></span>
       <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
@@ -759,6 +766,7 @@
   }
 
   let crescVisao = 'categoria';
+  let linhaModo = 'pct'; // com recorte filtrado: '%' vs ano anterior ou 'R$' mês a mês
 
   function renderCrescimentoAnual(){
     // Respeita categoria/fornecedor filtrados; o ANO define o par
@@ -772,11 +780,63 @@
     // muda de pergunta e vira a LINHA do crescimento mês a mês — dá
     // para ver se o recorte está acelerando ou desacelerando ao longo
     // do ano, sem ir filtrando mês por mês.
-    const toggleCresc = document.querySelector('.b-cresc .mini-toggle');
-    if(toggleCresc) toggleCresc.style.display = (fornSel || catSel) ? 'none' : '';
+    const recorteAtivo = !!(fornSel || catSel);
+    $('toggleVisaoCresc').style.display = recorteAtivo ? 'none' : '';
+    $('toggleModoLinha').style.display = recorteAtivo ? '' : 'none';
 
-    if(fornSel || catSel){
+    if(recorteAtivo){
       const nomeRecorte = [fornSel, catSel].filter(Boolean).join(' · ');
+
+      // Modo R$: o faturamento mês a mês do recorte, ano selecionado
+      // (azul, com os valores) × ano anterior (cinza tracejado). É o
+      // que o combo lá em cima NÃO mostra — a linha do ano passado
+      // junto, para a comparação ser visual e não de memória.
+      if(linhaModo === 'abs'){
+        const sAtual = seriesMensais(filtrarLinhas(base, { ano: anoSel }));
+        const sAnt = seriesMensais(filtrarLinhas(base, { ano: anoSel - 1 }));
+        const todos = sAtual.faturamento.concat(sAnt.faturamento).filter(v => v != null);
+        if(!todos.length){
+          caixa.style.display = 'none';
+          vazio.style.display = '';
+          vazio.textContent = 'Sem vendas de ' + nomeRecorte + ' em ' + anoSel + ' nem em ' + (anoSel - 1) + '.';
+          $('crescPeriodo').textContent = '';
+          if(charts.gCrescAnual){ charts.gCrescAnual.destroy(); delete charts.gCrescAnual; }
+          return;
+        }
+        caixa.style.display = '';
+        vazio.style.display = 'none';
+        $('crescPeriodo').textContent = nomeRecorte + ' · faturamento mês a mês: ' + anoSel + ' × ' + (anoSel - 1);
+        novoChart('gCrescAnual', {
+          type: 'line',
+          data: { labels: MESES, datasets: [
+            { label: String(anoSel), data: sAtual.faturamento,
+              borderColor: AZUL, backgroundColor: AZUL, borderWidth: 2.5, tension: 0.25,
+              spanGaps: false, pointRadius: 4.5 },
+            { label: String(anoSel - 1), data: sAnt.faturamento,
+              borderColor: '#9a9a9a', backgroundColor: '#9a9a9a', borderWidth: 2, borderDash: [6, 4],
+              tension: 0.25, spanGaps: false, pointRadius: 3 }
+          ] },
+          options: {
+            responsive: true, maintainAspectRatio: false,
+            layout: { padding: { top: 20, right: 26, left: 10 } },
+            plugins: {
+              legend: { display: true, position: 'top',
+                labels: { boxWidth: 10, boxHeight: 10, padding: 6,
+                  font: { family: "'Barlow Condensed', sans-serif", size: 11, weight: 700 } } },
+              tooltip: { enabled: false },
+              rotulosBarras: { fonte: '700 13px "Barlow Condensed", sans-serif',
+                formatadores: [{ formatar: v => v == null ? '' : fmtMi(v) }, null] }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { font: { size: 13 } } },
+              y: { display: false, suggestedMin: 0, suggestedMax: Math.max(1, ...todos) * 1.18 }
+            }
+          },
+          plugins: [rotulosBarras]
+        });
+        return;
+      }
+
       const m = crescimentoMensalComparado(base, anoSel);
       if(!m.temBase){
         caixa.style.display = 'none';
@@ -1371,10 +1431,17 @@
       mesSel = 0; fornSel = ''; catSel = '';
       sincronizarFiltrosUi(); renderTudo();
     });
-    document.querySelectorAll('.mini-toggle button').forEach(b =>
+    document.querySelectorAll('#toggleVisaoCresc button').forEach(b =>
       b.addEventListener('click', () => {
         crescVisao = b.dataset.visao;
-        document.querySelectorAll('.mini-toggle button').forEach(x =>
+        document.querySelectorAll('#toggleVisaoCresc button').forEach(x =>
+          x.setAttribute('aria-pressed', String(x === b)));
+        renderCrescimentoAnual();
+      }));
+    document.querySelectorAll('#toggleModoLinha button').forEach(b =>
+      b.addEventListener('click', () => {
+        linhaModo = b.dataset.modo;
+        document.querySelectorAll('#toggleModoLinha button').forEach(x =>
           x.setAttribute('aria-pressed', String(x === b)));
         renderCrescimentoAnual();
       }));
