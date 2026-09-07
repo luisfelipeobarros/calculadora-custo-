@@ -137,6 +137,13 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   eq('margem mensal pela regra de ouro', s.margem[0], 0.095);
   eq('margem de mes vazio e null', s.margem[1], null);
   eq('sao sempre 12 posicoes', s.faturamento.length, 12);
+  eq('quantidade mensal soma (10 + 20 em janeiro)', s.quantidade[0], 30);
+  eq('quantidade de mes vazio e null', s.quantidade[1], null);
+  // A linha "Outros" da planilha vem com quantidade 0 num mes COM
+  // venda: e' ausencia de dado, nao "vendeu zero".
+  eq('quantidade zerada num mes com venda e null (nao desenha ponto no chao)',
+    m.seriesMensais([{ ano: 2026, mes: 5, fornecedor: 'Outros', categoria: 'Outros',
+      quantidade: 0, faturamento: 100, lucro: 10 }]).quantidade[4], null);
 }
 
 // ── Participacao por categoria ───────────────────────────────

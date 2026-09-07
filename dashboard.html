@@ -210,6 +210,7 @@
       <div class="mini-toggle" id="toggleModoLinha" role="group" aria-label="Modo da linha mês a mês" style="display:none;">
         <button type="button" data-modo="pct" aria-pressed="true">% vs ano anterior</button>
         <button type="button" data-modo="abs" aria-pressed="false">R$ mês a mês</button>
+        <button type="button" data-modo="qtd" aria-pressed="false">Qtd mês a mês</button>
       </div>
       <span class="sub-periodo" id="crescPeriodo"></span>
       <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
@@ -339,12 +340,18 @@
   function seriesMensais(linhas){
     const fat = Array(12).fill(null);
     const lucro = Array(12).fill(null);
+    const qtd = Array(12).fill(null);
     linhas.forEach(l => {
       fat[l.mes - 1] = (fat[l.mes - 1] || 0) + l.faturamento;
       lucro[l.mes - 1] = (lucro[l.mes - 1] || 0) + l.lucro;
+      qtd[l.mes - 1] = (qtd[l.mes - 1] || 0) + (l.quantidade || 0);
     });
     const margem = fat.map((v, i) => (v != null && v > 0) ? lucro[i] / v : null);
-    return { faturamento: fat, margem };
+    // Quantidade zerada num mês com venda (a linha "Outros" da
+    // planilha vem assim) é AUSÊNCIA de dado, não "vendeu zero": null,
+    // para a linha de quantidade não desenhar um ponto falso no chão.
+    const quantidade = qtd.map(v => v > 0 ? v : null);
+    return { faturamento: fat, margem, quantidade };
   }
 
   // Participação por categoria: % do faturamento filtrado.
@@ -787,32 +794,38 @@
     if(recorteAtivo){
       const nomeRecorte = [fornSel, catSel].filter(Boolean).join(' · ');
 
-      // Modo R$: o faturamento mês a mês do recorte, ano selecionado
-      // (azul, com os valores) × ano anterior (cinza tracejado). É o
-      // que o combo lá em cima NÃO mostra — a linha do ano passado
-      // junto, para a comparação ser visual e não de memória.
-      if(linhaModo === 'abs'){
+      // Modos R$ e Qtd: o faturamento (ou a quantidade vendida) mês a
+      // mês do recorte, ano selecionado (azul, com os valores) × ano
+      // anterior (cinza tracejado). É o que o combo lá em cima NÃO
+      // mostra — a linha do ano passado junto, para a comparação ser
+      // visual e não de memória. Quantidade tira o efeito do preço:
+      // faturamento pode subir só porque o preço subiu (06/09/2026).
+      if(linhaModo === 'abs' || linhaModo === 'qtd'){
+        const campo = linhaModo === 'qtd' ? 'quantidade' : 'faturamento';
+        const rotuloCampo = linhaModo === 'qtd' ? 'quantidade vendida' : 'faturamento';
+        const formatar = linhaModo === 'qtd' ? (v => fmtNum(v, 0)) : fmtMi;
         const sAtual = seriesMensais(filtrarLinhas(base, { ano: anoSel }));
         const sAnt = seriesMensais(filtrarLinhas(base, { ano: anoSel - 1 }));
-        const todos = sAtual.faturamento.concat(sAnt.faturamento).filter(v => v != null);
+        const todos = sAtual[campo].concat(sAnt[campo]).filter(v => v != null);
         if(!todos.length){
           caixa.style.display = 'none';
           vazio.style.display = '';
-          vazio.textContent = 'Sem vendas de ' + nomeRecorte + ' em ' + anoSel + ' nem em ' + (anoSel - 1) + '.';
+          vazio.textContent = 'Sem ' + rotuloCampo + ' de ' + nomeRecorte + ' em ' + anoSel + ' nem em ' + (anoSel - 1) +
+            (linhaModo === 'qtd' ? ' (a planilha não traz quantidade para este recorte).' : '.');
           $('crescPeriodo').textContent = '';
           if(charts.gCrescAnual){ charts.gCrescAnual.destroy(); delete charts.gCrescAnual; }
           return;
         }
         caixa.style.display = '';
         vazio.style.display = 'none';
-        $('crescPeriodo').textContent = nomeRecorte + ' · faturamento mês a mês: ' + anoSel + ' × ' + (anoSel - 1);
+        $('crescPeriodo').textContent = nomeRecorte + ' · ' + rotuloCampo + ' mês a mês: ' + anoSel + ' × ' + (anoSel - 1);
         novoChart('gCrescAnual', {
           type: 'line',
           data: { labels: MESES, datasets: [
-            { label: String(anoSel), data: sAtual.faturamento,
+            { label: String(anoSel), data: sAtual[campo],
               borderColor: AZUL, backgroundColor: AZUL, borderWidth: 2.5, tension: 0.25,
               spanGaps: false, pointRadius: 4.5 },
-            { label: String(anoSel - 1), data: sAnt.faturamento,
+            { label: String(anoSel - 1), data: sAnt[campo],
               borderColor: '#9a9a9a', backgroundColor: '#9a9a9a', borderWidth: 2, borderDash: [6, 4],
               tension: 0.25, spanGaps: false, pointRadius: 3 }
           ] },
@@ -825,7 +838,7 @@
                   font: { family: "'Barlow Condensed', sans-serif", size: 11, weight: 700 } } },
               tooltip: { enabled: false },
               rotulosBarras: { fonte: '700 13px "Barlow Condensed", sans-serif',
-                formatadores: [{ formatar: v => v == null ? '' : fmtMi(v) }, null] }
+                formatadores: [{ formatar: v => v == null ? '' : formatar(v) }, null] }
             },
             scales: {
               x: { grid: { display: false }, ticks: { font: { size: 13 } } },
