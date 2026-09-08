@@ -39,8 +39,9 @@ const m = new Function(
   extrair('crescimentoAnual') + '\n' +
   extrair('crescimentoMensalComparado') + '\n' +
   extrair('canonizarNomes') + '\n' +
+  extrair('precoVersusVolume') + '\n' +
   extrair('destaquesAutomaticos') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, crescimentoMensalComparado, canonizarNomes, destaquesAutomaticos };'
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, crescimentoMensalComparado, canonizarNomes, precoVersusVolume, destaquesAutomaticos };'
 )();
 
 let problemas = 0;
@@ -302,6 +303,25 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
     [d[9].nome, d[9].margem], ['B', 0.1]);
   eq('ano sem dado nenhum: nenhum destaque inventado',
     m.destaquesAutomaticos(dados, 2030), []);
+}
+
+// ── Preço × volume ───────────────────────────────────────────
+
+{
+  const l = (ano, mes, forn, fat, qtd) =>
+    ({ ano, mes, fornecedor: forn, categoria: 'C', quantidade: qtd, faturamento: fat, lucro: 1 });
+  const dados = [
+    l(2025, 1, 'F', 100, 10), l(2026, 1, 'F', 130, 8),   // +30% R$, −20% qtd: preço
+    l(2025, 1, 'G', 100, 10), l(2026, 1, 'G', 90, 12),   // −10% R$, +20% qtd: volume
+    l(2025, 1, 'H', 100, 10), l(2026, 1, 'H', 120, 12),  // as duas juntas: não diverge
+    l(2025, 1, 'Outros', 50, 0), l(2026, 1, 'Outros', 60, 0) // sem quantidade: fora
+  ];
+  const r = m.precoVersusVolume(dados, 2026);
+  eq('só quem divergiu, maior faturamento primeiro', r.map(x => x.nome), ['F', 'G']);
+  eq('variações certas (F: +30% R$ / −20% qtd)',
+    [Math.round(r[0].fatVar * 100) / 100, Math.round(r[0].qtdVar * 100) / 100], [0.3, -0.2]);
+  eq('vira destaque "precoVolume" (até dois, os maiores)',
+    m.destaquesAutomaticos(dados, 2026).filter(d => d.tipo === 'precoVolume').map(d => d.nome), ['F', 'G']);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
