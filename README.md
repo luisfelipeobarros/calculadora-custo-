@@ -296,7 +296,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     de cadastro (`grupoCadastravel`), que espelha o regex do
     `firestore.rules`: item sem NCM ou UF desconhecida não ganha
     formulário, senão o salvamento morreria em permission-denied.
-14. **Concorrentes em lote (planilha)** — 41 verificações em
+14. **Concorrentes em lote (planilha)** — 42 verificações em
     `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
     ordem/acento/caixa, preço com sujeira de float → centavos inteiros,
     linha ruim **contada com motivo**, nunca engolida), a consulta de

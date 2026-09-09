@@ -2967,6 +2967,11 @@ Tupan</textarea>
     $('salvarPesqLoteBtn').disabled = true;
     $('salvarLoteMsg').textContent = 'Salvando ' + itensParaSalvar.length + ' produto(s)...';
     try{
+      // Pesquisa de pedido não traz fabricante; se o código está na
+      // planilha, o fabricante vem de lá — é o que faz "Ver última
+      // pesquisa" do fabricante enxergar também as pesquisas de pedido.
+      const fabricantePorCodigo = Object.create(null);
+      ((catalogoLote && catalogoLote.itens) || []).forEach(c => { fabricantePorCodigo[c.codigo] = c.fabricante || null; });
       await Promise.all(itensParaSalvar.map(it => {
         const resultados = Object.values(it.porLoja).filter(r => r && !r.pendente);
         return App.comAuth(()=> firestoreDb.collection('concorrentes').add({
@@ -2983,7 +2988,7 @@ Tupan</textarea>
           // "quando pesquisei este fornecedor pela última vez" — casar
           // por texto de nome quebraria na primeira renomeação.
           codigo: it.codigo || null,
-          fabricante: it.fabricante || null
+          fabricante: it.fabricante || (it.codigo && fabricantePorCodigo[it.codigo]) || null
         }));
       }));
       // O pedido ganhou pesquisas novas: a próxima abertura do painel no
@@ -3010,6 +3015,17 @@ Tupan</textarea>
           loteLojas.every((_, li) => it.porLoja[li] && !it.porLoja[li].pendente));
         if(tudoPesquisado) limparProgressoLote();
         else App.toast('Pesquisa parcial salva — a retomada dos produtos que faltam continua disponível na aba Concorrentes.', 'info');
+      } else {
+        // Pesquisa vinda de um PEDIDO do histórico (09/09/2026): os
+        // códigos são os mesmos da planilha, então ela conta no painel
+        // — data, menor concorrente e loja — mas SEM preço de
+        // referência: o "meu preço" daqui é o de venda do produto
+        // salvo, não o da tabela, e compará-lo gerava "preço mudou"
+        // falso. Sem meuPrecoCent, só a data decide se está em dia.
+        itensParaSalvar.forEach(it => {
+          if(it.codigo) registrarUltimaPesquisa(it.codigo, null,
+            Object.values(it.porLoja).filter(r => r && !r.pendente));
+        });
       }
       $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
       carregarHistoricoConcorrentes();
@@ -3031,10 +3047,11 @@ Tupan</textarea>
   // importado vive no localStorage (não no Firestore — é material de
   // trabalho local); as PESQUISAS continuam indo para "concorrentes".
   const CATALOGO_LS = 'catalogoConcorrentes_v1';
-  // _v2: o índice ganhou o menor concorrente (09/09/2026); a chave
-  // nova força a re-hidratação do Firestore uma vez, em vez de
-  // mostrar "—" no cache antigo até alguém clicar em Atualizar.
-  const INDICE_PESQ_LS = 'ultimaPesquisaPorCodigo_v2';
+  // A chave muda a cada vez que o índice ganha informação nova (_v2:
+  // menor concorrente; _v3: pesquisas de pedido contam) — força a
+  // re-hidratação do Firestore uma vez, em vez de mostrar o cache
+  // antigo até alguém clicar em Atualizar.
+  const INDICE_PESQ_LS = 'ultimaPesquisaPorCodigo_v3';
   const PROGRESSO_LS = 'progressoLotePlanilha_v1';
   const PRAZO_LS = 'prazoDesatualizadoDias_v1';
   const LIMITE_CONFIRMA_PRODUTOS = 50;
@@ -3079,17 +3096,20 @@ Tupan</textarea>
     snap.forEach(doc => {
       const d = doc.data();
       if(!d.codigo) return;
-      // Pesquisas de PEDIDOS do histórico também têm código, mas o
-      // meuPreco delas é o preço de venda do produto salvo — comparar
-      // com o catálogo gerava "preço mudou" falso no painel inteiro.
-      if(d.origemPedido !== ROTULO_ORIGEM_PLANILHA) return;
+      // Pesquisas de PEDIDOS do histórico também contam (09/09/2026:
+      // os códigos são os mesmos da planilha), mas SEM preço de
+      // referência: o meuPreco delas é o preço de venda do produto
+      // salvo, e compará-lo com o catálogo gerava "preço mudou" falso
+      // no painel inteiro. Só a pesquisa feita pela planilha carrega
+      // meuPrecoCent.
+      const daPlanilha = d.origemPedido === ROTULO_ORIGEM_PLANILHA;
       const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
       const atual = idx[d.codigo];
       if(!atual || (quando && (!atual.data || quando > atual.data))){
         idx[d.codigo] = {
           data: quando,
-          meuPrecoCent: d.meuPreco != null ? Math.round(d.meuPreco * 100) : null,
-          menor: ConcorrentesNucleo.menorConcorrente(d.resultados, d.meuPreco)
+          meuPrecoCent: (daPlanilha && d.meuPreco != null) ? Math.round(d.meuPreco * 100) : null,
+          menor: ConcorrentesNucleo.menorConcorrente(d.resultados, daPlanilha ? d.meuPreco : null)
         };
       }
     });
@@ -3441,10 +3461,11 @@ Tupan</textarea>
       snap.forEach(doc => {
         const d = doc.data();
         if(!d.codigo) return;
-        // Pedidos do histórico também gravam fabricante null: sem este
-        // filtro, o grupo "(sem fabricante)" misturava pesquisas que
-        // não são da planilha.
-        if(d.origemPedido !== ROTULO_ORIGEM_PLANILHA) return;
+        // Pesquisa de pedido entra quando o fabricante foi preenchido
+        // pela planilha na hora de salvar (09/09/2026). No grupo "(sem
+        // fabricante)" ela fica de fora: pedido antigo grava fabricante
+        // null e misturaria pesquisas que não são da planilha.
+        if(d.origemPedido !== ROTULO_ORIGEM_PLANILHA && alvo === null) return;
         const quando = (d.data && d.data.toDate) ? d.data.toDate() : null;
         const atual = porCodigo[d.codigo];
         if(!atual || (quando && (!atual.quando || quando > atual.quando))){

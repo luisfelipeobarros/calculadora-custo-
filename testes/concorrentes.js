@@ -218,6 +218,12 @@ const ultimas = {
      C.menorConcorrente(res, null, 'lojao').somosMaisBaratos], [false, true, null]);
   eq('sem resultado valido: null, nunca um preco inventado',
     C.menorConcorrente([{ loja: 'X', erro: true }], 10), null);
+  // Pesquisa vinda de PEDIDO entra no indice sem preco de referencia
+  // (meuPrecoCent null): conta como pesquisada, e o catalogo mudar de
+  // preco NAO dispara "preco mudou" — so a data decide.
+  eq('sem preco de referencia, so o prazo decide (nunca "preco mudou")',
+    C.statusProduto({ codigo: '1', precoCent: 3890 }, { data: '2026-09-09', meuPrecoCent: null }, '2026-09-10', 30).motivo,
+    null);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
