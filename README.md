@@ -8,7 +8,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador |
 | `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
 | `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
-| `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login |
+| `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login, instalável como app (`manifest-dashboard.json`) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
 | `app-shared.css` | Design system comum aos apps |
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
@@ -17,7 +17,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 
 Tudo precisa ficar **na mesma pasta**. Se você publica os aplicativos em
 algum lugar, suba também os `*-nucleo.js`, `app-shared.css`,
-`app-shared.js`, os ícones (`icon-*.png`) e os três `manifest*.json`.
+`app-shared.js`, os ícones (`icon-*.png`) e os quatro `manifest*.json`.
 
 ### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou `calculo-nucleo.js`
 
@@ -29,13 +29,13 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=14">
-<script src="app-shared.js?v=13"></script>
+<link rel="stylesheet" href="app-shared.css?v=16">
+<script src="app-shared.js?v=24"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
-**Ao mexer nos arquivos compartilhados, aumente esse número nos dois
-HTML.** Trocar `?v=12` por `?v=13` faz cada navegador baixar a versão nova
+**Ao mexer nos arquivos compartilhados, aumente esse número em todos os
+HTML que os carregam** (os números acima são os de hoje; eles só crescem). Trocar `?v=12` por `?v=13` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
 reclama se a referência estiver sem `?v=`.
 
@@ -352,8 +352,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     viram um nome só — o caso real "Outros"/"OUTROS") e os destaques
     automáticos calculados por regra, sem IA.
 
-18. **Vendas × Compras** — 18 verificações extraídas do
-    `controle-notas.html`: o cruzamento da planilha pública de vendas
+18. **Vendas × Compras** — 15 verificações: o cruzamento da planilha pública de vendas
     com as notas (compra pela **emissão**) e os títulos (duplicatas
     pelo **vencimento** no período, **pagas ou não** — a comparação
     não depende de o pagamento ter sido efetivado, e o título vale
@@ -362,10 +361,11 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     mesmo CNPJ, duas marcas decididas pelo produto), marca casa sem
     caixa/acento, nota cancelada fica fora dos dois lados, quem não
     tem vínculo vai para "sem vínculo" (nunca somado em silêncio) e
-    o "não comparar" sai da conta somado em ignorados. A área logada do `dashboard.html`
-    usa uma **cópia fiel** dessas funções — o teste compara os dois
-    arquivos textualmente, então mudar num lado e esquecer o outro
-    quebra aqui.
+    o "não comparar" sai da conta somado em ignorados. As regras do
+    cruzamento moram no `app-shared.js` (seção 9e) e são testadas
+    direto de lá — o Controle de Notas e o Dashboard usam a mesma
+    função, sem cópia; a leitura do gviz é extraída do
+    `controle-notas.html`.
 
 Rode antes de publicar qualquer alteração.
 

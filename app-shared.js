@@ -1,5 +1,5 @@
 /* ============================================================
-   app-shared.js — nucleo comum aos dois aplicativos
+   app-shared.js — nucleo comum aos aplicativos
    (Calculadora de Custo e Controle de Notas).
 
    Antes cada HTML tinha sua propria copia de escapeHtml, debounce,
@@ -978,7 +978,7 @@
   }
 
   /* ============================================================
-     9. Tabela de itens de NF-e (usada pelos dois apps)
+     9. Tabela de itens de NF-e (usada pela Calculadora e pelo Controle de Notas)
      ============================================================ */
 
   // dados: { itens:[...], stTotal, valorProdutos }
@@ -1057,7 +1057,7 @@
      9b. Vencimentos (duplicatas) de uma nota
      ============================================================
 
-     Usada pelos dois apps. O Controle de Notas ja' tem as duplicatas
+     Usada pela Calculadora e pelo Controle de Notas. O Controle ja' tem as duplicatas
      em memoria (onSnapshot) e so' filtra; a Calculadora nao carrega a
      colecao e consulta por nota, quando alguem abre a linha. Quem
      desenha e' esta funcao nos dois casos, para o quadro ser o mesmo.
@@ -1145,14 +1145,14 @@
   }
 
   /* ============================================================
-     9c. Nome do fornecedor (usado pelos dois apps)
+     9c. Nome do fornecedor (usado por todos os apps)
      ============================================================
 
      Um mesmo CNPJ pode representar negociacoes diferentes. A Vetrus
      vende duas linhas, e o que separa uma da outra e' o PRODUTO — nao
      ha' campo na nota que diga isso.
 
-     A regra mora aqui porque as duas paginas mostram fornecedor:
+     A regra mora aqui porque mais de uma pagina mostra fornecedor:
      Painel, Pagamentos, A importar, Canceladas e a aba Fornecedores no
      Controle de Notas, e Notas Emitidas na Calculadora. Se cada tela
      tivesse a sua copia, a Vetrus apareceria separada numa e junta na
@@ -1213,7 +1213,7 @@
   /* ============================================================
      9d. DANFE simplificado (documento de conferencia interna)
 
-     Usado pelas DUAS paginas (Controle de Notas e a tela NF-e
+     Usado por mais de uma pagina (Controle de Notas e a tela NF-e
      Emitidas da Calculadora) — o construtor mora aqui para os dois
      documentos serem UM SO'. E' conferencia, nao documento fiscal:
      o proprio papel diz "SEM VALOR FISCAL".
@@ -1462,6 +1462,110 @@
   }
 
   /* ============================================================
+     9e. Vendas x Compras (Controle de Notas e Dashboard)
+     ============================================================
+
+     O cruzamento da planilha de vendas com as notas (compra) e as
+     duplicatas (titulos) por marca. Vivia copiado em controle-notas e
+     dashboard, com um teste comparando as copias caractere a
+     caractere; desde 09/09/2026 mora aqui, uma vez so'.
+  */
+
+  var IGNORAR_VINCULO = '__ignorar';
+
+  // "Megaó" na planilha e "MEGAO" no vinculo sao a MESMA marca: a
+  // chave ignora caixa e acento (a licao do Outros/OUTROS do
+  // dashboard vale aqui tambem).
+  function chaveMarca(nome){
+    return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
+
+  // O vinculo por ROTULO vence o por CNPJ: e' ele que separa a Vetrus
+  // (mesmo CNPJ, duas marcas, decididas pelo produto da nota).
+  function marcaDoVinculo(cnpj, rotulo, vinculos){
+    var v = vinculos || {};
+    if(v.porRotulo && v.porRotulo[rotulo] != null) return v.porRotulo[rotulo];
+    if(v.porCnpj && cnpj && v.porCnpj[cnpj] != null) return v.porCnpj[cnpj];
+    return null;
+  }
+
+  // O cruzamento em si. Puro de proposito (recebe tudo, inclusive a
+  // funcao de rotular) — e' o que o teste trava:
+  // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
+  // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
+  // - titulos: duplicatas que VENCEM no periodo, pelo valor do
+  //   titulo, pagas ou nao (pedido de 04/09/2026: a comparacao nao
+  //   pode depender de o pagamento ja ter sido efetivado). Duplicata
+  //   de nota cancelada fica fora; sem a nota carregada, classifica
+  //   pelo proprio nome; sem vencimento, fica fora (nao ha mes onde
+  //   encaixar);
+  // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
+  // - compra/titulo sem vinculo nenhum vai para semVinculo.
+  function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
+    function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
+    function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
+
+    var porMarca = Object.create(null);
+    function garantir(marca){
+      var ch = chaveMarca(marca);
+      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, titulos: 0 };
+      return porMarca[ch];
+    }
+
+    (vendas || []).forEach(function(v){
+      if(!noPeriodo(v.ano, v.mes)) return;
+      garantir(v.fornecedor).vendido += v.faturamento || 0;
+    });
+
+    var semVinculo = Object.create(null);
+    var ignorados = { comprado: 0, titulos: 0 };
+    var notasPorId = Object.create(null);
+    notas.forEach(function(n){ notasPorId[n.id] = n; });
+
+    function produtosDe(n){ return Array.isArray(n.produtosResumo) ? n.produtosResumo : null; }
+    function classificar(cnpj, nome, produtos){
+      var rotulo = rotular(nome || '', produtos);
+      return { rotulo: rotulo, cnpj: cnpj, marca: marcaDoVinculo(cnpj, rotulo, vinculos) };
+    }
+    function somar(cls, campo, valor){
+      if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
+      if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
+      var s = semVinculo[cls.rotulo];
+      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, titulos: 0 };
+      if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
+      s[campo] += valor;
+    }
+
+    notas.forEach(function(n){
+      if((n.status || 'ativa') === 'cancelada') return;
+      var d = anoMesISO(n.dataEmissao);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      somar(classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n)), 'comprado', n.valorTotal || 0);
+    });
+
+    duplicatas.forEach(function(dup){
+      var d = anoMesISO(dup.vencimento);
+      if(!d || !noPeriodo(d.ano, d.mes)) return;
+      var n = notasPorId[dup.chaveAcesso];
+      if(n && (n.status || 'ativa') === 'cancelada') return;
+      var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
+                  : classificar(null, dup.nomeEmitente, null);
+      somar(cls, 'titulos', dup.valor || 0);
+    });
+
+    var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
+    linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
+    var soltos = Object.keys(semVinculo).map(function(k){
+      var s = semVinculo[k];
+      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, titulos: s.titulos };
+    });
+    soltos.sort(function(a, b){ return (b.comprado + b.titulos) - (a.comprado + a.titulos); });
+    var totais = { vendido: 0, comprado: 0, titulos: 0 };
+    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.titulos += l.titulos; });
+    return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
+  }
+
+  /* ============================================================
      10. Rede de seguranca
      ============================================================ */
 
@@ -1601,6 +1705,11 @@
     rotularFornecedor: rotularFornecedor,
     casaFornecedor: casaFornecedor,
     notaAImportar: notaAImportar,
+
+    IGNORAR_VINCULO: IGNORAR_VINCULO,
+    chaveMarca: chaveMarca,
+    marcaDoVinculo: marcaDoVinculo,
+    cruzarVendasCompras: cruzarVendasCompras,
 
     instalarErroGlobal: instalarErroGlobal
   };

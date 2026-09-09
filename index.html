@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- Design system comum aos dois apps. Ver app-shared.css -->
+<!-- Design system comum aos apps. Ver app-shared.css -->
 <link rel="stylesheet" href="app-shared.css?v=16">
 
 <style>
@@ -916,7 +916,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=23"></script>
+<script src="app-shared.js?v=24"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -996,9 +996,9 @@ Tupan</textarea>
         }
       });
 
-      // Modelo de PESQUISA: Gemini 3.5 Flash + urlContext/googleSearch, SEM forçar JSON.
-      // Escolhido em vez do 3.1 Pro porque é mais forte especificamente em busca/ferramentas,
-      // já é estável (não é "preview"), e mais rápido. Forçar JSON na mesma chamada que
+      // Modelo de PESQUISA: Gemini 3.8 Flash (MODELO_PESQUISA) + urlContext/googleSearch, SEM forçar JSON.
+      // Flash em vez de Pro porque é mais forte especificamente em busca/ferramentas,
+      // é estável (não é "preview"), e mais rápido. Forçar JSON na mesma chamada que
       // pesquisa prejudica a qualidade da busca — por isso aqui ele só pesquisa e escreve
       // o que achou em texto livre.
       // Duas instâncias do MESMO modelo, diferindo só no esforço de raciocínio.
@@ -1240,7 +1240,7 @@ Tupan</textarea>
 (function(){
   'use strict';
 
-  // Helpers comuns aos dois apps — ver app-shared.js
+  // Helpers comuns aos apps — ver app-shared.js
   const $ = App.$;
   const escapeHtml = App.escapeHtml;
   const safeUrl = App.safeUrl;
@@ -3775,7 +3775,7 @@ Tupan</textarea>
           htmlVencimentosNota(n.chave, n.dataEmissao) + '</div>';
       }
       if(aberta){
-        // Mesma tabela de itens dos dois apps (app-shared.js, secao 9);
+        // Mesma tabela de itens do Controle de Notas (app-shared.js, secao 9);
         // aqui com a coluna PIS+COFINS, que so' esta tela mostra. Ela
         // ja' cuida do ST total da nota e do link do XML.
         html += '<div style="border:1px solid var(--line); border-top:none; border-radius:0 0 5px 5px; padding:10px; background:var(--card);">' +

@@ -52,7 +52,7 @@
   // zero, senao o total pareceria completo faltando uma compra.
   function parsePrazo(texto) {
     var t = String(texto == null ? '' : texto).trim().toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, '');
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (t === '' || t === 'a vista') return [0];
     var partes = t.split('/');
     var dias = [];

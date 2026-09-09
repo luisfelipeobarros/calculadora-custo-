@@ -1,7 +1,7 @@
 /* ============================================================
-   app-shared.css - design system comum aos dois aplicativos
+   app-shared.css - design system comum aos aplicativos
    (Calculadora de Custo e Controle de Notas).
-   Extraido dos dois HTML, onde este bloco era byte a byte identico.
+   Extraido dos HTML originais, onde este bloco era byte a byte identico.
    ============================================================ */
 
   :root{
@@ -152,7 +152,7 @@
     /* O menu fechado nao ocupa espaco nenhum; aberto, empilha as
        telas em coluna, cada uma ocupando a largura toda para virar
        alvo de toque confortavel.
-       O seletor comeca em header.top de proposito: os dois HTML tem um
+       O seletor comeca em header.top de proposito: os HTML tem um
        "nav.telas{display:flex}" no <style> deles, que vem DEPOIS deste
        arquivo. Com a mesma especificidade o de la' ganharia, e o menu
        ficaria sempre aberto no celular. */
@@ -432,10 +432,6 @@
   .status-badge.variacao{ background:#FCEFD6; color:#8A6414; }
   .status-badge.missing{ background:#e5e5e5; color:#222; }
   .status-badge.neutral{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-negociacao{ background:var(--stripe2); color:var(--ink-soft); }
-  .status-badge.status-pedido{ background:#FCEFD6; color:#8A6414; }
-  .status-badge.status-transito{ background:rgba(59,111,166,0.14); color:#2C5A8C; }
-  .status-badge.status-recebido{ background:rgba(46,107,69,0.12); color:var(--profit); }
 
   .suggestion-item{
     padding:12px 14px;
@@ -897,7 +893,7 @@
   }
 
 /* ============================================================
-   DANFE simplificado (App.htmlDanfe) — usado pelas DUAS paginas,
+   DANFE simplificado (App.htmlDanfe) — usado por mais de uma pagina,
    por isso o visual mora aqui e nao no <style> de cada uma.
    ============================================================ */
 .nota-explicativa{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); }

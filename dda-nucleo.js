@@ -64,7 +64,7 @@
   // Firestore podem ter).
   function normalizar(s) {
     return String(s == null ? '' : s).toLowerCase()
-      .normalize('NFD').replace(/[̀-ͯ]/g, ''); // tira os acentos separados pelo NFD
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // tira os acentos separados pelo NFD
   }
 
   // O Bradesco imprime CNPJ com 15 digitos (um zero a mais na

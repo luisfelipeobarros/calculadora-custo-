@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- Design system comum aos dois apps. Ver app-shared.css -->
+<!-- Design system comum aos apps. Ver app-shared.css -->
 <link rel="stylesheet" href="app-shared.css?v=16">
 
 <style>
@@ -178,7 +178,7 @@
   .sim-ajustes .dica{ flex-basis:100%; font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); }
 
   /* O visual do DANFE simplificado mora no app-shared.css: e' o mesmo
-     documento nas duas paginas (aqui e na NF-e Emitidas da Calculadora). */
+     documento nas paginas que o mostram (aqui e na NF-e Emitidas da Calculadora). */
   #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
 
   .so-imprimir{ display:none; }
@@ -256,7 +256,6 @@
   .lc-campo input, .lc-campo select{ width:100%; box-sizing:border-box; padding:8px 9px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:13.5px; }
   .lc-c2{ grid-column:span 2; }
   .lc-c3{ grid-column:span 3; }
-  .lc-c6{ grid-column:1 / -1; }
   @media (max-width:760px){
     .lc-form-grid{ grid-template-columns:1fr 1fr; }
     .lc-c2, .lc-c3{ grid-column:span 2; }
@@ -752,11 +751,11 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=23"></script>
+<script src="app-shared.js?v=24"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=1"></script>
+<script src="dda-nucleo.js?v=2"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
-<script src="simulador-nucleo.js?v=2"></script>
+<script src="simulador-nucleo.js?v=3"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=4"></script>
@@ -852,7 +851,7 @@
   //
   // A regra (Vetrus separada por produto) mora em app-shared.js, secao
   // 9c: a Calculadora tambem mostra fornecedor na tela Notas Emitidas,
-  // e as duas paginas tem que chamar o mesmo fornecedor pelo mesmo nome.
+  // e todas as paginas tem que chamar o mesmo fornecedor pelo mesmo nome.
   var rotularFornecedor = App.rotularFornecedor, casaFornecedor = App.casaFornecedor;
 
   // produtosResumo AUSENTE nao e' o mesmo que lista vazia.
@@ -1162,7 +1161,7 @@
 
   var URL_GVIZ_VENDAS = 'https://docs.google.com/spreadsheets/d/1i-BufQCqSfovPEwdGz8bzmhW07ZxQNqyX3TQjX4K3Ac' +
     '/gviz/tq?tqx=out:json&headers=1&sheet=dados';
-  var IGNORAR_VINCULO = '__ignorar';
+  var IGNORAR_VINCULO = App.IGNORAR_VINCULO;
   var MESES_VC = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 
   // A resposta do gviz NAO e' JSON puro: vem embrulhada em
@@ -1202,97 +1201,11 @@
     return linhas;
   }
 
-  // "Megaó" na planilha e "MEGAO" no vinculo sao a MESMA marca: a
-  // chave ignora caixa e acento (a licao do Outros/OUTROS do
-  // dashboard vale aqui tambem).
-  function chaveMarca(nome){
-    return String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  }
-
-  // O vinculo por ROTULO vence o por CNPJ: e' ele que separa a Vetrus
-  // (mesmo CNPJ, duas marcas, decididas pelo produto da nota).
-  function marcaDoVinculo(cnpj, rotulo, vinculos){
-    var v = vinculos || {};
-    if(v.porRotulo && v.porRotulo[rotulo] != null) return v.porRotulo[rotulo];
-    if(v.porCnpj && cnpj && v.porCnpj[cnpj] != null) return v.porCnpj[cnpj];
-    return null;
-  }
-
-  // O cruzamento em si. Puro de proposito (recebe tudo, inclusive a
-  // funcao de rotular) — e' o que o teste trava:
-  // - vendido: soma da planilha no periodo (mes = null -> ano inteiro);
-  // - comprado: notas ATIVAS emitidas no periodo (cancelada fora);
-  // - titulos: duplicatas que VENCEM no periodo, pelo valor do
-  //   titulo, pagas ou nao (pedido de 04/09/2026: a comparacao nao
-  //   pode depender de o pagamento ja ter sido efetivado). Duplicata
-  //   de nota cancelada fica fora; sem a nota carregada, classifica
-  //   pelo proprio nome; sem vencimento, fica fora (nao ha mes onde
-  //   encaixar);
-  // - marca IGNORAR_VINCULO sai da conta (somada em "ignorados");
-  // - compra/titulo sem vinculo nenhum vai para semVinculo.
-  function cruzarVendasCompras(vendas, notas, duplicatas, vinculos, rotular, ano, mes){
-    function noPeriodo(a, m){ return a === ano && (!mes || m === mes); }
-    function anoMesISO(d){ return d ? { ano: +d.slice(0, 4), mes: +d.slice(5, 7) } : null; }
-
-    var porMarca = Object.create(null);
-    function garantir(marca){
-      var ch = chaveMarca(marca);
-      if(!porMarca[ch]) porMarca[ch] = { marca: marca, vendido: 0, comprado: 0, titulos: 0 };
-      return porMarca[ch];
-    }
-
-    (vendas || []).forEach(function(v){
-      if(!noPeriodo(v.ano, v.mes)) return;
-      garantir(v.fornecedor).vendido += v.faturamento || 0;
-    });
-
-    var semVinculo = Object.create(null);
-    var ignorados = { comprado: 0, titulos: 0 };
-    var notasPorId = Object.create(null);
-    notas.forEach(function(n){ notasPorId[n.id] = n; });
-
-    function produtosDe(n){ return Array.isArray(n.produtosResumo) ? n.produtosResumo : null; }
-    function classificar(cnpj, nome, produtos){
-      var rotulo = rotular(nome || '', produtos);
-      return { rotulo: rotulo, cnpj: cnpj, marca: marcaDoVinculo(cnpj, rotulo, vinculos) };
-    }
-    function somar(cls, campo, valor){
-      if(cls.marca === IGNORAR_VINCULO){ ignorados[campo] += valor; return; }
-      if(cls.marca){ garantir(cls.marca)[campo] += valor; return; }
-      var s = semVinculo[cls.rotulo];
-      if(!s) s = semVinculo[cls.rotulo] = { rotulo: cls.rotulo, cnpjs: Object.create(null), comprado: 0, titulos: 0 };
-      if(cls.cnpj) s.cnpjs[cls.cnpj] = true;
-      s[campo] += valor;
-    }
-
-    notas.forEach(function(n){
-      if((n.status || 'ativa') === 'cancelada') return;
-      var d = anoMesISO(n.dataEmissao);
-      if(!d || !noPeriodo(d.ano, d.mes)) return;
-      somar(classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n)), 'comprado', n.valorTotal || 0);
-    });
-
-    duplicatas.forEach(function(dup){
-      var d = anoMesISO(dup.vencimento);
-      if(!d || !noPeriodo(d.ano, d.mes)) return;
-      var n = notasPorId[dup.chaveAcesso];
-      if(n && (n.status || 'ativa') === 'cancelada') return;
-      var cls = n ? classificar(n.cnpjEmitente, n.nomeEmitente, produtosDe(n))
-                  : classificar(null, dup.nomeEmitente, null);
-      somar(cls, 'titulos', dup.valor || 0);
-    });
-
-    var linhas = Object.keys(porMarca).map(function(k){ return porMarca[k]; });
-    linhas.sort(function(a, b){ return b.vendido - a.vendido || b.comprado - a.comprado; });
-    var soltos = Object.keys(semVinculo).map(function(k){
-      var s = semVinculo[k];
-      return { rotulo: s.rotulo, cnpjs: Object.keys(s.cnpjs), comprado: s.comprado, titulos: s.titulos };
-    });
-    soltos.sort(function(a, b){ return (b.comprado + b.titulos) - (a.comprado + a.titulos); });
-    var totais = { vendido: 0, comprado: 0, titulos: 0 };
-    linhas.forEach(function(l){ totais.vendido += l.vendido; totais.comprado += l.comprado; totais.titulos += l.titulos; });
-    return { linhas: linhas, semVinculo: soltos, ignorados: ignorados, totais: totais };
-  }
+  // As regras do cruzamento (chaveMarca, marcaDoVinculo,
+  // cruzarVendasCompras) moram no app-shared.js, secao 9e — o
+  // dashboard usa as MESMAS, sem copia (auditoria de 09/09/2026).
+  var chaveMarca = App.chaveMarca, marcaDoVinculo = App.marcaDoVinculo,
+      cruzarVendasCompras = App.cruzarVendasCompras;
 
   // ── Estado e IO da tela ──
   var vendasLinhas = null, vendasErro = null, buscandoVendas = false;

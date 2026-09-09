@@ -1,7 +1,9 @@
 /*
-  Vendas × Compras × Pagamentos (controle-notas.html) — o cruzamento
-  da planilha publica de vendas com as notas e as duplicatas pagas,
-  extraido do proprio HTML (o teste mede o codigo que roda na tela).
+  Vendas × Compras × Titulos — o cruzamento da planilha publica de
+  vendas com as notas e as duplicatas. A leitura do gviz e' extraida
+  do controle-notas.html (o teste mede o codigo que roda na tela); o
+  cruzamento vem do app-shared.js, secao 9e, que o Controle de Notas
+  e o Dashboard compartilham sem copia.
 
   O que estes testes travam:
   - a leitura enxuta do gviz (colunas pelo rotulo, linha invalida fora);
@@ -33,15 +35,19 @@ function extrairDe(texto, nome, origem){
 }
 const extrair = (nome) => extrairDe(html, nome, 'controle-notas.html');
 
-const m = new Function(
-  "var IGNORAR_VINCULO = '__ignorar';\n" +
+// A leitura do gviz e' da tela (extraida do HTML); o cruzamento em si
+// mora no app-shared.js (secao 9e) e e' testado direto de la'.
+const App = require('../app-shared.js');
+const tela = new Function(
   extrair('parseGvizTexto') + '\n' +
   extrair('linhasVendasDaResposta') + '\n' +
-  extrair('chaveMarca') + '\n' +
-  extrair('marcaDoVinculo') + '\n' +
-  extrair('cruzarVendasCompras') + '\n' +
-  'return { parseGvizTexto, linhasVendasDaResposta, chaveMarca, marcaDoVinculo, cruzarVendasCompras };'
+  'return { parseGvizTexto, linhasVendasDaResposta };'
 )();
+const m = Object.assign({}, tela, {
+  chaveMarca: App.chaveMarca,
+  marcaDoVinculo: App.marcaDoVinculo,
+  cruzarVendasCompras: App.cruzarVendasCompras
+});
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);
@@ -148,20 +154,6 @@ const duplicatas = [
   const megao = r.linhas[0];
   eq('ano inteiro soma todos os meses (venda 1900, compra 400+1234, titulos 160+40+500)',
     [megao.vendido, megao.comprado, megao.titulos], [1900, 1634, 700]);
-}
-
-// ── Espelho: o dashboard usa as MESMAS funcoes ───────────────
-// A area logada do dashboard.html carrega uma COPIA de chaveMarca,
-// marcaDoVinculo e cruzarVendasCompras. Copia diverge em silencio;
-// este teste compara os dois arquivos caractere a caractere — quem
-// mudar a regra num lado e esquecer o outro quebra aqui.
-
-{
-  const htmlDash = fs.readFileSync(path.resolve(__dirname, '..', 'dashboard.html'), 'utf8');
-  ['chaveMarca', 'marcaDoVinculo', 'cruzarVendasCompras'].forEach((nome) => {
-    eq('copia fiel no dashboard.html: ' + nome,
-      extrairDe(htmlDash, nome, 'dashboard.html') === extrair(nome), true);
-  });
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');

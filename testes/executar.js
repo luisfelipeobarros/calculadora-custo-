@@ -10,7 +10,7 @@
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
-  - validar-html.js    — estrutura dos dois HTML: sintaxe dos <script>,
+  - validar-html.js    — estrutura dos quatro HTML: sintaxe dos <script>,
                          tags, ids, labels, arquivos referenciados, ?v=.
   - carregar-em-dom.js — executa os scripts de cada pagina num DOM
                          simulado, pegando erro em tempo de carga.

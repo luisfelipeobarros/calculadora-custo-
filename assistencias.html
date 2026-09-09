@@ -203,12 +203,14 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=23"></script>
+<script src="app-shared.js?v=24"></script>
 <script src="assistencias-nucleo.js?v=3"></script>
 <script>
 (() => {
   'use strict';
   const $ = App.$;
+  // Erro nao tratado vira aviso na tela (no celular ninguem abre o console).
+  App.instalarErroGlobal();
   const escapeHtml = App.escapeHtml;
   const brl = App.brl;
   const N = AssistenciasNucleo;
@@ -337,8 +339,13 @@
       // SEMPRE com as duas casas ("25.000,00"): sem elas, "25.000"
       // voltava do parse como 25 — era o bug que corrompia qualquer
       // valor >= 1000 num simples abrir-e-salvar.
-      $(elId).value = a && a[campo] != null
-        ? a[campo].toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+      // Excecao: QUANTIDADE inteira (1 bacia, 5 caixas) aparece como
+      // "5", nao "5,00" — e SEM separador de milhar, justamente para
+      // nao cair no mesmo "25.000" ambiguo (auditoria de 09/09/2026).
+      const v = a && a[campo] != null ? a[campo] : null;
+      $(elId).value = v == null ? ''
+        : (campo === 'quantidade' && Number.isInteger(v)) ? String(v)
+        : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     });
     $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
     $('afDataResolucao').value = (a && a.dataResolucao) || '';
@@ -608,7 +615,9 @@
       App.toastErro('Erro ao iniciar', e);
     }).then(() => { iniciando = false; });
   }
-  window.__aoEntrar = () => { renderLista(); };
+  // Se a escuta ainda nao foi aberta (a conexao falhou antes do login),
+  // entrar pela barra refaz o boot; senao so' redesenha.
+  window.__aoEntrar = () => { if(!carregou && !iniciando) iniciar(); else renderLista(); };
 
   router.iniciar(); // sincroniza o #hash — sem isto o Voltar do celular ficava inerte
   renderLista();
