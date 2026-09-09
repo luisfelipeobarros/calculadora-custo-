@@ -197,5 +197,28 @@ const ultimas = {
     [m3.mudouNome, m3.mudouPreco], [true, false]);
 }
 
+// ── Menor concorrente (coluna do catalogo) ───────────────────
+
+{
+  const res = [
+    { loja: 'Loja A', preco: 39.9 },
+    { loja: 'Loja B', preco: 34.5 },
+    { loja: 'Loja C', preco: 29.9, erro: true },   // erro: fora
+    { loja: 'Loja D', pendente: true },             // pendente: fora
+    { loja: 'Loja E', preco: null },                // sem preco: fora
+    { loja: 'Lojao', preco: 30.0 }                  // a nossa, se informada
+  ];
+  eq('o mais barato entre os validos (erro/pendente/sem preco fora)',
+    [C.menorConcorrente(res, 36.9).loja, C.menorConcorrente(res, 36.9).preco], ['Lojao', 30]);
+  eq('a nossa loja pesquisada e pulada: vale o 2o (o primeiro concorrente de verdade)',
+    C.menorConcorrente(res, 36.9, 'lojao').loja, 'Loja B');
+  eq('somosMaisBaratos compara com o nosso preco (36,90 > 34,50 -> false; 30 -> true; sem preco -> null)',
+    [C.menorConcorrente(res, 36.9, 'lojao').somosMaisBaratos,
+     C.menorConcorrente(res, 30, 'lojao').somosMaisBaratos,
+     C.menorConcorrente(res, null, 'lojao').somosMaisBaratos], [false, true, null]);
+  eq('sem resultado valido: null, nunca um preco inventado',
+    C.menorConcorrente([{ loja: 'X', erro: true }], 10), null);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

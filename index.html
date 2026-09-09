@@ -924,7 +924,7 @@ Tupan</textarea>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=2"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
-<script src="concorrentes-nucleo.js?v=2"></script>
+<script src="concorrentes-nucleo.js?v=3"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -3000,7 +3000,8 @@ Tupan</textarea>
         ((catalogoLote && catalogoLote.itens) || []).forEach(c => { precoCatalogo[c.codigo] = c.precoCent; });
         itensParaSalvar.forEach(it => {
           if(it.codigo) registrarUltimaPesquisa(it.codigo,
-            precoCatalogo[it.codigo] != null ? precoCatalogo[it.codigo] / 100 : it.nossoPreco);
+            precoCatalogo[it.codigo] != null ? precoCatalogo[it.codigo] / 100 : it.nossoPreco,
+            Object.values(it.porLoja).filter(r => r && !r.pendente));
         });
         // O progresso anti-F5 só morre quando TUDO foi pesquisado:
         // salvar uma varredura parcial apagava a retomada dos que
@@ -3030,7 +3031,10 @@ Tupan</textarea>
   // importado vive no localStorage (não no Firestore — é material de
   // trabalho local); as PESQUISAS continuam indo para "concorrentes".
   const CATALOGO_LS = 'catalogoConcorrentes_v1';
-  const INDICE_PESQ_LS = 'ultimaPesquisaPorCodigo_v1';
+  // _v2: o índice ganhou o menor concorrente (09/09/2026); a chave
+  // nova força a re-hidratação do Firestore uma vez, em vez de
+  // mostrar "—" no cache antigo até alguém clicar em Atualizar.
+  const INDICE_PESQ_LS = 'ultimaPesquisaPorCodigo_v2';
   const PROGRESSO_LS = 'progressoLotePlanilha_v1';
   const PRAZO_LS = 'prazoDesatualizadoDias_v1';
   const LIMITE_CONFIRMA_PRODUTOS = 50;
@@ -3053,11 +3057,14 @@ Tupan</textarea>
   // salvamento e hidratado do Firestore só na 1ª carga (ou no botão
   // Atualizar painel) — a consulta cresce com o histórico, então ela
   // não roda a cada abertura da aba.
-  function registrarUltimaPesquisa(codigo, nossoPreco){
+  function registrarUltimaPesquisa(codigo, nossoPreco, resultados){
     if(!ultimaPorCodigo) ultimaPorCodigo = {};
     ultimaPorCodigo[codigo] = {
       data: App.hojeISO(),
-      meuPrecoCent: (nossoPreco != null && nossoPreco > 0) ? Math.round(nossoPreco * 100) : null
+      meuPrecoCent: (nossoPreco != null && nossoPreco > 0) ? Math.round(nossoPreco * 100) : null,
+      // {preco, loja} do concorrente mais barato — a comparação com o
+      // nosso preço é refeita na tela, contra o catálogo ATUAL.
+      menor: ConcorrentesNucleo.menorConcorrente(resultados, nossoPreco)
     };
     gravarLS(INDICE_PESQ_LS, ultimaPorCodigo);
   }
@@ -3079,7 +3086,11 @@ Tupan</textarea>
       const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
       const atual = idx[d.codigo];
       if(!atual || (quando && (!atual.data || quando > atual.data))){
-        idx[d.codigo] = { data: quando, meuPrecoCent: d.meuPreco != null ? Math.round(d.meuPreco * 100) : null };
+        idx[d.codigo] = {
+          data: quando,
+          meuPrecoCent: d.meuPreco != null ? Math.round(d.meuPreco * 100) : null,
+          menor: ConcorrentesNucleo.menorConcorrente(d.resultados, d.meuPreco)
+        };
       }
     });
     ultimaPorCodigo = idx;
@@ -3275,12 +3286,26 @@ Tupan</textarea>
     const btnDesat = $('pesquisarDesatCatBtn');
     if(btnDesat) btnDesat.textContent = '⏳ Pesquisar só os desatualizados (' + desat.length + ')';
 
-    let html = '<table class="quote-table" style="min-width:840px;"><thead><tr>' +
+    let html = '<table class="quote-table" style="min-width:1040px;"><thead><tr>' +
       '<th scope="col"><span class="sr-only">Selecionar</span></th><th scope="col">Código</th>' +
-      '<th scope="col">Produto</th><th scope="col">Preço de venda</th><th scope="col">Situação</th>' +
+      '<th scope="col">Produto</th><th scope="col">Preço de venda</th>' +
+      '<th scope="col" title="O concorrente mais barato da última pesquisa. Se o nosso preço é o mais baixo, este é o 2º.">Menor concorrente</th>' +
+      '<th scope="col">Loja</th><th scope="col">Situação</th>' +
       '</tr></thead><tbody>';
     lista.forEach(it=>{
       const st = ConcorrentesNucleo.statusProduto(it, (ultimaPorCodigo||{})[it.codigo], hoje, pd);
+      // Menor concorrente da última pesquisa; a cor compara com o preço
+      // ATUAL do catálogo (verde: somos mais baratos; vermelho: ele é).
+      const menor = st.ultima && st.ultima.menor ? st.ultima.menor : null;
+      let colMenor = '<td>—</td><td>—</td>';
+      if(menor){
+        const eleMaisBarato = it.precoCent != null && Math.round(menor.preco * 100) < it.precoCent;
+        colMenor = '<td style="font-family:var(--font-mono); font-weight:700; color:' +
+            (eleMaisBarato ? 'var(--loss)' : 'var(--profit)') + ';" title="' +
+            (eleMaisBarato ? 'concorrente mais barato que nós' : 'nosso preço é o mais baixo — este é o 2º') + '">' +
+            brl(menor.preco) + '</td>' +
+          '<td style="font-size:11.5px;">' + escapeHtml(menor.loja) + '</td>';
+      }
       let situacao;
       if(st.motivo === 'nunca') situacao = '<span style="color:var(--loss); font-weight:700;">nunca pesquisado</span>';
       else if(st.motivo === 'preco') situacao = '<span style="color:var(--loss); font-weight:700;">💲 preço mudou desde a pesquisa</span>';
@@ -3293,6 +3318,7 @@ Tupan</textarea>
         '<td style="font-family:var(--font-mono); font-size:11.5px;">'+escapeHtml(it.codigo)+'</td>' +
         '<td title="busca: '+escapeHtml(it.consulta)+'">'+escapeHtml(it.nome)+'</td>' +
         '<td style="font-family:var(--font-mono);">'+brl(it.precoCent/100)+'</td>' +
+        colMenor +
         '<td style="font-size:11.5px;">'+situacao+'</td></tr>';
     });
     el.innerHTML = html + '</tbody></table>' +

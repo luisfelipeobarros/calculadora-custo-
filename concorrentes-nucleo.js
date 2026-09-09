@@ -238,6 +238,29 @@
     return (qtdProdutos || 0) * (qtdLojas || 0);
   }
 
+  // A coluna "menor concorrente" do catalogo (pedido de 09/09/2026):
+  // o mais barato entre os resultados VALIDOS da pesquisa (preco
+  // numerico > 0, sem erro/pendente, com loja). Se a nossa propria
+  // loja tambem foi pesquisada (nomeNossaLoja) e e' a mais barata,
+  // ela e' pulada e vale o segundo — o primeiro concorrente de
+  // verdade. somosMaisBaratos compara meuPreco com esse concorrente;
+  // null quando nao ha meuPreco para comparar.
+  function menorConcorrente(resultados, meuPreco, nomeNossaLoja) {
+    var nossa = App.normalizarTexto(nomeNossaLoja || '');
+    var validos = (resultados || []).filter(function (r) {
+      if (!r || r.pendente || r.erro) return false;
+      if (typeof r.preco !== 'number' || !(r.preco > 0) || !r.loja) return false;
+      return !(nossa && App.normalizarTexto(r.loja) === nossa);
+    }).sort(function (a, b) { return a.preco - b.preco; });
+    if (!validos.length) return null;
+    var m = validos[0];
+    return {
+      preco: m.preco,
+      loja: String(m.loja),
+      somosMaisBaratos: (meuPreco != null && meuPreco > 0) ? meuPreco < m.preco : null
+    };
+  }
+
   /* ============================================================
      Exporta
      ============================================================ */
@@ -250,7 +273,8 @@
     diffCatalogos: diffCatalogos,
     statusProduto: statusProduto,
     painelFabricantes: painelFabricantes,
-    contarBuscas: contarBuscas
+    contarBuscas: contarBuscas,
+    menorConcorrente: menorConcorrente
   };
 
   global.ConcorrentesNucleo = ConcorrentesNucleo;
