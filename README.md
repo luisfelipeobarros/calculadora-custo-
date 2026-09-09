@@ -1,6 +1,6 @@
 # Calculadora de Custo + Controle de Notas
 
-Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
+Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o redirecionamento do antigo Lançamentos) que compartilham o mesmo projeto Firebase.
 
 | Arquivo | O que é |
 |---|---|
@@ -15,10 +15,9 @@ Dois aplicativos de página única que compartilham o mesmo projeto Firebase.
 | `firestore.rules` | Regras de segurança do banco (**precisa ser publicada**) |
 | `testes/` | Verificação automatizada, roda só com Node |
 
-Os cinco primeiros precisam ficar **na mesma pasta**. Se você publica os
-aplicativos em algum lugar, suba `calculo-nucleo.js`, `app-shared.css`,
-`app-shared.js`, `icon-192.png`, `icon-512.png` e os dois
-`manifest*.json` junto.
+Tudo precisa ficar **na mesma pasta**. Se você publica os aplicativos em
+algum lugar, suba também os `*-nucleo.js`, `app-shared.css`,
+`app-shared.js`, os ícones (`icon-*.png`) e os três `manifest*.json`.
 
 ### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou `calculo-nucleo.js`
 
@@ -117,8 +116,11 @@ sozinho a operação que falhou.
   checkpoints e reprocessar a pasta inteira. O outro lado da moeda: se
   uma NF-e for reemitida com vencimentos diferentes, as duplicatas
   antigas **não** são atualizadas — corrigir isso é na mão, pelo app.
-- `produtos`, `cotacoes`, `concorrentes` — leitura e escrita livres para
-  quem está autenticado.
+- `produtos`, `cotacoes`, `concorrentes`, `pagamentosInternos`,
+  `assistencias`, `bancos`, `categorias`, `lancamentos`, `config`,
+  `metasMensais`, `fiscaisNcm` — leitura e escrita para quem está
+  autenticado (cada uma com as travas descritas no próprio
+  `firestore.rules`).
 - Qualquer outra coleção: bloqueada.
 
 ---
@@ -208,7 +210,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    a cotação sugere o mesmo número da calculadora, e que o `index.html`
    continua ligado no núcleo em vez de ter voltado a ter sua própria
    cópia da conta.
-2. **Estrutura dos dois HTML** — sintaxe dos scripts, tags balanceadas,
+2. **Estrutura dos quatro HTML** — sintaxe dos scripts, tags balanceadas,
    ids duplicados, `$()` apontando para id inexistente, `label for=`
    órfão, arquivo referenciado que sumiu.
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que

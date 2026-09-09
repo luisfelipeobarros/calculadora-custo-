@@ -138,7 +138,7 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
-    // Lancamentos contabeis (lancamentos.html): bancos e categorias
+    // Lancamentos contabeis (telas do controle-notas.html): bancos e categorias
     // (seed + cadastro), os lancamentos com as partidas montadas pelo
     // app e o doc de config com os contadores continuos da exportacao
     // (config/contadoresExportacao). Colecoes proprias do app.

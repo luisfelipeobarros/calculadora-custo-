@@ -1,6 +1,6 @@
 /* ============================================================
-   lancamentos-nucleo.js — regras do app de Lançamentos Contábeis
-   (lancamentos.html: partidas dobradas e exportação ao contador).
+   lancamentos-nucleo.js — regras das telas Lançamentos e Cadastros do Controle de Notas
+   (partidas dobradas e exportação ao contador).
 
    Mesmo desenho dos outros núcleos: o ÚNICO lugar onde as regras
    moram, carregável com <script src> no navegador e com require()

@@ -758,7 +758,7 @@
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=2"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
-     regra mora no mesmo núcleo que o app de Lançamentos usa. -->
+     regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=4"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -3730,10 +3730,10 @@
   //
   // O dialogo de pagar captura data, banco, valor pago e observacao;
   // com isso o pagamento ja' nasce como lançamento contabil na
-  // colecao "lancamentos" (a do app de Lançamentos), com ID
+  // colecao "lancamentos" (a da tela Lançamentos), com ID
   // DETERMINISTICO — pagar de novo nao duplica, e desfazer sabe o que
   // apagar. Valor pago acima do devido vira um segundo lançamento de
-  // juros. O mapa de contas mora nos Cadastros do app de Lançamentos;
+  // juros. O mapa de contas mora na tela Cadastros;
   // categoria sem conta mapeada NAO trava o pagamento: o lançamento
   // nasce sem partida e fica pendente (amarelo) la'.
 
@@ -3743,7 +3743,7 @@
   function carregarContabil(){
     if(cadContabil){
       // Bancos e categorias mudam raramente (ficam em cache), mas o
-      // MAPA de contas e' editado no app de Lançamentos no meio do dia
+      // MAPA de contas e' editado na tela Cadastros no meio do dia
       // — reler o doc (1 leitura) evita pagamento pendente por mapa
       // velho. Se a releitura falhar, vale o cache.
       var cache = cadContabil;
@@ -3769,7 +3769,7 @@
     }).catch(function(e){
       // Cadastro contabil indisponivel (regras ainda nao publicadas,
       // rede) nao pode travar o PAGAMENTO: segue sem banco e o
-      // lançamento nasce pendente no app de Lançamentos. O fallback
+      // lançamento nasce pendente na tela Lançamentos. O fallback
       // NAO entra no cache — um blip de rede no primeiro clique
       // condenava a sessao inteira a pagar sem banco.
       console.error('Cadastro contabil indisponivel:', e);
@@ -3944,7 +3944,7 @@
     if(!marcado){
       pagandoId = id;
       // Confirmacao: desfazer tambem APAGA o lancamento contabil (e
-      // qualquer ajuste feito nele no app de Lançamentos) — nao pode
+      // qualquer ajuste feito nele na tela Lançamentos) — nao pode
       // acontecer num clique acidental. E os lancamentos morrem ANTES
       // de despagar: se o delete falhar, nada fica pela metade.
       App.confirmar({

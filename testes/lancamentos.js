@@ -1,5 +1,5 @@
 /*
-  Lancamentos contabeis (lancamentos.html + nucleo).
+  Lancamentos contabeis (telas do controle-notas.html + nucleo).
 
   O que estes testes travam:
   - as partidas dobradas montadas pelo app (a funcionaria NUNCA
@@ -199,7 +199,7 @@ const categoriasPag = {
 }
 {
   // Sem mapa/banco o PAGAMENTO nao trava: o doc nasce sem partida e
-  // fica pendente no app de Lancamentos.
+  // fica pendente na tela Lancamentos.
   const docs = L.lancamentosDePagamento({
     tipo: 'interno', id: 'Y1', data: '2026-09-05', valor: 100,
     valorPago: 100, bancoId: null,
