@@ -24,3 +24,9 @@ calculadora-custo-backup-*.json
 *.xml
 dda/
 amostras/
+# Exportacoes de banco (DDA, extrato) — mesmo motivo. O app so' as
+# le no navegador; nenhuma precisa estar versionada.
+*.xlsx
+*.xls
+*.csv
+*.ofx
