@@ -240,7 +240,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as duas coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
-9. **Conferência de DDA** — 174 verificações em `dda-nucleo.js`. O parser
+9. **Conferência de DDA** — 176 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que

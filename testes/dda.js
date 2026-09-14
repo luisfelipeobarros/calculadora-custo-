@@ -273,7 +273,21 @@ const reg = (o) => Object.assign({
     dup({ id: 'paga', valor: 165.22, vencimento: '2026-07-31', nomeEmitente: 'CERBRAS LTDA', pago: true })
   ]);
   const c4 = Dda.casar(r, base4);
-  eq('Cerbras: duplicata paga nao entra no escopo', c4.duplicata, null);
+  eq('Cerbras: duplicata paga TAMBEM casa (reimportar o DDA de ontem nao pode virar "cobranca sem nota")',
+    c4.duplicata && c4.duplicata.id, 'paga');
+  // Paga e em aberto com o mesmo valor: a em aberto desempata, registrado.
+  const base5 = Dda.prepararBase([
+    dup({ id: 'paga', valor: 165.22, vencimento: '2026-07-01', nomeEmitente: 'CERBRAS LTDA', pago: true }),
+    dup({ id: 'aberta', valor: 165.22, vencimento: '2026-08-15', nomeEmitente: 'CERBRAS LTDA' })
+  ]);
+  const c5 = Dda.casar(r, base5);
+  eq('Cerbras: paga e aberta com o mesmo valor e nenhuma no vencimento exato: a aberta desempata',
+    [c5.duplicata && c5.duplicata.id, c5.como], ['aberta', ['valor', 'desempate: única em aberto']]);
+  // E o relatorio: boleto PAGO no banco + duplicata paga aqui = ✅.
+  const relC = Dda.conferir([Object.assign({}, r, { situacao: 'PAGO' })],
+    { duplicatas: [dup({ id: 'p', valor: 165.22, nomeEmitente: 'CERBRAS LTDA', pago: true, chaveAcesso: 'chave-ok' })],
+      notasPorChave: { 'chave-ok': { noSistema: true } }, corteJanela: null, periodo: null });
+  eq('Cerbras PAGO no banco + paga aqui = nada a apontar', tipos(relC.linhas[0]), []);
 }
 
 // documento ambiguo ("1 1626 2"): o documento NAO e' interpretado.

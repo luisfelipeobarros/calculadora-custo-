@@ -754,12 +754,15 @@
     var re = new RegExp('\\b' + regra.cedente + '\\b');
     // Escopado ao cedente e SO' a ele: com valores repetidos 6x no
     // mesmo vencimento (PDF real), casar por valor na base inteira
-    // seria loteria. Só nao pagas: a duplicata ja' quitada do mesmo
-    // valor e' de outro ciclo.
+    // seria loteria. Paga tambem entra (caso real de 14/09/2026: o
+    // boleto PAGO da Cerbras ja' baixado aqui caia como "cobranca sem
+    // nota"): quem decide o que fazer com duplicata paga e' a
+    // conferencia, que ve os dois lados concordando. Entre varias, a
+    // unica em aberto desempata — e o `como` registra.
     var doCedente = base.duplicatas.filter(function (d) {
-      return re.test(normalizar(d.nomeEmitente)) && d.pago !== true;
+      return re.test(normalizar(d.nomeEmitente));
     });
-    if (!doCedente.length) return resultado(rot, { motivo: 'nenhuma duplicata de ' + regra.cedente + ' em aberto na base carregada' });
+    if (!doCedente.length) return resultado(rot, { motivo: 'nenhuma duplicata de ' + regra.cedente + ' na base carregada' });
 
     // Valor e' a chave forte; vencimento so' DESEMPATA (preferindo o
     // exato). Exigir data igual na entrada faria um boleto com
@@ -773,6 +776,11 @@
 
     var exatas = porValor.filter(function (d) { return d.vencimento === r.vencimento; });
     if (exatas.length === 1) return resultado(rot, { duplicata: exatas[0], como: ['valor', 'desempate por vencimento'] });
+
+    var abertas = (exatas.length ? exatas : porValor).filter(function (d) { return d.pago !== true; });
+    if (abertas.length === 1) {
+      return resultado(rot, { duplicata: abertas[0], como: ['valor'].concat(exatas.length ? ['vencimento'] : []).concat(['desempate: única em aberto']) });
+    }
 
     return resultado(rot, { ambiguo: true, candidatas: porValor, motivo: 'mais de uma duplicata de ' + regra.cedente + ' com esse valor' });
   }
