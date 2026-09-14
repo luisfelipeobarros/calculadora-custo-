@@ -28,7 +28,9 @@ const eq = (t, a, b) => {
 
 // ── UF pela chave de acesso ──────────────────────────────────
 
-const chavePE = '26260703428529000107550010003747371460563119';
+// Chave SINTETICA (CNPJ 00.000.000/0001-91, nota 1): so' a UF importa.
+const chavePE = '26' + '2607' + '00000000000191' + '55' + '001' + '000000001' + '1' + '00000001' + '0';
+if (chavePE.length !== 44) throw new Error('chave sintetica com ' + chavePE.length + ' digitos');
 eq('chave começando em 26 -> Pernambuco', m.ufDaChave(chavePE), 'PE (Pernambuco)');
 eq('chave começando em 35 -> São Paulo',
   m.ufDaChave('35' + chavePE.substring(2)), 'SP (São Paulo)');

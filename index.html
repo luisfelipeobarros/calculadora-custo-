@@ -22,6 +22,9 @@
 <style>
   /* Somente o que e' exclusivo da Calculadora de Custo. As larguras
      das views e do cabecalho/rodape moram no app-shared.css. */
+  /* Botoes miudos das tabelas do Painel (mesma regra do Controle de Notas). */
+  .acao-mini{ font-family:var(--font-mono); font-size:11px; padding:4px 8px; border:1px solid var(--line); border-radius:4px; background:var(--card); cursor:pointer; color:var(--ink); text-decoration:none; display:inline-block; }
+  .acao-mini:hover{ background:var(--stripe); }
 
   /* Pesquisa de concorrentes em lote */
   /* A tabela usa o MESMO desenho da pesquisa individual (.quote-table:
@@ -174,8 +177,8 @@
     <!-- Projeção do ano × faturamento do ano anterior. A conta mora no
          painel-nucleo.js (projecaoAnual): vendas dos meses fechados +
          previsão do mês corrente + objetivos dos meses futuros. O
-         faturamento dos anos fechados fica em FATURAMENTO_ANUAL, no
-         mesmo arquivo. -->
+         faturamento dos anos fechados vem das metas gravadas
+         (PainelNucleo.totalAnualVendas) — nenhum numero fica em codigo. -->
     <div class="card" style="margin-top:18px;">
       <h2 id="compAnualTitulo">Ano × ano anterior</h2>
       <div id="comparativoAnual"></div>
@@ -334,7 +337,7 @@
           <label for="loteBonificacao">Bonificação por unidade <span class="hint">valor que volta por unidade vendida</span></label>
           <div style="display:flex; gap:8px; align-items:stretch;">
             <div class="input-row" style="flex:1;"><span class="prefix" id="loteBonificacaoPrefix">R$</span><input type="number" step="0.01" id="loteBonificacao" placeholder="0"></div>
-            <select id="loteTipoBonificacao" style="border:1.5px solid var(--line); border-radius:4px; padding:0 10px; font-family:var(--font-mono); font-size:13px; background:#fff; color:var(--ink);">
+            <select id="loteTipoBonificacao" aria-label="Tipo de bonificação" style="border:1.5px solid var(--line); border-radius:4px; padding:0 10px; font-family:var(--font-mono); font-size:13px; background:#fff; color:var(--ink);">
               <option value="0" selected>R$</option>
               <option value="1">%</option>
             </select>
@@ -427,7 +430,7 @@
             <label for="indBonificacao">Bonificação por unidade <span class="hint">valor que volta por unidade vendida</span></label>
             <div style="display:flex; gap:8px; align-items:stretch;">
               <div class="input-row" style="flex:1;"><span class="prefix" id="indBonificacaoPrefix">R$</span><input type="number" step="0.01" id="indBonificacao" placeholder="0"></div>
-              <select id="indTipoBonificacao" style="border:1.5px solid var(--line); border-radius:4px; padding:0 10px; font-family:var(--font-mono); font-size:13px; background:#fff; color:var(--ink);">
+              <select id="indTipoBonificacao" aria-label="Tipo de bonificação" style="border:1.5px solid var(--line); border-radius:4px; padding:0 10px; font-family:var(--font-mono); font-size:13px; background:#fff; color:var(--ink);">
                 <option value="0" selected>R$</option>
                 <option value="1">%</option>
               </select>
@@ -480,10 +483,10 @@
       </div>
       <div style="display:flex; gap:16px; flex-wrap:wrap;">
         <div class="field" style="margin-bottom:14px; flex:1; min-width:200px;">
-          <div class="input-row"><input type="text" id="buscaProdutoHistorico" placeholder="Buscar produto pelo nome..."></div>
+          <div class="input-row"><input type="text" id="buscaProdutoHistorico" aria-label="Buscar produto" placeholder="Buscar produto pelo nome..."></div>
         </div>
         <div class="field" style="margin-bottom:14px; flex:1; min-width:200px;">
-          <div class="input-row"><input type="text" id="buscaFornecedorHistorico" placeholder="Buscar fornecedor..."></div>
+          <div class="input-row"><input type="text" id="buscaFornecedorHistorico" aria-label="Buscar fornecedor" placeholder="Buscar fornecedor..."></div>
         </div>
       </div>
       <div id="historicoTotalPeriodo" style="display:none; margin-bottom:14px;"></div>
@@ -500,7 +503,7 @@
         Notas emitidas contra a empresa (pasta de XML), com os produtos, CFOP e impostos de cada uma. Clique numa nota para abrir os itens.
       </p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
-        <input type="search" id="buscaNotas" class="campo-busca" placeholder="Buscar por emitente, nº da nota ou produto...">
+        <input type="search" id="buscaNotas" aria-label="Buscar nota" class="campo-busca" placeholder="Buscar por emitente, nº da nota ou produto...">
         <label class="rotulo-mono">De <input type="date" id="notasDataDe" class="campo-data"></label>
         <label class="rotulo-mono">Até <input type="date" id="notasDataAte" class="campo-data"></label>
         <button class="btn secondary" id="limparDatasNotasBtn" style="display:none;">✕ Limpar datas</button>
@@ -540,7 +543,7 @@
       <div class="card">
         <h2>NF-e Emitidas — últimos 120 dias</h2>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-          <input type="search" id="buscaNotasCmp" class="campo-busca" placeholder="Buscar por emitente, nº ou produto..." style="min-width:170px;">
+          <input type="search" id="buscaNotasCmp" aria-label="Buscar nota" class="campo-busca" placeholder="Buscar por emitente, nº ou produto..." style="min-width:170px;">
           <label class="rotulo-mono">De <input type="date" id="notasDataDeCmp" class="campo-data"></label>
           <label class="rotulo-mono">Até <input type="date" id="notasDataAteCmp" class="campo-data"></label>
           <button class="btn secondary" id="limparDatasNotasBtnCmp" style="display:none;">✕ Limpar</button>
@@ -687,8 +690,8 @@ Tupan</textarea>
         <button class="btn secondary" id="irSyncBtn" style="padding:5px 12px; font-size:12px;">⚙ Configurar sincronização</button>
       </div>
       <div class="field" style="margin-bottom:12px; display:flex; gap:10px; flex-wrap:wrap;">
-        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaProduto" placeholder="Buscar produto pelo nome..."></div>
-        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaFornecedor" placeholder="Buscar fornecedor..."></div>
+        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaProduto" aria-label="Buscar produto" placeholder="Buscar produto pelo nome..."></div>
+        <div class="input-row" style="flex:1; min-width:180px;"><input type="text" id="buscaFornecedor" aria-label="Buscar fornecedor" placeholder="Buscar fornecedor..."></div>
       </div>
       <div class="saved-list" id="savedList"></div>
       <div class="empty-note" id="emptyNote">Nenhum produto salvo ainda. Preencha os dados e clique em "Salvar" abaixo.</div>
@@ -1176,7 +1179,7 @@ Tupan</textarea>
     return JSON.parse(result.response.text());
   }
 
-  // Pipeline completo de uma loja: pesquisa (3.5 Flash + busca) → formatação (Flash-Lite).
+  // Pipeline completo de uma loja: pesquisa (MODELO_PESQUISA + busca) → formatação (Flash-Lite).
   // Sempre resolve com um objeto estruturado, mesmo em caso de erro.
   async function pesquisarEFormatarUmaLoja(descricaoProduto, loja, nivel){
     const busca = await pesquisarUmaLoja(descricaoProduto, loja, nivel);
@@ -1321,8 +1324,11 @@ Tupan</textarea>
   function parseFirebaseConfig(texto){
     const campos = ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'];
     const config = {};
+    // A chave pode vir com aspas ("apiKey": ...) — e' o JSON que o
+    // proprio app escreve na textarea ao carregar — ou sem (apiKey: ...),
+    // como no bloco copiado do Console.
     campos.forEach(campo=>{
-      const re = new RegExp(campo + '\\s*:\\s*["\']([^"\']+)["\']');
+      const re = new RegExp('["\']?' + campo + '["\']?\\s*:\\s*["\']([^"\']+)["\']');
       const m = texto.match(re);
       if(m) config[campo] = m[1];
     });
@@ -1357,8 +1363,11 @@ Tupan</textarea>
     const snap = await App.comAuth(() => exigirDb().collection('produtos').get());
     const produtos = {};
     snap.forEach(doc=>{
-      const nome = decodeURIComponent(doc.id);
       const d = doc.data();
+      // O nome gravado vale mais que o id; e um id que nao veio de
+      // encodeURIComponent ("%" solto) nao pode derrubar a lista inteira.
+      let nome = d.nome;
+      if(!nome){ try{ nome = decodeURIComponent(doc.id); }catch(e){ nome = doc.id; } }
       produtos[nome] = d.dados;
     });
     return produtos;
@@ -1563,7 +1572,7 @@ Tupan</textarea>
   // ==================== NUCLEO DE CALCULO ====================
   //
   // A formula (aliquotas, custo, margem, preco-alvo) mora em
-  // calculo-nucleo.js — arquivo proprio, carregado no <head>. Foi
+  // calculo-nucleo.js — arquivo proprio, carregado no fim do <body>. Foi
   // tirada daqui para os testes automatizados chamarem exatamente a
   // MESMA funcao que esta tela chama: antes o teste recortava o texto
   // da funcao do HTML e remontava uma copia, o que passava a medir
@@ -1811,8 +1820,8 @@ Tupan</textarea>
     await storageSet(key, JSON.stringify(dados));
   }
 
-  // normalizarTexto, escapeHtml, parseNumeroBR e a formatacao de data
-  // agora vem de app-shared.js (aliases no topo deste arquivo).
+  // normalizarTexto, escapeHtml e parseNumeroBR vem de app-shared.js
+  // (aliases no topo deste arquivo); datas, direto em App.fmtData.
 
   // Converte o registro salvo (tudo string, como veio do formulario)
   // nos numeros que o nucleo de calculo espera.
@@ -2185,7 +2194,7 @@ Tupan</textarea>
       const blob = new Blob([payload], { type:'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      const dataStr = new Date().toISOString().slice(0,10);
+      const dataStr = App.hojeISO(); // local, nao UTC (depois das 21h o UTC ja' e' amanha)
       a.href = url;
       a.download = 'calculadora-custo-backup-' + dataStr + '.json';
       document.body.appendChild(a);
@@ -2202,8 +2211,13 @@ Tupan</textarea>
     try{
       const texto = await file.text();
       const json = JSON.parse(texto);
+      if(json && json.tipo && json.tipo !== 'calculadora-custo-backup') throw new Error('tipo ' + json.tipo);
       produtos = json.produtos || json; // aceita o formato do backup ou {nome: dados}
+      if(!produtos || typeof produtos !== 'object' || Array.isArray(produtos)) throw new Error('formato');
       nomes = Object.keys(produtos);
+      // Cada produto e' um objeto com os campos da ficha — um array ou
+      // uma lista de strings viraria produtos chamados "0", "1"...
+      if(!nomes.every(n => produtos[n] && typeof produtos[n] === 'object' && !Array.isArray(produtos[n]))) throw new Error('formato');
     }catch(e){
       App.toastErro('Não foi possível ler esse arquivo. Confirme se é um backup gerado por este app', e);
       return;
@@ -2513,7 +2527,7 @@ Tupan</textarea>
     async function salvarStatusPedido(){
       $('cmpStatusMsg').textContent = 'Gravando status...';
       try{
-        await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(d.id).update({ itens: d.itens }));
+        await App.comAuth(()=> exigirDb().collection('cotacoes').doc(d.id).update({ itens: d.itens }));
         $('cmpStatusMsg').textContent = 'Status gravado ✓ ' + new Date().toLocaleTimeString('pt-BR');
         renderHistorico();
       }catch(e){
@@ -2534,7 +2548,7 @@ Tupan</textarea>
     const palavras = String(d.fornecedor || d.nomeCotacao || '').split(/\s+/).filter(w => w.length >= 4);
     $('buscaNotasCmp').value = palavras.length ? palavras[0] : '';
     if(dt){
-      $('notasDataDeCmp').value = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+      $('notasDataDeCmp').value = App.iso(dt);
     } else {
       $('notasDataDeCmp').value = '';
     }
@@ -2779,9 +2793,7 @@ Tupan</textarea>
     if(loteRodando) return; // não atropela uma varredura em andamento
     const [idx, lojaIdx] = btn.dataset.refazer.split('_').map(Number);
     const item = loteItens[idx];
-    // loteLojas é preenchido ao iniciar a pesquisa; o fallback cobre o
-    // caso de o botão ser usado antes disso.
-    const loja = loteLojas[lojaIdx] || lojasDoCampo()[lojaIdx];
+    const loja = loteLojas[lojaIdx]; // preenchido em toda entrada na tela de lote
     if(!item || !loja) return;
     const meuToken = loteExecToken;
     item.porLoja[lojaIdx] = { pendente: true };
@@ -2789,7 +2801,7 @@ Tupan</textarea>
     try{
       const r = await window.geminiRebuscarUmaLoja(item.consulta || item.produto, loja, 'maxima');
       if(meuToken !== loteExecToken) return;
-      item.porLoja[lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
+      item.porLoja[lojaIdx] = resultadoParaGuardar(r, loja, 'maxima');
     }catch(e){
       console.error('Erro ao refazer:', e);
       if(meuToken !== loteExecToken) return;
@@ -2835,7 +2847,7 @@ Tupan</textarea>
         // A consulta limpa (sem a notacao interna da planilha) vai para
         // a busca; o nome original continua sendo o que aparece e salva.
         const { buscaHtml } = await window.geminiBuscarPrecos(item.consulta || item.produto, loteLojas, (lojaIdx, r) => {
-          item.porLoja[lojaIdx] = r;
+          item.porLoja[lojaIdx] = resultadoParaGuardar(r, loteLojas[lojaIdx]);
           if(meuToken === loteExecToken) atualizarLinhaLote(idx);
         });
         if(buscaHtml && meuToken === loteExecToken) mostrarWidgetBusca('buscaGoogleWidgetLote', buscaHtml);
@@ -2923,7 +2935,7 @@ Tupan</textarea>
       try{
         const itemF = loteItens[f.idx];
         const r = await window.geminiRebuscarUmaLoja((itemF && itemF.consulta) || f.produto, f.loja, 'maxima');
-        loteItens[f.idx].porLoja[f.lojaIdx] = Object.assign({}, r, { nivel: 'maxima' });
+        loteItens[f.idx].porLoja[f.lojaIdx] = resultadoParaGuardar(r, f.loja, 'maxima');
       }catch(e){
         console.error('Erro no reprocessamento:', e);
         loteItens[f.idx].porLoja[f.lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
@@ -3281,7 +3293,7 @@ Tupan</textarea>
     if(!fabricanteAberto){ alvo.innerHTML = ''; return; }
     alvo.innerHTML =
       '<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">' +
-        '<input type="search" id="filtroProdutoCat" class="campo-busca" style="min-width:220px;" placeholder="Filtrar por nome ou código...">' +
+        '<input type="search" id="filtroProdutoCat" aria-label="Filtrar produtos" class="campo-busca" style="min-width:220px;" placeholder="Filtrar por nome ou código...">' +
         '<label class="rotulo-mono">R$ de <input type="number" id="precoMinCat" class="no-spin" style="width:80px; padding:6px;"></label>' +
         '<label class="rotulo-mono">até <input type="number" id="precoMaxCat" class="no-spin" style="width:80px; padding:6px;"></label>' +
         '<button class="btn secondary mini" id="selTodosCatBtn">☑ Selecionar filtrados</button>' +
@@ -3527,7 +3539,7 @@ Tupan</textarea>
     refiltrarNotas('');
   });
 
-  // ─── NF-e Emitidas (últimos 60 dias, coleção itensNotas) ───
+  // ─── NF-e Emitidas (janela em DIAS_NOTAS_EMITIDAS, coleção itensNotas) ───
   let notasEmitidasCache = null;
   const notasAbertas = {};
 
@@ -3604,7 +3616,7 @@ Tupan</textarea>
     setNotasMsg('Carregando notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias...');
     try{
       const corte = new Date(Date.now() - DIAS_NOTAS_EMITIDAS*86400000);
-      const corteISO = corte.getFullYear() + '-' + String(corte.getMonth()+1).padStart(2,'0') + '-' + String(corte.getDate()).padStart(2,'0');
+      const corteISO = App.iso(corte);
       const [snap, snapNotas] = await Promise.all([
         App.comAuth(()=> firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get()),
         App.comAuth(()=> firestoreDb.collection('notas').where('dataEmissao', '>=', corteISO).get())
@@ -3875,7 +3887,7 @@ Tupan</textarea>
     $('danfeView').scrollTop = 0;
 
     const c = vencCache[chave];
-    if(c && c.lista){
+    if(c && c.lista && !c.erro){ // com erro, refaz a consulta
       $('danfeDoc').innerHTML = App.htmlDanfe(danfeCtx(n, c.lista));
       return;
     }
@@ -3919,6 +3931,10 @@ Tupan</textarea>
       if(!notasEmitidasCache || forcar){
         $('listaFiscal').innerHTML = '<p class="nota-explicativa">Carregando as notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias...</p>';
         await carregarNotasEmitidas(forcar);
+        // carregarNotasEmitidas engole o proprio erro (avisa na aba NF-e
+        // Emitidas); aqui ele precisa aparecer, senao a aba fica em
+        // "Carregando..." para sempre.
+        if(!notasEmitidasCache) throw new Error('Não foi possível carregar as notas emitidas (veja a aba NF-e Emitidas).');
       }
       if(fiscaisCadastro === null || forcar){
         const snap = await App.comAuth(()=> exigirDb().collection('fiscaisNcm').get());
@@ -4025,7 +4041,7 @@ Tupan</textarea>
     const doc = {
       ncm: partes[0], uf: partes[1],
       modalidade: mod.value || null,
-      percentual: pct && pct.value.trim() !== '' ? App.parseNumeroBR(pct.value) : null,
+      percentual: pct && pct.value.trim() !== '' ? parseNumeroBR(pct.value) : null,
       obs: (obs && obs.value.trim()) || null,
       atualizadoEm: App.hojeISO()
     };
@@ -4081,10 +4097,8 @@ Tupan</textarea>
       if(inp.value !== '') valoresDigitados[inp.dataset.idx] = inp.value;
     });
     const meuPreco = toNum($('meuPrecoConcorrente').value);
-    let menorPreco = null;
-    ultimosConcorrentes.forEach(c=>{
-      if(c.preco != null && (menorPreco === null || c.preco < menorPreco)) menorPreco = c.preco;
-    });
+    const menorAchado = ConcorrentesNucleo.menorConcorrente(ultimosConcorrentes);
+    const menorPreco = menorAchado ? menorAchado.preco : null;
 
     let html = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th>'+(meuPreco>0?'<th>Dif. vs seu preço</th>':'')+'</tr></thead><tbody>';
     ultimosConcorrentes.forEach((c, idx)=>{
@@ -4145,7 +4159,7 @@ Tupan</textarea>
       renderResultadoConcorrentes();
       try{
         const r = await window.geminiRebuscarUmaLoja(descricao, loja, 'maxima');
-        ultimosConcorrentes[idx] = Object.assign({}, r, { loja, nivel: 'maxima' });
+        ultimosConcorrentes[idx] = resultadoParaGuardar(r, loja, 'maxima');
       }catch(e){
         console.error('Erro ao refazer:', e);
         ultimosConcorrentes[idx] = { loja, erro:true, preco:null,
@@ -4202,16 +4216,7 @@ Tupan</textarea>
 
     try{
       const { buscaHtml } = await window.geminiBuscarPrecos(descricao, lojas, (i, r)=>{
-        ultimosConcorrentes[i] = {
-          url: r.url || '',
-          loja: r.loja || lojas[i],
-          produto: r.produto || '',
-          marca: r.marca || '',
-          preco: (r.preco != null && !isNaN(r.preco)) ? Number(r.preco) : null,
-          erro: !!r.erro || r.preco == null,
-          mensagemErro: r.mensagemErro || (r.erro ? 'Não encontrei esse produto nessa loja.' : ''),
-          pendente: false
-        };
+        ultimosConcorrentes[i] = resultadoParaGuardar(r, lojas[i]);
         renderResultadoConcorrentes();
       });
       $('concorrentesMsg').textContent = '';
@@ -4237,6 +4242,31 @@ Tupan</textarea>
     $('salvarConcorrentesMsg').textContent = '';
   });
 
+  // O objeto do Gemini traz tambem o `grounding` (HTML do widget do
+  // Google, kilobytes por loja). O que se guarda — na tela, no
+  // localStorage do progresso e no Firestore — e' so' isto.
+  function resultadoParaGuardar(r, loja, nivel){
+    r = r || {};
+    const o = {
+      url: r.url || '',
+      loja: r.loja || loja || '',
+      produto: r.produto || '',
+      marca: r.marca || '',
+      preco: (r.preco != null && !isNaN(r.preco)) ? Number(r.preco) : null,
+      erro: !!r.erro || r.preco == null,
+      mensagemErro: r.mensagemErro || (r.erro ? 'Não encontrei esse produto nessa loja.' : ''),
+      pendente: false
+    };
+    if(nivel || r.nivel) o.nivel = nivel || r.nivel;
+    return o;
+  }
+
+  // "Seu preço" digitado depois da pesquisa: a coluna "Dif. vs seu
+  // preço" acompanha.
+  $('meuPrecoConcorrente').addEventListener('input', debounce(()=>{
+    if(ultimosConcorrentes.length) renderResultadoConcorrentes();
+  }, DEBOUNCE_BUSCA));
+
   $('salvarConcorrentesBtn').addEventListener('click', async ()=>{
     if(!firestoreDb){
       $('salvarConcorrentesMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar.';
@@ -4244,6 +4274,9 @@ Tupan</textarea>
     }
     const produtoRef = $('produtoConcorrente').value.trim();
     if(!produtoRef){ App.toast('Preencha o nome do produto de referência antes de salvar.', 'info'); $('produtoConcorrente').focus(); return; }
+    if(!ultimosConcorrentes.length || ultimosConcorrentes.some(c => c.pendente)){
+      App.toast('Espere a pesquisa terminar antes de salvar.', 'info'); return;
+    }
     try{
       await App.comAuth(()=> firestoreDb.collection('concorrentes').add({
         produto: produtoRef,
@@ -4260,7 +4293,7 @@ Tupan</textarea>
   });
 
   // ==================== HISTÓRICO DE COMPARAÇÕES COM CONCORRENTES ====================
-  let concorrentesHistColapsados = new Set();
+  let concorrentesHistAbertos = new Set();
 
   // Os documentos ficam em memória, como no histórico de cotações.
   // Antes, abrir ou fechar UMA comparação chamava a carga inteira de
@@ -4297,8 +4330,8 @@ Tupan</textarea>
   App.delegar($('concorrentesHistLista'), 'click', '[data-conc-header]', (h, ev)=>{
     if(ev.target.closest && ev.target.closest('[data-conc-excluir]')) return;
     const id = h.dataset.concHeader;
-    if(concorrentesHistColapsados.has(id)) concorrentesHistColapsados.delete(id);
-    else concorrentesHistColapsados.add(id);
+    if(concorrentesHistAbertos.has(id)) concorrentesHistAbertos.delete(id);
+    else concorrentesHistAbertos.add(id);
     renderHistoricoConcorrentes(); // só redesenha — nada de reler o banco
   });
 
@@ -4316,7 +4349,7 @@ Tupan</textarea>
       App.toast('Comparação excluída.', 'ok');
       // Tira do cache e redesenha, em vez de reler a coleção.
       concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== id);
-      concorrentesHistColapsados.delete(id);
+      concorrentesHistAbertos.delete(id);
       renderHistoricoConcorrentes();
     }catch(e){
       App.toastErro('Erro ao excluir', e);
@@ -4340,7 +4373,7 @@ Tupan</textarea>
       let menorPreco = null;
       resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
 
-      const aberto = concorrentesHistColapsados.has(d.id);
+      const aberto = concorrentesHistAbertos.has(d.id);
       const item = document.createElement('div');
       item.className = 'historico-item';
 
@@ -4392,7 +4425,7 @@ Tupan</textarea>
   }
 
   // ==================== HISTÓRICO DE COTAÇÕES ====================
-  let historicoColapsados = new Set(); // ids abertos por padrão; guarda os ABERTOS manualmente
+  let historicoAbertos = new Set(); // ids abertos manualmente (tudo começa recolhido)
   let historicoDocsCache = [];
 
   // ─── Pesquisas de concorrentes salvas a partir de um pedido ───
@@ -4431,8 +4464,7 @@ Tupan</textarea>
   function diaDaPesquisa(p){
     const dt = (p.data && p.data.toDate) ? p.data.toDate() : (p.data ? new Date(p.data) : null);
     if(!dt || isNaN(dt.getTime())) return { chave:'sem-data', rotulo:'sem data', ordem:0 };
-    const chave = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') +
-      '-' + String(dt.getDate()).padStart(2,'0');
+    const chave = App.iso(dt);
     return { chave, rotulo: dt.toLocaleDateString('pt-BR'), ordem: dt.getTime() };
   }
 
@@ -4449,8 +4481,8 @@ Tupan</textarea>
     // chega aqui, e é isso mesmo que queremos.
     if(ev.target.closest && ev.target.closest('[data-acao]')) return;
     const id = h.dataset.cotacaoHeader;
-    if(historicoColapsados.has(id)) historicoColapsados.delete(id);
-    else historicoColapsados.add(id);
+    if(historicoAbertos.has(id)) historicoAbertos.delete(id);
+    else historicoAbertos.add(id);
     renderHistorico();
   });
 
@@ -4549,9 +4581,6 @@ Tupan</textarea>
     return html;
   }
 
-  // Remonta na tela da pesquisa em lote uma varredura já salva, para
-  // ver o resultado inteiro — o mesmo quadro produto × loja de quando
-  // ela rodou. Somente leitura: nada aqui refaz busca nem grava.
   // Remonta documentos de "concorrentes" na tela de lote, sem edição.
   // Serve a pesquisa salva do histórico E a última pesquisa de um
   // fabricante da planilha — as duas são a mesma tabela produto × loja.
@@ -4836,7 +4865,7 @@ Tupan</textarea>
       });
       totalGeral += totalImpacto;
 
-      const aberto = historicoColapsados.has(d.id);
+      const aberto = historicoAbertos.has(d.id);
       const nomeExibicao = d.nomeCotacao || (d.fornecedor || 'Fornecedor não informado');
 
       const item = document.createElement('div');
@@ -5296,7 +5325,7 @@ Tupan</textarea>
   };
   function renderStatusBadge(status){
     const s = status || 'negociacao';
-    return '<span class="status-badge status-'+s+'">'+(STATUS_LABELS[s]||s)+'</span>';
+    return '<span class="status-badge">'+escapeHtml(STATUS_LABELS[s]||s)+'</span>';
   }
 
   function formatarQtdColuna(esperada, recebida){
@@ -5722,7 +5751,7 @@ Tupan</textarea>
     }
 
     const fornecedor = $('fornecedorCotacao').value.trim();
-    const dataStr = new Date().toISOString().slice(0,10);
+    const dataStr = App.hojeISO(); // local, nao UTC (depois das 21h o UTC ja' e' amanha)
     const nomeArquivo = (fornecedor ? (fornecedor + ' ') : '') + 'cotacao ' + dataStr + '.xlsx';
     XLSX.writeFile(wb, nomeArquivo);
   });
@@ -6243,7 +6272,7 @@ Tupan</textarea>
   const mesAtualISO = () => App.hojeISO().substring(0, 7);
   const metaDe = (mes) => (painelDados && painelDados.metas && painelDados.metas[mes]) || {};
   const numBR = v => v == null ? '' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const pctBR = v => v == null ? '' : (v * 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+  const pctBR = v => v == null ? '' : pct(v);
 
   async function carregarPainel(forcar){
     $('anoPainel').textContent = painelAno;
@@ -6392,7 +6421,7 @@ Tupan</textarea>
 
   // Card "Ano × ano anterior": projeção composta (vendas fechadas +
   // previsão do mês corrente + metas futuras) contra o total do ano
-  // anterior (PainelNucleo.FATURAMENTO_ANUAL). Segue o ano exibido na
+  // anterior (PainelNucleo.totalAnualVendas). Segue o ano exibido na
   // tabela — voltar para um ano fechado compara realizado × anterior.
   function renderComparativoAnual(){
     const alvo = $('comparativoAnual');
@@ -6569,7 +6598,7 @@ Tupan</textarea>
         '<td style="text-align:left;">' +
           feriados.map(f =>
             '<span class="feriado-chip">' + f.substring(8, 10) + '/' + f.substring(5, 7) +
-            '<button type="button" data-del-feriado="' + f + '" data-mes="' + mes + '"' +
+            '<button type="button" data-del-feriado="' + escapeHtml(f) + '" data-mes="' + mes + '"' +
             ' aria-label="Remover feriado ' + App.fmtData(f) + '">×</button></span>').join('') +
           ' <input type="date" class="feriado-data" data-feriado-de="' + mes + '"' +
             ' min="' + mes + '-01" max="' + PainelNucleo.ultimoDiaDoMes(mes) + '"' +
@@ -6709,6 +6738,7 @@ Tupan</textarea>
     if(router.atual() === 'Historico') carregarHistorico();
     if(router.atual() === 'Concorrentes'){ carregarHistoricoConcorrentes(); renderLotePlanilha(); }
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
+    if(router.atual() === 'Fiscal') carregarFiscal(true);
   };
 
   (async ()=>{

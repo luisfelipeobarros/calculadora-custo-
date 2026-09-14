@@ -4,13 +4,13 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e quatro etapas,
+  Nao precisa instalar nada — so' o Node. Sao vinte e cinco etapas,
   em dezoito frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
-  - validar-html.js    — estrutura dos quatro HTML: sintaxe dos <script>,
+  - validar-html.js    — estrutura dos cinco HTML: sintaxe dos <script>,
                          tags, ids, labels, arquivos referenciados, ?v=.
   - carregar-em-dom.js — executa os scripts de cada pagina num DOM
                          simulado, pegando erro em tempo de carga.
@@ -30,6 +30,9 @@
                          rampa de 12 meses e projecao de recorrentes.
   - danfe.js           — DANFE simplificado: UF pela chave de acesso e
                          classificacao da operacao pelo CFOP.
+  - fiscal.js          — NCM & ST: agrupamento fiscal das notas emitidas.
+  - dashboard.js       — dashboard de vendas: leitura do gviz, KPIs,
+                         crescimento, destaques automaticos.
   - concorrentes.js    — catalogo da pesquisa em lote por planilha:
                          leitura, consulta de busca, diff e o painel
                          de desatualizacao por fabricante.
@@ -56,6 +59,7 @@ const etapas = [
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
   ['Estrutura: assistencias.html', 'validar-html.js', ['assistencias.html']],
   ['Estrutura: dashboard.html', 'validar-html.js', ['dashboard.html']],
+  ['Estrutura: lancamentos.html', 'validar-html.js', ['lancamentos.html']],
   ['Carga em DOM: index.html', 'carregar-em-dom.js', ['index.html']],
   ['Carga em DOM: controle-notas.html', 'carregar-em-dom.js', ['controle-notas.html']],
   ['Carga em DOM: assistencias.html', 'carregar-em-dom.js', ['assistencias.html']],

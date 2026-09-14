@@ -37,10 +37,10 @@ const tipos = (linha) => linha.problemas.map(p => p.tipo).sort();
 
 // O Bradesco imprime CNPJ com 15 digitos (zero a mais na frente).
 eq('CNPJ de 15 digitos perde o zero da frente',
-  Dda.normalizarCnpj('004.226.489/0001-75'), '04226489000175');
+  Dda.normalizarCnpj('000.111.222/0001-33'), '00111222000133');
 eq('CNPJ de 14 digitos fica como esta',
-  Dda.normalizarCnpj('011.878.198/0001-27'.slice(1)), '11878198000127');
-eq('CNPJ ja' + ' limpo tambem funciona', Dda.normalizarCnpj('04226489000175'), '04226489000175');
+  Dda.normalizarCnpj('011.111.111/0001-11'.slice(1)), '11111111000111');
+eq('CNPJ ja' + ' limpo tambem funciona', Dda.normalizarCnpj('00111222000133'), '00111222000133');
 
 // Os quatro separadores vistos no PDF real, mais os zeros a esquerda.
 eq('documento com "/" separa nota e parcela',
@@ -89,7 +89,7 @@ lido.registros.forEach(r => { porDoc[r.documento] = r; });
 // O registro que o parse sequencial desalinhou: comeca no pe da
 // pagina 1 e o documento + situacao + banco estao na pagina 2.
 const carmelo = porDoc['147863/04'];
-eq('CARMELO FIOR (quebra de pagina 1->2) tem documento', !!carmelo, true);
+eq('ceramica 147863/04 (quebra de pagina 1->2) tem documento', !!carmelo, true);
 eq('  ...com o valor certo', carmelo && carmelo.valorCentavos, 414750);
 eq('  ...vencimento = a PRIMEIRA data', carmelo && carmelo.vencimento, '2026-07-31');
 eq('  ...limite = a segunda, nao trocadas', carmelo && carmelo.limite, '2026-09-29');
@@ -98,7 +98,7 @@ eq('  ...e situacao presente', carmelo && carmelo.situacao, 'A PAGAR');
 // O outro: so a linha de nomes na pagina 2, e no topo da pagina 3 o
 // Bradesco funde vencimento+CNPJs+valor numa linha so.
 const csmjQuebra = porDoc['372797-02'];
-eq('CSMJ 372797-02 (quebra 2->3, linha fundida) completo', !!csmjQuebra, true);
+eq('securitizadora 372797-02 (quebra 2->3, linha fundida) completo', !!csmjQuebra, true);
 eq('  ...valor', csmjQuebra && csmjQuebra.valorCentavos, 222486);
 eq('  ...limite a dez anos nao virou vencimento', csmjQuebra && csmjQuebra.vencimento, '2026-07-31');
 
@@ -124,7 +124,7 @@ const dup = (o) => Object.assign({
 
 const reg = (o) => Object.assign({
   vencimento: '2026-07-31', limite: '2026-09-29',
-  pagador: 'NOS', cnpjPagador: '04226489000175',
+  pagador: 'NOS', cnpjPagador: '00111222000133',
   documento: '1000-1', beneficiario: 'FORNECEDOR GENERICO LTDA',
   cnpjBeneficiario: '11111111000111', banco: '237 - BCO BRADESCO S.A.',
   valorCentavos: 10000, situacao: 'A PAGAR', semSituacao: false
@@ -235,8 +235,8 @@ const reg = (o) => Object.assign({
 // hoje so' a Cerbras tem regra, e a Mari segue a estrategia padrao.
 {
   const base = Dda.prepararBase([dup({ id: 'a', numeroNota: '49676', parcela: '001', valor: 333.83 })]);
-  const c = Dda.casar(reg({ documento: '0000049676', beneficiario: 'MARI', valorCentavos: 33383 }), base);
-  eq('Mari: estrategia padrao, casa por nota+valor+vencimento', [c.duplicata && c.duplicata.id, c.estrategia], ['a', 'nota+valor+vencimento']);
+  const c = Dda.casar(reg({ documento: '0000049676', beneficiario: 'FORNECEDOR SEM PARCELA', valorCentavos: 33383 }), base);
+  eq('documento so com a nota (sem regra propria): casa por nota+valor+vencimento', [c.duplicata && c.duplicata.id, c.estrategia], ['a', 'nota+valor+vencimento']);
 }
 
 // Cerbras: valor e a chave forte, ESCOPADO ao cedente; vencimento so
@@ -436,7 +436,7 @@ const ctx = (duplicatas, extra) => Object.assign({
 // fundo, que a chave por beneficiario deixaria passar)
 {
   const d = dup({ id: 'a', numeroNota: '10', parcela: '001', chaveAcesso: 'chave-ok' });
-  const doFundo = reg({ documento: '10-1', beneficiario: 'CSMJ SECURITIZADORA S.A.', cnpjBeneficiario: '32945591000166' });
+  const doFundo = reg({ documento: '10-1', beneficiario: 'SECURITIZADORA EXEMPLO HOTEL S.A.', cnpjBeneficiario: '11111111000199' });
   const doFornecedor = reg({ documento: '10/1', beneficiario: 'FORNECEDOR GENERICO LTDA' });
   const rel = Dda.conferir([doFundo, doFornecedor], ctx([d]));
   eq('fundo e fornecedor cobrando a MESMA duplicata: vermelho nos dois',
@@ -515,7 +515,7 @@ const ctx = (duplicatas, extra) => Object.assign({
 const CAB = ['Tipo', 'Empresa', 'CNPJ / CPF', 'Vencimento', 'Nº documento', 'Nosso número',
   'Beneficiário', 'Banco', 'Nominal (R$)', 'Valor Total (R$)', 'Situação', 'Beneficiario Final'];
 const linhaSafra = (o) => ['Pagador', 'NOSSA LOJA LTDA', '00.111.222/0001-33',
-  o.venc || '14/09/2026', o.doc == null ? '375033 01' : o.doc, o.nn || '01008251230002348097',
+  o.venc || '14/09/2026', o.doc == null ? '375033 01' : o.doc, o.nn || '00000000000000000001',
   o.ben || 'SECURITIZADORA XYZ S.A.', o.banco || 756,
   o.nominal == null ? 4940.76 : o.nominal, o.total == null ? (o.nominal == null ? 4940.76 : o.nominal) : o.total,
   o.sit || 'ABERTO', o.final || ''];
@@ -551,7 +551,7 @@ const planilhaSafra = (boletos) => [
   eq('planilha: valor em numero vira centavos inteiros (4940.76 -> 494076)', r0.valorCentavos, 494076);
   eq('planilha: documento, beneficiario, banco e nosso numero no lugar',
     [r0.documento, r0.beneficiario, r0.banco, r0.nossoNumero],
-    ['375033 01', 'SECURITIZADORA XYZ S.A.', '756', '01008251230002348097']);
+    ['375033 01', 'SECURITIZADORA XYZ S.A.', '756', '00000000000000000001']);
   eq('planilha: CNPJ do pagador normalizado, CNPJ do beneficiario vazio (a planilha nao traz)',
     [r0.cnpjPagador, r0.cnpjBeneficiario], ['00111222000133', '']);
   eq('planilha: situacao presente, semSituacao false', [r0.situacao, r0.semSituacao], ['ABERTO', false]);
@@ -640,7 +640,7 @@ const planilhaSafra = (boletos) => [
 
 // ── 6. Formatos de documento da planilha real de 30 dias ─────
 
-eq('Formigres "1666488B H": nota + parcela B, o H (ultima parcela) se descarta',
+eq('documento "1666488B H": nota + parcela B, o H (ultima parcela) se descarta',
   Dda.dividirDocumento('1666488B H'), { nota: '1666488', parcela: 'B' });
 eq('nota colada na letra ("000341713C"): nota sem zeros + parcela C',
   Dda.dividirDocumento('000341713C'), { nota: '341713', parcela: 'C' });
@@ -737,17 +737,17 @@ const paginaExtrato = (linhas, ultimos) => [
 const ultimos = [deb('12/09/2026', 'PAGTO ELETRON  COBRANCA FORNECEDOR Z LTDA', '999', '10,00')];
 const pag1 = paginaExtrato([
   cred('14/08/2026', 'PIX RECEBIDO REM: Cliente Tal 14/08', '1', '111,00'),
-  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '2', '2.199,86'),
-  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '3', '2.199,86'),
-  deb('14/08/2026', 'PIX ENVIADO DES: MASSA PRONTA PRODUTOS 14/08', '4', '500,00'),
+  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA SECURITIZADORA EXEMPLO HOTEL S.A.', '2', '2.199,86'),
+  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA SECURITIZADORA EXEMPLO HOTEL S.A.', '3', '2.199,86'),
+  deb('14/08/2026', 'PIX ENVIADO DES: ARGAMASSA EXEMPLO PRODUTOS 14/08', '4', '500,00'),
   deb('15/08/2026', 'TARIFA BANCARIA CESTA PJ 6', '5', '80,00')
 ], ultimos);
 const pag2 = paginaExtrato([
-  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '6', '2.199,86'),
-  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA KARINA PISOS REV CERAM LTDA', '7', '1.000,00'),
-  deb('26/08/2026', 'PAGTO ELETRON  COBRANCA KARINA PISOS REV CERAM LTDA', '8', '1.030,00'),
+  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA SECURITIZADORA EXEMPLO HOTEL S.A.', '6', '2.199,86'),
+  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA PISOS EXEMPLO REV CERAM LTDA', '7', '1.000,00'),
+  deb('26/08/2026', 'PAGTO ELETRON  COBRANCA PISOS EXEMPLO REV CERAM LTDA', '8', '1.030,00'),
   deb('26/08/2026', 'PAGTO ELETRON  COBRANCA', '9', '256,75'),
-  deb('01/09/2026', 'PAGTO ELETRON  COBRANCA CERAMICA CAPRI LTDA', '10', '700,00')
+  deb('01/09/2026', 'PAGTO ELETRON  COBRANCA CERAMICA KILO LTDA', '10', '700,00')
 ], ultimos);
 
 {
@@ -760,20 +760,20 @@ const pag2 = paginaExtrato([
   eq('extrato: tipos classificados pelo historico', tipos2, { credito: 1, boleto: 8, pix: 1, outro: 1 });
   const csmj = ext.lancamentos.find(l => l.dcto === '2');
   eq('extrato: debito em centavos, sem sinal, com o cedente separado',
-    [csmj.debitoCentavos, csmj.creditoCentavos, csmj.contraparte], [219986, 0, 'CSMJ SECURITIZADORA S.A.']);
+    [csmj.debitoCentavos, csmj.creditoCentavos, csmj.contraparte], [219986, 0, 'SECURITIZADORA EXEMPLO HOTEL S.A.']);
   eq('extrato: PIX enviado traz o destinatario sem a data do fim',
-    ext.lancamentos.find(l => l.tipo === 'pix').contraparte, 'MASSA PRONTA PRODUTOS');
+    ext.lancamentos.find(l => l.tipo === 'pix').contraparte, 'ARGAMASSA EXEMPLO PRODUTOS');
   eq('extrato: uma matriz so tambem serve', Dda.interpretarExtrato(pag1).lancamentos.length, 6);
   eq('extrato: sem cabecalho reconhecivel = vazio', Dda.interpretarExtrato([['a', 'b']]).lancamentos.length, 0);
 }
 
 eq('nomes: abreviado do extrato bate com o completo do DDA',
-  Dda.nomesCompativeis('KARINA PISOS REV CERAM LTDA', 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA'), true);
-eq('nomes: mesma primeira palavra NAO basta (CERAMICA FORMIGRES x CERAMICA CAPRI)',
-  Dda.nomesCompativeis('CERAMICA FORMIGRES LTDA.', 'CERAMICA CAPRI LTDA'), false);
-eq('nomes: pontuacao e sufixos fora (RUY R.ROCHA PRODS x RUY R. DA ROCHA)',
-  Dda.nomesCompativeis('RUY R. DA ROCHA PRODUTOS CERAMIC', 'RUY R.ROCHA PRODS.CERAMICOS LT'), true);
-eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'CSMJ'), false);
+  Dda.nomesCompativeis('PISOS EXEMPLO REV CERAM LTDA', 'PISOS EXEMPLO E REVESTIMENTOS CERAMICOS LTDA'), true);
+eq('nomes: mesma primeira palavra NAO basta (CERAMICA JULIET x CERAMICA KILO)',
+  Dda.nomesCompativeis('CERAMICA JULIET LTDA.', 'CERAMICA KILO LTDA'), false);
+eq('nomes: pontuacao e sufixos fora (JOSE R.SILVA PRODS x JOSE R. DA SILVA)',
+  Dda.nomesCompativeis('JOSE R. DA SILVA PRODUTOS CERAMIC', 'JOSE R.SILVA PRODS.CERAMICOS LT'), true);
+eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'SECURITIZADORA'), false);
 
 // O casamento debito x boleto, em cima dos registros PAGOS
 {
@@ -781,20 +781,20 @@ eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'CSMJ'), false);
   const regs = [
     // recorrente: dois boletos iguais em 14/08 e um em 21/08 — o de
     // 21/08 NAO pode pegar um debito de 14/08 (data mais proxima)
-    reg({ documento: 'a', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
-    reg({ documento: 'b', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
-    reg({ documento: 'c', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    reg({ documento: 'a', beneficiario: 'SECURITIZADORA EXEMPLO HOTEL S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
+    reg({ documento: 'b', beneficiario: 'SECURITIZADORA EXEMPLO HOTEL S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
+    reg({ documento: 'c', beneficiario: 'SECURITIZADORA EXEMPLO HOTEL S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
     // quarto boleto igual: nao sobra debito
-    reg({ documento: 'd', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
-    // Karina: um exato em 21/08, outro pago com juros em 26/08 (venc 22/08)
-    reg({ documento: 'e', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
-    reg({ documento: 'f', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
+    reg({ documento: 'd', beneficiario: 'SECURITIZADORA EXEMPLO HOTEL S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    // Pisos Exemplo: um exato em 21/08, outro pago com juros em 26/08 (venc 22/08)
+    reg({ documento: 'e', beneficiario: 'PISOS EXEMPLO E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    reg({ documento: 'f', beneficiario: 'PISOS EXEMPLO E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
     // cedente sem nome no extrato ("PAGTO ELETRON  COBRANCA" e so)
     reg({ documento: 'g', beneficiario: 'SINDICATO DOS EMPREGADOS', valorCentavos: 25675, vencimento: '2026-08-26', situacao: 'PAGO' }),
     // aberto: nao entra
-    reg({ documento: 'h', beneficiario: 'CERAMICA CAPRI LTDA', valorCentavos: 70000, vencimento: '2026-09-01', situacao: 'ABERTO' }),
-    // pago por PIX (Massa Pronta): nao ha debito de boleto
-    reg({ documento: 'i', beneficiario: 'MASSA PRONTA PRODUTOS E SERVICOS LTDA.', valorCentavos: 50000, vencimento: '2026-08-14', situacao: 'PAGO' })
+    reg({ documento: 'h', beneficiario: 'CERAMICA KILO LTDA', valorCentavos: 70000, vencimento: '2026-09-01', situacao: 'ABERTO' }),
+    // pago por PIX (Argamassa Exemplo): nao ha debito de boleto
+    reg({ documento: 'i', beneficiario: 'ARGAMASSA EXEMPLO PRODUTOS E SERVICOS LTDA.', valorCentavos: 50000, vencimento: '2026-08-14', situacao: 'PAGO' })
   ];
   const c = Dda.casarExtrato(regs, ext.lancamentos);
   const de = (doc) => c.porRegistro.get(regs.find(r => r.documento === doc));
@@ -802,8 +802,8 @@ eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'CSMJ'), false);
   eq('  ...e o como diz "um de 2 iguais no dia"', de('a').como.includes('um de 2 iguais no dia'), true);
   eq('recorrente: o de 21/08 pega o debito de 21/08, nao o de 14/08', [de('c').lancamento.dcto, de('c').data], ['6', '2026-08-21']);
   eq('quarto boleto igual: sem debito livre, com o motivo', [de('d').lancamento, /nenhum débito livre/.test(de('d').motivo)], [undefined, true]);
-  eq('Karina exato: valor + data = vencimento + cedente', de('e').como, ['valor', 'data = vencimento', 'cedente']);
-  eq('Karina com juros: so depois das passadas exatas, e o debito exato NAO foi roubado',
+  eq('Pisos Exemplo exato: valor + data = vencimento + cedente', de('e').como, ['valor', 'data = vencimento', 'cedente']);
+  eq('Pisos Exemplo com juros: so depois das passadas exatas, e o debito exato NAO foi roubado',
     [de('f').lancamento.dcto, de('f').valorPagoCentavos, de('f').jurosCentavos], ['8', 103000, 3000]);
   eq('  ...e o como registra juros e os dias de atraso', de('f').como, ['cedente', 'valor acima do nominal (juros)', 'data 4 dias depois do vencimento']);
   eq('cedente sem nome no extrato: casa pelo valor e data, marcado como nao conferido',
@@ -822,8 +822,8 @@ eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'CSMJ'), false);
     dup({ id: 'k2', numeroNota: '101', parcela: '001', valor: 500, vencimento: '2026-08-22', chaveAcesso: 'chave-ok' })
   ];
   const regs = [
-    reg({ documento: '99/1', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
-    reg({ documento: '100/1', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
+    reg({ documento: '99/1', beneficiario: 'PISOS EXEMPLO E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    reg({ documento: '100/1', beneficiario: 'PISOS EXEMPLO E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
     reg({ documento: '101/1', beneficiario: 'FORNECEDOR SEM EXTRATO', valorCentavos: 50000, vencimento: '2026-08-22', situacao: 'PAGO' })
   ];
   const rel = Dda.conferir(regs, ctx(base, { periodo: null, extrato: ext.lancamentos }));

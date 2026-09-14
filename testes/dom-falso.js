@@ -155,12 +155,19 @@ function criarFirebaseFalso() {
     batch: () => ({ set() {}, commit: () => Promise.resolve() }),
     enablePersistence: () => Promise.resolve()
   };
-  const auth = { onAuthStateChanged() {}, signInWithEmailAndPassword: () => Promise.resolve({ user: {} }), signOut: () => Promise.resolve() };
+  const auth = {
+    onAuthStateChanged() {}, signInWithEmailAndPassword: () => Promise.resolve({ user: {} }),
+    signOut: () => Promise.resolve(), setPersistence: () => Promise.resolve()
+  };
   const app = { name: 'x', firestore: () => db, auth: () => auth, delete: () => Promise.resolve() };
   const fb = function () { return app; };
   fb.apps = [];
   fb.initializeApp = () => app;
   fb.firestore = { FieldValue: { serverTimestamp: () => 'ts' } };
+  // app-shared usa firebase.auth.Auth.Persistence.LOCAL e setPersistence:
+  // sem isto, qualquer caminho que passe por ai' morre em silencio.
+  fb.auth = () => auth;
+  fb.auth.Auth = { Persistence: { LOCAL: 'local', SESSION: 'session', NONE: 'none' } };
   return fb;
 }
 

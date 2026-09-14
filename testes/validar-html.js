@@ -1,4 +1,7 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
 const arquivo = process.argv[2];
 const html = fs.readFileSync(arquivo, 'utf8');
 let problemas = 0;
@@ -19,7 +22,19 @@ const estatico = (corte === -1 ? html : html.slice(0, corte))
 const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
 scripts.forEach((m, i) => {
   const ehModulo = /type=["']module["']/.test(m[0]);
-  if (ehModulo) { console.log('  (bloco ' + (i + 1) + ' e modulo ESM - checado a parte)'); return; }
+  if (ehModulo) {
+    // import/export nao passam por new Function: o bloco vai para um
+    // .mjs temporario e o proprio Node confere a sintaxe.
+    const tmp = path.join(os.tmpdir(), 'bloco-esm-' + process.pid + '-' + i + '.mjs');
+    try {
+      fs.writeFileSync(tmp, m[1]);
+      execFileSync(process.execPath, ['--check', tmp], { stdio: 'pipe' });
+      ok('sintaxe do bloco <script type=module> ' + (i + 1));
+    } catch (e) {
+      erro('sintaxe no bloco <script type=module> ' + (i + 1) + ': ' + String(e.stderr || e.message).split('\n').slice(0, 3).join(' '));
+    } finally { try { fs.unlinkSync(tmp); } catch (e2) {} }
+    return;
+  }
   try { new Function(m[1]); ok('sintaxe do bloco <script> ' + (i + 1)); }
   catch (e) { erro('sintaxe no bloco <script> ' + (i + 1) + ': ' + e.message); }
 });
@@ -81,7 +96,7 @@ hrefsDinamicos.forEach(h => {
 });
 
 // 9) alert/confirm nativos nao devem sobrar
-const nativos = (html.match(/(?<![.\w])(alert|confirm)\s*\(/g) || []);
+const nativos = (html.match(/(?:(?<![.\w])|window\.)(alert|confirm)\s*\(/g) || []);
 if (nativos.length) erro('ainda usa ' + nativos.length + ' alert()/confirm() nativo(s)');
 else ok('sem alert()/confirm() nativos');
 

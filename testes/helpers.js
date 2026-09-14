@@ -55,6 +55,11 @@ conferir('centavos preserva nulo', App.centavos(null), null);
 // --- numeros em formato brasileiro ---
 conferir('parseNumeroBR com R$', App.parseNumeroBR('R$ 1.234,56'), 1234.56);
 conferir('parseNumeroBR ponto decimal', App.parseNumeroBR('1234.56'), 1234.56);
+// Planilha de fornecedor traz "0,325" e "1,500": virgula unica seguida
+// de digitos e' decimal, com quantas casas vierem (antes virava 325).
+conferir('parseNumeroBR virgula com 3 decimais', App.parseNumeroBR('0,325'), 0.325);
+conferir('parseNumeroBR "1,500" e um e meio', App.parseNumeroBR('1,500'), 1.5);
+conferir('parseNumeroBR duas virgulas = milhar', App.parseNumeroBR('1,234,567'), 1234567);
 // AMBIGUIDADE CONHECIDA (comportamento original, mantido de proposito):
 // sem virgula, "1.234" e' lido como 1,234 e nao como mil duzentos e
 // trinta e quatro. Nao da' para desfazer sem saber como os fornecedores
@@ -282,6 +287,10 @@ assincrono('pedirTexto confirmado em branco devolve "" (limpar), nao null', () =
 conferir('confirmar nao tem mais inputDate',
   /inputDate/.test(fs.readFileSync(path.resolve(__dirname, '..', 'app-shared.js'), 'utf8')), false);
 
+// Modal que nunca resolve a promessa deixaria a fila parada e o
+// processo sairia com 0: o codigo de saida comeca em 1 e so' vira 0
+// quando o ultimo .then de fato rodou.
+process.exitCode = 1;
 pendentes
   .reduce((fila, t) => fila.then(t.executar).catch(e => {
     falhas++;
@@ -290,5 +299,5 @@ pendentes
   .then(() => {
     console.log('  ' + ok + ' verificacoes passaram' + (falhas ? ', ' + falhas + ' falharam' : ''));
     if (falhas) { console.log('  >>> ' + falhas + ' FALHA(S)'); process.exitCode = 1; }
-    else console.log('  >>> tudo certo');
+    else { console.log('  >>> tudo certo'); process.exitCode = 0; }
   });

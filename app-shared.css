@@ -1,6 +1,7 @@
 /* ============================================================
    app-shared.css - design system comum aos aplicativos
-   (Calculadora de Custo e Controle de Notas).
+   (Calculadora de Custo, Controle de Notas e Assistencias; o
+   Dashboard tem estilo proprio).
    Extraido dos HTML originais, onde este bloco era byte a byte identico.
    ============================================================ */
 
@@ -740,14 +741,6 @@
   .tabela-rolavel{
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
-  }
-  .quote-table caption{
-    caption-side:top;
-    text-align:left;
-    font-family:var(--font-mono);
-    font-size:11px;
-    color:var(--ink-soft);
-    padding-bottom:6px;
   }
 
   /* --- Avisos (toast) --------------------------------------- */

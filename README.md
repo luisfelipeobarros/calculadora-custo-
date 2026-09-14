@@ -19,7 +19,7 @@ Tudo precisa ficar **na mesma pasta**. Se você publica os aplicativos em
 algum lugar, suba também os `*-nucleo.js`, `app-shared.css`,
 `app-shared.js`, os ícones (`icon-*.png`) e os quatro `manifest*.json`.
 
-### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou `calculo-nucleo.js`
+### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou qualquer `*-nucleo.js`
 
 O navegador guarda esses arquivos em cache. Depois de publicar uma
 mudança neles, as máquinas continuam usando a **cópia antiga** por um
@@ -47,11 +47,12 @@ Notas não faz conta de margem), e precisa vir **depois** do
 
 ## ⚠ Passo obrigatório: fechar o banco
 
-Hoje qualquer pessoa que tenha o arquivo HTML consegue ler e apagar
+Sem as regras publicadas, qualquer pessoa que tenha o arquivo HTML consegue ler e apagar
 **todas as notas, duplicatas, cotações e preços de fornecedor**. A
 `apiKey` que aparece no código é pública por design — ela identifica o
-projeto, não protege nada. Quem protege são as regras do Firestore, e as
-atuais estão abertas.
+projeto, não protege nada. Quem protege são as regras do Firestore — os
+apps já exigem login na entrada, mas isso é só a tela; o banco só fica
+fechado com as regras publicadas.
 
 Faça isto no [Firebase Console](https://console.firebase.google.com/):
 
@@ -200,7 +201,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
+Não precisa instalar nada. São vinte e cinco etapas, em dezoito frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -210,13 +211,13 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    a cotação sugere o mesmo número da calculadora, e que o `index.html`
    continua ligado no núcleo em vez de ter voltado a ter sua própria
    cópia da conta.
-2. **Estrutura dos quatro HTML** — sintaxe dos scripts, tags balanceadas,
+2. **Estrutura dos cinco HTML** — sintaxe dos scripts, tags balanceadas,
    ids duplicados, `$()` apontando para id inexistente, `label for=`
    órfão, arquivo referenciado que sumiu.
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 95 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 98 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -229,16 +230,16 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
 6. **Regras da tela de cotação** — campo escondido não entra na conta,
    a margem do histórico bate com a da cotação, e nada (barra de conta,
    escutas do Firestore) se multiplica a cada reconexão.
-7. **Fornecedores e prazos** — 55 verificações: a separação da Vetrus
+7. **Fornecedores e prazos** — 58 verificações: a separação da Vetrus
    por produto e a moda dos prazos com a folga de ±5 dias. Trava o
    principal: o prazo mostrado é sempre um que **existiu de verdade**
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 38 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 50 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
-   de período. Trava também que a tela espere as duas coleções antes de
+   de período. Trava também que a tela espere as três coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
 9. **Conferência de DDA** — 180 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
@@ -339,7 +340,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-16. **Lançamentos contábeis** — 58 verificações em
+16. **Lançamentos contábeis** — 60 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
     transferência = D destino / C origem — dado faltando não monta
@@ -358,7 +359,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
 
-17. **Dashboard de vendas** — 59 verificações extraídas do próprio
+17. **Dashboard de vendas** — 60 verificações extraídas do próprio
     `dashboard.html` (o teste mede o código que roda na tela): o
     desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
     (ordem e acento não importam), a **regra de ouro** da margem
@@ -470,7 +471,7 @@ constante `LOJAS_PADRAO`.
 `MODELO_EXTRATOR`, `MODELO_PESQUISA`, `MODELO_FORMATADOR`.
 
 **Esforço de raciocínio da pesquisa de preços** (`thinkingLevel`), no
-mesmo bloco. São dois níveis:
+mesmo bloco. São dois níveis na pesquisa (o formatador roda em `minimal`):
 
 | Nível | Onde roda | Volume |
 |---|---|---|
@@ -492,8 +493,9 @@ aquela célula, e são poucas chamadas.
 As telas agora ficam no endereço, então dá para recarregar a página sem
 voltar ao início e para mandar um link já aberto na tela certa:
 
-- `controle-notas.html#Pagamentos`, `#Importar`, `#Canceladas`, `#Painel`
-- `index.html#Historico`, `#Cotacao`, `#Concorrentes`,
+- `controle-notas.html#Painel`, `#Importar` (Canceladas é um filtro aí dentro), `#Pagamentos`,
+  `#Lancamentos`, `#Dda`, `#Simulador`, `#Vendas`, `#Fornecedores`, `#Cadastros`
+- `index.html#Calculadora`, `#Painel`, `#Historico`, `#Cotacao`, `#Concorrentes`, `#Fiscal`,
   `#Produtos`, `#Notas`, `#Frete`, `#Sync`
 
 As telas de comparação e de pesquisa em lote dependem de um pedido

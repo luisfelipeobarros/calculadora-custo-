@@ -2,10 +2,11 @@
   Painel de metas da Calculadora: dias uteis, limite de 60% e a
   previsao de faturamento do mes corrente.
 
-  Os numeros de referencia vem da PLANILHA que o painel substitui
-  (ano de 2026): dias de trabalho mes a mes, faturamento diario
-  previsto e realizado, e a diferenca objetivo x realizado. Se a
-  conta daqui discordar da planilha, quem muda e' o codigo.
+  A ARITMETICA e' a da planilha que o painel substitui (dias de
+  trabalho mes a mes, faturamento diario previsto e realizado,
+  diferenca objetivo x realizado); os VALORES sao sinteticos —
+  repositorio publico, nenhum faturamento real fica aqui. Cada
+  esperado foi conferido a mao a partir dos valores de entrada.
 
   Regras que estes testes travam:
   - dia de trabalho = tudo menos DOMINGO e menos feriado cadastrado
@@ -56,18 +57,18 @@ eq('fevereiro bissexto tem os dias certos (2028)',
 
 // ── Limite e derivados da linha (numeros da planilha) ────────
 
-// Janeiro fechado: objetivo 6.470.000, vendas 6.656.607,40.
+// Janeiro fechado (26 dias de trabalho): objetivo 5.200.000, vendas 5.356.000.
 {
   const r = P.resumoDoMes({
-    mes: '2026-01', objetivo: 6470000, feriados: ['2026-01-01'],
-    faturamento: { acumulado: 6656607.40, ate: '2026-01-31' },
-    aPagar: 3873749.24
+    mes: '2026-01', objetivo: 5200000, feriados: ['2026-01-01'],
+    faturamento: { acumulado: 5356000, ate: '2026-01-31' },
+    aPagar: 3111749.24
   }, '2026-08-04');
-  eq('limite = 60% do objetivo (janeiro)', r.limite, 3882000);
+  eq('limite = 60% do objetivo (janeiro)', r.limite, 3120000);
   eq('disponivel = limite - a pagar (janeiro)', r.disponivel, 8250.76);
-  eq('diario previsto = objetivo / dias de trabalho', r.diarioPrevisto, 248846.15);
-  eq('diario realizado (mes fechado) = vendas / dias de trabalho', r.diarioRealizado, 256023.36);
-  eq('diferenca obj x real de janeiro ~ 2,88%', Math.round(r.difPct * 10000), 288);
+  eq('diario previsto = objetivo / dias de trabalho', r.diarioPrevisto, 200000);
+  eq('diario realizado (mes fechado) = vendas / dias de trabalho', r.diarioRealizado, 206000);
+  eq('diferenca obj x real de janeiro = 3,00%', Math.round(r.difPct * 10000), 300);
   eq('mes anterior ao de hoje e "fechado"', r.estado, 'fechado');
   eq('mes fechado nao tem previsao', r.previsao, null);
 }
@@ -75,8 +76,8 @@ eq('fevereiro bissexto tem os dias certos (2028)',
 // Maio: vendas abaixo do objetivo -> diferenca negativa.
 {
   const r = P.resumoDoMes({
-    mes: '2026-05', objetivo: 6200000, feriados: ['2026-05-01'],
-    faturamento: { acumulado: 6121019.08, ate: '2026-05-31' }, aPagar: 0
+    mes: '2026-05', objetivo: 5000000, feriados: ['2026-05-01'],
+    faturamento: { acumulado: 4936500, ate: '2026-05-31' }, aPagar: 0
   }, '2026-08-04');
   eq('diferenca negativa de maio ~ -1,27%', Math.round(r.difPct * 10000), -127);
 }
@@ -149,11 +150,11 @@ eq('fevereiro bissexto tem os dias certos (2028)',
 // "-91%" todo dia 04. O comparavel e' objetivo x decorridos/uteis.
 {
   const r = P.resumoDoMes({
-    mes: '2026-08', objetivo: 6500000, feriados: [],
-    faturamento: { acumulado: 529667.57, ate: '2026-08-03' }, aPagar: 0
+    mes: '2026-08', objetivo: 5200000, feriados: [],
+    faturamento: { acumulado: 423720, ate: '2026-08-03' }, aPagar: 0
   }, '2026-08-04');
   eq('objetivo comparavel = proporcional (2 de 26 dias uteis)',
-    r.objetivoComparavel, 500000);
+    r.objetivoComparavel, 400000);
   eq('dif do mes corrente vs proporcional ~ +5,93%',
     Math.round(r.difPct * 10000), 593);
 }
@@ -171,11 +172,11 @@ eq('fevereiro bissexto tem os dias certos (2028)',
   // Mes fechado segue comparando com o objetivo inteiro (a conta da
   // planilha, ja' travada nos testes de janeiro/maio acima).
   const r = P.resumoDoMes({
-    mes: '2026-01', objetivo: 6470000, feriados: ['2026-01-01'],
-    faturamento: { acumulado: 6656607.40, ate: '2026-01-31' }, aPagar: 0
+    mes: '2026-01', objetivo: 5200000, feriados: ['2026-01-01'],
+    faturamento: { acumulado: 5356000, ate: '2026-01-31' }, aPagar: 0
   }, '2026-08-04');
   eq('mes fechado: objetivo comparavel = objetivo inteiro',
-    r.objetivoComparavel, 6470000);
+    r.objetivoComparavel, 5200000);
 }
 
 // Objetivo ja' batido: necessario por dia = 0, nao negativo.
@@ -190,11 +191,11 @@ eq('fevereiro bissexto tem os dias certos (2028)',
 // "ate" alem do fim do mes vale o fim (mes completo).
 {
   const r = P.resumoDoMes({
-    mes: '2026-07', objetivo: 6540000, feriados: [],
-    faturamento: { acumulado: 7490144, ate: '2026-08-15' }, aPagar: 0
+    mes: '2026-07', objetivo: 5000000, feriados: [],
+    faturamento: { acumulado: 6210000, ate: '2026-08-15' }, aPagar: 0
   }, '2026-08-04');
   eq('"ate" depois do fim do mes: divide pelos dias do mes inteiro',
-    r.diarioRealizado, App.centavos(7490144 / 27));
+    r.diarioRealizado, App.centavos(6210000 / 27));
 }
 
 // O 60% mora num lugar so'.
@@ -245,7 +246,7 @@ eq('a constante do limite e 60%', P.LIMITE_DO_OBJETIVO, 0.6);
 }
 
 eq('crescimento = total / anterior - 1',
-  Math.round(P.crescimentoAnual(72942769.81, 66311608.92) * 10000) / 10000, 0.1);
+  Math.round(P.crescimentoAnual(55000000, 50000000) * 10000) / 10000, 0.1);
 eq('queda sai negativa', P.crescimentoAnual(50, 100), -0.5);
 eq('sem ano anterior: null, nunca 0%', P.crescimentoAnual(100, null), null);
 eq('anterior zero nao divide', P.crescimentoAnual(100, 0), null);

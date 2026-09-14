@@ -16,9 +16,10 @@ rules_version = '2';
 //  3) Firestore Database > Rules: cole este arquivo e clique
 //     em "Publicar".
 //
-//  Depois disso os apps pedem login sozinhos na primeira operacao
-//  que o Firestore recusar. Antes disso, continuam funcionando como
-//  hoje — da' para publicar as regras sem parar o trabalho de ninguem.
+//  Os apps ja' exigem login na entrada (App.exigirLogin); estas regras
+//  sao o que vale do lado do servidor — sem elas, quem tiver o HTML
+//  le e apaga tudo com a apiKey publica. Da' para publicar sem parar o
+//  trabalho de ninguem: quem esta' logado nem percebe.
 // ============================================================
 
 service cloud.firestore {

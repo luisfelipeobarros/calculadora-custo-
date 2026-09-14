@@ -175,7 +175,11 @@ for(let i = 0; i < 20000; i++){
   const r = novo.computeCalc(v);
   piorFecha = Math.max(piorFecha, Math.abs(r.total - (v.venda - r.lucro)));
 }
-console.log('identidade total == venda - lucro, pior erro:', piorFecha.toFixed(6));
+// Cada parcela e' arredondada em centavos antes de somar: ate' meio
+// centavo por parcela, 4 centavos no total, e' arredondamento; acima
+// disso a identidade quebrou.
+if(piorFecha > 0.04){ falhas++; console.log('>>> identidade total == venda - lucro FALHOU (pior erro ' + piorFecha.toFixed(6) + ')'); }
+console.log('identidade total == venda - lucro, pior erro:', piorFecha.toFixed(6), '(limite 0.04)');
 
 // A margem-alvo realmente sai o que foi pedido?
 let piorAlvo = 0;
@@ -190,7 +194,11 @@ for(let i = 0; i < 20000; i++){
     if(isFinite(r.margem)) piorAlvo = Math.max(piorAlvo, Math.abs(r.margem - alvo));
   });
 }
-console.log('preco sugerido atinge a margem pedida, pior erro:', piorAlvo.toExponential(3));
+// O preco sugerido e' arredondado em centavos: a margem que sai pode
+// diferir da pedida por um centavo sobre o preco (~1e-5 em preco de
+// R$ 100). Acima de 1e-3 (0,1 ponto percentual) a formula errou.
+if(piorAlvo > 1e-3){ falhas++; console.log('>>> preco sugerido NAO atinge a margem pedida (pior erro ' + piorAlvo.toExponential(3) + ')'); }
+console.log('preco sugerido atinge a margem pedida, pior erro:', piorAlvo.toExponential(3), '(limite 1e-3)');
 
 // ---------- precoSugerido: a coluna "Sugerido" da cotacao ----------
 // Precisa dar exatamente o mesmo numero que a calculadora mostra na

@@ -1,6 +1,6 @@
 /* ============================================================
-   app-shared.js — nucleo comum aos aplicativos
-   (Calculadora de Custo e Controle de Notas).
+   app-shared.js — nucleo comum aos aplicativos (Calculadora de
+   Custo, Controle de Notas, Assistencias e Dashboard).
 
    Antes cada HTML tinha sua propria copia de escapeHtml, debounce,
    formatacao de moeda/data e da config do Firebase. Corrigir um bug
@@ -123,13 +123,17 @@
     return Number(v).toLocaleString('pt-BR', o);
   }
 
-  // Aceita "1.234,56", "1234.56", "R$ 99,90" e devolve numero ou null.
+  // Aceita "1.234,56", "1234.56", "R$ 99,90", "0,325" e devolve numero
+  // ou null. Uma UNICA virgula seguida so' de digitos e' o decimal, com
+  // quantas casas vierem (planilha de fornecedor traz "0,325" e
+  // "1,500"); virgula em qualquer outra posicao e' milhar e sai.
   function parseNumeroBR(v) {
     if (v === '' || v == null) return null;
     if (typeof v === 'number') return v;
     var s = String(v).trim().replace(/^R\$\s*/i, '').trim();
     if (s === '') return null;
-    s = /,\d{1,2}$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    var umaVirgula = s.indexOf(',') !== -1 && s.indexOf(',') === s.lastIndexOf(',');
+    s = (umaVirgula && /,\d+$/.test(s)) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
     var n = parseFloat(s);
     return isNaN(n) ? null : n;
   }
@@ -199,6 +203,10 @@
   }
 
   function fmtDataFirestore(ts) {
+    // null (serverTimestamp ainda pendente na leitura local) virava
+    // 31/12/1969; string ISO passava pelo fuso e perdia um dia.
+    if (ts == null) return '-';
+    if (typeof ts === 'string') return fmtData(ts);
     try {
       var d = (ts && ts.toDate) ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return '-';
@@ -425,7 +433,7 @@
   // a pessoa cancelou / fechou / nao escolheu nada.
   //
   // E' uma funcao separada de proposito: confirmar() promete um booleano
-  // (13 chamadas dependem disso, e o `.then(v => v === true)` no fim
+  // (todas as chamadas dependem disso, e o `.then(v => v === true)` no fim
   // dela transformaria qualquer data escolhida em `false`). Quem precisa
   // de um valor de volta usa esta.
   //
@@ -869,6 +877,11 @@
   function comAuth(operacao) {
     return Promise.resolve().then(operacao).catch(function (e) {
       if (!ehPermissaoNegada(e)) throw e;
+      // Logado e mesmo assim negado: e' a REGRA recusando (campo fora da
+      // lista, colecao fechada), nao sessao vencida — pedir login de
+      // novo so' repetiria o erro depois do modal. O Firebase renova o
+      // token sozinho; sessao expirada de verdade chega com _usuario nulo.
+      if (_usuario) throw e;
       return pedirLogin('Sua sessao expirou ou estes dados exigem login.').then(function () {
         return operacao();
       });
@@ -957,8 +970,14 @@
       if (!o.semRolar) global.scrollTo(0, 0);
     }
 
+    // "#%E0" (escape quebrado) faz decodeURIComponent lancar URIError:
+    // vira hash vazio, que cai na tela padrao.
+    function lerHash() {
+      try { return decodeURIComponent(global.location.hash.slice(1)); } catch (e) { return ''; }
+    }
+
     global.addEventListener('hashchange', function () {
-      var bruto = decodeURIComponent(global.location.hash.slice(1));
+      var bruto = lerHash();
 
       // Navegacao feita pelo proprio app: ir() ja' aplicou a tela e so'
       // depois mexeu no endereco. Sem esta saida antecipada, as telas de
@@ -978,7 +997,7 @@
     });
 
     function iniciar() {
-      var nome = decodeURIComponent(global.location.hash.slice(1));
+      var nome = lerHash();
       // Telas que precisam de um registro selecionado nao podem ser
       // restauradas de um link; caem na tela padrao.
       if (!existe(nome) || naoRestauraveis.indexOf(nome) !== -1) nome = padrao;
@@ -1337,7 +1356,7 @@
         var rotulo = cl ? [cl.ambito, cl.st].filter(Boolean).join(' · ') : 'CFOP fora do padrão';
         html += '<div style="padding:2px 0;">CFOP <strong>' + escapeHtml(c || '—') + '</strong> — ' +
           escapeHtml(rotulo) + ' <span style="color:var(--ink-soft); font-family:var(--font-mono); font-size:11px;">(' +
-          porCfop[c] + ' item' + (porCfop[c] === 1 ? '' : 'ns') + ')</span></div>';
+          porCfop[c] + (porCfop[c] === 1 ? ' item' : ' itens') + ')</span></div>';
       });
       var temVendaComSt = dados.itens.some(function (it) {
         var cl = classificarCfop(it.cfop);
