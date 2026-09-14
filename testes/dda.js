@@ -234,12 +234,55 @@ const reg = (o) => Object.assign({
   eq('Cerbras: duplicata paga nao entra no escopo', c4.duplicata, null);
 }
 
-// documento ambiguo ("1 1626 2"): nem tenta
+// documento ambiguo ("1 1626 2"): o documento NAO e' interpretado.
+// O que resta e' o ultimo recurso — valor E vencimento exatos, na base
+// inteira, so' se sobrar UMA duplicata — e o `como` registra que foi
+// por ai'. Sem par exato: ambiguo, sem chute.
 {
   const base = Dda.prepararBase([dup({ id: 'a', numeroNota: '1626' })]);
-  const c = Dda.casar(reg({ documento: '1 1626 2' }), base);
-  eq('documento com dois separadores vira ambiguo, sem chute', c.ambiguo, true);
+  const c = Dda.casar(reg({ documento: '1 1626 2', valorCentavos: 12345 }), base);
+  eq('documento com dois separadores e valor sem par = ambiguo, sem chute', c.ambiguo, true);
+  eq('  ...e o motivo diz que o documento e ambiguo', /ambíguo/.test(c.motivo), true);
+  const c2 = Dda.casar(reg({ documento: '1 1626 2' }), base);
+  eq('documento ambiguo + valor e vencimento UNICOS na base = casa pelo ultimo recurso',
+    c2.duplicata && c2.duplicata.id, 'a');
+  eq('  ...e o como registra o caminho', c2.como, ['valor+vencimento únicos na base']);
 }
+
+// ultimo recurso: nunca escolhe entre duas
+{
+  const base = Dda.prepararBase([
+    dup({ id: 'a', numeroNota: '7001', valor: 2199.86 }),
+    dup({ id: 'b', numeroNota: '7002', valor: 2199.86 })
+  ]);
+  const c = Dda.casar(reg({ documento: '', valorCentavos: 219986 }), base);
+  eq('sem documento + duas duplicatas com o mesmo valor e vencimento = ambiguo', c.ambiguo, true);
+  eq('  ...com as duas candidatas mostradas', c.candidatas.map(d => d.id), ['a', 'b']);
+  eq('  ...e o motivo diz "sem número de documento"', /sem número de documento/.test(c.motivo), true);
+
+  // Uma paga e uma em aberto: a em aberto desempata, e o como registra.
+  const base2 = Dda.prepararBase([
+    dup({ id: 'a', numeroNota: '7001', valor: 2199.86, pago: true }),
+    dup({ id: 'b', numeroNota: '7002', valor: 2199.86 })
+  ]);
+  const c2 = Dda.casar(reg({ documento: '', valorCentavos: 219986 }), base2);
+  eq('  ...mas se so uma esta em aberto, ela desempata', c2.duplicata && c2.duplicata.id, 'b');
+  eq('  ...e o como diz que foi desempate', c2.como, ['valor+vencimento', 'desempate: única em aberto']);
+
+  // Nota fora da base + valor/vencimento unicos: tambem casa (cedente
+  // que numera o boleto do seu jeito: '1634349E G').
+  const c3 = Dda.casar(reg({ documento: '999999/1', valorCentavos: 219986 }), base2);
+  eq('nota fora da base + valor/vencimento unicos em aberto = casa, e diz por onde',
+    c3.duplicata && c3.duplicata.id === 'b' && c3.como[0] === 'valor+vencimento', true);
+  // "A nota existe mas nao tem a parcela" e' divergencia de verdade:
+  // NAO cai no ultimo recurso.
+  const c4 = Dda.casar(reg({ documento: '7002/9', valorCentavos: 219986 }), base2);
+  eq('nota existe sem a parcela: continua sem casar (nao e caso do ultimo recurso)', c4.duplicata, null);
+}
+
+// separador no fim ('44536-', planilha do Safra) = nota sem parcela
+eq('documento com separador no fim = nota sem parcela',
+  Dda.dividirDocumento('44536-'), { nota: '44536', parcela: null });
 
 // ── 4. As situacoes do relatorio ─────────────────────────────
 
@@ -388,6 +431,148 @@ const ctx = (duplicatas, extra) => Object.assign({
   eq('ordem: vermelhos primeiro, maior valor primeiro, ok por ultimo',
     rel.linhas.map(l => l.registro.documento), ['405/1', '404/1', '10/1']);
   eq('resumo bate com as linhas', [rel.resumo.vermelhos, rel.resumo.ok], [2, 1]);
+}
+
+// ── 5. Planilha do Safra (.xlsx) ─────────────────────────────
+//
+// Mesmo layout da exportacao real "Boletos DDA" (14/09/2026): titulo,
+// CNPJ e periodo acima, um resumo, a linha de cabecalho e os boletos.
+// Nomes e valores sao fabricados; a FORMA e' a do banco: valor em
+// numero, data em texto dd/mm/aaaa, documento com espaco ('375033 01'),
+// com letra ('1634349E G'), com separador no fim ('44536-') e VAZIO,
+// beneficiario final so' quando o cedente e' fundo, BAIXADO com valor
+// a pagar zero.
+
+const CAB = ['Tipo', 'Empresa', 'CNPJ / CPF', 'Vencimento', 'Nº documento', 'Nosso número',
+  'Beneficiário', 'Banco', 'Nominal (R$)', 'Valor Total (R$)', 'Situação', 'Beneficiario Final'];
+const linhaSafra = (o) => ['Pagador', 'NOSSA LOJA LTDA', '00.111.222/0001-33',
+  o.venc || '14/09/2026', o.doc == null ? '375033 01' : o.doc, o.nn || '01008251230002348097',
+  o.ben || 'SECURITIZADORA XYZ S.A.', o.banco || 756,
+  o.nominal == null ? 4940.76 : o.nominal, o.total == null ? (o.nominal == null ? 4940.76 : o.nominal) : o.total,
+  o.sit || 'ABERTO', o.final || ''];
+const planilhaSafra = (boletos) => [
+  ['', 'Banco Safra', '', '', '', '', '', '', 'FULANO', '', '14/09/2026 11:49', ''],
+  ['', 'CNPJ: 00.000.000/0001-00'],
+  [],
+  ['Boletos DDA'],
+  [],
+  ['Período: 08/09/2026 até 14/09/2026'],
+  [],
+  ['Quantidade', 'Valor nominal total (R$)', 'Valor a pagar total (R$)'],
+  [boletos.length, 1, 1],
+  [],
+  CAB
+].concat(boletos);
+
+{
+  const lido = Dda.interpretarPlanilha(planilhaSafra([
+    linhaSafra({}),
+    linhaSafra({ doc: '1634349E G', ben: 'CERAMICA ABC LTDA.', banco: 1, nominal: 511.92 }),
+    linhaSafra({ doc: '44536-', nominal: 2370.19 }),
+    linhaSafra({ doc: '', ben: 'A. FULANO', nominal: 1650 }),
+    linhaSafra({ doc: '15974 2', ben: 'FUNDO DE INVESTIMENTO Q', nominal: 645.83, final: 'INDUSTRIA DE PAPEL LTDA' }),
+    linhaSafra({ doc: '000001195', nominal: 3370.91, total: 0, sit: 'BAIXADO' }),
+    linhaSafra({ doc: '0760825 02', nominal: 3483.26, total: 3500.10, sit: 'PAGO' })
+  ]));
+  eq('planilha: origem marcada', lido.origem, 'planilha');
+  eq('planilha: periodo lido do cabecalho ("Período: X até Y")', lido.periodo, { ini: '2026-09-08', fim: '2026-09-14' });
+  eq('planilha: 7 boletos, 0 ilegiveis', [lido.registros.length, lido.ilegiveis.length], [7, 0]);
+  const r0 = lido.registros[0];
+  eq('planilha: vencimento dd/mm/aaaa vira ISO', r0.vencimento, '2026-09-14');
+  eq('planilha: valor em numero vira centavos inteiros (4940.76 -> 494076)', r0.valorCentavos, 494076);
+  eq('planilha: documento, beneficiario, banco e nosso numero no lugar',
+    [r0.documento, r0.beneficiario, r0.banco, r0.nossoNumero],
+    ['375033 01', 'SECURITIZADORA XYZ S.A.', '756', '01008251230002348097']);
+  eq('planilha: CNPJ do pagador normalizado, CNPJ do beneficiario vazio (a planilha nao traz)',
+    [r0.cnpjPagador, r0.cnpjBeneficiario], ['00111222000133', '']);
+  eq('planilha: situacao presente, semSituacao false', [r0.situacao, r0.semSituacao], ['ABERTO', false]);
+  eq('planilha: beneficiario final so quando existe',
+    [lido.registros[4].beneficiarioFinal, r0.beneficiarioFinal], ['INDUSTRIA DE PAPEL LTDA', null]);
+  eq('planilha: documento vazio e registro VALIDO (nao ilegivel)', lido.registros[3].documento, '');
+  eq('planilha: BAIXADO com valor a pagar zero, nominal preservado',
+    [lido.registros[5].valorCentavos, lido.registros[5].valorAPagarCentavos], [337091, 0]);
+  eq('planilha: valor a pagar diferente do nominal preservado (3500.10)',
+    lido.registros[6].valorAPagarCentavos, 350010);
+}
+
+// Cabecalho em outra posicao/ordem e datas como Date ou serial:
+// o que ancora e' o ROTULO, nao a coluna.
+{
+  const lido = Dda.interpretarPlanilha([
+    ['qualquer coisa'],
+    ['Beneficiário', 'Nominal (R$)', 'Vencimento', 'Nº documento', 'Situação'],
+    ['FORN A', 100, new Date(2026, 8, 14), '10/1', 'PAGO'],
+    ['FORN B', 200, 46279, '11/1', 'ABERTO'],      // serial do Excel = 14/09/2026
+    ['FORN C', 300, 'não é data', '12/1', 'ABERTO'],
+    ['Total', 600]
+  ]);
+  eq('planilha: colunas fora de ordem, achadas pelo rotulo',
+    lido.registros.map(r => r.beneficiario), ['FORN A', 'FORN B']);
+  eq('planilha: Date e serial do Excel viram a mesma data ISO',
+    lido.registros.map(r => r.vencimento), ['2026-09-14', '2026-09-14']);
+  eq('planilha: linha com data ilegivel vai para ilegiveis (nunca registro pela metade)',
+    lido.ilegiveis.length === 1 && /vencimento ilegível/.test(lido.ilegiveis[0].motivo), true);
+  eq('planilha: linha "Total" do rodape e ignorada em silencio',
+    lido.registros.length + lido.ilegiveis.length, 3);
+  eq('planilha: sem periodo no cabecalho = null (o check 8 e pulado, como no PDF)', lido.periodo, null);
+}
+
+{
+  const lido = Dda.interpretarPlanilha([['Boletos'], ['a', 'b', 'c']]);
+  eq('planilha sem cabecalho reconhecivel: zero registros e UM ilegivel explicando',
+    [lido.registros.length, lido.ilegiveis.length, /cabeçalho/.test(lido.ilegiveis[0].motivo)], [0, 1, true]);
+}
+
+// A planilha entra no MESMO conferir do PDF — e' o que faz a lista
+// de baixa em lote existir para os dois bancos.
+{
+  const base = [
+    dup({ id: 'a', numeroNota: '375033', parcela: '001', valor: 4940.76, vencimento: '2026-09-14', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'b', numeroNota: '760825', parcela: '002', valor: 3483.26, vencimento: '2026-09-14', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'c', numeroNota: '44536', parcela: '001', valor: 2370.19, vencimento: '2026-09-14', chaveAcesso: 'chave-ok', pago: true }),
+    dup({ id: 'd', numeroNota: '1195', parcela: '001', valor: 3370.91, vencimento: '2026-09-14', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'e', numeroNota: '9', parcela: '001', valor: 1650, vencimento: '2026-09-14', chaveAcesso: 'chave-ok' })
+  ];
+  const lido = Dda.interpretarPlanilha(planilhaSafra([
+    linhaSafra({ doc: '375033 01', nominal: 4940.76, sit: 'PAGO' }),                    // pago la, aberto aqui
+    linhaSafra({ doc: '0760825 02', nominal: 3483.26, total: 3500.10, sit: 'PAGO' }),   // idem, com juros embutidos
+    linhaSafra({ doc: '44536-', nominal: 2370.19, sit: 'PAGO' }),                       // pago dos dois lados
+    linhaSafra({ doc: '000001195', nominal: 3370.91, total: 0, sit: 'BAIXADO' }),       // baixado: nao e pago
+    linhaSafra({ doc: '', ben: 'A. FULANO', nominal: 1650, sit: 'ABERTO' })             // sem documento, em aberto
+  ]));
+  const rel = Dda.conferir(lido.registros, ctx(base, { periodo: lido.periodo }));
+  const por = (doc) => rel.linhas.find(l => l.registro.documento === doc);
+
+  eq('PAGO no banco + aberto aqui = amarelo bancoBaixouNosNao', tipos(por('375033 01')), ['bancoBaixouNosNao']);
+  eq('  ...e entra na lista de baixa em lote', rel.baixaveis.map(l => l.casamento.duplicata.id).sort(), ['a', 'b']);
+  eq('juros embutidos: aviso branco a mais, e continua baixavel',
+    tipos(por('0760825 02')), ['bancoBaixouNosNao', 'valorAPagarDiferente']);
+  eq('PAGO no banco + pago aqui = ✅ (reimportar o DDA de ontem nao acusa nada)',
+    [tipos(por('44536-')), gravidadeDe(por('44536-'))], [[], G.OK]);
+  eq('BAIXADO = amarelo proprio (baixadoNoBanco), fora do lote',
+    [tipos(por('000001195')), rel.baixaveis.some(l => l.casamento.duplicata.id === 'd')], [['baixadoNoBanco'], false]);
+  eq('  ...e o valor a pagar zero do BAIXADO nao vira aviso de juros',
+    tipos(por('000001195')).includes('valorAPagarDiferente'), false);
+  eq('sem documento, em aberto: casa pelo ultimo recurso e fica ✅',
+    [por('').casamento.duplicata.id, gravidadeDe(por(''))], ['e', G.OK]);
+  eq('resumo: 3 amarelos, 2 ok', [rel.resumo.amarelos, rel.resumo.ok, rel.resumo.vermelhos], [3, 2, 0]);
+}
+
+// Lote NUNCA leva vermelho: banco diz pago, mas o valor diverge.
+{
+  const base = [dup({ id: 'a', numeroNota: '10', parcela: '001', valor: 100, chaveAcesso: 'chave-ok' })];
+  const rel = Dda.conferir([reg({ documento: '10/1', situacao: 'PAGO', valorCentavos: 10001 })], ctx(base));
+  eq('pago no banco com valor divergente: vermelho, e FORA da lista de baixa',
+    [gravidadeDe(rel.linhas[0]), rel.baixaveis.length], [G.VERMELHO, 0]);
+}
+
+// "ja pago" so' e' vermelho quando o banco AINDA cobra.
+{
+  const d = dup({ id: 'a', numeroNota: '10', parcela: '001', pago: true, dataPagamento: '2026-09-10', chaveAcesso: 'chave-ok' });
+  const rel = Dda.conferir([reg({ documento: '10/1', situacao: 'A PAGAR' })], ctx([d]));
+  eq('pago aqui + banco ainda cobrando = vermelho jaPago', tipos(rel.linhas[0]).includes('jaPago'), true);
+  const rel2 = Dda.conferir([reg({ documento: '10/1', situacao: 'BAIXADO' })], ctx([d]));
+  eq('pago aqui + BAIXADO no banco = nada a apontar', tipos(rel2.linhas[0]), []);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');

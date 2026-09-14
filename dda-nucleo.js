@@ -1,5 +1,10 @@
 /* ============================================================
-   dda-nucleo.js — conferência do DDA (Bradesco) contra as duplicatas.
+   dda-nucleo.js — conferência do DDA contra as duplicatas.
+
+   Duas entradas, um so' registro: o PDF do Bradesco (secao 3, por
+   posicao no texto) e a planilha .xlsx do Safra (secao 3b, por rotulo
+   de coluna). Tudo que vem depois — casamento, conferencia, lista do
+   que pode ser baixado em lote — nao sabe de onde o boleto veio.
 
    Mesmo desenho do calculo-nucleo.js: o UNICO lugar onde as regras
    de leitura e casamento moram, carregavel com <script src> no
@@ -14,8 +19,8 @@
    "nao consegui ler". Falhar alto e' a caracteristica principal.
 
    Este arquivo NAO escreve nada em lugar nenhum: recebe dados,
-   devolve um relatorio. Quem le o PDF (pdf.js) e quem desenha e' o
-   controle-notas.html.
+   devolve um relatorio. Quem le o PDF (pdf.js), quem abre a planilha
+   (SheetJS), quem desenha e quem grava a baixa e' o controle-notas.html.
 
    Precisa vir DEPOIS de app-shared.js — usa App.linhasDePdf.
    ============================================================ */
@@ -99,6 +104,9 @@
     var m = d.match(/^(\d+)[\/\- ]([0-9A-Za-z]+)$/);
     if (m) return { nota: semZeros(m[1]), parcela: normalizarParcela(m[2]) };
     if (/^\d+$/.test(d)) return { nota: semZeros(d), parcela: null };
+    // '44536-' (planilha do Safra): separador sem nada depois = nota
+    // sem parcela, nao ambiguidade.
+    if (/^\d+[\/\- ]$/.test(d)) return { nota: semZeros(d.slice(0, -1)), parcela: null };
     return { ambiguo: true };
   }
 
@@ -331,6 +339,152 @@
   }
 
   /* ============================================================
+     3b. Leitura da planilha do DDA (Safra, .xlsx)
+
+     A planilha ja' vem em celulas: nao ha' posicao para adivinhar.
+     O que se ancora e' o ROTULO de cada coluna (a linha de cabecalho
+     e' a primeira que tem Vencimento + Nº documento + Beneficiario +
+     Nominal, onde quer que esteja — o Safra poe titulo, CNPJ,
+     periodo e um resumo antes dela). Linha que nao tem vencimento,
+     valor ou beneficiario legiveis vai para "nao consegui ler",
+     nunca vira registro pela metade.
+
+     O que a planilha traz a mais que o PDF do Bradesco, e o registro
+     carrega: o BENEFICIARIO FINAL (o fornecedor de verdade quando o
+     boleto e' de fundo/securitizadora), o NOSSO NUMERO do boleto e o
+     VALOR A PAGAR ao lado do nominal. O que ela NAO traz: o CNPJ do
+     beneficiario (fica vazio; as regras por cedente casam pelo nome).
+     ============================================================ */
+
+  // Rotulos aceitos por coluna, ja' normalizados (minusculas, sem
+  // acento). Os quatro primeiros sao obrigatorios para reconhecer o
+  // cabecalho; o resto e' opcional.
+  var COLUNAS_PLANILHA = {
+    vencimento: /^vencimento$/,
+    documento: /^n.{0,2}\s*documento$/,
+    beneficiario: /^beneficiario$/,
+    nominal: /^(valor )?nominal/,
+    valorTotal: /^valor (total|a pagar)/,
+    situacao: /^situacao$/,
+    nossoNumero: /^nosso numero$/,
+    beneficiarioFinal: /^beneficiario final$/,
+    banco: /^banco$/,
+    pagador: /^(empresa|pagador)$/,
+    cnpjPagador: /^cnpj/
+  };
+  var OBRIGATORIAS_PLANILHA = ['vencimento', 'documento', 'beneficiario', 'nominal'];
+
+  function celulaTexto(v) {
+    if (v == null) return '';
+    if (v instanceof Date) return isNaN(v) ? '' : dataDaCelula(v);
+    return String(v).trim();
+  }
+
+  // Data como o SheetJS entrega: Date (cellDates), serial do Excel
+  // (numero), 'dd/mm/aaaa' ou ISO. Qualquer outra coisa: null.
+  function dataDaCelula(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) {
+      if (isNaN(v)) return null;
+      var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+      return v.getFullYear() + '-' + p2(v.getMonth() + 1) + '-' + p2(v.getDate());
+    }
+    if (typeof v === 'number') {
+      if (v < 20000 || v > 80000) return null; // serial plausivel: 1954..2119
+      var d = new Date(Math.round((v - 25569) * 86400000));
+      return d.toISOString().slice(0, 10);
+    }
+    var t = String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+    return dataBrParaIso(t);
+  }
+
+  // linhas: matriz de celulas (sheet_to_json com header:1), qualquer
+  // planilha do Safra — a primeira aba, como o app abre.
+  function interpretarPlanilha(linhas) {
+    linhas = linhas || [];
+    var cab = null, iCab = -1, periodo = null;
+
+    for (var i = 0; i < linhas.length && !cab; i++) {
+      var mapa = {};
+      (linhas[i] || []).forEach(function (c, j) {
+        var t = normalizar(celulaTexto(c));
+        Object.keys(COLUNAS_PLANILHA).forEach(function (k) {
+          if (mapa[k] == null && COLUNAS_PLANILHA[k].test(t)) mapa[k] = j;
+        });
+      });
+      var completa = OBRIGATORIAS_PLANILHA.every(function (k) { return mapa[k] != null; });
+      if (completa) { cab = mapa; iCab = i; }
+    }
+
+    // O periodo ("Período: 14/09/2026 até 14/09/2026") vive acima do
+    // cabecalho. Sem ele, o check de "titulo nosso fora do DDA" e'
+    // pulado — igual ao PDF.
+    var limite = iCab === -1 ? linhas.length : iCab;
+    for (i = 0; i < limite && !periodo; i++) {
+      (linhas[i] || []).forEach(function (c) {
+        if (periodo) return;
+        var m = normalizar(celulaTexto(c)).match(/periodo:?\s*(\d{2}\/\d{2}\/\d{4})\s*(?:ate|a|-)\s*(\d{2}\/\d{2}\/\d{4})/);
+        if (m) periodo = { ini: dataBrParaIso(m[1]), fim: dataBrParaIso(m[2]) };
+      });
+    }
+
+    if (!cab) {
+      return {
+        periodo: periodo, registros: [], origem: 'planilha',
+        ilegiveis: [{ texto: '(planilha inteira)', motivo: 'não achei a linha de cabeçalho (Vencimento, Nº documento, Beneficiário, Nominal)' }]
+      };
+    }
+
+    var registros = [], ilegiveis = [];
+    for (i = iCab + 1; i < linhas.length; i++) {
+      var l = linhas[i] || [];
+      var textos = l.map(celulaTexto);
+      if (!textos.some(function (t) { return t !== ''; })) continue; // linha em branco
+      // Linha de total no rodape ("Total", "Totais"): nao e' boleto.
+      var primeira = textos.filter(function (t) { return t !== ''; })[0];
+      if (/^tota(l|is)\b/.test(normalizar(primeira))) continue;
+
+      var celula = function (k) { return cab[k] == null ? null : l[cab[k]]; };
+      var problemas = [];
+      var venc = dataDaCelula(celula('vencimento'));
+      if (!venc) problemas.push('vencimento ilegível: "' + celulaTexto(celula('vencimento')) + '"');
+      var nominal = valorParaCentavos(celula('nominal'));
+      if (nominal == null) problemas.push('valor nominal ilegível: "' + celulaTexto(celula('nominal')) + '"');
+      var ben = celulaTexto(celula('beneficiario'));
+      if (!ben) problemas.push('sem beneficiário');
+      if (problemas.length) {
+        ilegiveis.push({ texto: textos.filter(Boolean).join(' | '), motivo: problemas.join('; ') });
+        continue;
+      }
+
+      // Documento vazio EXISTE na planilha real (cedente que nao
+      // preenche): registro valido; o casamento cai no valor +
+      // vencimento, e a tela diz que foi assim.
+      var total = cab.valorTotal != null ? valorParaCentavos(celula('valorTotal')) : null;
+      var situacao = celulaTexto(celula('situacao')) || null;
+      registros.push({
+        vencimento: venc,
+        limite: null,
+        pagador: celulaTexto(celula('pagador')) || null,
+        cnpjPagador: normalizarCnpj(celula('cnpjPagador')),
+        documento: celulaTexto(celula('documento')),
+        beneficiario: ben,
+        beneficiarioFinal: celulaTexto(celula('beneficiarioFinal')) || null,
+        cnpjBeneficiario: '',
+        banco: celulaTexto(celula('banco')) || null,
+        nossoNumero: celulaTexto(celula('nossoNumero')) || null,
+        valorCentavos: nominal,
+        valorAPagarCentavos: total,
+        situacao: situacao,
+        semSituacao: situacao == null
+      });
+    }
+
+    return { periodo: periodo, registros: registros, ilegiveis: ilegiveis, origem: 'planilha' };
+  }
+
+  /* ============================================================
      4. Casamento boleto <-> duplicata
 
      Toda resposta diz COMO casou (campo `como`): quem confere
@@ -447,6 +601,32 @@
     return resultado(rot, { ambiguo: true, candidatas: porValor, motivo: 'mais de uma duplicata de ' + regra.cedente + ' com esse valor' });
   }
 
+  // Ultimo recurso, quando o documento nao leva a lugar nenhum
+  // (vazio, ambiguo, ou nota que nao esta na base): valor E
+  // vencimento EXATOS, na base inteira. So' vale se sobrar UMA
+  // duplicata — com seis boletos da mesma securitizadora de R$
+  // 2.199,86 no mesmo dia (planilha real do Safra), qualquer coisa
+  // menos que isso e' loteria e fica ambiguo. Paga tambem entra: a
+  // reimportacao do DDA de ontem precisa reencontrar o que ja' foi
+  // baixado, senao vira "cobranca sem nota" no dia seguinte. Entre
+  // varias, a unica em aberto desempata — e o `como` registra.
+  function casarValorEVencimentoGeral(r, base, rotulo, motivo) {
+    if (!r.vencimento || r.valorCentavos == null) return null;
+    var cands = base.duplicatas.filter(function (d) {
+      return d.vencimento === r.vencimento && centavosDe(d.valor) === r.valorCentavos;
+    });
+    if (!cands.length) return null;
+    if (cands.length === 1) return resultado(rotulo, { duplicata: cands[0], como: ['valor+vencimento únicos na base'], motivo: motivo });
+    var abertas = cands.filter(function (d) { return d.pago !== true; });
+    if (abertas.length === 1) {
+      return resultado(rotulo, { duplicata: abertas[0], como: ['valor+vencimento', 'desempate: única em aberto'], motivo: motivo });
+    }
+    return resultado(rotulo, {
+      ambiguo: true, candidatas: cands,
+      motivo: motivo + '; ' + cands.length + ' duplicatas com esse valor e vencimento'
+    });
+  }
+
   function casar(r, base) {
     var regra = regraDoBoleto(r);
     var estrategia = regra ? regra.estrategia : ESTRATEGIA_PADRAO;
@@ -455,17 +635,28 @@
 
     var doc = dividirDocumento(r.documento);
     if (doc.ambiguo) {
-      return resultado(estrategia === 'notaSemParcela' ? 'nota sem parcela' : 'nota+parcela', {
-        ambiguo: true,
-        motivo: 'número de documento ambíguo ("' + r.documento + '")'
-      });
+      var rot = estrategia === 'notaSemParcela' ? 'nota sem parcela' : 'nota+parcela';
+      var motivo = String(r.documento || '').trim()
+        ? 'número de documento ambíguo ("' + r.documento + '")'
+        : 'boleto sem número de documento';
+      return casarValorEVencimentoGeral(r, base, rot, motivo) || resultado(rot, { ambiguo: true, motivo: motivo });
     }
-    if (estrategia === 'notaSemParcela') return casarNotaSemParcela(r, base, doc);
+    var res;
+    if (estrategia === 'notaSemParcela') res = casarNotaSemParcela(r, base, doc);
     // Documento sem separador na estrategia padrao: nao ha' parcela
     // para exigir — degrada para o casamento por nota, e o rotulo
     // registra a degradacao.
-    if (doc.parcela == null) return casarNotaSemParcela(r, base, doc, 'nota (documento sem parcela)');
-    return casarNotaEParcela(r, base, doc);
+    else if (doc.parcela == null) res = casarNotaSemParcela(r, base, doc, 'nota (documento sem parcela)');
+    else res = casarNotaEParcela(r, base, doc);
+
+    // Nota fora da base (e so' nesse caso — "a nota existe mas nao tem
+    // a parcela" e' divergencia de verdade e fica como esta): tenta o
+    // ultimo recurso. Cedente que numera o boleto do seu jeito
+    // ('1634349E G') passa a casar, com o `como` dizendo por onde.
+    if (!res.duplicata && !res.ambiguo && !res.candidatas.length) {
+      return casarValorEVencimentoGeral(r, base, res.estrategia, res.motivo) || res;
+    }
+    return res;
   }
 
   /* ============================================================
@@ -486,8 +677,15 @@
 
   // Banco ja' deu o titulo como quitado? ("A PAGAR" contem "pagar",
   // nao "pago" — a palavra inteira evita a confusao.)
+  function situacaoPaga(s) {
+    return /\bpago\b|\bpaga\b|liquidad/.test(normalizar(s));
+  }
+  // "BAIXADO" na planilha do Safra NAO e' "pago": e' o boleto que saiu
+  // do DDA — pago por outro canal, ou cancelado pelo cedente (valor a
+  // pagar zero). As duas situacoes recebem avisos diferentes e so' a
+  // paga entra na lista do que pode ser baixado em lote.
   function situacaoBaixada(s) {
-    return /\bpago\b|\bpaga\b|liquidad|baixad/.test(normalizar(s));
+    return /baixad/.test(normalizar(s));
   }
 
   function conferir(registros, ctx) {
@@ -503,9 +701,15 @@
 
     // Nivel 1 de duplicidade: a MESMA linha duas vezes no PDF
     // (documento + beneficiario + valor + vencimento identicos).
+    // (A planilha do Safra nao traz o CNPJ do beneficiario: o nome
+    // entra no lugar, senao dois cedentes com o mesmo documento e valor
+    // virariam "duplicidade".)
+    var chaveDuplicidade = function (r) {
+      return [normalizar(r.documento), r.cnpjBeneficiario || normalizar(r.beneficiario), r.valorCentavos, r.vencimento].join('|');
+    };
     var vistos = Object.create(null);
     registros.forEach(function (r) {
-      var chave = [normalizar(r.documento), r.cnpjBeneficiario, r.valorCentavos, r.vencimento].join('|');
+      var chave = chaveDuplicidade(r);
       vistos[chave] = (vistos[chave] || 0) + 1;
     });
 
@@ -515,7 +719,7 @@
       var linha = { registro: r, casamento: casamento, problemas: problemas };
       linhas.push(linha);
 
-      var chaveDup = [normalizar(r.documento), r.cnpjBeneficiario, r.valorCentavos, r.vencimento].join('|');
+      var chaveDup = chaveDuplicidade(r);
       if (vistos[chaveDup] > 1) {
         problemas.push({ tipo: 'duplicidadeNoPdf', gravidade: GRAVIDADE.VERMELHO,
           texto: 'este boleto aparece ' + vistos[chaveDup] + '× no DDA' });
@@ -555,18 +759,33 @@
           texto: 'valor do boleto difere da duplicata' });
       }
 
-      // 4) ja' pago por nos
-      if (d.pago === true) {
+      // 4) ja' pago por nos — e o banco AINDA cobra. Se o banco tambem
+      // da' como pago, os dois lados concordam e nao ha' o que apontar
+      // (e' o que a reimportacao do DDA de ontem produz).
+      if (d.pago === true && !situacaoPaga(r.situacao) && !situacaoBaixada(r.situacao)) {
         problemas.push({ tipo: 'jaPago', gravidade: GRAVIDADE.VERMELHO,
           texto: 'a duplicata já está paga' + (d.dataPagamento ? ' (em ' + App.fmtData(d.dataPagamento) + ')' : '') });
       }
 
       // banco baixou, nos nao — o inverso do "ja' pago". Nao e'
       // fraude: e' divergencia de controle (alguem pagou e nao
-      // marcou). So' aponta; NUNCA marca pago sozinho.
-      if (situacaoBaixada(r.situacao) && d.pago !== true) {
+      // marcou). Aponta e OFERECE a baixa em lote (lista baixaveis);
+      // nunca marca pago sozinho.
+      if (situacaoPaga(r.situacao) && d.pago !== true) {
         problemas.push({ tipo: 'bancoBaixouNosNao', gravidade: GRAVIDADE.AMARELO,
           texto: 'o banco dá o boleto como "' + r.situacao + '", mas a duplicata não está baixada aqui' });
+      } else if (situacaoBaixada(r.situacao) && d.pago !== true) {
+        problemas.push({ tipo: 'baixadoNoBanco', gravidade: GRAVIDADE.AMARELO,
+          texto: 'o banco dá o boleto como "' + r.situacao + '" — pago por outro canal ou cancelado pelo cedente; ' +
+            'confira antes de marcar (não entra no lote)' });
+      }
+
+      // Valor a pagar diferente do nominal (so' a planilha traz os
+      // dois): juros ou desconto embutidos no boleto. Informativo —
+      // o que se compara com a duplicata e' sempre o nominal.
+      if (r.valorAPagarCentavos != null && r.valorAPagarCentavos !== r.valorCentavos && !situacaoBaixada(r.situacao)) {
+        problemas.push({ tipo: 'valorAPagarDiferente', gravidade: GRAVIDADE.BRANCO,
+          texto: 'o valor a pagar do boleto difere do nominal (juros ou desconto embutidos)' });
       }
 
       // 5/6) nota de origem. Sem a nota carregada nao se AFIRMA nada
@@ -636,6 +855,14 @@
       return (gravidadeDa(b) - gravidadeDa(a)) || (b.registro.valorCentavos - a.registro.valorCentavos);
     });
 
+    // O que pode ser baixado em lote: banco diz pago, aqui em aberto,
+    // e NENHUM vermelho na linha (valor divergente, nota cancelada,
+    // cobranca dobrada... nada disso se marca pago no automatico).
+    var baixaveis = linhas.filter(function (l) {
+      return l.casamento.duplicata && gravidadeDa(l) < GRAVIDADE.VERMELHO &&
+        l.problemas.some(function (p) { return p.tipo === 'bancoBaixouNosNao'; });
+    });
+
     var resumo = { vermelhos: 0, amarelos: 0, brancos: 0, ok: 0, totalCentavos: 0 };
     linhas.forEach(function (l) {
       resumo.totalCentavos += l.registro.valorCentavos;
@@ -646,7 +873,7 @@
       else resumo.ok++;
     });
 
-    return { linhas: linhas, foraDoDda: foraDoDda, resumo: resumo, periodo: periodo, gravidadeDa: gravidadeDa };
+    return { linhas: linhas, foraDoDda: foraDoDda, baixaveis: baixaveis, resumo: resumo, periodo: periodo, gravidadeDa: gravidadeDa };
   }
 
   /* ============================================================
@@ -665,7 +892,11 @@
     dataBrParaIso: dataBrParaIso,
     valorParaCentavos: valorParaCentavos,
 
+    situacaoPaga: situacaoPaga,
+    situacaoBaixada: situacaoBaixada,
+
     interpretar: interpretar,
+    interpretarPlanilha: interpretarPlanilha,
     prepararBase: prepararBase,
     casar: casar,
     conferir: conferir

@@ -240,15 +240,21 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as duas coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
-9. **Conferência de DDA** — 74 verificações em `dda-nucleo.js`. O parser
-   roda contra a **camada de texto real** de um DDA do Bradesco
+9. **Conferência de DDA** — 114 verificações em `dda-nucleo.js`. O parser
+   do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que
-   o PDF desenha fora de ordem. Também trava as três estratégias de
-   casamento (nota+parcela, nota sem parcela, valor escopado ao
-   cedente), o CNPJ de 15 dígitos do Bradesco, a comparação em centavos
-   inteiros e — principalmente — que boleto sem par **fora da janela de
-   carga** vira ⚪ indeterminado, nunca 🔴 fraude.
+   o PDF desenha fora de ordem. O leitor da **planilha do Safra** (.xlsx)
+   acha as colunas pelo rótulo, onde quer que estejam, aceita data como
+   texto, `Date` ou serial do Excel, e manda linha ilegível para "não
+   consegui ler" em vez de registro pela metade. Também trava as
+   estratégias de casamento (nota+parcela, nota sem parcela, valor
+   escopado ao cedente e o último recurso valor+vencimento, que só vale
+   com UMA candidata), o CNPJ de 15 dígitos do Bradesco, a comparação em
+   centavos inteiros, a lista do que pode ser **baixado em lote** (banco
+   diz PAGO, aqui em aberto, nenhum 🔴 na linha; BAIXADO nunca entra) e
+   — principalmente — que boleto sem par **fora da janela de carga**
+   vira ⚪ indeterminado, nunca 🔴 fraude.
 10. **Painel de metas** — 81 verificações em `painel-nucleo.js`, com os
     números da planilha de 2026 como referência: dias de trabalho mês a
     mês (sem domingos e feriados; sábado é dia normal; feriado no

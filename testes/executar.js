@@ -19,8 +19,10 @@
   - cotacao.js         — regras da tela de cotacao e travas de origem.
   - fornecedores.js    — separacao da Vetrus e moda dos prazos.
   - pagamentos.js      — categorias, recorrencia e filtro de periodo.
-  - dda.js             — leitura do DDA do Bradesco (contra a camada de
-                         texto real do PDF) e casamento boleto/duplicata.
+  - dda.js             — leitura do DDA: PDF do Bradesco (contra a camada
+                         de texto real) e planilha do Safra (pelo rotulo
+                         das colunas), casamento boleto/duplicata e a
+                         lista do que pode ser baixado em lote.
   - painel.js          — Painel de metas: dias uteis, limite de 60% e a
                          previsao de faturamento do mes corrente.
   - simulador.js       — Simulador de compra: parcelas em centavos,

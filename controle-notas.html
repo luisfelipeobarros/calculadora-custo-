@@ -529,15 +529,19 @@
   <!-- ═══════════ DDA ═══════════ -->
   <div id="viewDda" style="display:none;">
     <div class="card">
-      <h2>Conferência de DDA (Bradesco)</h2>
+      <h2>Conferência de DDA</h2>
       <p class="nota-explicativa">
-        Lê o PDF do DDA aqui no navegador — nada é enviado nem gravado — e compara
+        Lê o DDA aqui no navegador — nada é enviado nem gravado — e compara
         cada boleto com as duplicatas carregadas, apontando divergências.
-        A tela só compara: marcar pagamento continua sendo na aba Pagamentos.
+        Aceita o PDF do Bradesco e a planilha (.xlsx) do Safra. Boleto que o
+        banco já dá como <strong>pago</strong> e aqui ainda está em aberto pode
+        ser marcado como pago em lote, no fim da lista; o resto continua sendo
+        na aba Pagamentos.
       </p>
       <div class="filtros" style="margin-top:12px;">
-        <label class="acao-mini" for="arquivoDda" style="cursor:pointer;">📄 Escolher o PDF do DDA...</label>
-        <input type="file" id="arquivoDda" accept=".pdf,application/pdf" class="sr-only">
+        <label class="acao-mini" for="arquivoDda" style="cursor:pointer;">📄 Escolher o DDA (PDF ou planilha)...</label>
+        <input type="file" id="arquivoDda" class="sr-only"
+               accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
         <label class="sr-only" for="filtroFornDda">Filtrar por fornecedor</label>
         <select id="filtroFornDda" style="display:none;"></select>
         <button type="button" class="acao-mini" id="btnImprimirDda" style="display:none;">🖨 Imprimir</button>
@@ -753,7 +757,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="app-shared.js?v=24"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=2"></script>
+<script src="dda-nucleo.js?v=3"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=3"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
@@ -3748,8 +3752,11 @@
       }
 
       var data = document.createElement('input');
-      data.type = 'date'; data.style.cssText = estilo; data.value = hojeISO();
-      campo('Data do pagamento', data);
+      data.type = 'date'; data.style.cssText = estilo;
+      // dataOpcional (baixa pelo DDA): em branco, cada item recebe a
+      // propria data (o vencimento) — por isso NAO vem preenchida.
+      data.value = o.dataOpcional ? '' : hojeISO();
+      campo(o.dataOpcional ? 'Data do pagamento (em branco = vencimento de cada boleto)' : 'Data do pagamento', data);
 
       var banco = document.createElement('select');
       banco.style.cssText = estilo;
@@ -3766,23 +3773,26 @@
       if(lembrado && idsBancos.indexOf(lembrado) !== -1) banco.value = lembrado;
       campo('Banco', banco);
 
+      // semValor (baixa pelo DDA): o valor de cada item e' o da propria
+      // duplicata e nao se pergunta nada — o campo nem existe.
       var valor = document.createElement('input');
       valor.type = 'text'; valor.inputMode = 'decimal'; valor.style.cssText = estilo;
       valor.value = o.valorBase != null ? o.valorBase.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
-      campo(o.valorOpcional
-        ? 'Total pago (opcional — acima da soma vira UM lançamento de juros)'
-        : 'Valor pago (acima do devido vira juros)', valor);
+      if(!o.semValor){
+        campo(o.valorOpcional
+          ? 'Total pago (opcional — acima da soma vira UM lançamento de juros)'
+          : 'Valor pago (acima do devido vira juros)', valor);
 
-      var juros = document.createElement('p');
-      juros.style.cssText = 'font-family:var(--font-mono); font-size:11.5px; color:var(--loss); margin:4px 0 0; min-height:15px;';
-      caixa.appendChild(juros);
-      function mostrarJuros(){
-        var v = App.parseNumeroBR(valor.value);
-        var dif = (v != null && o.valorBase != null) ? App.centavos(v - o.valorBase) : 0;
-        juros.textContent = dif > 0 ? 'Juros: ' + brl(dif)
-          : (dif < 0 ? 'Atenção: menor que o devido (' + brl(o.valorBase) + ')' : '');
+        var juros = document.createElement('p');
+        juros.style.cssText = 'font-family:var(--font-mono); font-size:11.5px; color:var(--loss); margin:4px 0 0; min-height:15px;';
+        caixa.appendChild(juros);
+        valor.addEventListener('input', function(){
+          var v = App.parseNumeroBR(valor.value);
+          var dif = (v != null && o.valorBase != null) ? App.centavos(v - o.valorBase) : 0;
+          juros.textContent = dif > 0 ? 'Juros: ' + brl(dif)
+            : (dif < 0 ? 'Atenção: menor que o devido (' + brl(o.valorBase) + ')' : '');
+        });
       }
-      valor.addEventListener('input', mostrarJuros);
 
       var obs = document.createElement('input');
       obs.type = 'text'; obs.maxLength = 200; obs.style.cssText = estilo;
@@ -3808,11 +3818,11 @@
       var ok = document.createElement('button');
       ok.type = 'button'; ok.className = 'btn'; ok.textContent = o.confirmar || 'Confirmar pagamento';
       ok.addEventListener('click', function(){
-        if(!/^\d{4}-\d{2}-\d{2}$/.test(data.value)){
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(data.value) && !(o.dataOpcional && data.value === '')){
           erro.textContent = 'Escolha a data do pagamento.'; erro.style.display = ''; data.focus(); return;
         }
-        var v = App.parseNumeroBR(valor.value);
-        if(!o.valorOpcional && (v == null || !(v > 0))){
+        var v = o.semValor ? null : App.parseNumeroBR(valor.value);
+        if(!o.semValor && !o.valorOpcional && (v == null || !(v > 0))){
           erro.textContent = 'Informe o valor pago.'; erro.style.display = ''; valor.focus(); return;
         }
         // No lote, total MENOR que a soma nao tem representacao: os
@@ -3825,7 +3835,7 @@
           erro.style.display = ''; valor.focus(); return;
         }
         try{ if(banco.value) localStorage.setItem('ultimoBancoPag', banco.value); }catch(e){}
-        fechar({ data: data.value, bancoId: banco.value || null, valorPago: v, obs: obs.value.trim() || null });
+        fechar({ data: data.value || null, bancoId: banco.value || null, valorPago: v, obs: obs.value.trim() || null });
       });
       acoes.appendChild(cancelar); acoes.appendChild(ok);
       caixa.appendChild(acoes);
@@ -4554,16 +4564,15 @@
     detalhes.forEach(function(d, i){ d.open = estados[i]; });
   });
 
-  $('arquivoDda').addEventListener('change', function(){
-    var f = this.files && this.files[0];
-    this.value = ''; // reescolher o mesmo arquivo dispara change de novo
-    if(!f) return;
+  // PDF do Bradesco (pdf.js -> itens posicionados -> DdaNucleo.interpretar)
+  // ou planilha do Safra (SheetJS -> matriz de celulas ->
+  // DdaNucleo.interpretarPlanilha). Os dois produzem o mesmo registro;
+  // daqui para baixo a tela nao sabe de onde o boleto veio.
+  function lerDdaPdf(f){
     if(!window.pdfjsLib){
-      App.toastErro('Leitor de PDF', 'O pdf.js não carregou (sem internet?). Recarregue a página.');
-      return;
+      return Promise.reject(new Error('O pdf.js não carregou (sem internet?). Recarregue a página.'));
     }
-    $('statusDda').textContent = 'Lendo ' + f.name + '...';
-    f.arrayBuffer().then(function(buf){
+    return f.arrayBuffer().then(function(buf){
       return pdfjsLib.getDocument({ data: buf }).promise;
     }).then(function(pdf){
       var ps = [];
@@ -4577,14 +4586,40 @@
           return { texto: it.str, x: it.transform[4], y: it.transform[5] };
         });
       });
-      ddaLido = DdaNucleo.interpretar(paginas);
+      return DdaNucleo.interpretar(paginas);
+    });
+  }
+
+  function lerDdaPlanilha(f){
+    if(typeof XLSX === 'undefined'){
+      return Promise.reject(new Error('A biblioteca de planilha não carregou (sem internet?). Recarregue a página.'));
+    }
+    return f.arrayBuffer().then(function(buf){
+      // cellDates: a data vem como Date, nao como serial do Excel —
+      // o nucleo aceita os dois, mas Date nao depende de fuso.
+      var wb = XLSX.read(new Uint8Array(buf), { type:'array', cellDates:true });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var linhas = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+      return DdaNucleo.interpretarPlanilha(linhas);
+    });
+  }
+
+  $('arquivoDda').addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    this.value = ''; // reescolher o mesmo arquivo dispara change de novo
+    if(!f) return;
+    var planilha = /\.xlsx?$/i.test(f.name);
+    $('statusDda').textContent = 'Lendo ' + f.name + '...';
+    (planilha ? lerDdaPlanilha(f) : lerDdaPdf(f)).then(function(lido){
+      ddaLido = lido;
       ddaLido.nomeArquivo = f.name;
       $('statusDda').textContent = f.name + ' — ' + ddaLido.registros.length + ' boleto(s) lido(s)' +
-        (ddaLido.ilegiveis.length ? ' + ' + ddaLido.ilegiveis.length + ' bloco(s) ILEGÍVEL(IS)' : '');
+        (ddaLido.ilegiveis.length ? ' + ' + ddaLido.ilegiveis.length +
+          (planilha ? ' linha(s)' : ' bloco(s)') + ' ILEGÍVEL(IS)' : '');
       renderDda();
     }).catch(function(e){
       $('statusDda').textContent = '';
-      App.toastErro('Não consegui ler o PDF', e);
+      App.toastErro(planilha ? 'Não consegui ler a planilha' : 'Não consegui ler o PDF', e);
     });
   });
 
@@ -4593,8 +4628,9 @@
   function renderDda(){
     var alvo = $('resultadoDda');
     if(!ddaLido){
-      alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Nenhum PDF carregado ainda. ' +
-        'Baixe o DDA no internet banking do Bradesco (Boletos de Cobrança Registrados/DDA) e escolha o arquivo acima.</p>';
+      alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Nenhum arquivo carregado ainda. ' +
+        'Baixe o DDA no internet banking — Bradesco (PDF, em Boletos de Cobrança Registrados/DDA) ' +
+        'ou Safra (planilha, em Boletos DDA → exportar Excel) — e escolha o arquivo acima.</p>';
       return;
     }
     // Mesmo principio dos cartoes do Painel: enquanto as colecoes nao
@@ -4658,7 +4694,7 @@
     });
 
     // O resumo acompanha o filtro: com "Vetrus (Pamesa)" selecionado,
-    // as contagens sao as da Vetrus (Pamesa), nao as do PDF inteiro.
+    // as contagens sao as da Vetrus (Pamesa), nao as do arquivo inteiro.
     var resumo = { vermelhos: 0, amarelos: 0, brancos: 0, ok: 0, totalCentavos: 0 };
     linhasVisiveis.forEach(function(l){
       resumo.totalCentavos += l.registro.valorCentavos;
@@ -4678,7 +4714,7 @@
     html += '<div class="dda-meta" style="margin:14px 0 10px; font-size:12.5px;">' +
       (rel.periodo
         ? 'Período do DDA: <strong>' + fmtData(rel.periodo.ini) + ' a ' + fmtData(rel.periodo.fim) + '</strong>'
-        : '<strong>⚠ não achei o período no cabeçalho do PDF</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
+        : '<strong>⚠ não achei o período no cabeçalho do arquivo</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
       ' · arquivo ' + escapeHtml(ddaLido.nomeArquivo || '?') +
       (filtroFornDda
         ? ' · <strong>filtro: ' + escapeHtml(filtroFornDda === SEM_FORNECEDOR ? 'sem fornecedor (não casaram)' : filtroFornDda) +
@@ -4695,9 +4731,10 @@
     // fraudulenta engolida por causa de um filtro seria o pior
     // resultado possivel. Texto cru para conferir a mao.
     if(ddaLido.ilegiveis.length){
+      var unidade = ddaLido.origem === 'planilha' ? 'linha' : 'bloco';
       html += '<div class="dda-ilegiveis"><strong>⚠ Não consegui ler ' +
-        (ddaLido.ilegiveis.length === 1 ? 'este bloco' : 'estes ' + ddaLido.ilegiveis.length + ' blocos') +
-        ' do PDF</strong> — confira à mão:' +
+        (ddaLido.ilegiveis.length === 1 ? 'esta ' + unidade : 'estas ' + ddaLido.ilegiveis.length + ' ' + unidade + 's') +
+        ' do arquivo</strong> — confira à mão:' +
         ddaLido.ilegiveis.map(function(il){
           return '<pre>' + escapeHtml(il.motivo) + '\n' + escapeHtml(il.texto) + '</pre>';
         }).join('') + '</div>';
@@ -4715,7 +4752,8 @@
           '<span class="nome">' + EMOJI_GRAV[g] + ' ' + escapeHtml(r.beneficiario) + '</span>' +
           '<span class="valor">' + brl(r.valorCentavos / 100) + '</span>' +
         '</div>' +
-        '<div class="dda-meta">doc ' + escapeHtml(r.documento) + ' · venc ' + fmtData(r.vencimento) +
+        '<div class="dda-meta">doc ' + (r.documento ? escapeHtml(r.documento) : '—') + ' · venc ' + fmtData(r.vencimento) +
+          (r.beneficiarioFinal ? ' · p/ ' + escapeHtml(r.beneficiarioFinal) : '') +
           ' · <span class="badge">' + escapeHtml(r.situacao || 'sem situação') + '</span>' +
           ' · <span class="badge" title="Como este boleto foi procurado nas duplicatas">' +
           escapeHtml(d && c.como.length ? c.como.join(' → ') : c.estrategia) + '</span>' +
@@ -4740,6 +4778,23 @@
       html += '</div>';
     });
 
+    // Baixa em lote: o que o banco ja' deu como pago e aqui esta' em
+    // aberto, sem nenhum vermelho na linha (o nucleo decide quem
+    // entra). Acompanha o filtro de fornecedor. O botao some na
+    // impressao — papel nao tem clique.
+    ddaBaixaveis = linhasVisiveis.filter(function(l){ return rel.baixaveis.indexOf(l) !== -1; });
+    if(ddaBaixaveis.length){
+      var somaBaixa = ddaBaixaveis.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
+      html += '<div class="dda-baixa no-print" style="margin-top:16px; padding:12px; border:1.5px solid var(--line);' +
+        ' border-radius:6px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">' +
+        '<span>🟡 <strong>' + ddaBaixaveis.length + ' boleto(s)</strong> que o banco já dá como pago e aqui ' +
+          (ddaBaixaveis.length === 1 ? 'está' : 'estão') + ' em aberto — ' + brl(somaBaixa) + '</span>' +
+        '<button type="button" class="acao-mini" id="btnBaixarDda">✓ Marcar como pagas</button>' +
+        '<span class="nota-explicativa" style="margin:0;">Banco e data pedidos uma vez; data em branco = vencimento de cada boleto. ' +
+          'O valor pago é o da duplicata (juros vão pela aba Pagamentos).</span>' +
+        '</div>';
+    }
+
     // Check 8 por ultimo e RECOLHIDO: fornecedor que cobra por PIX ou
     // deposito nunca aparece no DDA e cairia aqui toda santa vez;
     // aberto junto com os vermelhos viraria ruido permanente.
@@ -4759,6 +4814,84 @@
     }
 
     alvo.innerHTML = html;
+  }
+
+  // As linhas oferecidas pelo ultimo renderDda (ja' filtradas). O
+  // botao e' redesenhado a cada render, por isso o clique e' delegado.
+  var ddaBaixaveis = [];
+
+  App.delegar($('resultadoDda'), 'click', '#btnBaixarDda', function(btn){
+    baixarPelaDda(btn);
+  });
+
+  // Marca como pagas, em lote, as duplicatas que o DDA diz que o banco
+  // ja' liquidou. Mesmo dialogo e mesmos campos do "Marcar como pagas"
+  // da aba Pagamentos (pago, dataPagamento, bancoPagamento, valorPago,
+  // obsPagamento, pagoEmLote) + o lancamento contabil de cada uma —
+  // nenhum campo novo. Diferencas: sem "total pago" (juros de boleto
+  // se tratam um a um, na aba Pagamentos) e a data pode ficar em
+  // branco: cada boleto recebe o proprio vencimento, que e' o dia em
+  // que o banco debitou o DDA.
+  function baixarPelaDda(btn){
+    if(pagandoId) return;
+    var itens = ddaBaixaveis.slice();
+    if(!itens.length) return;
+    pagandoId = 'dda';
+    var soma = itens.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
+
+    carregarContabil().then(function(contabil){
+      return pedirPagamento({
+        titulo: 'Marcar como pagas pelo DDA',
+        mensagem: itens.length + ' boleto(s) · ' + brl(soma) + ' · cada um pelo valor da própria duplicata',
+        bancos: contabil.bancos,
+        semValor: true,
+        dataOpcional: true,
+        confirmar: 'Marcar como pagas',
+        sugestoes: sugestoesObs()
+      }).then(function(r){
+        if(!r) return;
+        if(btn) btn.disabled = true;
+        var gravadas = 0;
+
+        function bloco(i){
+          if(i >= itens.length) return Promise.resolve();
+          var pedaco = itens.slice(i, i + LOTE_FIRESTORE);
+          if(btn) btn.textContent = 'Gravando... ' + Math.min(i + LOTE_FIRESTORE, itens.length) + '/' + itens.length;
+          var pares = [];
+          return App.comAuth(function(){
+            var batch = db.batch();
+            pedaco.forEach(function(l){
+              var d = l.casamento.duplicata;
+              var dataPgto = r.data || l.registro.vencimento;
+              batch.set(db.collection('duplicatas').doc(d.id), {
+                pago:true, dataPagamento:dataPgto, obsPagamento:(r.obs || 'conferido no DDA'),
+                bancoPagamento:r.bancoId, valorPago:(d.valor || 0), pagoEmLote:true
+              }, { merge:true });
+              pares = pares.concat(LancamentosNucleo.lancamentosDePagamento({
+                tipo:'fornecedor', id:d.id, data:dataPgto, valor:d.valor || 0, valorPago:d.valor || 0,
+                bancoId:r.bancoId,
+                historico:'PAGTO ' + fornecedorDaDuplicata(d) + (d.numeroNota ? ' NF ' + d.numeroNota : ''),
+                fornecedor:d.nomeEmitente || null, numeroDoc:d.numeroNota || null
+              }, contabil.mapa, contabil.bancos, contabil.categorias));
+            });
+            return batch.commit();
+          }).then(function(){
+            // O bloco JA' esta gravado: conta antes dos lancamentos,
+            // senao uma falha ali diria "0 de N" com N pagos no banco.
+            gravadas += pedaco.length;
+            return gravarLancamentosDePagamento(pares);
+          }).then(function(){ return bloco(i + LOTE_FIRESTORE); });
+        }
+
+        return bloco(0).then(function(){
+          App.toast(gravadas + ' boleto(s) marcado(s) como pago(s) — lançamentos contábeis criados.', 'ok');
+        }).catch(function(e){
+          App.toastErro('Erro ao marcar — ' + gravadas + ' de ' + itens.length +
+            ' já gravados. A lista se atualiza sozinha; repita para o resto.', e);
+        });
+      });
+    }).catch(function(e){ App.toastErro('Erro ao marcar como pagas', e); })
+      .then(function(){ pagandoId = null; });
   }
 
   // ─── Simulador de compra ────────────────────────────────────
