@@ -1,5 +1,6 @@
 /*
-  Conferencia de DDA (Bradesco) contra as duplicatas.
+  Conferencia de DDA (PDF do Bradesco e planilha do Safra) contra as
+  duplicatas.
 
   Duas frentes:
 
@@ -129,72 +130,113 @@ const reg = (o) => Object.assign({
   valorCentavos: 10000, situacao: 'A PAGAR', semSituacao: false
 }, o);
 
-// padrao: nota+parcela, com normalizacao dos dois lados
+// A regra (14/09/2026): a NOTA e' o eixo; dentro dela, VALOR e
+// VENCIMENTO decidem. A parcela do boleto so' desempata — e, quando
+// nenhuma parcela tem o valor do boleto, e' o que permite casar e
+// acusar o valor adulterado.
+
+// 1) nota + valor + vencimento exatos, com normalizacao dos dois lados
 {
   const base = Dda.prepararBase([
-    dup({ id: 'a', numeroNota: '49676', parcela: '001' }),
-    dup({ id: 'b', numeroNota: '49676', parcela: '002' })
+    dup({ id: 'a', numeroNota: '49676', parcela: '001', valor: 100, vencimento: '2026-07-31' }),
+    dup({ id: 'b', numeroNota: '49676', parcela: '002', valor: 200, vencimento: '2026-08-31' })
   ]);
-  const c = Dda.casar(reg({ documento: '0049676/01' }), base);
-  eq('notaEParcela: zeros a esquerda nos dois lados nao atrapalham', c.duplicata && c.duplicata.id, 'a');
-  eq('  ...e o como diz "nota+parcela"', c.como, ['nota+parcela']);
+  const c = Dda.casar(reg({ documento: '0049676/01', valorCentavos: 10000 }), base);
+  eq('nota+valor+vencimento: zeros a esquerda nos dois lados nao atrapalham', c.duplicata && c.duplicata.id, 'a');
+  eq('  ...e o como diz por onde', c.como, ['nota', 'valor', 'vencimento']);
 
-  const c2 = Dda.casar(reg({ documento: '49676-05' }), base);
-  eq('notaEParcela: parcela inexistente NAO casa', c2.duplicata, null);
-  eq('  ...sem ambiguidade (a nota existe, a parcela nao)', c2.ambiguo, false);
+  // A parcela do boleto NAO manda: "parcela 1" do fornecedor que conta
+  // a partir da segunda casa com a nossa 002 pelo valor e vencimento.
+  const c2 = Dda.casar(reg({ documento: '49676/01', valorCentavos: 20000, vencimento: '2026-08-31' }), base);
+  eq('parcela do boleto diferente da nossa: valor e vencimento decidem', c2.duplicata && c2.duplicata.id, 'b');
+
+  // Parcela inexistente com valor e vencimento certos: casa igual.
+  const c3 = Dda.casar(reg({ documento: '49676-05', valorCentavos: 10000 }), base);
+  eq('parcela inexistente + valor e vencimento certos: casa (a parcela nao e filtro)', c3.duplicata && c3.duplicata.id, 'a');
+
+  // Sem parcela nenhuma (Mari: '0000049676'): a mesma regra.
+  const c4 = Dda.casar(reg({ documento: '0000049676', valorCentavos: 20000, vencimento: '2026-08-31' }), base);
+  eq('documento so com a nota: casa por valor e vencimento', c4.duplicata && c4.duplicata.id, 'b');
 }
 
-// parcela em letra: nao converte; desempata por valor e REGISTRA
+// 2) so' o valor bate: casa, e o vencimento diferente fica registrado
 {
   const base = Dda.prepararBase([
-    dup({ id: 'a', numeroNota: '550072', parcela: '001', valor: 121.58 }),
-    dup({ id: 'b', numeroNota: '550072', parcela: '002', valor: 999 })
+    dup({ id: 'a', numeroNota: '500', parcela: '001', valor: 100, vencimento: '2026-08-10' }),
+    dup({ id: 'b', numeroNota: '500', parcela: '002', valor: 200, vencimento: '2026-09-10' })
   ]);
-  const c = Dda.casar(reg({ documento: '550072-D', valorCentavos: 12158 }), base);
-  eq('parcela em letra casa por desempate de valor', c.duplicata && c.duplicata.id, 'a');
-  eq('  ...e o como registra o desempate',
-    c.como.some(p => /letra/.test(p) && /valor/.test(p)), true);
-
-  const c2 = Dda.casar(reg({ documento: '550072-D', valorCentavos: 77700 }), base);
-  eq('parcela em letra sem valor igual = ambiguo, nunca chute', c2.ambiguo, true);
+  const c = Dda.casar(reg({ documento: '500/1', valorCentavos: 20000, vencimento: '2026-08-31' }), base);
+  eq('valor unico na nota com vencimento diferente: casa', c.duplicata && c.duplicata.id, 'b');
+  eq('  ...e o como registra "vencimento diferente"', c.como, ['nota', 'valor', 'vencimento diferente']);
 }
 
-// mesmo numero de nota em fornecedores diferentes: desempate por valor
+// Empates: a parcela desempata (numero ou letra como posicao); sem
+// desempate, ambiguo com as candidatas.
+{
+  const base = Dda.prepararBase([
+    dup({ id: 'a', numeroNota: '600', parcela: '001', valor: 363, vencimento: '2026-07-31' }),
+    dup({ id: 'b', numeroNota: '600', parcela: '002', valor: 363, vencimento: '2026-07-31' }),
+    dup({ id: 'c', numeroNota: '600', parcela: '003', valor: 363, vencimento: '2026-09-30' })
+  ]);
+  const c = Dda.casar(reg({ documento: '600/02', valorCentavos: 36300 }), base);
+  eq('duas parcelas iguais em valor e vencimento: a parcela desempata', c.duplicata && c.duplicata.id, 'b');
+  eq('  ...e o como registra o desempate', c.como, ['nota', 'valor', 'vencimento', 'desempate pela parcela']);
+  const c2 = Dda.casar(reg({ documento: '600B H', valorCentavos: 36300 }), base);
+  eq('  ...tambem com a parcela em letra (B = 2a)', c2.duplicata && c2.duplicata.id, 'b');
+  const c3 = Dda.casar(reg({ documento: '600', valorCentavos: 36300 }), base);
+  eq('  ...sem parcela para desempatar = ambiguo, nunca escolhe', c3.ambiguo && c3.candidatas.length, 2);
+  const c4 = Dda.casar(reg({ documento: '600/9', valorCentavos: 36300 }), base);
+  eq('  ...parcela que nao existe tambem nao desempata', c4.ambiguo, true);
+
+  // So' valor bate (vencimento de nenhuma), duas iguais: parcela desempata
+  const c5 = Dda.casar(reg({ documento: '600/1', valorCentavos: 36300, vencimento: '2026-12-01' }), base);
+  eq('tres do mesmo valor, nenhuma no vencimento: parcela desempata', c5.duplicata && c5.duplicata.id, 'a');
+  eq('  ...e o como diz nota, valor, desempate', c5.como, ['nota', 'valor', 'desempate pela parcela']);
+}
+
+// 3) nenhuma parcela da nota tem o valor: casa pela parcela para o
+// relatorio acusar o valor divergente (o alarme de fraude).
+{
+  const base = Dda.prepararBase([
+    dup({ id: 'a', numeroNota: '700', parcela: '001', valor: 121.58 }),
+    dup({ id: 'b', numeroNota: '700', parcela: '002', valor: 999 })
+  ]);
+  const c = Dda.casar(reg({ documento: '700/2', valorCentavos: 99999 }), base);
+  eq('valor nao bate em nenhuma parcela, mas a parcela existe: casa por ela', c.duplicata && c.duplicata.id, 'b');
+  eq('  ...e o como avisa que o valor NAO bate', c.como, ['nota', 'parcela', 'valor NÃO bate']);
+  const c2 = Dda.casar(reg({ documento: '700-B', valorCentavos: 99999 }), base);
+  eq('  ...parcela em letra tambem (B = 2a)', c2.duplicata && c2.duplicata.id, 'b');
+
+  // 4) nota existe, nada bate: sem casar, com as parcelas mostradas, e
+  // NAO cai no ultimo recurso (a nota e' o eixo).
+  const c3 = Dda.casar(reg({ documento: '700/9', valorCentavos: 99999 }), base);
+  eq('nota existe, valor e parcela sem par: nao casa', c3.duplicata, null);
+  eq('  ...sem ambiguidade, com as parcelas da nota como candidatas', [c3.ambiguo, c3.candidatas.length], [false, 2]);
+  eq('  ...e o motivo explica', /nenhuma parcela tem esse valor nem a parcela 9/.test(c3.motivo), true);
+  const c4 = Dda.casar(reg({ documento: '700', valorCentavos: 99999 }), base);
+  eq('nota existe, sem parcela no documento, valor sem par: nao casa', [c4.duplicata, c4.candidatas.length], [null, 2]);
+}
+
+// Mesmo numero de nota em fornecedores diferentes: valor decide (a base
+// e' por numero da nota; o fornecedor vem da duplicata encontrada).
 {
   const base = Dda.prepararBase([
     dup({ id: 'a', numeroNota: '777', parcela: '001', valor: 100, nomeEmitente: 'AAA' }),
     dup({ id: 'b', numeroNota: '777', parcela: '001', valor: 200, nomeEmitente: 'BBB' })
   ]);
   const c = Dda.casar(reg({ documento: '777/1', valorCentavos: 20000 }), base);
-  eq('nota+parcela repetida entre fornecedores: valor decide', c.duplicata && c.duplicata.id, 'b');
+  eq('nota repetida entre fornecedores: valor decide', c.duplicata && c.duplicata.id, 'b');
   const c2 = Dda.casar(reg({ documento: '777/1', valorCentavos: 55500 }), base);
-  eq('  ...e sem valor igual vira ambiguo com candidatas', c2.ambiguo && c2.candidatas.length, 2);
+  eq('  ...valor sem par: as duas tem a parcela 1, ambiguo entre elas',
+    [c2.duplicata, c2.ambiguo, c2.candidatas.length], [null, false, 2]);
 }
 
-// Mari: nota sem parcela, desempate valor -> vencimento -> ambiguo
+// "MARIA CERAMICAS" nao pode cair em regra de cedente (palavra inteira):
+// hoje so' a Cerbras tem regra, e a Mari segue a estrategia padrao.
 {
-  const base = Dda.prepararBase([
-    dup({ id: 'a', numeroNota: '49676', parcela: '001', valor: 333.83, vencimento: '2026-07-31' }),
-    dup({ id: 'b', numeroNota: '49676', parcela: '002', valor: 333.83, vencimento: '2026-08-31' }),
-    dup({ id: 'c', numeroNota: '49676', parcela: '003', valor: 100, vencimento: '2026-09-30' })
-  ]);
-  const r = reg({ documento: '0000049676', beneficiario: 'MARI', valorCentavos: 33383 });
-  const c = Dda.casar(r, base);
-  eq('Mari: empate de valor desempata por vencimento', c.duplicata && c.duplicata.id, 'a');
-
-  const c2 = Dda.casar(reg({ documento: '0000049676', beneficiario: 'MARI', valorCentavos: 10000 }), base);
-  eq('Mari: valor unico decide', c2.duplicata && c2.duplicata.id, 'c');
-
-  const base2 = Dda.prepararBase([
-    dup({ id: 'a', numeroNota: '49676', parcela: '001', valor: 333.83, vencimento: '2026-07-31' }),
-    dup({ id: 'b', numeroNota: '49676', parcela: '002', valor: 333.83, vencimento: '2026-07-31' })
-  ]);
-  const c3 = Dda.casar(r, base2);
-  eq('Mari: empate total = ambiguo, nunca escolhe', c3.ambiguo, true);
-
-  // "MARIA CERAMICAS" nao pode cair na regra da Mari (palavra inteira)
-  const c4 = Dda.casar(reg({ documento: '49676/01', beneficiario: 'MARIA CERAMICAS LTDA', valorCentavos: 33383 }), base);
-  eq('regra da Mari nao pega "MARIA..." (palavra inteira)', c4.duplicata && c4.duplicata.id, 'a');
+  const base = Dda.prepararBase([dup({ id: 'a', numeroNota: '49676', parcela: '001', valor: 333.83 })]);
+  const c = Dda.casar(reg({ documento: '0000049676', beneficiario: 'MARI', valorCentavos: 33383 }), base);
+  eq('Mari: estrategia padrao, casa por nota+valor+vencimento', [c.duplicata && c.duplicata.id, c.estrategia], ['a', 'nota+valor+vencimento']);
 }
 
 // Cerbras: valor e a chave forte, ESCOPADO ao cedente; vencimento so
@@ -274,10 +316,13 @@ const reg = (o) => Object.assign({
   const c3 = Dda.casar(reg({ documento: '999999/1', valorCentavos: 219986 }), base2);
   eq('nota fora da base + valor/vencimento unicos em aberto = casa, e diz por onde',
     c3.duplicata && c3.duplicata.id === 'b' && c3.como[0] === 'valor+vencimento', true);
-  // "A nota existe mas nao tem a parcela" e' divergencia de verdade:
-  // NAO cai no ultimo recurso.
+  // Nota que existe: a parcela nao importa, o valor e o vencimento
+  // dentro dela decidem — e sem par dentro da nota NAO cai no ultimo
+  // recurso (a nota e' o eixo).
   const c4 = Dda.casar(reg({ documento: '7002/9', valorCentavos: 219986 }), base2);
-  eq('nota existe sem a parcela: continua sem casar (nao e caso do ultimo recurso)', c4.duplicata, null);
+  eq('nota existe: casa pelo valor e vencimento dentro dela, parcela 9 ignorada', c4.duplicata && c4.duplicata.id, 'b');
+  const c5 = Dda.casar(reg({ documento: '7002/9', valorCentavos: 1 }), base2);
+  eq('nota existe sem par dentro dela: nao casa, e NAO tenta a base inteira', [c5.duplicata, c5.candidatas.length], [null, 1]);
 }
 
 // separador no fim ('44536-', planilha do Safra) = nota sem parcela
@@ -595,12 +640,15 @@ eq('sigla nao e posicao: ST, ICM, P1 -> null', ['ST', 'ICM', 'P1'].map(Dda.parce
     dup({ id: 'c', numeroNota: '1666488', parcela: '003', valor: 363 })
   ]);
   const c = Dda.casar(reg({ documento: '1666488B H', valorCentavos: 36300 }), base);
-  eq('parcela B com tres parcelas do MESMO valor: casa a 2a pela posicao (valor nao decidiria)',
+  eq('parcela B com tres parcelas do MESMO valor e vencimento: a letra desempata (B = 2a)',
     c.duplicata && c.duplicata.id, 'b');
-  eq('  ...e o como registra a conversao', c.como, ['nota+parcela', 'parcela em letra (B = 2ª)']);
-  // Posicao que nao existe (D = 4a): sobra o desempate por valor, como antes.
+  eq('  ...e o como registra o desempate', c.como, ['nota', 'valor', 'vencimento', 'desempate pela parcela']);
+  // Posicao que nao existe (D = 4a): nao desempata, ambiguo.
   const c2 = Dda.casar(reg({ documento: '1666488D H', valorCentavos: 36300 }), base);
   eq('posicao inexistente + valores iguais = ambiguo, sem chute', c2.ambiguo, true);
+  eq('parcelaCasa: numero ou letra como posicao',
+    [Dda.parcelaCasa({ parcela: '002' }, '2'), Dda.parcelaCasa({ parcela: '002' }, 'B'), Dda.parcelaCasa({ parcela: '002' }, 'C')],
+    [true, true, false]);
 }
 
 // PAGO e BAIXADO vem com "valor a pagar" ZERO na planilha real (447 de

@@ -53,12 +53,14 @@
      duplicata encontrada disser.
      ============================================================ */
 
-  var ESTRATEGIA_PADRAO = 'notaEParcela';
+  var ESTRATEGIA_PADRAO = 'nota+valor+vencimento';
   var REGRAS_DDA = [
-    // Cerbras: o documento e' numero interno do cedente, nao a NF-e.
-    { cedente: 'cerbras', estrategia: 'valorEVencimento' },
-    // Mari: so' o numero da NF-e, sem parcela.
-    { cedente: 'mari', estrategia: 'notaSemParcela' }
+    // Cerbras: o documento e' numero interno do cedente, nao a NF-e —
+    // a nota nao tem como ser o eixo, entao vale o valor escopado ao
+    // cedente. E' a UNICA excecao; fornecedor que so' numera a parcela
+    // do seu jeito (Mari sem parcela, Formigres em letra) nao precisa
+    // de regra: a estrategia padrao ignora a parcela.
+    { cedente: 'cerbras', estrategia: 'valorEVencimento' }
   ];
 
   /* ============================================================
@@ -530,10 +532,19 @@
   /* ============================================================
      4. Casamento boleto <-> duplicata
 
+     A NOTA e' o eixo (regra de 14/09/2026): o numero de documento do
+     boleto aponta a NF-e, e dentro dela VALOR e VENCIMENTO decidem.
+     A parcela do boleto NAO manda — fornecedor que comeca a contar da
+     segunda, que numera em letra ou do seu jeito nao atrapalha. Ela
+     so' desempata e, no fim, e' o que permite acusar o valor
+     adulterado: boleto cujo valor nao bate com NENHUMA parcela da
+     nota casa pela parcela e sai vermelho, em vez de sumir como
+     "cobranca sem nota" sem dizer qual duplicata ele imitava.
+
      Toda resposta diz COMO casou (campo `como`): quem confere
-     precisa saber se o "OK" veio de nota+parcela exata ou de um
-     desempate por valor — sem isso a tela vira caixa preta e
-     ninguem confia nela quando apontar uma fraude de verdade.
+     precisa saber se o "OK" veio de nota+valor+vencimento exatos ou
+     de um desempate — sem isso a tela vira caixa preta e ninguem
+     confia nela quando apontar uma fraude de verdade.
 
      Ambiguidade NUNCA vira escolha: devolve ambiguo=true com as
      candidatas, e o relatorio marca indeterminado.
@@ -566,64 +577,61 @@
     return base;
   }
 
-  function casarNotaEParcela(r, base, doc) {
-    var rot = 'nota+parcela';
-    var daNota = base.porNota[doc.nota] || [];
-    if (!daNota.length) return resultado(rot, { motivo: 'nota ' + doc.nota + ' não está na base carregada' });
-
-    var exatas = daNota.filter(function (d) { return normalizarParcela(d.parcela) === doc.parcela; });
-    if (exatas.length === 1) return resultado(rot, { duplicata: exatas[0], como: ['nota+parcela'] });
-    if (exatas.length > 1) {
-      // Mesmo numero de NF-e pode existir em fornecedores diferentes.
-      var porValor = exatas.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
-      if (porValor.length === 1) return resultado(rot, { duplicata: porValor[0], como: ['nota+parcela', 'desempate por valor'] });
-      return resultado(rot, { ambiguo: true, candidatas: exatas, motivo: 'mais de uma duplicata com essa nota e parcela' });
-    }
-
-    // Parcela do boleto em LETRA ('550072-D', '1666488B H') e as
-    // nossas em numero: a letra e' a POSICAO da parcela (A = 1a, B =
-    // 2a — regra confirmada com o fornecedor real, 14/09/2026). Se a
-    // duplicata dessa posicao existe, casa por ela e o `como` diz que
-    // converteu; se nao existe (ou a "parcela" e' uma sigla), sobra o
-    // desempate por valor entre as duplicatas da nota, registrado.
-    if (!/^\d+$/.test(doc.parcela)) {
-      var posicao = parcelaDaLetra(doc.parcela);
-      if (posicao) {
-        var daPosicao = daNota.filter(function (d) { return normalizarParcela(d.parcela) === posicao; });
-        if (daPosicao.length === 1) {
-          return resultado(rot, { duplicata: daPosicao[0], como: ['nota+parcela', 'parcela em letra (' + doc.parcela + ' = ' + posicao + 'ª)'] });
-        }
-      }
-      var porValorL = daNota.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
-      if (porValorL.length === 1) return resultado(rot, { duplicata: porValorL[0], como: ['nota', 'parcela em letra — desempate por valor'] });
-      return resultado(rot, {
-        ambiguo: true, candidatas: daNota,
-        motivo: 'parcela em letra ("' + doc.parcela + '") e ' +
-          (porValorL.length ? 'mais de uma' : 'nenhuma') + ' duplicata da nota com esse valor'
-      });
-    }
-
-    return resultado(rot, { candidatas: daNota, motivo: 'a nota existe, mas não tem a parcela ' + doc.parcela });
+  // A parcela do boleto bate com a nossa? Numero contra numero ('01'
+  // = '1') ou letra como posicao ('B' = '2').
+  function parcelaCasa(d, parcelaBoleto) {
+    if (parcelaBoleto == null) return false;
+    var nossa = normalizarParcela(d.parcela);
+    if (nossa === parcelaBoleto) return true;
+    var pos = parcelaDaLetra(parcelaBoleto);
+    return pos != null && nossa === pos;
   }
 
-  function casarNotaSemParcela(r, base, doc, motivoRotulo) {
-    var rot = motivoRotulo || 'nota sem parcela';
+  // Varias candidatas iguais: a parcela do boleto desempata, se
+  // apontar exatamente uma. Senao, ambiguo com todas mostradas.
+  function desempatarPelaParcela(cands, doc, comoBase, motivo) {
+    var pela = cands.filter(function (d) { return parcelaCasa(d, doc.parcela); });
+    if (pela.length === 1) {
+      return resultado(ESTRATEGIA_PADRAO, { duplicata: pela[0], como: comoBase.concat(['desempate pela parcela']) });
+    }
+    return resultado(ESTRATEGIA_PADRAO, { ambiguo: true, candidatas: cands, motivo: motivo });
+  }
+
+  function casarNaNota(r, base, doc) {
+    var rot = ESTRATEGIA_PADRAO;
     var daNota = base.porNota[doc.nota] || [];
     if (!daNota.length) return resultado(rot, { motivo: 'nota ' + doc.nota + ' não está na base carregada' });
-    if (daNota.length === 1) return resultado(rot, { duplicata: daNota[0], como: ['nota'] });
 
+    // 1) valor E vencimento iguais
     var porValor = daNota.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
-    if (porValor.length === 1) return resultado(rot, { duplicata: porValor[0], como: ['nota', 'desempate por valor'] });
-
-    var porVenc = (porValor.length ? porValor : daNota).filter(function (d) { return d.vencimento === r.vencimento; });
-    if (porVenc.length === 1) {
-      var como = ['nota'];
-      if (porValor.length) como.push('desempate por valor');
-      como.push('desempate por vencimento');
-      return resultado(rot, { duplicata: porVenc[0], como: como });
+    var exatas = porValor.filter(function (d) { return d.vencimento === r.vencimento; });
+    if (exatas.length === 1) return resultado(rot, { duplicata: exatas[0], como: ['nota', 'valor', 'vencimento'] });
+    if (exatas.length > 1) {
+      return desempatarPelaParcela(exatas, doc, ['nota', 'valor', 'vencimento'],
+        'mais de uma parcela da nota com esse valor e vencimento');
     }
 
-    return resultado(rot, { ambiguo: true, candidatas: daNota, motivo: 'várias parcelas da nota e nenhum desempate decidiu' });
+    // 2) so' o valor — o vencimento diferente vira o achado de
+    // antecipacao (check 7), nao derruba o casamento.
+    if (porValor.length === 1) return resultado(rot, { duplicata: porValor[0], como: ['nota', 'valor', 'vencimento diferente'] });
+    if (porValor.length > 1) {
+      return desempatarPelaParcela(porValor, doc, ['nota', 'valor'],
+        'mais de uma parcela da nota com esse valor e nenhuma com esse vencimento');
+    }
+
+    // 3) nenhuma parcela da nota tem esse valor. Se a parcela do
+    // boleto existe, casa por ela — e a conferencia acusa o valor
+    // divergente (vermelho). E' o alarme de valor adulterado.
+    var pela = daNota.filter(function (d) { return parcelaCasa(d, doc.parcela); });
+    if (pela.length === 1) return resultado(rot, { duplicata: pela[0], como: ['nota', 'parcela', 'valor NÃO bate'] });
+
+    // 4) a nota existe e nada bate: divergencia de verdade, com as
+    // parcelas mostradas. NAO cai no ultimo recurso — a nota e' o eixo.
+    return resultado(rot, {
+      candidatas: daNota,
+      motivo: 'a nota existe, mas nenhuma parcela tem esse valor' +
+        (doc.parcela != null ? ' nem a parcela ' + doc.parcela : '')
+    });
   }
 
   function casarValorEVencimento(r, base, regra) {
@@ -682,30 +690,21 @@
 
   function casar(r, base) {
     var regra = regraDoBoleto(r);
-    var estrategia = regra ? regra.estrategia : ESTRATEGIA_PADRAO;
-
-    if (estrategia === 'valorEVencimento') return casarValorEVencimento(r, base, regra);
+    if (regra && regra.estrategia === 'valorEVencimento') return casarValorEVencimento(r, base, regra);
 
     var doc = dividirDocumento(r.documento);
     if (doc.ambiguo) {
-      var rot = estrategia === 'notaSemParcela' ? 'nota sem parcela' : 'nota+parcela';
       var motivo = String(r.documento || '').trim()
         ? 'número de documento ambíguo ("' + r.documento + '")'
         : 'boleto sem número de documento';
-      return casarValorEVencimentoGeral(r, base, rot, motivo) || resultado(rot, { ambiguo: true, motivo: motivo });
+      return casarValorEVencimentoGeral(r, base, ESTRATEGIA_PADRAO, motivo) ||
+        resultado(ESTRATEGIA_PADRAO, { ambiguo: true, motivo: motivo });
     }
-    var res;
-    if (estrategia === 'notaSemParcela') res = casarNotaSemParcela(r, base, doc);
-    // Documento sem separador na estrategia padrao: nao ha' parcela
-    // para exigir — degrada para o casamento por nota, e o rotulo
-    // registra a degradacao.
-    else if (doc.parcela == null) res = casarNotaSemParcela(r, base, doc, 'nota (documento sem parcela)');
-    else res = casarNotaEParcela(r, base, doc);
 
-    // Nota fora da base (e so' nesse caso — "a nota existe mas nao tem
-    // a parcela" e' divergencia de verdade e fica como esta): tenta o
-    // ultimo recurso. Cedente que numera o boleto do seu jeito
-    // ('1634349E G') passa a casar, com o `como` dizendo por onde.
+    var res = casarNaNota(r, base, doc);
+    // Nota fora da base (e so' nesse caso — nota que existe sem par e'
+    // divergencia de verdade): tenta o ultimo recurso, com o `como`
+    // dizendo por onde.
     if (!res.duplicata && !res.ambiguo && !res.candidatas.length) {
       return casarValorEVencimentoGeral(r, base, res.estrategia, res.motivo) || res;
     }
@@ -950,6 +949,7 @@
     normalizarParcela: normalizarParcela,
     dividirDocumento: dividirDocumento,
     parcelaDaLetra: parcelaDaLetra,
+    parcelaCasa: parcelaCasa,
     dataBrParaIso: dataBrParaIso,
     valorParaCentavos: valorParaCentavos,
 
