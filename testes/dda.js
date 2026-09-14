@@ -358,13 +358,23 @@ const ctx = (duplicatas, extra) => Object.assign({
 // 1+7 cumulativos: valor divergente E vencimento antecipado na mesma linha
 {
   const d = dup({ id: 'a', numeroNota: '10', parcela: '001', valor: 100, vencimento: '2026-08-05', chaveAcesso: 'chave-ok' });
-  const rel = Dda.conferir([reg({ documento: '10/1', valorCentavos: 9999 })], ctx([d]));
+  const rel = Dda.conferir([reg({ documento: '10/1', valorCentavos: 9989 })], ctx([d]));
   const l = rel.linhas[0];
   eq('valor divergente E vencimento antecipado ACUMULAM na mesma linha',
     tipos(l), ['valorDivergente', 'vencimentoAntecipado']);
   eq('  ...gravidade da linha = a pior (vermelho)', gravidadeDe(l), G.VERMELHO);
-  eq('  ...um centavo ja e divergencia (9999 != 10000)',
+  eq('  ...onze centavos ja e divergencia (9989 x 10000)',
     l.problemas.some(p => p.tipo === 'valorDivergente'), true);
+
+  // Ate 10 centavos e arredondamento (pedido de 14/09/2026): casa e
+  // nao e divergencia — nem para cima nem para baixo.
+  const rel2 = Dda.conferir([reg({ documento: '10/1', valorCentavos: 10003, vencimento: '2026-08-05' })], ctx([d]));
+  eq('3 centavos a mais: casa por nota+valor+vencimento e fica ✅',
+    [rel2.linhas[0].casamento.duplicata && rel2.linhas[0].casamento.duplicata.id, tipos(rel2.linhas[0])], ['a', []]);
+  const rel3 = Dda.conferir([reg({ documento: '10/1', valorCentavos: 9990, vencimento: '2026-08-05' })], ctx([d]));
+  eq('10 centavos a menos: ainda igual', tipos(rel3.linhas[0]), []);
+  eq('valorBate: 10 dentro, 11 fora, null nunca',
+    [Dda.valorBate(10000, 10010), Dda.valorBate(10000, 10011), Dda.valorBate(null, 10000)], [true, false, false]);
 }
 
 // 4: ja pago
@@ -620,9 +630,12 @@ const planilhaSafra = (boletos) => [
 // Lote NUNCA leva vermelho: banco diz pago, mas o valor diverge.
 {
   const base = [dup({ id: 'a', numeroNota: '10', parcela: '001', valor: 100, chaveAcesso: 'chave-ok' })];
-  const rel = Dda.conferir([reg({ documento: '10/1', situacao: 'PAGO', valorCentavos: 10001 })], ctx(base));
-  eq('pago no banco com valor divergente: vermelho, e FORA da lista de baixa',
+  const rel = Dda.conferir([reg({ documento: '10/1', situacao: 'PAGO', valorCentavos: 10020 })], ctx(base));
+  eq('pago no banco com valor divergente (20 centavos): vermelho, e FORA da lista de baixa',
     [gravidadeDe(rel.linhas[0]), rel.baixaveis.length], [G.VERMELHO, 0]);
+  const rel2 = Dda.conferir([reg({ documento: '10/1', situacao: 'PAGO', valorCentavos: 10003 })], ctx(base));
+  eq('pago no banco com 3 centavos de diferenca: amarelo e DENTRO da lista de baixa',
+    [gravidadeDe(rel2.linhas[0]), rel2.baixaveis.length], [G.AMARELO, 1]);
 }
 
 // ── 6. Formatos de documento da planilha real de 30 dias ─────

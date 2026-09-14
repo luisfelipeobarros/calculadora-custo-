@@ -163,6 +163,14 @@
     return Math.round((valor || 0) * 100);
   }
 
+  // Ate' 10 centavos e' arredondamento, nao divergencia (pedido de
+  // 14/09/2026: boleto de 4.940,76 contra duplicata de 4.940,73). Vale
+  // em TODO lugar que compara valor — casamento, extrato e relatorio.
+  var TOLERANCIA_CENTAVOS = 10;
+  function valorBate(a, b) {
+    return a != null && b != null && Math.abs(a - b) <= TOLERANCIA_CENTAVOS;
+  }
+
   /* ============================================================
      3. Leitura do PDF ja' extraido (paginas de itens {texto,x,y})
 
@@ -718,7 +726,7 @@
     if (!daNota.length) return resultado(rot, { motivo: 'nota ' + doc.nota + ' não está na base carregada' });
 
     // 1) valor E vencimento iguais
-    var porValor = daNota.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
+    var porValor = daNota.filter(function (d) { return valorBate(centavosDe(d.valor), r.valorCentavos); });
     var exatas = porValor.filter(function (d) { return d.vencimento === r.vencimento; });
     if (exatas.length === 1) return resultado(rot, { duplicata: exatas[0], como: ['nota', 'valor', 'vencimento'] });
     if (exatas.length > 1) {
@@ -770,7 +778,7 @@
     // alarme falso vermelho e' o que mata a confianca na tela. A
     // diferenca de data do que casou vira o achado de vencimento
     // antecipado, que e' o que ela realmente e'.
-    var porValor = doCedente.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
+    var porValor = doCedente.filter(function (d) { return valorBate(centavosDe(d.valor), r.valorCentavos); });
     if (!porValor.length) return resultado(rot, { motivo: 'nenhuma duplicata de ' + regra.cedente + ' com esse valor' });
     if (porValor.length === 1) return resultado(rot, { duplicata: porValor[0], como: ['valor'] });
 
@@ -797,7 +805,7 @@
   function casarValorEVencimentoGeral(r, base, rotulo, motivo) {
     if (!r.vencimento || r.valorCentavos == null) return null;
     var cands = base.duplicatas.filter(function (d) {
-      return d.vencimento === r.vencimento && centavosDe(d.valor) === r.valorCentavos;
+      return d.vencimento === r.vencimento && valorBate(centavosDe(d.valor), r.valorCentavos);
     });
     if (!cands.length) return null;
     if (cands.length === 1) return resultado(rotulo, { duplicata: cands[0], como: ['valor+vencimento únicos na base'], motivo: motivo });
@@ -934,7 +942,7 @@
       pagos.forEach(function (r) {
         if (porRegistro.has(r)) return;
         var cands = livresNaJanela(r).filter(function (c) {
-          return c.l.debitoCentavos === r.valorCentavos &&
+          return valorBate(c.l.debitoCentavos, r.valorCentavos) &&
             (!exigirNome || nomesCompativeis(c.l.contraparte, r.beneficiario));
         });
         if (!cands.length) return;
@@ -954,7 +962,7 @@
       if (porRegistro.has(r)) return;
       var teto = Math.round(r.valorCentavos * (1 + JUROS_MAXIMO));
       var comJuros = livresNaJanela(r).filter(function (c) {
-        return c.l.data >= r.vencimento && c.l.debitoCentavos > r.valorCentavos && c.l.debitoCentavos <= teto &&
+        return c.l.data >= r.vencimento && c.l.debitoCentavos > r.valorCentavos + TOLERANCIA_CENTAVOS && c.l.debitoCentavos <= teto &&
           nomesCompativeis(c.l.contraparte, r.beneficiario);
       });
       if (comJuros.length === 1) {
@@ -1097,7 +1105,7 @@
 
       // 1) valor divergente — a fraude mais sutil. Comparacao em
       // centavos inteiros, sempre.
-      if (centavosDe(d.valor) !== r.valorCentavos) {
+      if (!valorBate(centavosDe(d.valor), r.valorCentavos)) {
         problemas.push({ tipo: 'valorDivergente', gravidade: GRAVIDADE.VERMELHO,
           texto: 'valor do boleto difere da duplicata' });
       }
@@ -1133,7 +1141,7 @@
       // dois): juros ou desconto embutidos no boleto. Informativo —
       // o que se compara com a duplicata e' sempre o nominal. Zero
       // nao conta: pago e baixado vem com "a pagar" zerado.
-      if (r.valorAPagarCentavos != null && r.valorAPagarCentavos > 0 && r.valorAPagarCentavos !== r.valorCentavos) {
+      if (r.valorAPagarCentavos != null && r.valorAPagarCentavos > 0 && !valorBate(r.valorAPagarCentavos, r.valorCentavos)) {
         problemas.push({ tipo: 'valorAPagarDiferente', gravidade: GRAVIDADE.BRANCO,
           texto: 'o valor a pagar do boleto difere do nominal (juros ou desconto embutidos)' });
       }
@@ -1246,6 +1254,8 @@
     parcelaCasa: parcelaCasa,
     dataBrParaIso: dataBrParaIso,
     valorParaCentavos: valorParaCentavos,
+    TOLERANCIA_CENTAVOS: TOLERANCIA_CENTAVOS,
+    valorBate: valorBate,
 
     situacaoPaga: situacaoPaga,
     situacaoBaixada: situacaoBaixada,

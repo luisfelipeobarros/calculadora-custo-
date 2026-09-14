@@ -4898,8 +4898,14 @@
     var soma = itens.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
     // Com extrato: valor e data reais de cada boleto que teve o debito
     // achado; os outros ficam no valor da duplicata e no vencimento.
+    // Diferenca de ate' 10 centavos entre o que saiu da conta e a
+    // duplicata e' arredondamento (DdaNucleo.TOLERANCIA_CENTAVOS): grava
+    // o valor da duplicata, sem lancamento de juros de 3 centavos.
     var valorPagoDe = function(l){
-      return (l.extrato && l.extrato.lancamento) ? l.extrato.valorPagoCentavos / 100 : (l.casamento.duplicata.valor || 0);
+      var dup = l.casamento.duplicata.valor || 0;
+      if(!(l.extrato && l.extrato.lancamento)) return dup;
+      var doExtrato = l.extrato.valorPagoCentavos / 100;
+      return DdaNucleo.valorBate(l.extrato.valorPagoCentavos, Math.round(dup * 100)) ? dup : doExtrato;
     };
     var comExtrato = itens.filter(function(l){ return l.extrato && l.extrato.lancamento; }).length;
     var jurosTotal = itens.reduce(function(s2, l){ return s2 + ((l.extrato && l.extrato.jurosCentavos) || 0); }, 0);

@@ -240,7 +240,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as duas coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
-9. **Conferência de DDA** — 176 verificações em `dda-nucleo.js`. O parser
+9. **Conferência de DDA** — 180 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que
@@ -262,7 +262,8 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    parcela tem o valor, é o que permite acusar o valor adulterado. Fora
    disso: valor escopado ao cedente (Cerbras) e o último recurso
    valor+vencimento na base inteira, que só vale com UMA candidata, o CNPJ de 15 dígitos do Bradesco, a comparação em
-   centavos inteiros, a lista do que pode ser **baixado em lote** (banco
+   centavos inteiros com tolerância de 10 centavos (arredondamento não é
+   divergência), a lista do que pode ser **baixado em lote** (banco
    diz PAGO, aqui em aberto, nenhum 🔴 na linha; BAIXADO nunca entra) e
    — principalmente — que boleto sem par **fora da janela de carga**
    vira ⚪ indeterminado, nunca 🔴 fraude.
