@@ -536,16 +536,22 @@
         Aceita o PDF do Bradesco e a planilha (.xlsx) do Safra. Boleto que o
         banco já dá como <strong>pago</strong> e aqui ainda está em aberto pode
         ser marcado como pago em lote, no fim da lista; o resto continua sendo
-        na aba Pagamentos.
+        na aba Pagamentos. Com as páginas do <strong>extrato do Bradesco</strong>
+        carregadas junto, a baixa usa a data e o valor que saíram da conta
+        (juros incluídos) em vez do vencimento.
       </p>
       <div class="filtros" style="margin-top:12px;">
         <label class="acao-mini" for="arquivoDda" style="cursor:pointer;">📄 Escolher o DDA (PDF ou planilha)...</label>
         <input type="file" id="arquivoDda" class="sr-only"
                accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+        <label class="acao-mini" for="arquivoExtrato" style="cursor:pointer;">🏦 Extrato do Bradesco (opcional, as páginas juntas)...</label>
+        <input type="file" id="arquivoExtrato" class="sr-only" multiple
+               accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <label class="sr-only" for="filtroFornDda">Filtrar por fornecedor</label>
         <select id="filtroFornDda" style="display:none;"></select>
         <button type="button" class="acao-mini" id="btnImprimirDda" style="display:none;">🖨 Imprimir</button>
         <span id="statusDda" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
+        <span id="statusExtrato" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
       </div>
       <div id="resultadoDda"></div>
     </div>
@@ -757,7 +763,7 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="app-shared.js?v=24"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=3"></script>
+<script src="dda-nucleo.js?v=4"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=3"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
@@ -4604,6 +4610,40 @@
     });
   }
 
+  // Extrato do Bradesco: varias paginas (.xls) de uma vez. Fica em
+  // memoria como o DDA; o casamento debito x boleto e' refeito a cada
+  // render, dentro do DdaNucleo.conferir.
+  var extratoLido = null;
+
+  $('arquivoExtrato').addEventListener('change', function(){
+    var arquivos = Array.prototype.slice.call(this.files || []);
+    this.value = '';
+    if(!arquivos.length) return;
+    if(typeof XLSX === 'undefined'){
+      App.toastErro('Leitor de planilha', 'A biblioteca de planilha não carregou (sem internet?). Recarregue a página.');
+      return;
+    }
+    $('statusExtrato').textContent = 'Lendo ' + arquivos.length + ' arquivo(s) do extrato...';
+    Promise.all(arquivos.map(function(f){
+      return f.arrayBuffer().then(function(buf){
+        var wb = XLSX.read(new Uint8Array(buf), { type:'array' });
+        var ws = wb.Sheets[wb.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+      });
+    })).then(function(matrizes){
+      extratoLido = DdaNucleo.interpretarExtrato(matrizes);
+      var nBoletos = extratoLido.lancamentos.filter(function(l){ return l.tipo === 'boleto'; }).length;
+      $('statusExtrato').textContent = 'extrato: ' + arquivos.length + ' arquivo(s), ' +
+        (extratoLido.periodo ? fmtData(extratoLido.periodo.ini) + ' a ' + fmtData(extratoLido.periodo.fim) + ', ' : '') +
+        nBoletos + ' débito(s) de boleto' +
+        (extratoLido.ilegiveis.length ? ' + ' + extratoLido.ilegiveis.length + ' linha(s) ILEGÍVEL(IS)' : '');
+      renderDda();
+    }).catch(function(e){
+      $('statusExtrato').textContent = '';
+      App.toastErro('Não consegui ler o extrato', e);
+    });
+  });
+
   $('arquivoDda').addEventListener('change', function(){
     var f = this.files && this.files[0];
     this.value = ''; // reescolher o mesmo arquivo dispara change de novo
@@ -4645,7 +4685,8 @@
       duplicatas: duplicatas,
       notasPorChave: notasPorChave,
       corteJanela: carregarTudo ? null : cortePorMeses(MESES_HISTORICO),
-      periodo: ddaLido.periodo
+      periodo: ddaLido.periodo,
+      extrato: extratoLido ? extratoLido.lancamentos : null
     });
 
     // Fornecedores presentes no relatorio (dos boletos casados e dos
@@ -4725,6 +4766,9 @@
       ' · 🔴 ' + resumo.vermelhos + ' · 🟡 ' + resumo.amarelos +
       ' · ⚪ ' + resumo.brancos + ' · ✅ ' + resumo.ok +
       (carregarTudo ? '' : ' · janela de ' + MESES_HISTORICO + ' meses') +
+      (rel.extrato
+        ? ' · extrato: ' + rel.extrato.usados + ' de ' + rel.extrato.boletosPagos + ' boleto(s) pago(s) com o débito achado'
+        : '') +
       '</div>';
 
     // Aviso do leitor (planilha cortada em 500 linhas pelo Safra): a
@@ -4770,6 +4814,12 @@
           ' — nota ' + escapeHtml(String(d.numeroNota || '?')) + ' parc. ' + escapeHtml(String(d.parcela || '?')) +
           ' · nosso valor ' + brl(d.valor || 0) + ' · nosso venc. ' + fmtData(d.vencimento) +
           (d.pago === true ? ' · <span class="badge pago">paga</span>' : '') + '</div>';
+        if(l.extrato && l.extrato.lancamento){
+          html += '<div class="dda-meta">saiu da conta em <strong>' + fmtData(l.extrato.data) + '</strong> · ' +
+            brl(l.extrato.valorPagoCentavos / 100) +
+            (l.extrato.jurosCentavos > 0 ? ' (juros ' + brl(l.extrato.jurosCentavos / 100) + ')' : '') +
+            ' · <span class="badge" title="Como o débito foi achado no extrato">' + escapeHtml(l.extrato.como.join(' → ')) + '</span></div>';
+        }
       } else if(c.candidatas.length){
         html += '<div class="dda-meta">candidatas: ' + c.candidatas.slice(0, 4).map(function(cd){
           return escapeHtml(String(cd.numeroNota || '?')) + '/' + escapeHtml(String(cd.parcela || '?')) +
@@ -4797,8 +4847,9 @@
         '<span>🟡 <strong>' + ddaBaixaveis.length + ' boleto(s)</strong> que o banco já dá como pago e aqui ' +
           (ddaBaixaveis.length === 1 ? 'está' : 'estão') + ' em aberto — ' + brl(somaBaixa) + '</span>' +
         '<button type="button" class="acao-mini" id="btnBaixarDda">✓ Marcar como pagas</button>' +
-        '<span class="nota-explicativa" style="margin:0;">Banco e data pedidos uma vez; data em branco = vencimento de cada boleto. ' +
-          'O valor pago é o da duplicata (juros vão pela aba Pagamentos).</span>' +
+        '<span class="nota-explicativa" style="margin:0;">Banco e data pedidos uma vez; data em branco = ' +
+          (extratoLido ? 'data do débito no extrato (ou o vencimento, se não achado)' : 'vencimento de cada boleto') +
+          '. O valor pago é ' + (extratoLido ? 'o que saiu da conta (diferença vira juros)' : 'o da duplicata') + '.</span>' +
         '</div>';
     }
 
@@ -4845,11 +4896,21 @@
     if(!itens.length) return;
     pagandoId = 'dda';
     var soma = itens.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
+    // Com extrato: valor e data reais de cada boleto que teve o debito
+    // achado; os outros ficam no valor da duplicata e no vencimento.
+    var valorPagoDe = function(l){
+      return (l.extrato && l.extrato.lancamento) ? l.extrato.valorPagoCentavos / 100 : (l.casamento.duplicata.valor || 0);
+    };
+    var comExtrato = itens.filter(function(l){ return l.extrato && l.extrato.lancamento; }).length;
+    var jurosTotal = itens.reduce(function(s2, l){ return s2 + ((l.extrato && l.extrato.jurosCentavos) || 0); }, 0);
 
     carregarContabil().then(function(contabil){
       return pedirPagamento({
         titulo: 'Marcar como pagas pelo DDA',
-        mensagem: itens.length + ' boleto(s) · ' + brl(soma) + ' · cada um pelo valor da própria duplicata',
+        mensagem: itens.length + ' boleto(s) · ' + brl(soma) +
+          (extratoLido
+            ? ' · ' + comExtrato + ' com data e valor do extrato' + (jurosTotal ? ' (juros ' + brl(jurosTotal / 100) + ')' : '')
+            : ' · cada um pelo valor da própria duplicata'),
         bancos: contabil.bancos,
         semValor: true,
         dataOpcional: true,
@@ -4869,13 +4930,14 @@
             var batch = db.batch();
             pedaco.forEach(function(l){
               var d = l.casamento.duplicata;
-              var dataPgto = r.data || l.registro.vencimento;
+              var dataPgto = r.data || (l.extrato && l.extrato.data) || l.registro.vencimento;
+              var valorPago = valorPagoDe(l);
               batch.set(db.collection('duplicatas').doc(d.id), {
                 pago:true, dataPagamento:dataPgto, obsPagamento:(r.obs || 'conferido no DDA'),
-                bancoPagamento:r.bancoId, valorPago:(d.valor || 0), pagoEmLote:true
+                bancoPagamento:r.bancoId, valorPago:valorPago, pagoEmLote:true
               }, { merge:true });
               pares = pares.concat(LancamentosNucleo.lancamentosDePagamento({
-                tipo:'fornecedor', id:d.id, data:dataPgto, valor:d.valor || 0, valorPago:d.valor || 0,
+                tipo:'fornecedor', id:d.id, data:dataPgto, valor:d.valor || 0, valorPago:valorPago,
                 bancoId:r.bancoId,
                 historico:'PAGTO ' + fornecedorDaDuplicata(d) + (d.numeroNota ? ' NF ' + d.numeroNota : ''),
                 fornecedor:d.nomeEmitente || null, numeroDoc:d.numeroNota || null
@@ -4891,7 +4953,8 @@
         }
 
         return bloco(0).then(function(){
-          App.toast(gravadas + ' boleto(s) marcado(s) como pago(s) — lançamentos contábeis criados.', 'ok');
+          App.toast(gravadas + ' boleto(s) marcado(s) como pago(s) — lançamentos contábeis criados' +
+            (jurosTotal ? ', juros de ' + brl(jurosTotal / 100) + ' lançados' : '') + '.', 'ok');
         }).catch(function(e){
           App.toastErro('Erro ao marcar — ' + gravadas + ' de ' + itens.length +
             ' já gravados. A lista se atualiza sozinha; repita para o resto.', e);

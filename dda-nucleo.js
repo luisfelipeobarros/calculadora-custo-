@@ -6,6 +6,11 @@
    de coluna). Tudo que vem depois — casamento, conferencia, lista do
    que pode ser baixado em lote — nao sabe de onde o boleto veio.
 
+   Terceira entrada, opcional: o EXTRATO do Bradesco (secao 3c). Ele
+   nao casa com duplicata nenhuma (nao traz numero de documento); ele
+   se apoia no boleto que o DDA ja' casou e diz QUANDO e QUANTO saiu
+   da conta (secao 4b) — e' o que da' data real e juros a' baixa.
+
    Mesmo desenho do calculo-nucleo.js: o UNICO lugar onde as regras
    de leitura e casamento moram, carregavel com <script src> no
    navegador e com require() nos testes — o teste exercita o codigo
@@ -400,10 +405,12 @@
     cnpjPagador: /^cnpj/
   };
   var OBRIGATORIAS_PLANILHA = ['vencimento', 'documento', 'beneficiario', 'nominal'];
-  // Tamanho em que a exportacao do Safra para (planilha real de 30
-  // dias: exatamente 500 linhas, 15/08 a 25/08, com o cabecalho
-  // dizendo "ate' 14/09").
-  var LIMITE_EXPORTACAO_SAFRA = 500;
+  // A primeira exportacao real de 30 dias veio com exatamente 500
+  // linhas (15/08 a 25/08) e o cabecalho dizendo "ate' 14/09"; a
+  // segunda, do mesmo periodo, veio inteira (1.253). O corte existe e
+  // nao e' fixo — o que se detecta e' o SINTOMA: os boletos param
+  // varios dias antes do fim que o cabecalho promete.
+  var FOLGA_CORTE_DIAS = 3;
 
   function celulaTexto(v) {
     if (v == null) return '';
@@ -512,21 +519,129 @@
       });
     }
 
-    // O Safra corta a exportacao em 500 linhas SEM avisar: o periodo
-    // do cabecalho continua dizendo "ate' dia X", mas os boletos param
-    // antes. Detectado, o periodo encolhe ate' o ultimo vencimento
-    // lido (senao o check 8 acusaria "sem boleto" tudo que ficou fora
-    // do corte) e a tela avisa para exportar um periodo menor.
+    // Exportacao cortada: o cabecalho diz "ate' dia X", mas os boletos
+    // param dias antes. Detectado, o periodo encolhe ate' o ultimo
+    // vencimento lido (senao o check 8 acusaria "sem boleto" tudo que
+    // ficou fora do corte) e a tela avisa para exportar de novo.
     var aviso = null;
-    if (registros.length >= LIMITE_EXPORTACAO_SAFRA) {
+    if (periodo && registros.length) {
       var ultimo = registros.reduce(function (m, r) { return r.vencimento > m ? r.vencimento : m; }, '');
-      aviso = 'a planilha tem ' + registros.length + ' boletos — o Safra corta a exportação em ' +
-        LIMITE_EXPORTACAO_SAFRA + ' linhas. O que vence depois de ' + App.fmtData(ultimo) +
-        ' provavelmente ficou de fora: exporte um período menor (uma semana cabe).';
-      if (periodo && ultimo && ultimo < periodo.fim) periodo = { ini: periodo.ini, fim: ultimo, cortado: true };
+      var faltam = Math.round((new Date(periodo.fim + 'T00:00:00Z') - new Date(ultimo + 'T00:00:00Z')) / 86400000);
+      if (faltam >= FOLGA_CORTE_DIAS) {
+        aviso = 'os boletos lidos vão só até ' + App.fmtData(ultimo) + ', mas o cabeçalho diz até ' +
+          App.fmtData(periodo.fim) + ' (' + registros.length + ' linhas). Se a exportação foi cortada, ' +
+          'exporte de novo num período menor; a conferência abaixo vale só até ' + App.fmtData(ultimo) + '.';
+        periodo = { ini: periodo.ini, fim: ultimo, cortado: true };
+      }
     }
 
     return { periodo: periodo, registros: registros, ilegiveis: ilegiveis, origem: 'planilha', aviso: aviso };
+  }
+
+  /* ============================================================
+     3c. Leitura do extrato do Bradesco (.xls, Net Empresa)
+
+     Cada pagina exportada e' um arquivo: Data | Lancamento | Dcto. |
+     Credito | Debito | Saldo, valores em texto "1.234,56" (debito com
+     sinal negativo). O arquivo repete, no fim, um bloco "Ultimos
+     Lancamentos" (igual em todas as paginas) e os saldos do Invest
+     Facil (cabecalho diferente, sem coluna de debito — ignorado).
+     Aceita varias matrizes de uma vez e descarta a repeticao pela
+     chave data + dcto + historico + valor.
+     ============================================================ */
+
+  var COLUNAS_EXTRATO = {
+    data: /^data$/, historico: /^lancamento$/, dcto: /^dcto/,
+    credito: /^credito/, debito: /^debito/, saldo: /^saldo/
+  };
+  var OBRIGATORIAS_EXTRATO = ['data', 'historico', 'debito'];
+
+  // "-1.530,34" -> 153034 (o sinal fica por conta da coluna).
+  function centavosDoExtrato(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return Math.abs(Math.round(v * 100));
+    return valorParaCentavos(String(v).trim().replace(/^-\s*/, ''));
+  }
+
+  // O que a linha e', pelo historico. So' o que a fase 1 precisa:
+  // boleto (PAGTO ELETRON COBRANCA + cedente) e PIX enviado; o resto
+  // fica rotulado para a conferencia de caixa (fase 2).
+  function classificarLancamento(historico, ehCredito) {
+    var h = String(historico == null ? '' : historico).replace(/\s+/g, ' ').trim();
+    var m;
+    if (/^SALDO/i.test(h)) return { tipo: 'saldo', contraparte: null };
+    if ((m = h.match(/^PAGTO ELETRON COBRANCA\s*(.*)$/i))) return { tipo: 'boleto', contraparte: m[1].trim() || null };
+    if ((m = h.match(/^PIX (?:ENVIADO|QR CODE \w+) DES:\s*(.*?)(?:\s+\d{2}\/\d{2})?$/i))) return { tipo: 'pix', contraparte: m[1].trim() || null };
+    return { tipo: ehCredito ? 'credito' : 'outro', contraparte: null };
+  }
+
+  function interpretarExtrato(arquivos) {
+    // Uma matriz so' ou uma lista de matrizes (as paginas).
+    var lista = (arquivos && arquivos.length && Array.isArray(arquivos[0]) && Array.isArray(arquivos[0][0]))
+      ? arquivos : [arquivos || []];
+    var vistos = Object.create(null);
+    var lancamentos = [], ilegiveis = [];
+
+    lista.forEach(function (linhas, iArq) {
+      var cab = null;
+      (linhas || []).forEach(function (l) {
+        l = l || [];
+        var textos = l.map(celulaTexto);
+        if (!textos.some(function (t) { return t !== ''; })) return;
+
+        // Cabecalho de secao: reconhecido pelos rotulos, onde estiver.
+        var mapa = {};
+        textos.forEach(function (t, j) {
+          var n = normalizar(t);
+          Object.keys(COLUNAS_EXTRATO).forEach(function (k) {
+            if (mapa[k] == null && COLUNAS_EXTRATO[k].test(n)) mapa[k] = j;
+          });
+        });
+        if (OBRIGATORIAS_EXTRATO.every(function (k) { return mapa[k] != null; })) { cab = mapa; return; }
+        if (!cab) return;
+
+        var primeira = textos.filter(function (t) { return t !== ''; })[0];
+        if (/^tota(l|is)\b/.test(normalizar(primeira))) { cab = null; return; } // fim da secao
+
+        var celula = function (k) { return cab[k] == null ? null : l[cab[k]]; };
+        var historico = celulaTexto(celula('historico'));
+        var credito = centavosDoExtrato(celula('credito'));
+        var debito = centavosDoExtrato(celula('debito'));
+        var cls = classificarLancamento(historico, credito != null && credito > 0);
+        if (cls.tipo === 'saldo') return; // "SALDO ANTERIOR" (com ou sem data) nao e' movimento
+        var data = dataDaCelula(celula('data'));
+        if (!data) {
+          ilegiveis.push({ arquivo: iArq + 1, texto: textos.filter(Boolean).join(' | '), motivo: 'data ilegível' });
+          return;
+        }
+        if (cls.tipo !== 'saldo' && credito == null && debito == null) {
+          ilegiveis.push({ arquivo: iArq + 1, texto: textos.filter(Boolean).join(' | '), motivo: 'sem crédito nem débito legível' });
+          return;
+        }
+        var lanc = {
+          data: data,
+          historico: historico,
+          dcto: celulaTexto(celula('dcto')) || null,
+          creditoCentavos: credito || 0,
+          debitoCentavos: debito || 0,
+          saldoCentavos: centavosDoExtrato(celula('saldo')),
+          tipo: cls.tipo,
+          contraparte: cls.contraparte,
+          arquivo: iArq + 1
+        };
+        // Repeticao entre paginas (bloco "Ultimos Lancamentos"): fora.
+        var chave = [lanc.data, lanc.dcto, normalizar(lanc.historico), lanc.creditoCentavos, lanc.debitoCentavos].join('|');
+        if (vistos[chave]) return;
+        vistos[chave] = true;
+        lancamentos.push(lanc);
+      });
+    });
+
+    lancamentos.sort(function (a, b) { return a.data < b.data ? -1 : (a.data > b.data ? 1 : 0); });
+    var periodo = lancamentos.length
+      ? { ini: lancamentos[0].data, fim: lancamentos[lancamentos.length - 1].data }
+      : null;
+    return { lancamentos: lancamentos, ilegiveis: ilegiveis, periodo: periodo, arquivos: lista.length, origem: 'extrato' };
   }
 
   /* ============================================================
@@ -712,6 +827,152 @@
   }
 
   /* ============================================================
+     4b. Extrato <-> boleto: quando e quanto saiu da conta
+
+     O extrato e o DDA falam do mesmo CEDENTE ("PAGTO ELETRON COBRANCA
+     CSMJ SECURITIZADORA" x beneficiario "CSMJ SECURITIZADORA S.A."),
+     entao o debito se procura por VALOR e DATA perto do vencimento,
+     com o nome so' confirmando (o extrato corta em ~34 letras e
+     abrevia: "KARINA PISOS REV CERAM"). Cada debito serve a UM boleto:
+     seis boletos da CSMJ de R$ 2.199,86 no mesmo dia consomem seis
+     debitos iguais, e o setimo boleto fica "sem debito".
+
+     Tres passadas, na ordem, cada uma so' com os debitos que a
+     anterior nao consumiu — senao o "juros" de um boleto roubaria o
+     debito exato de outro (visto no extrato real):
+       1. valor exato + cedente conferido;
+       2. valor exato sem o cedente conferir (o Bradesco as vezes
+          imprime "PAG COBRANCA NET EMPRESA" ou nada no lugar do nome);
+       3. juros: mesmo cedente, acima do nominal ate' JUROS_MAXIMO,
+          depois do vencimento, e so' se sobrar um.
+     Boleto recorrente (mesmo valor toda semana) tem varios debitos
+     iguais na janela: vale o da DATA MAIS PROXIMA do vencimento, com
+     empate para o lado de depois. O que casar da' a' baixa a data real
+     e o valor pago; o que nao casar cai no vencimento e no valor da
+     duplicata, avisado.
+     ============================================================ */
+
+  var JANELA_EXTRATO = { antes: 5, depois: 20 }; // dias em volta do vencimento
+  var JUROS_MAXIMO = 0.10;                        // 10% acima do nominal
+
+  function somarDias(iso, n) {
+    var d = new Date(iso + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+
+  var SUFIXO_NOME = /^(ltda|sa|s|a|me|epp|eireli|cia|e|de|do|da|dos|das|s\/a)$/;
+  function palavrasDoNome(s) {
+    return normalizar(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+      .filter(function (p) { return p && !SUFIXO_NOME.test(p); });
+  }
+  // Primeiras duas palavras iguais (ou a unica, quando um dos lados so'
+  // tem uma): "CERAMICA FORMIGRES" bate com "CERAMICA FORMIGRES LTDA."
+  // e nao com "CERAMICA CAPRI".
+  function nomesCompativeis(a, b) {
+    var pa = palavrasDoNome(a), pb = palavrasDoNome(b);
+    if (!pa.length || !pb.length) return false;
+    if (pa[0] !== pb[0]) return false;
+    if (pa.length < 2 || pb.length < 2) return true;
+    return pa[1] === pb[1];
+  }
+
+  function diasEntre(a, b) {
+    return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+  }
+
+  // registros: boletos (os PAGOS sao os que interessam); lancamentos:
+  // do interpretarExtrato. Devolve um Map registro -> resultado.
+  function casarExtrato(registros, lancamentos) {
+    var debitos = (lancamentos || []).filter(function (l) { return l.tipo === 'boleto' && l.debitoCentavos > 0; });
+    var usado = [];
+    var porRegistro = new Map();
+
+    // Ordem estavel: vencimento, depois valor — para que dois boletos
+    // iguais consumam debitos na mesma ordem em qualquer maquina.
+    var pagos = registros.filter(function (r) { return situacaoPaga(r.situacao) && r.vencimento && r.valorCentavos != null; })
+      .sort(function (a, b) { return (a.vencimento < b.vencimento ? -1 : a.vencimento > b.vencimento ? 1 : 0) || (a.valorCentavos - b.valorCentavos); });
+
+    function livresNaJanela(r) {
+      var ini = somarDias(r.vencimento, -JANELA_EXTRATO.antes);
+      var fim = somarDias(r.vencimento, JANELA_EXTRATO.depois);
+      var lista = [];
+      debitos.forEach(function (l, i) {
+        if (!usado[i] && l.data >= ini && l.data <= fim) lista.push({ i: i, l: l });
+      });
+      return lista;
+    }
+
+    // Entre candidatos iguais, o da data mais proxima do vencimento
+    // (empate: o de depois). Devolve o escolhido e quantos havia nesse dia.
+    function maisProximo(cands, venc) {
+      cands.sort(function (a, b) {
+        var da = diasEntre(venc, a.l.data), db = diasEntre(venc, b.l.data);
+        return (Math.abs(da) - Math.abs(db)) || (db - da) || (a.i - b.i);
+      });
+      var c = cands[0];
+      var noDia = cands.filter(function (x) { return x.l.data === c.l.data; }).length;
+      return { c: c, noDia: noDia };
+    }
+
+    function comoDaData(venc, data) {
+      var d = diasEntre(venc, data);
+      if (d === 0) return 'data = vencimento';
+      return 'data ' + Math.abs(d) + ' dia' + (Math.abs(d) === 1 ? '' : 's') + (d > 0 ? ' depois' : ' antes') + ' do vencimento';
+    }
+
+    // Passadas 1 e 2: valor exato (com o cedente conferido, depois sem)
+    [true, false].forEach(function (exigirNome) {
+      pagos.forEach(function (r) {
+        if (porRegistro.has(r)) return;
+        var cands = livresNaJanela(r).filter(function (c) {
+          return c.l.debitoCentavos === r.valorCentavos &&
+            (!exigirNome || nomesCompativeis(c.l.contraparte, r.beneficiario));
+        });
+        if (!cands.length) return;
+        var esc = maisProximo(cands, r.vencimento);
+        usado[esc.c.i] = true;
+        porRegistro.set(r, {
+          lancamento: esc.c.l, data: esc.c.l.data, valorPagoCentavos: esc.c.l.debitoCentavos, jurosCentavos: 0,
+          nomeConferido: exigirNome,
+          como: ['valor', comoDaData(r.vencimento, esc.c.l.data), exigirNome ? 'cedente' : 'cedente NÃO conferido']
+            .concat(esc.noDia > 1 ? ['um de ' + esc.noDia + ' iguais no dia'] : [])
+        });
+      });
+    });
+
+    // Passada 3: juros, so' com o que sobrou
+    pagos.forEach(function (r) {
+      if (porRegistro.has(r)) return;
+      var teto = Math.round(r.valorCentavos * (1 + JUROS_MAXIMO));
+      var comJuros = livresNaJanela(r).filter(function (c) {
+        return c.l.data >= r.vencimento && c.l.debitoCentavos > r.valorCentavos && c.l.debitoCentavos <= teto &&
+          nomesCompativeis(c.l.contraparte, r.beneficiario);
+      });
+      if (comJuros.length === 1) {
+        var cj = comJuros[0];
+        usado[cj.i] = true;
+        porRegistro.set(r, {
+          lancamento: cj.l, data: cj.l.data, valorPagoCentavos: cj.l.debitoCentavos,
+          jurosCentavos: cj.l.debitoCentavos - r.valorCentavos, nomeConferido: true,
+          como: ['cedente', 'valor acima do nominal (juros)', comoDaData(r.vencimento, cj.l.data)]
+        });
+        return;
+      }
+      var ini = somarDias(r.vencimento, -JANELA_EXTRATO.antes);
+      var fim = somarDias(r.vencimento, JANELA_EXTRATO.depois);
+      porRegistro.set(r, {
+        motivo: comJuros.length > 1
+          ? comJuros.length + ' débitos do cedente acima do nominal na janela — não dá para escolher'
+          : 'nenhum débito livre desse valor entre ' + App.fmtData(ini) + ' e ' + App.fmtData(fim)
+      });
+    });
+
+    var usados = usado.filter(Boolean).length;
+    return { porRegistro: porRegistro, resumo: { debitos: debitos.length, usados: usados, boletosPagos: pagos.length } };
+  }
+
+  /* ============================================================
      5. Conferencia (o relatorio)
 
      Gravidade: 3 = vermelho (fraude possivel), 2 = amarelo (acao
@@ -746,6 +1007,8 @@
     var notasPorChave = ctx.notasPorChave || {};
     var corteJanela = ctx.corteJanela || null; // null = historico completo carregado
     var periodo = ctx.periodo || null;
+    // Extrato (opcional): data e valor reais para os boletos pagos.
+    var extrato = ctx.extrato ? casarExtrato(registros, ctx.extrato) : null;
 
     var base = prepararBase(duplicatas);
     var linhas = [];
@@ -768,8 +1031,28 @@
     registros.forEach(function (r) {
       var casamento = casar(r, base);
       var problemas = [];
-      var linha = { registro: r, casamento: casamento, problemas: problemas };
+      var linha = { registro: r, casamento: casamento, problemas: problemas, extrato: null };
       linhas.push(linha);
+
+      if (extrato && extrato.porRegistro.has(r)) {
+        var ex = extrato.porRegistro.get(r);
+        linha.extrato = ex;
+        if (!ex.lancamento) {
+          problemas.push({ tipo: 'semDebitoNoExtrato', gravidade: GRAVIDADE.BRANCO,
+            texto: 'não achei o débito deste boleto no extrato (' + ex.motivo + ') — a baixa usa o vencimento e o valor da duplicata' });
+        } else {
+          if (ex.jurosCentavos > 0) {
+            problemas.push({ tipo: 'jurosNoExtrato', gravidade: GRAVIDADE.BRANCO,
+              texto: 'saiu da conta em ' + App.fmtData(ex.data) + ' com ' + App.brl(ex.valorPagoCentavos / 100) +
+                ' — juros de ' + App.brl(ex.jurosCentavos / 100) + ' (vira lançamento de juros na baixa)' });
+          }
+          if (!ex.nomeConferido) {
+            problemas.push({ tipo: 'debitoCedenteDiferente', gravidade: GRAVIDADE.BRANCO,
+              texto: 'o débito do extrato bate em valor e data, mas o nome do cedente não confere ("' +
+                (ex.lancamento.contraparte || '?') + '") — confira antes de baixar' });
+          }
+        }
+      }
 
       var chaveDup = chaveDuplicidade(r);
       if (vistos[chaveDup] > 1) {
@@ -932,7 +1215,10 @@
       else resumo.ok++;
     });
 
-    return { linhas: linhas, foraDoDda: foraDoDda, baixaveis: baixaveis, resumo: resumo, periodo: periodo, gravidadeDa: gravidadeDa };
+    return {
+      linhas: linhas, foraDoDda: foraDoDda, baixaveis: baixaveis, resumo: resumo, periodo: periodo,
+      extrato: extrato ? extrato.resumo : null, gravidadeDa: gravidadeDa
+    };
   }
 
   /* ============================================================
@@ -958,6 +1244,10 @@
 
     interpretar: interpretar,
     interpretarPlanilha: interpretarPlanilha,
+    interpretarExtrato: interpretarExtrato,
+    classificarLancamento: classificarLancamento,
+    nomesCompativeis: nomesCompativeis,
+    casarExtrato: casarExtrato,
     prepararBase: prepararBase,
     casar: casar,
     conferir: conferir

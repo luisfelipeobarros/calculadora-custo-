@@ -662,16 +662,156 @@ eq('sigla nao e posicao: ST, ICM, P1 -> null', ['ST', 'ICM', 'P1'].map(Dda.parce
   eq('VENCIDO com juros embutidos: aviso branco de valor a pagar', tipos(rel2.linhas[0]), ['valorAPagarDiferente']);
 }
 
-// O Safra corta a exportacao em 500 linhas sem avisar.
+// Exportacao cortada (a primeira real de 30 dias parou em 500 linhas,
+// 25/08, com o cabecalho dizendo "ate 14/09"): o sintoma e' os boletos
+// pararem dias antes do fim prometido.
 {
-  const muitas = [];
-  for (let i = 0; i < 500; i++) muitas.push(linhaSafra({ doc: String(1000 + i) + ' 1', venc: i < 250 ? '08/09/2026' : '09/09/2026', sit: 'PAGO', total: 0 }));
-  const lido = Dda.interpretarPlanilha(planilhaSafra(muitas));
-  eq('500 linhas: aviso de corte', /500 linhas/.test(lido.aviso || ''), true);
+  const cortada = Dda.interpretarPlanilha(planilhaSafra([
+    linhaSafra({ doc: '1 1', venc: '08/09/2026', sit: 'PAGO', total: 0 }),
+    linhaSafra({ doc: '2 1', venc: '09/09/2026', sit: 'PAGO', total: 0 })
+  ]));
+  eq('boletos ate 09/09 com cabecalho ate 14/09: aviso de corte', /cortada/.test(cortada.aviso || ''), true);
   eq('  ...e o periodo encolhe ate o ultimo vencimento lido, marcado como cortado',
-    lido.periodo, { ini: '2026-09-08', fim: '2026-09-09', cortado: true });
-  const poucas = Dda.interpretarPlanilha(planilhaSafra(muitas.slice(0, 40)));
-  eq('40 linhas: sem aviso, periodo do cabecalho intacto', [poucas.aviso, poucas.periodo.cortado], [null, undefined]);
+    cortada.periodo, { ini: '2026-09-08', fim: '2026-09-09', cortado: true });
+  const inteira = Dda.interpretarPlanilha(planilhaSafra([
+    linhaSafra({ doc: '1 1', venc: '08/09/2026', sit: 'PAGO', total: 0 }),
+    linhaSafra({ doc: '2 1', venc: '13/09/2026', sit: 'PAGO', total: 0 })
+  ]));
+  eq('ultimo boleto a 1 dia do fim: sem aviso, periodo do cabecalho intacto',
+    [inteira.aviso, inteira.periodo.cortado], [null, undefined]);
+}
+
+// ── 7. Extrato do Bradesco: quando e quanto saiu da conta ───
+//
+// Mesma forma do .xls real (Net Empresa): Data | Lançamento | Dcto. |
+// Crédito | Débito | Saldo, valores em texto, débito negativo, um bloco
+// "Últimos Lançamentos" repetido em cada página e os saldos do Invest
+// Fácil com cabeçalho diferente.
+
+const CAB_EXT = ['Data', 'Lançamento', 'Dcto.', 'Crédito (R$)', 'Débito (R$)', 'Saldo (R$)'];
+const deb = (data, hist, dcto, valor) => [data, hist, dcto, '', '-' + valor, '0,00'];
+const cred = (data, hist, dcto, valor) => [data, hist, dcto, valor, '', '0,00'];
+const paginaExtrato = (linhas, ultimos) => [
+  [], [null, 'Bradesco Net Empresa'], [], ['Extrato de: Agência: 0000  Conta: 0000-0'], [],
+  CAB_EXT,
+  ['13/08/2026', 'SALDO ANTERIOR', '', '', '', '100,00']
+].concat(linhas, [
+  ['Total', '', '', '1,00', '-1,00', '0,00'],
+  ['Últimos Lançamentos', '', '', '', '', ''],
+  CAB_EXT,
+  ['', 'SALDO ANTERIOR', '', '', '', '5,00']
+], ultimos, [
+  ['Total', '', '', '0,00', '0,00', '0,00'],
+  ['Saldos Invest Fácil / Plus'],
+  ['Data', 'Histórico', 'Valor (R$)'],
+  ['14/08/2026', 'SALDO INVEST FÁCIL', '9,99']
+]);
+
+const ultimos = [deb('12/09/2026', 'PAGTO ELETRON  COBRANCA FORNECEDOR Z LTDA', '999', '10,00')];
+const pag1 = paginaExtrato([
+  cred('14/08/2026', 'PIX RECEBIDO REM: Cliente Tal 14/08', '1', '111,00'),
+  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '2', '2.199,86'),
+  deb('14/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '3', '2.199,86'),
+  deb('14/08/2026', 'PIX ENVIADO DES: MASSA PRONTA PRODUTOS 14/08', '4', '500,00'),
+  deb('15/08/2026', 'TARIFA BANCARIA CESTA PJ 6', '5', '80,00')
+], ultimos);
+const pag2 = paginaExtrato([
+  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA CSMJ SECURITIZADORA S.A.', '6', '2.199,86'),
+  deb('21/08/2026', 'PAGTO ELETRON  COBRANCA KARINA PISOS REV CERAM LTDA', '7', '1.000,00'),
+  deb('26/08/2026', 'PAGTO ELETRON  COBRANCA KARINA PISOS REV CERAM LTDA', '8', '1.030,00'),
+  deb('26/08/2026', 'PAGTO ELETRON  COBRANCA', '9', '256,75'),
+  deb('01/09/2026', 'PAGTO ELETRON  COBRANCA CERAMICA CAPRI LTDA', '10', '700,00')
+], ultimos);
+
+{
+  const ext = Dda.interpretarExtrato([pag1, pag2]);
+  eq('extrato: 2 paginas lidas, sem ilegiveis', [ext.arquivos, ext.ilegiveis.length], [2, 0]);
+  eq('extrato: movimentos lidos, bloco repetido descartado, saldos e Invest Facil fora',
+    ext.lancamentos.length, 11);
+  eq('extrato: periodo = primeiro e ultimo movimento', ext.periodo, { ini: '2026-08-14', fim: '2026-09-12' });
+  const tipos2 = {}; ext.lancamentos.forEach(l => { tipos2[l.tipo] = (tipos2[l.tipo] || 0) + 1; });
+  eq('extrato: tipos classificados pelo historico', tipos2, { credito: 1, boleto: 8, pix: 1, outro: 1 });
+  const csmj = ext.lancamentos.find(l => l.dcto === '2');
+  eq('extrato: debito em centavos, sem sinal, com o cedente separado',
+    [csmj.debitoCentavos, csmj.creditoCentavos, csmj.contraparte], [219986, 0, 'CSMJ SECURITIZADORA S.A.']);
+  eq('extrato: PIX enviado traz o destinatario sem a data do fim',
+    ext.lancamentos.find(l => l.tipo === 'pix').contraparte, 'MASSA PRONTA PRODUTOS');
+  eq('extrato: uma matriz so tambem serve', Dda.interpretarExtrato(pag1).lancamentos.length, 6);
+  eq('extrato: sem cabecalho reconhecivel = vazio', Dda.interpretarExtrato([['a', 'b']]).lancamentos.length, 0);
+}
+
+eq('nomes: abreviado do extrato bate com o completo do DDA',
+  Dda.nomesCompativeis('KARINA PISOS REV CERAM LTDA', 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA'), true);
+eq('nomes: mesma primeira palavra NAO basta (CERAMICA FORMIGRES x CERAMICA CAPRI)',
+  Dda.nomesCompativeis('CERAMICA FORMIGRES LTDA.', 'CERAMICA CAPRI LTDA'), false);
+eq('nomes: pontuacao e sufixos fora (RUY R.ROCHA PRODS x RUY R. DA ROCHA)',
+  Dda.nomesCompativeis('RUY R. DA ROCHA PRODUTOS CERAMIC', 'RUY R.ROCHA PRODS.CERAMICOS LT'), true);
+eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'CSMJ'), false);
+
+// O casamento debito x boleto, em cima dos registros PAGOS
+{
+  const ext = Dda.interpretarExtrato([pag1, pag2]);
+  const regs = [
+    // recorrente: dois boletos iguais em 14/08 e um em 21/08 — o de
+    // 21/08 NAO pode pegar um debito de 14/08 (data mais proxima)
+    reg({ documento: 'a', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
+    reg({ documento: 'b', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-14', situacao: 'PAGO' }),
+    reg({ documento: 'c', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    // quarto boleto igual: nao sobra debito
+    reg({ documento: 'd', beneficiario: 'CSMJ SECURITIZADORA S.A.', valorCentavos: 219986, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    // Karina: um exato em 21/08, outro pago com juros em 26/08 (venc 22/08)
+    reg({ documento: 'e', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    reg({ documento: 'f', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
+    // cedente sem nome no extrato ("PAGTO ELETRON  COBRANCA" e so)
+    reg({ documento: 'g', beneficiario: 'SINDICATO DOS EMPREGADOS', valorCentavos: 25675, vencimento: '2026-08-26', situacao: 'PAGO' }),
+    // aberto: nao entra
+    reg({ documento: 'h', beneficiario: 'CERAMICA CAPRI LTDA', valorCentavos: 70000, vencimento: '2026-09-01', situacao: 'ABERTO' }),
+    // pago por PIX (Massa Pronta): nao ha debito de boleto
+    reg({ documento: 'i', beneficiario: 'MASSA PRONTA PRODUTOS E SERVICOS LTDA.', valorCentavos: 50000, vencimento: '2026-08-14', situacao: 'PAGO' })
+  ];
+  const c = Dda.casarExtrato(regs, ext.lancamentos);
+  const de = (doc) => c.porRegistro.get(regs.find(r => r.documento === doc));
+  eq('dois iguais no dia: cada boleto consome UM debito', [de('a').lancamento.dcto, de('b').lancamento.dcto].sort(), ['2', '3']);
+  eq('  ...e o como diz "um de 2 iguais no dia"', de('a').como.includes('um de 2 iguais no dia'), true);
+  eq('recorrente: o de 21/08 pega o debito de 21/08, nao o de 14/08', [de('c').lancamento.dcto, de('c').data], ['6', '2026-08-21']);
+  eq('quarto boleto igual: sem debito livre, com o motivo', [de('d').lancamento, /nenhum débito livre/.test(de('d').motivo)], [undefined, true]);
+  eq('Karina exato: valor + data = vencimento + cedente', de('e').como, ['valor', 'data = vencimento', 'cedente']);
+  eq('Karina com juros: so depois das passadas exatas, e o debito exato NAO foi roubado',
+    [de('f').lancamento.dcto, de('f').valorPagoCentavos, de('f').jurosCentavos], ['8', 103000, 3000]);
+  eq('  ...e o como registra juros e os dias de atraso', de('f').como, ['cedente', 'valor acima do nominal (juros)', 'data 4 dias depois do vencimento']);
+  eq('cedente sem nome no extrato: casa pelo valor e data, marcado como nao conferido',
+    [de('g').lancamento.dcto, de('g').nomeConferido], ['9', false]);
+  eq('boleto ABERTO nao e procurado', c.porRegistro.has(regs[7]), false);
+  eq('pago por PIX: sem debito de boleto, fica avisado', /nenhum débito livre/.test(de('i').motivo), true);
+  eq('resumo: 8 debitos de boleto, 6 usados, 8 boletos pagos', c.resumo, { debitos: 8, usados: 6, boletosPagos: 8 });
+}
+
+// Dentro do conferir: avisos brancos e nada muda na lista de baixa.
+{
+  const ext = Dda.interpretarExtrato([pag2]);
+  const base = [
+    dup({ id: 'k0', numeroNota: '99', parcela: '001', valor: 1000, vencimento: '2026-08-21', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'k1', numeroNota: '100', parcela: '001', valor: 1000, vencimento: '2026-08-22', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'k2', numeroNota: '101', parcela: '001', valor: 500, vencimento: '2026-08-22', chaveAcesso: 'chave-ok' })
+  ];
+  const regs = [
+    reg({ documento: '99/1', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-21', situacao: 'PAGO' }),
+    reg({ documento: '100/1', beneficiario: 'KARINA PISOS E REVESTIMENTOS CERAMICOS LTDA', valorCentavos: 100000, vencimento: '2026-08-22', situacao: 'PAGO' }),
+    reg({ documento: '101/1', beneficiario: 'FORNECEDOR SEM EXTRATO', valorCentavos: 50000, vencimento: '2026-08-22', situacao: 'PAGO' })
+  ];
+  const rel = Dda.conferir(regs, ctx(base, { periodo: null, extrato: ext.lancamentos }));
+  const k0 = rel.linhas.find(l => l.registro.documento === '99/1');
+  const k1 = rel.linhas.find(l => l.registro.documento === '100/1');
+  const k2 = rel.linhas.find(l => l.registro.documento === '101/1');
+  eq('debito exato: so o aviso de baixa, data e valor do extrato anexados',
+    [tipos(k0), k0.extrato.data, k0.extrato.valorPagoCentavos], [['bancoBaixouNosNao'], '2026-08-21', 100000]);
+  eq('debito com juros: aviso branco de juros, data e valor do extrato anexados',
+    [tipos(k1), k1.extrato.data, k1.extrato.valorPagoCentavos], [['bancoBaixouNosNao', 'jurosNoExtrato'], '2026-08-26', 103000]);
+  eq('linha sem debito: aviso branco "sem debito no extrato"', tipos(k2), ['bancoBaixouNosNao', 'semDebitoNoExtrato']);
+  eq('as tres continuam baixaveis (o extrato so enriquece a baixa)', rel.baixaveis.length, 3);
+  eq('resumo do extrato no relatorio', rel.extrato, { debitos: 6, usados: 2, boletosPagos: 3 });
+  const sem = Dda.conferir(regs, ctx(base, { periodo: null }));
+  eq('sem extrato: nenhum aviso de extrato e rel.extrato null', [tipos(sem.linhas[0]), sem.extrato], [['bancoBaixouNosNao'], null]);
 }
 
 // "ja pago" so' e' vermelho quando o banco AINDA cobra.

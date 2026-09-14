@@ -240,7 +240,7 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as duas coleções antes de
    dizer "nenhum item" — zero é uma afirmação.
-9. **Conferência de DDA** — 145 verificações em `dda-nucleo.js`. O parser
+9. **Conferência de DDA** — 174 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que
@@ -249,8 +249,13 @@ Não precisa instalar nada. São vinte e quatro etapas, em dezoito frentes:
    texto, `Date` ou serial do Excel, e manda linha ilegível para "não
    consegui ler" em vez de registro pela metade. Trava os formatos de
    documento vistos nos arquivos reais (parcela em letra = posição,
-   "1666488B H" da Formigres, nota colada na sigla do cedente) e o corte
-   de 500 linhas que o Safra faz na exportação sem avisar. Também trava o
+   "1666488B H" da Formigres, nota colada na sigla do cedente) e a
+   exportação cortada do Safra (boletos parando dias antes do fim que o
+   cabeçalho promete). O leitor do **extrato do Bradesco** (.xls, várias
+   páginas de uma vez, bloco repetido descartado) e o casamento débito ×
+   boleto em três passadas (valor exato com cedente, valor exato sem
+   cedente, juros só com o que sobrou; data mais próxima do vencimento
+   entre repetidos) também estão travados. Também trava o
    casamento: a **nota é o eixo** e, dentro dela, valor e vencimento
    decidem; a parcela do boleto só desempata (fornecedor que conta a
    partir da segunda, ou numera em letra, não atrapalha) e, quando nenhuma
