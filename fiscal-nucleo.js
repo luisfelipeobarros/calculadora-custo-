@@ -62,8 +62,8 @@
           };
         }
         g.qtdItens++;
-        g.somaValorCent += Math.round((it.vTotal || 0) * 100);
-        g.somaStCent += Math.round((it.icmsStValor || 0) * 100);
+        g.somaValorCent += App.emCentavos(it.vTotal);
+        g.somaStCent += App.emCentavos(it.icmsStValor);
         g.chaves[doc.chave] = true;
         if (doc.nomeEmitente) g.fornecedores[doc.nomeEmitente] = true;
         var desc = String(it.descricao || '').trim();

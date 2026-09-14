@@ -40,7 +40,8 @@
   .asst-kpi .k-val{ font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
   .asst-kpi .k-val.neg{ color:var(--loss); }
 
-  .asst-item{ border:1px solid var(--line); border-radius:6px; background:var(--card); padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+  .asst-item{ display:block; width:100%; box-sizing:border-box; text-align:left; font:inherit; color:inherit;
+    border:1px solid var(--line); border-radius:6px; background:var(--card); padding:10px 12px; margin-bottom:8px; cursor:pointer; }
   .asst-item:hover{ background:var(--stripe2); }
   .asst-item .linha1{ display:flex; justify-content:space-between; gap:8px; align-items:center; }
   .asst-item .seq{ font-family:var(--font-mono); font-size:12px; font-weight:600; }
@@ -100,8 +101,7 @@
     </div>
 
     <div class="asst-filtros" id="asstChips">
-      <button type="button" class="chip-filtro" data-st="" aria-pressed="true">Todas</button>
-      <!-- os chips de status são montados pelo script, a partir do núcleo -->
+      <!-- "Todas" e os chips de status são montados pelo script, a partir do núcleo -->
     </div>
     <div class="asst-filtros">
       <label class="sr-only" for="asstBusca">Buscar por cliente ou sequência</label>
@@ -166,7 +166,7 @@
       </div>
 
       <div style="margin-top:14px;">
-        <label class="rotulo-forte" style="font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Fotos</label>
+        <span style="display:block; font-family:var(--font-mono); font-size:11px; text-transform:uppercase; color:var(--ink-soft);">Fotos</span>
         <div style="margin-top:6px;">
           <button type="button" class="btn secondary" id="afFotoBtn">📷 Adicionar fotos</button>
           <input type="file" id="afFotos" accept="image/*" multiple style="display:none;">
@@ -203,7 +203,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=24"></script>
+<script src="app-shared.js?v=25"></script>
 <script src="assistencias-nucleo.js?v=3"></script>
 <script>
 (() => {
@@ -276,7 +276,7 @@
     $('asstListaMsg').textContent = lista.length + ' assistência(s)' +
       (lista.length !== assistencias.length ? ' (de ' + assistencias.length + ')' : '');
     $('asstLista').innerHTML = lista.map(a =>
-      '<div class="asst-item" data-abrir="' + escapeHtml(a.id) + '" role="button" tabindex="0"' +
+      '<button type="button" class="asst-item" data-abrir="' + escapeHtml(a.id) + '"' +
         ' aria-label="Abrir assistência ' + escapeHtml(a.sequencia || '') + ' de ' + escapeHtml(a.cliente || '') + '">' +
         '<div class="linha1"><span class="seq">#' + escapeHtml(a.sequencia || '—') + '</span>' +
           '<span class="badge-st ' + N.classeStatus(a.status) + '">' + escapeHtml(a.status || 'Aberta') + '</span></div>' +
@@ -290,7 +290,7 @@
             return (fs.problema.length ? ' · 📷 ' + fs.problema.length : '') +
               (fs.termo.length ? ' · 📄 termo' : '');
           })() + '</div>' +
-      '</div>').join('');
+      '</button>').join('');
   }
 
   App.delegar($('asstChips'), 'click', '.chip-filtro', (b) => {
@@ -350,6 +350,13 @@
     $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
     $('afDataResolucao').value = (a && a.dataResolucao) || '';
     $('afCausa').value = (a && a.causa) || '';
+    // Status gravado fora da lista do nucleo (documento antigo): entra
+    // como opcao para nao ser trocado por "Aberta" em silencio ao salvar.
+    if(a && a.status && N.STATUS.indexOf(a.status) === -1){
+      const op = document.createElement('option');
+      op.value = a.status; op.textContent = a.status + ' (fora da lista)';
+      $('afStatus').appendChild(op);
+    }
     $('afStatus').value = (a && a.status) || 'Aberta';
     $('afTipoSolucao').value = (a && a.tipoSolucao) || '';
     $('afMsg').textContent = '';
@@ -604,8 +611,12 @@
         renderLista();
       }, (e) => {
         console.error(e);
+        // A escuta que erra morre: a proxima entrada pela barra refaz o boot.
+        carregou = false;
         if(App.ehPermissaoNegada(e)){
-          setStatus('Acesso negado — as regras da coleção "assistencias" já foram publicadas no Console?');
+          setStatus(assistencias.length
+            ? 'A sessão expirou ou o acesso foi negado — toque em Entrar para voltar a atualizar.'
+            : 'Acesso negado — as regras da coleção "assistencias" já foram publicadas no Console?');
         } else {
           setStatus('Erro: ' + App.erroDe(e));
         }

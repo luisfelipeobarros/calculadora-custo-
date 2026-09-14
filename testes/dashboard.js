@@ -210,6 +210,10 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   const rj = m.crescimentoAnual(dadosJul, 2026, 'categoria', 7);
   eq('com mês filtrado, compara mês × mesmo mês (+50%)',
     [rj.periodo.de, rj.periodo.ate, rj.itens[0].cresc], [7, 7, 0.5]);
+  // Mês que o ano selecionado ainda não tem (dezembro com dados até
+  // julho): aviso, nunca uma parede de −100%.
+  eq('mês sem dado no ano selecionado -> periodo null, nada de -100% inventado',
+    m.crescimentoAnual(dadosJul, 2026, 'categoria', 12), { periodo: null, itens: [] });
 
   // Sem NADA do ano anterior no período: aviso, não gráfico vazio.
   eq('sem ano anterior -> periodo null (a tela avisa)',

@@ -318,9 +318,9 @@
      5. Layout do contador — 19 colunas, sem cabeçalho
      ============================================================ */
 
+  // A mesma formatacao do app (App.fmtData); vazio fica vazio, nao "--".
   function dataBR(iso) {
-    var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
-    return m ? (m[3] + '/' + m[2] + '/' + m[1]) : '';
+    return iso ? App.fmtData(iso) : '';
   }
 
   // Cada lançamento vira DUAS linhas consecutivas: a perna a débito
@@ -339,7 +339,7 @@
       return String(a.data || '').localeCompare(String(b.data || ''));
     });
     ordenada.forEach(function (l) {
-      if (pendente(l)) throw new Error('Lançamento pendente na exportação (sem data ou valor): ' + (l.historico || l.id || ''));
+      if (pendente(l)) throw new Error('Lançamento pendente na exportação (sem data, valor ou partida): ' + (l.historico || l.id || ''));
       var num = String(numero).padStart(8, '0');
       var hist = String(l.historico || '').toUpperCase();
       var pernas = [

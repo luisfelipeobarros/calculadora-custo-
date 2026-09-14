@@ -94,6 +94,17 @@
     return sinal * Math.round((Math.abs(v) + Number.EPSILON) * 100) / 100;
   }
 
+  // Reais -> centavos INTEIROS, com o mesmo criterio do centavos():
+  // 1.005 vira 101, nao 100. Vazio/invalido vira 0 (e' o que toda
+  // soma em centavos quer). Um so' para os nucleos — quatro copias de
+  // Math.round(v * 100) arredondavam o mesmo valor de jeitos diferentes.
+  function emCentavos(v) {
+    var n = Number(v);
+    if (!isFinite(n)) return 0;
+    var sinal = n < 0 ? -1 : 1;
+    return sinal * Math.round((Math.abs(n) + Number.EPSILON) * 100);
+  }
+
   function brl(v) {
     if (typeof v !== 'number' || !isFinite(v)) return '--';
     return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -1656,6 +1667,7 @@
 
     toNum: toNum,
     centavos: centavos,
+    emCentavos: emCentavos,
     brl: brl,
     pct: pct,
     parseNumeroBR: parseNumeroBR,
@@ -1691,6 +1703,7 @@
     montarBarraConta: montarBarraConta,
     DOMINIO_LOGIN: DOMINIO_LOGIN,
     usuarioParaEmail: usuarioParaEmail,
+    mensagemErroAuth: mensagemErroAuth,
     emailParaUsuario: emailParaUsuario,
 
     criarRouter: criarRouter,

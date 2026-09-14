@@ -22,9 +22,9 @@
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
   .wrap{ padding:28px 20px 60px; }
-  header.top, footer.note,
+  /* header.top ja' vem com este limite do app-shared.css */
   #viewPainel, #viewImportar, #viewPagamentos, #viewDda, #viewVendas,
-  #viewLancamentosLc, #viewCadastrosLc{
+  #viewFornecedores, #viewSimulador, #viewLancamentosLc, #viewCadastrosLc{
     max-width:1700px;
     margin-left:auto;
     margin-right:auto;
@@ -53,7 +53,6 @@
   .kpi .k-num.compacto{ font-size:22px; }
   .kpi .k-sub{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .kpi.alerta .k-num{ color:var(--loss); }
-  .kpi.ok .k-num{ color:var(--profit); }
 
   .badge{ display:inline-block; font-family:var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
   .badge.atrasado{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
@@ -88,7 +87,7 @@
   .btn-pagar[disabled]{ opacity:.5; cursor:default; }
   .rodape-total{ font-family:var(--font-mono); font-size:12.5px; color:var(--ink-soft); margin-top:10px; text-align:right; }
   .previsao-input{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-mono); font-size:12px; }
-  .nota-explicativa{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:-6px; }
+  .nota-explicativa{ margin-top:-6px; } /* fonte e cor vem do app-shared.css */
 
   #statusConexao{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
   .barra-status{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
@@ -183,10 +182,10 @@
 
   .so-imprimir{ display:none; }
 
-  /* Impressao: so' o conteudo da tela aberta (DDA ou Painel), sem o
-     cabecalho e os controles do app. */
+  /* Impressao: so' o conteudo da tela aberta (DDA, Painel ou A
+     importar), sem o cabecalho e os controles do app. */
   @media print{
-    header.top, .barra-status, footer.note, .skip-link, #viewDda .filtros,
+    header.top, .barra-status, .skip-link, #viewDda .filtros,
     .no-print{ display:none !important; }
     .wrap{ padding:0; }
     .card{ border:none; box-shadow:none; padding:0; }
@@ -216,12 +215,12 @@
     #tabelaImportar .tab-importar > tbody > tr > td:nth-child(8),
     #maisImportarBtn{ display:none; }
     /* A tabela de ITENS no papel (pedido de 12/08/2026): Cod./Produto,
-       Qtd, V.Unit e V.Total — NCM/CFOP, ICMS, IPI e PIS+COFINS ficam
-       so' na tela; o botao Baixar XML e' interacao e some. */
+       Qtd, V.Unit e V.Total — NCM/CFOP, ICMS e IPI ficam so' na tela
+       (a tabela aqui tem 7 colunas, sem PIS+COFINS); o botao Baixar XML
+       e' interacao e some. */
     #tabelaImportar .tabela-itens-nota th:nth-child(2), #tabelaImportar .tabela-itens-nota td:nth-child(2),
     #tabelaImportar .tabela-itens-nota th:nth-child(6), #tabelaImportar .tabela-itens-nota td:nth-child(6),
     #tabelaImportar .tabela-itens-nota th:nth-child(7), #tabelaImportar .tabela-itens-nota td:nth-child(7),
-    #tabelaImportar .tabela-itens-nota th:nth-child(8), #tabelaImportar .tabela-itens-nota td:nth-child(8),
     #tabelaImportar .st-total-nota,
     #tabelaImportar a.btn{ display:none; }
     /* Sem o traco sob o cabecalho das tabelas ANINHADAS — vale para a
@@ -483,6 +482,8 @@
         <button type="button" class="chip-filtro" data-f="hoje" aria-pressed="false">Hoje</button>
         <button type="button" class="chip-filtro" data-f="semana" aria-pressed="false"
           title="Do último sábado até a sexta — a segunda acumula o fim de semana">Pgto semana</button>
+        <button type="button" class="chip-filtro" data-f="fimmes" aria-pressed="false"
+          title="De hoje até o último dia do mês — o mesmo cartão do Painel">Até fim do mês</button>
         <button type="button" class="chip-filtro" data-f="pagas" aria-pressed="false">Pagas</button>
         <button type="button" class="chip-filtro" data-f="todas" aria-pressed="false">Todas</button>
       </div>
@@ -761,14 +762,14 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=24"></script>
+<script src="app-shared.js?v=25"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=4"></script>
+<script src="dda-nucleo.js?v=5"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
-<script src="simulador-nucleo.js?v=3"></script>
+<script src="simulador-nucleo.js?v=4"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
-<script src="lancamentos-nucleo.js?v=4"></script>
+<script src="lancamentos-nucleo.js?v=5"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -822,9 +823,7 @@
   var MESES_FOLGA_NOTAS = 6;
 
   function cortePorMeses(meses){
-    var d = new Date();
-    d.setMonth(d.getMonth() - meses);
-    return App.iso(d);
+    return App.somarMeses(hojeISO(), -meses);
   }
 
   var carregarTudo = false; // ligado pelo botao de historico completo
@@ -923,7 +922,7 @@
   function escutarColecoes(){
     // Cancela o que ja' estava escutando antes de abrir escuta nova.
     // Sem isto, cada rechamada (login refeito, historico completo) somava
-    // mais quatro assinaturas sobre as mesmas colecoes — varias delas
+    // mais seis assinaturas sobre as mesmas colecoes — varias delas
     // contra um app do Firebase ja' deletado, e todas cobradas por
     // documento lido.
     pararEscutas();
@@ -1116,9 +1115,9 @@
     escutarColecoes();
   });
 
-  // As quatro consultas compartilham o mesmo aoFalhar. Quando as regras
-  // recusam tudo de uma vez, as quatro chamavam pedirLogin().then(iniciar):
-  // o modal era um so', mas iniciar() rodava quatro vezes, cada uma
+  // As seis consultas compartilham o mesmo aoFalhar. Quando as regras
+  // recusam tudo de uma vez, todas chamavam pedirLogin().then(iniciar):
+  // o modal era um so', mas iniciar() rodava varias vezes, cada uma
   // recriando o app do Firebase e abrindo mais quatro escutas.
   var iniciando = false;
 
@@ -1165,8 +1164,8 @@
 
   // ─── Vendas × Compras ───────────────────────────────────────
   // Cruza a planilha publica de vendas (a MESMA do dashboard) com as
-  // notas (compras, pela data de emissao) e as duplicatas pagas
-  // (pagamentos, pela data do pagamento). O vinculo fornecedor ->
+  // notas (compras, pela data de emissao) e as duplicatas que VENCEM
+  // no periodo, pagas ou nao (titulos). O vinculo fornecedor ->
   // marca da planilha mora em config/vendasCompras e e' editado aqui.
 
   var URL_GVIZ_VENDAS = 'https://docs.google.com/spreadsheets/d/1i-BufQCqSfovPEwdGz8bzmhW07ZxQNqyX3TQjX4K3Ac' +
@@ -1192,7 +1191,7 @@
     var idx = { ano: 0, mes: 1, fornecedor: 2, faturamento: 5 };
     var mapa = { ano: 'ano', mes: 'mes', fornecedor: 'fornecedor', faturamento: 'faturamento' };
     cols.forEach(function(c, i){
-      var rot = String(c.label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      var rot = App.normalizarTexto(String(c.label || '')).trim();
       if(mapa[rot] != null) idx[mapa[rot]] = i;
     });
     function cel(linha, i){
@@ -1681,7 +1680,9 @@
     $('lcCancelarEdicaoBtn').style.display = 'inline-block';
     $('lcSalvarBtn').textContent = '💾 Salvar alterações';
     $('lcData').value = l.data || '';
-    $('lcValor').value = l.valor != null ? l.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+    // maximumFractionDigits: sem ele, 12.345 virava "12,345" e voltava
+    // como doze mil na gravacao.
+    $('lcValor').value = l.valor != null ? l.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
     $('lcBanco').value = l.bancoId || '';
     tipoAtual = l.tipo || 'saida';
     document.querySelectorAll('.lc-tipo button').forEach(x =>
@@ -1801,7 +1802,7 @@
       App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou. Verifique a internet e recarregue (F5).');
       return;
     }
-    const mes = $('lcMesFiltro').value;
+    const mes = $('lcMesFiltro').value || mesAtualLc(); // o mesmo fallback da lista
     // Valida com o estado ATUAL só para montar a confirmação; tudo é
     // RECALCULADO depois do "ok" — a lista pode mudar (um pagamento
     // marcado na tela de Pagamentos) enquanto o diálogo está aberto.
@@ -2017,6 +2018,7 @@
 
   // ─── Escutas e seed ───
   function escutarLancamentos(){
+    if(!db) return; // boot nao chegou ao Firestore (SDK/login): nada a escutar
     if(pararLancamentos) pararLancamentos();
     const mes = $('lcMesFiltro').value || mesAtualLc();
     carregouLancamentos = false;
@@ -2060,6 +2062,13 @@
     pararCadastrosLc = [];
     semearSePreciso().catch(function(e){ console.error('seed dos lançamentos:', e); })
       .then(function(){
+        // Escuta que falha (sessao expirada, regras) nao pode deixar
+        // "Carregando..." para sempre sem dizer o motivo.
+        const falhaCadastroLc = (rotulo) => (e) => {
+          console.error(rotulo, e);
+          $('lcListaMsg').textContent = 'Erro ao carregar ' + rotulo + ': ' + App.erroDe(e) +
+            (App.ehPermissaoNegada(e) ? ' — entre de novo pela barra de cima.' : '');
+        };
         pararCadastrosLc.push(db.collection('bancos').onSnapshot(snap => {
           bancos = {};
           snap.forEach(doc => { bancos[doc.id] = doc.data(); });
@@ -2067,7 +2076,7 @@
           montarSelectsLc();
           renderCadastrosLc();
           renderLancamentos();
-        }));
+        }, falhaCadastroLc('bancos')));
         pararCadastrosLc.push(db.collection('categorias').onSnapshot(snap => {
           categorias = {};
           snap.forEach(doc => { categorias[doc.id] = doc.data(); });
@@ -2075,7 +2084,7 @@
           montarSelectsLc();
           renderCadastrosLc();
           renderLancamentos();
-        }));
+        }, falhaCadastroLc('categorias')));
         escutarLancamentos();
         carregarContadoresLc();
         carregarMapaContas();
@@ -2146,7 +2155,7 @@
   $('kpiAtrasadas').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('atrasadas'); router.ir('Pagamentos'); });
   $('kpiHoje').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('hoje'); router.ir('Pagamentos'); });
   $('kpiSemana').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('semana'); router.ir('Pagamentos'); });
-  $('kpiFimMes').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('pendentes'); router.ir('Pagamentos'); });
+  $('kpiFimMes').addEventListener('click', function(){ setEscopoPag('todos'); setFiltroPag('fimmes'); router.ir('Pagamentos'); });
 
   // Redesenha SO' a tela aberta. Antes, marcar uma duplicata como paga
   // redesenhava as quatro telas, inclusive as tres invisiveis.
@@ -2648,14 +2657,14 @@
       html += '<tr' + (previsaoVencida && !disponivel ? ' class="linha-atrasada"' : '') + '>' +
         '<td style="white-space:nowrap;">' + (ehNfse(n) ? '' :
           '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
-          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
+          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota" aria-label="Ver produtos da nota">' +
           (aberta ? '▼' : '▶') + '</button>') +
           ' <button type="button" class="acao-mini" data-venc="' + escapeHtml(n.id) + '" ' +
-          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota">' +
+          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota" aria-label="Ver vencimentos da nota">' +
           (vencAberto ? '📅▼' : '📅') + '</button>' +
           (ehNfse(n) ? '' :
           ' <button type="button" class="acao-mini" data-danfe="' + escapeHtml(n.id) + '" ' +
-          'title="DANFE simplificado (conferência interna)">📄</button>') + '</td>' +
+          'title="DANFE simplificado (conferência interna)" aria-label="DANFE simplificado">📄</button>') + '</td>' +
         '<td>' + escapeHtml(n.numero || '-') + '</td>' +
         '<td>' + fmtData(n.dataEmissao) + '</td>' +
         '<td>' + escapeHtml(fornecedorEmCelula(n.nomeEmitente, fornecedorDaNota(n))) +
@@ -3176,14 +3185,21 @@
     atualizarBarraSelecao();
   });
 
-  // O batch do Firestore aceita 500 operacoes; 450 deixa folga.
+  // Tamanho de cada bloco gravado. O Firestore nao limita mais o numero
+  // de operacoes por batch (so' o tamanho da requisicao); 450 e' o
+  // tamanho em que o progresso "N/M" ainda faz sentido e uma falha no
+  // meio deixa pouco para repetir. Repare que o batch dos lancamentos
+  // grava ATE' duas operacoes por item (o lancamento e o juros/delete).
   var LOTE_FIRESTORE = 450;
 
+  // Em reais, arredondada em centavos: somar float cru dava
+  // 3.3000000000000003, e o dialogo recusava o proprio total padrao
+  // ("menor que a soma") em metade dos lotes.
   function somaSelecionada(ids){
-    return ids.reduce(function(s, id){
+    return App.centavos(ids.reduce(function(s, id){
       var d = pagPorId.get(id);
       return s + (d ? (d.valor || 0) : 0);
-    }, 0);
+    }, 0));
   }
 
   // Grava os selecionados em blocos, com o progresso no proprio botao.
@@ -3361,6 +3377,8 @@
           atualizarBarraSelecao();
         });
       });
+    }).catch(function(e){
+      App.toastErro('Erro no pagamento em lote', e);
     }).then(function(){
       // Cancelou o dialogo (ou o carregamento falhou): libera a trava.
       if(!gravandoLote) pagandoId = null;
@@ -3371,6 +3389,10 @@
   $('selProrrogarBtn').addEventListener('click', function(){
     var ids = Object.keys(selecionados);
     if(!ids.length) return;
+    // Mesma trava do pagar: prorrogar e pagar os mesmos ids ao mesmo
+    // tempo gravaria por cima um do outro.
+    if(pagandoId) return;
+    pagandoId = 'prorrogar';
 
     // pedirData, e nao confirmar: confirmar() promete um booleano e
     // devolveria `false` no lugar da data escolhida.
@@ -3383,6 +3405,9 @@
 
       var btn = $('selProrrogarBtn');
       btn.disabled = true;
+      // Como no pagar: o re-render do primeiro bloco nao pode limpar a
+      // selecao e sumir com o botao do progresso.
+      gravandoLote = true;
 
       var t = gravarSelecionados(ids, btn, 'Prorrogando', function(item){
         if(!item) return null;
@@ -3401,7 +3426,15 @@
       }).then(function(){
         btn.disabled = false;
         btn.textContent = '📅 Prorrogar vencimento';
+        gravandoLote = false;
+        pagandoId = null;
+        atualizarBarraSelecao();
       });
+      return t.promessa.catch(function(){});
+    }).catch(function(e){
+      App.toastErro('Erro na prorrogação', e);
+    }).then(function(){
+      if(!gravandoLote) pagandoId = null;
     });
   });
 
@@ -3426,6 +3459,9 @@
       var sem = janelaSemanaPagamento(hoje);
       return !pago && vencimento >= sem.ini && vencimento <= sem.fim;
     }
+    // O mesmo recorte do cartao "Vencendo ate o fim do mes" do Painel.
+    // "-31" na comparacao de texto cobre qualquer ultimo dia do mes.
+    if(filtroPag === 'fimmes')    return !pago && vencimento >= inicioHoje && vencimento <= hoje.substring(0, 7) + '-31';
     if(filtroPag === 'pagas')     return pago;
     return true; // 'todas'
   }
@@ -3835,7 +3871,7 @@
         // lancamentos sairiam com o valor cheio e a conciliacao
         // bancaria ficaria furada. Desconto negociado se paga
         // individualmente (la' o valor menor vale como o que saiu).
-        if(o.valorOpcional && v != null && o.valorBase != null && v < o.valorBase){
+        if(o.valorOpcional && v != null && o.valorBase != null && App.centavos(v - o.valorBase) < 0){
           erro.textContent = 'Menor que a soma das selecionadas (' + brl(o.valorBase) +
             '). Para desconto, pague o boleto com desconto individualmente.';
           erro.style.display = ''; valor.focus(); return;
@@ -3976,7 +4012,9 @@
           .then(function(){
             if(pgto.recorrente){
               return criarProximoRecorrente(pgto).then(function(proxVenc){
-                if(proxVenc) App.toast('Pago. Próximo lançamento criado para ' + fmtData(proxVenc) + '.', 'ok');
+                App.toast(proxVenc
+                  ? 'Pago. Próximo lançamento criado para ' + fmtData(proxVenc) + '.'
+                  : 'Pago — lançamento contábil criado (era a última parcela).', 'ok');
               });
             }
             App.toast('Pago — lançamento contábil criado.', 'ok');
@@ -4323,7 +4361,8 @@
       var oculto = !!fornOcultos[l.fornecedor];
       html += '<tr' + (oculto ? ' style="opacity:.55;"' : '') + '>' +
         '<td><button type="button" class="acao-mini" data-forn="' + escapeHtml(l.fornecedor) + '" ' +
-          'aria-expanded="' + (aberto ? 'true' : 'false') + '">' + (aberto ? '▼' : '▶') + '</button> ' +
+          'aria-expanded="' + (aberto ? 'true' : 'false') + '" title="Ver notas do fornecedor" ' +
+          'aria-label="Ver notas de ' + escapeHtml(l.fornecedor) + '">' + (aberto ? '▼' : '▶') + '</button> ' +
           escapeHtml(l.fornecedor) +
           (oculto
             ? ' <button type="button" class="acao-mini" data-reexibir="' + escapeHtml(l.fornecedor) +
@@ -4440,14 +4479,14 @@
       html += '<tr>' +
         '<td>' + (ehNfse(n) ? '' :
           '<button type="button" class="acao-mini" data-itens="' + escapeHtml(n.id) + '" ' +
-          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota">' +
+          'aria-expanded="' + (aberta ? 'true' : 'false') + '" title="Ver produtos da nota" aria-label="Ver produtos da nota">' +
           (aberta ? '▼' : '▶') + '</button>') +
           ' <button type="button" class="acao-mini" data-venc="' + escapeHtml(n.id) + '" ' +
-          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota">' +
+          'aria-expanded="' + (vencAberto ? 'true' : 'false') + '" title="Ver vencimentos da nota" aria-label="Ver vencimentos da nota">' +
           (vencAberto ? '📅▼' : '📅') + '</button>' +
           (ehNfse(n) ? '' :
           ' <button type="button" class="acao-mini" data-danfe="' + escapeHtml(n.id) + '" ' +
-          'title="DANFE simplificado (conferência interna)">📄</button>') + '</td>' +
+          'title="DANFE simplificado (conferência interna)" aria-label="DANFE simplificado">📄</button>') + '</td>' +
         '<td>' + escapeHtml(n.numero || '-') +
           (ehDevolucao && n.devolucaoDe
             ? '<br><span class="badge avencer" style="font-size:9.5px;">↩ dev. da nota ' + escapeHtml(n.devolucaoDe) + '</span>'
@@ -4967,7 +5006,12 @@
         });
       });
     }).catch(function(e){ App.toastErro('Erro ao marcar como pagas', e); })
-      .then(function(){ pagandoId = null; });
+      .then(function(){
+        pagandoId = null;
+        // Falha antes de qualquer gravacao nao dispara snapshot nenhum:
+        // redesenha para o botao voltar do "Gravando..." desabilitado.
+        renderDda();
+      });
   }
 
   // ─── Simulador de compra ────────────────────────────────────
@@ -5360,7 +5404,7 @@
       confirmar: 'Limpar'
     }).then(function(ok){
       if(!ok) return;
-      simulacao = { linhas: [], projetado: simulacao.projetado };
+      simulacao = { linhas: [], projetado: simulacao.projetado, ajustes: {} };
       salvarSim();
       renderSimulador();
     });
@@ -5461,10 +5505,6 @@
       .then(function(doc){ itensCache[chave] = doc.exists ? doc.data() : { semItens:true }; return itensCache[chave]; })
       .catch(function(e){ itensCache[chave] = { erro: App.erroDe(e) }; return itensCache[chave]; });
   }
-
-  // UF pela chave, classificacao de CFOP e a montagem do documento
-  // moram no app-shared.js (App.htmlDanfe e afins): e' o MESMO DANFE
-  // da tela NF-e Emitidas da Calculadora.
 
   // O documento em si e' montado pelo App.htmlDanfe (app-shared.js) —
   // o MESMO da tela NF-e Emitidas da Calculadora. Aqui so' se monta o

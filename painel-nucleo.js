@@ -124,7 +124,10 @@
 
     var previsao = null;
     if (estado === 'corrente' && fat) {
-      var restantes = ate ? diasUteis(somarDias(ate, 1), fimMes, feriados) : diasTrabalho;
+      // "ate" antes do inicio do mes: nenhum dia decorrido, TODOS restam
+      // (contar a partir do mes anterior inflava os restantes e
+      // subestimava o necessario por dia).
+      var restantes = (ate && ate >= iniMes) ? diasUteis(somarDias(ate, 1), fimMes, feriados) : diasTrabalho;
       var media = decorridos > 0 ? vendas / decorridos : null;
       previsao = {
         decorridos: decorridos,

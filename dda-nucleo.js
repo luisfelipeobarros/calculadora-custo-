@@ -27,7 +27,9 @@
    devolve um relatorio. Quem le o PDF (pdf.js), quem abre a planilha
    (SheetJS), quem desenha e quem grava a baixa e' o controle-notas.html.
 
-   Precisa vir DEPOIS de app-shared.js — usa App.linhasDePdf.
+   Precisa vir DEPOIS de app-shared.js — usa App.linhasDePdf,
+   App.normalizarTexto, App.somarDias, App.diasEntre, App.emCentavos,
+   App.fmtData e App.brl.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -73,11 +75,8 @@
      ============================================================ */
 
   // minusculas + sem acento (nomes do PDF vem sem acento, mas os do
-  // Firestore podem ter).
-  function normalizar(s) {
-    return String(s == null ? '' : s).toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // tira os acentos separados pelo NFD
-  }
+  // Firestore podem ter) — o mesmo normalizador dos outros nucleos.
+  var normalizar = App.normalizarTexto;
 
   // O Bradesco imprime CNPJ com 15 digitos (um zero a mais na
   // frente: 004.226.489/0001-75). Sem descartar esse zero, NENHUMA
@@ -159,9 +158,7 @@
   }
 
   // Centavos de uma duplicata do Firestore (valor em reais, numero).
-  function centavosDe(valor) {
-    return Math.round((valor || 0) * 100);
-  }
+  var centavosDe = App.emCentavos;
 
   // Ate' 10 centavos e' arredondamento, nao divergencia (pedido de
   // 14/09/2026: boleto de 4.940,76 contra duplicata de 4.940,73). Vale
@@ -418,7 +415,7 @@
   // segunda, do mesmo periodo, veio inteira (1.253). O corte existe e
   // nao e' fixo — o que se detecta e' o SINTOMA: os boletos param
   // varios dias antes do fim que o cabecalho promete.
-  var FOLGA_CORTE_DIAS = 3;
+  var FOLGA_CORTE_DIAS = 3; // dias de semana sem boleto antes do fim prometido
 
   function celulaTexto(v) {
     if (v == null) return '';
@@ -534,7 +531,14 @@
     var aviso = null;
     if (periodo && registros.length) {
       var ultimo = registros.reduce(function (m, r) { return r.vencimento > m ? r.vencimento : m; }, '');
-      var faltam = Math.round((new Date(periodo.fim + 'T00:00:00Z') - new Date(ultimo + 'T00:00:00Z')) / 86400000);
+      // Em dias de SEMANA: periodo que termina no domingo com o ultimo
+      // boleto na quinta nao esta' cortado, so' nao tem boleto no fim
+      // de semana.
+      var faltam = 0;
+      for (var dia = App.somarDias(ultimo, 1); dia <= periodo.fim; dia = App.somarDias(dia, 1)) {
+        var dow = new Date(dia + 'T12:00:00').getDay();
+        if (dow !== 0 && dow !== 6) faltam++;
+      }
       if (faltam >= FOLGA_CORTE_DIAS) {
         aviso = 'os boletos lidos vão só até ' + App.fmtData(ultimo) + ', mas o cabeçalho diz até ' +
           App.fmtData(periodo.fim) + ' (' + registros.length + ' linhas). Se a exportação foi cortada, ' +
@@ -622,7 +626,7 @@
           ilegiveis.push({ arquivo: iArq + 1, texto: textos.filter(Boolean).join(' | '), motivo: 'data ilegível' });
           return;
         }
-        if (cls.tipo !== 'saldo' && credito == null && debito == null) {
+        if (credito == null && debito == null) {
           ilegiveis.push({ arquivo: iArq + 1, texto: textos.filter(Boolean).join(' | '), motivo: 'sem crédito nem débito legível' });
           return;
         }
@@ -637,10 +641,15 @@
           contraparte: cls.contraparte,
           arquivo: iArq + 1
         };
-        // Repeticao entre paginas (bloco "Ultimos Lancamentos"): fora.
-        var chave = [lanc.data, lanc.dcto, normalizar(lanc.historico), lanc.creditoCentavos, lanc.debitoCentavos].join('|');
-        if (vistos[chave]) return;
-        vistos[chave] = true;
+        // Repeticao entre secoes/paginas (bloco "Ultimos Lancamentos"):
+        // fora — mas so' com o numero de documento do banco na chave.
+        // Sem ele, seis debitos iguais no mesmo dia (boletos da mesma
+        // securitizadora) virariam um so'.
+        if (lanc.dcto) {
+          var chave = [lanc.data, lanc.dcto, normalizar(lanc.historico), lanc.creditoCentavos, lanc.debitoCentavos].join('|');
+          if (vistos[chave]) return;
+          vistos[chave] = true;
+        }
         lancamentos.push(lanc);
       });
     });
@@ -871,11 +880,7 @@
   var JANELA_EXTRATO = { antes: 5, depois: 20 }; // dias em volta do vencimento
   var JUROS_MAXIMO = 0.10;                        // 10% acima do nominal
 
-  function somarDias(iso, n) {
-    var d = new Date(iso + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() + n);
-    return d.toISOString().slice(0, 10);
-  }
+  var somarDias = App.somarDias;
 
   var SUFIXO_NOME = /^(ltda|sa|s|a|me|epp|eireli|cia|e|de|do|da|dos|das|s\/a)$/;
   function palavrasDoNome(s) {
@@ -893,9 +898,7 @@
     return pa[1] === pb[1];
   }
 
-  function diasEntre(a, b) {
-    return Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
-  }
+  var diasEntre = App.diasEntre;
 
   // registros: boletos (os PAGOS sao os que interessam); lancamentos:
   // do interpretarExtrato. Devolve um Map registro -> resultado.
@@ -1030,7 +1033,7 @@
     var linhas = [];
     var usoPorDuplicata = Object.create(null); // id -> [linhas que casaram nela]
 
-    // Nivel 1 de duplicidade: a MESMA linha duas vezes no PDF
+    // 2) Nivel 1 de duplicidade: a MESMA linha duas vezes no arquivo
     // (documento + beneficiario + valor + vencimento identicos).
     // (A planilha do Safra nao traz o CNPJ do beneficiario: o nome
     // entra no lugar, senao dois cedentes com o mesmo documento e valor
@@ -1078,7 +1081,7 @@
 
       if (r.semSituacao) {
         problemas.push({ tipo: 'semSituacao', gravidade: GRAVIDADE.BRANCO,
-          texto: 'o PDF não trouxe a situação deste boleto' });
+          texto: 'o DDA não trouxe a situação deste boleto' });
       }
 
       var d = casamento.duplicata;
@@ -1094,6 +1097,7 @@
             texto: 'não casou, mas o vencimento está fora da janela carregada — ' +
               'carregue o histórico completo antes de concluir qualquer coisa' });
         } else {
+          // 3) cobranca sem nota
           problemas.push({ tipo: 'cobrancaSemNota', gravidade: GRAVIDADE.VERMELHO,
             texto: 'nenhuma duplicata corresponde a este boleto' +
               (casamento.motivo ? ' (' + casamento.motivo + ')' : '') });

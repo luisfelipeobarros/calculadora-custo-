@@ -22,8 +22,8 @@
    textos diferentes na coluna sao dois fabricantes na tela — e'
    assim que o dono da planilha descobre que ela precisa de limpeza.
 
-   Precisa vir DEPOIS de app-shared.js — usa App.parseNumeroBR,
-   App.normalizarTexto e App.diasEntre.
+   Precisa vir DEPOIS de app-shared.js — usa App.parseDinheiroBR,
+   App.normalizarTexto, App.diasEntre e App.emCentavos.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -32,7 +32,7 @@
     ? require('./app-shared.js')
     : global.App;
 
-  if (!App || !App.parseNumeroBR) {
+  if (!App || !App.parseDinheiroBR) {
     throw new Error('concorrentes-nucleo.js precisa de app-shared.js carregado antes.');
   }
 
@@ -81,7 +81,7 @@
   function precoParaCentavos(v) {
     var n = App.parseDinheiroBR(v);
     if (n == null || !(n > 0)) return null;
-    return Math.round(n * 100);
+    return App.emCentavos(n);
   }
 
   // A notacao interna do nome nao ajuda um site concorrente: sai o

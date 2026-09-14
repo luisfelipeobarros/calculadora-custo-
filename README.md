@@ -30,7 +30,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=16">
-<script src="app-shared.js?v=24"></script>
+<script src="app-shared.js?v=25"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 

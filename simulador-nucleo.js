@@ -32,9 +32,7 @@
   var somarDias = App.somarDias;
   var somarMeses = App.somarMeses;
 
-  function centavosDe(valorReais) {
-    return Math.round((valorReais || 0) * 100);
-  }
+  var centavosDe = App.emCentavos;
 
   /* ============================================================
      1. Prazo digitado -> lista de dias
@@ -51,8 +49,7 @@
   // fica FORA da simulacao, com aviso na tela — nunca contada como
   // zero, senao o total pareceria completo faltando uma compra.
   function parsePrazo(texto) {
-    var t = String(texto == null ? '' : texto).trim().toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    var t = App.normalizarTexto(String(texto == null ? '' : texto).trim());
     if (t === '' || t === 'a vista') return [0];
     var partes = t.split('/');
     var dias = [];
@@ -193,11 +190,13 @@
   // media so' dos meses em que houve nota. Notas fora da janela ficam
   // de fora; a soma e' em centavos, como todo dinheiro aqui.
   function mediaCompraMensal(notas, hoje, meses) {
+    // Janela de N meses exatos: o dia do corte fica FORA (com ele
+    // dentro, "12 meses" contava 12 meses e um dia).
     var corte = somarMeses(hoje, -meses);
     var totalCent = 0, qtd = 0;
     (notas || []).forEach(function (n) {
-      if (!n.dataEmissao || n.dataEmissao < corte || n.dataEmissao > hoje) return;
-      totalCent += Math.round((n.valorTotal || 0) * 100);
+      if (!n.dataEmissao || n.dataEmissao <= corte || n.dataEmissao > hoje) return;
+      totalCent += centavosDe(n.valorTotal);
       qtd++;
     });
     return {
