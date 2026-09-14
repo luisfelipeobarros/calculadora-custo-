@@ -4713,7 +4713,8 @@
     // tambem, porque e' esta linha que da' contexto na impressao.
     html += '<div class="dda-meta" style="margin:14px 0 10px; font-size:12.5px;">' +
       (rel.periodo
-        ? 'Período do DDA: <strong>' + fmtData(rel.periodo.ini) + ' a ' + fmtData(rel.periodo.fim) + '</strong>'
+        ? 'Período do DDA: <strong>' + fmtData(rel.periodo.ini) + ' a ' + fmtData(rel.periodo.fim) + '</strong>' +
+          (rel.periodo.cortado ? ' (até onde a planilha foi)' : '')
         : '<strong>⚠ não achei o período no cabeçalho do arquivo</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
       ' · arquivo ' + escapeHtml(ddaLido.nomeArquivo || '?') +
       (filtroFornDda
@@ -4725,6 +4726,12 @@
       ' · ⚪ ' + resumo.brancos + ' · ✅ ' + resumo.ok +
       (carregarTudo ? '' : ' · janela de ' + MESES_HISTORICO + ' meses') +
       '</div>';
+
+    // Aviso do leitor (planilha cortada em 500 linhas pelo Safra): a
+    // conferencia vale so' ate' onde o arquivo foi.
+    if(ddaLido.aviso){
+      html += '<div class="dda-ilegiveis"><strong>⚠ ' + escapeHtml(ddaLido.aviso) + '</strong></div>';
+    }
 
     // Ilegiveis PRIMEIRO, em destaque e FORA do filtro: bloco que o
     // parser nao entendeu nao tem fornecedor, e uma cobranca

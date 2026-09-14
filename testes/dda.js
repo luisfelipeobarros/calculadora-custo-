@@ -566,6 +566,66 @@ const planilhaSafra = (boletos) => [
     [gravidadeDe(rel.linhas[0]), rel.baixaveis.length], [G.VERMELHO, 0]);
 }
 
+// ── 6. Formatos de documento da planilha real de 30 dias ─────
+
+eq('Formigres "1666488B H": nota + parcela B, o H (ultima parcela) se descarta',
+  Dda.dividirDocumento('1666488B H'), { nota: '1666488', parcela: 'B' });
+eq('nota colada na letra ("000341713C"): nota sem zeros + parcela C',
+  Dda.dividirDocumento('000341713C'), { nota: '341713', parcela: 'C' });
+eq('nota + sigla do cedente ("1715506STI"): nota sem parcela',
+  Dda.dividirDocumento('1715506STI'), { nota: '1715506', parcela: null });
+eq('separador sobrando no fim ("470970/02/"): nota + parcela 2',
+  Dda.dividirDocumento('470970/02/'), { nota: '470970', parcela: '2' });
+eq('ponto como separador ("48074.1")', Dda.dividirDocumento('48074.1'), { nota: '48074', parcela: '1' });
+eq('espacos repetidos ("7359   P1"): nota + "parcela" P1 (sigla, nao posicao)',
+  Dda.dividirDocumento('7359   P1'), { nota: '7359', parcela: 'P1' });
+eq('"482700 ST": nota + sigla como parcela (vai desempatar por valor)',
+  Dda.dividirDocumento('482700 ST'), { nota: '482700', parcela: 'ST' });
+eq('transportadora "1 7112 1" continua ambiguo (serie? nota? parcela?)',
+  Dda.dividirDocumento('1 7112 1'), { ambiguo: true });
+eq('letra unica vira posicao: A=1, B=2, H=8', ['A', 'b', 'H'].map(Dda.parcelaDaLetra), ['1', '2', '8']);
+eq('sigla nao e posicao: ST, ICM, P1 -> null', ['ST', 'ICM', 'P1'].map(Dda.parcelaDaLetra), [null, null, null]);
+
+// Letra = posicao da parcela (regra do fornecedor, 14/09/2026): casa
+// pela POSICAO antes de desempatar por valor, e o como registra.
+{
+  const base = Dda.prepararBase([
+    dup({ id: 'a', numeroNota: '1666488', parcela: '001', valor: 363 }),
+    dup({ id: 'b', numeroNota: '1666488', parcela: '002', valor: 363 }),
+    dup({ id: 'c', numeroNota: '1666488', parcela: '003', valor: 363 })
+  ]);
+  const c = Dda.casar(reg({ documento: '1666488B H', valorCentavos: 36300 }), base);
+  eq('parcela B com tres parcelas do MESMO valor: casa a 2a pela posicao (valor nao decidiria)',
+    c.duplicata && c.duplicata.id, 'b');
+  eq('  ...e o como registra a conversao', c.como, ['nota+parcela', 'parcela em letra (B = 2ª)']);
+  // Posicao que nao existe (D = 4a): sobra o desempate por valor, como antes.
+  const c2 = Dda.casar(reg({ documento: '1666488D H', valorCentavos: 36300 }), base);
+  eq('posicao inexistente + valores iguais = ambiguo, sem chute', c2.ambiguo, true);
+}
+
+// PAGO e BAIXADO vem com "valor a pagar" ZERO na planilha real (447 de
+// 500 linhas): zero nao e' juros nem desconto.
+{
+  const base = [dup({ id: 'a', numeroNota: '10', parcela: '001', valor: 100, chaveAcesso: 'chave-ok' })];
+  const rel = Dda.conferir([reg({ documento: '10/1', situacao: 'PAGO', valorAPagarCentavos: 0 })], ctx(base));
+  eq('PAGO com valor a pagar zero: so o aviso de baixa, sem "valor a pagar difere"',
+    tipos(rel.linhas[0]), ['bancoBaixouNosNao']);
+  const rel2 = Dda.conferir([reg({ documento: '10/1', situacao: 'VENCIDO', valorAPagarCentavos: 10500 })], ctx(base));
+  eq('VENCIDO com juros embutidos: aviso branco de valor a pagar', tipos(rel2.linhas[0]), ['valorAPagarDiferente']);
+}
+
+// O Safra corta a exportacao em 500 linhas sem avisar.
+{
+  const muitas = [];
+  for (let i = 0; i < 500; i++) muitas.push(linhaSafra({ doc: String(1000 + i) + ' 1', venc: i < 250 ? '08/09/2026' : '09/09/2026', sit: 'PAGO', total: 0 }));
+  const lido = Dda.interpretarPlanilha(planilhaSafra(muitas));
+  eq('500 linhas: aviso de corte', /500 linhas/.test(lido.aviso || ''), true);
+  eq('  ...e o periodo encolhe ate o ultimo vencimento lido, marcado como cortado',
+    lido.periodo, { ini: '2026-09-08', fim: '2026-09-09', cortado: true });
+  const poucas = Dda.interpretarPlanilha(planilhaSafra(muitas.slice(0, 40)));
+  eq('40 linhas: sem aviso, periodo do cabecalho intacto', [poucas.aviso, poucas.periodo.cortado], [null, undefined]);
+}
+
 // "ja pago" so' e' vermelho quando o banco AINDA cobra.
 {
   const d = dup({ id: 'a', numeroNota: '10', parcela: '001', pago: true, dataPagamento: '2026-09-10', chaveAcesso: 'chave-ok' });

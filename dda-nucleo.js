@@ -94,20 +94,45 @@
     return semZeros(String(s == null ? '' : s).trim()).toUpperCase();
   }
 
-  // Formatos vistos no PDF real: '0000049676', '460347/04',
-  // '370357-3', '550072-D', '471702 01' — separadores -, / e ESPACO,
-  // e letra no fim tambem e' parcela. '1 1626 2' tem DOIS separadores
-  // e e' genuinamente ambiguo (nota 1626 parcela 2? outra coisa?):
-  // nao casa o regex e volta como ambiguo, sem chute.
+  // Formatos vistos nos arquivos reais (PDF do Bradesco e planilha do
+  // Safra, 30 dias):
+  //   '0000049676'   so' a nota
+  //   '460347/04', '370357-3', '471702 01', '48074.1'   nota + parcela
+  //   '550072-D', '018923 B'   parcela em LETRA (A = 1a, B = 2a...)
+  //   '1666488B H'   Formigres: nota, parcela B, e o H e' a ULTIMA
+  //                  parcela (8 parcelas = H) — o H se descarta
+  //   '000341713C', '000221609B'   nota colada na letra da parcela
+  //   '1715506STI', '2018849GNR'   nota + sigla do cedente, sem parcela
+  //   '470970/02/', '44536-'   separador sobrando no fim
+  //   '7359   P1'   espacos repetidos
+  // '1 1656 2' e '454802 5 3' tem DOIS separadores e sao genuinamente
+  // ambiguos (serie? nota? parcela?): voltam como ambiguo, sem chute,
+  // e o casamento cai no ultimo recurso por valor+vencimento.
   function dividirDocumento(doc) {
-    var d = String(doc == null ? '' : doc).trim();
-    var m = d.match(/^(\d+)[\/\- ]([0-9A-Za-z]+)$/);
+    var d = String(doc == null ? '' : doc).trim()
+      .replace(/\s+/g, ' ')
+      .replace(/[\/\-. ]+$/, ''); // separador sobrando no fim
+    var m = d.match(/^(\d+)[\/\-. ]([0-9A-Za-z]+)$/);
     if (m) return { nota: semZeros(m[1]), parcela: normalizarParcela(m[2]) };
     if (/^\d+$/.test(d)) return { nota: semZeros(d), parcela: null };
-    // '44536-' (planilha do Safra): separador sem nada depois = nota
-    // sem parcela, nao ambiguidade.
-    if (/^\d+[\/\- ]$/.test(d)) return { nota: semZeros(d.slice(0, -1)), parcela: null };
+    // nota + letra da parcela, colada ou nao, com ou sem a letra da
+    // ultima parcela depois ('1666488B H', '000341713C', '885579A A')
+    m = d.match(/^(\d+)([A-Za-z])( [A-Za-z])?$/);
+    if (m) return { nota: semZeros(m[1]), parcela: normalizarParcela(m[2]) };
+    // nota + sigla (2 a 4 letras) colada: sem parcela
+    m = d.match(/^(\d+)[A-Za-z]{2,4}$/);
+    if (m) return { nota: semZeros(m[1]), parcela: null };
     return { ambiguo: true };
+  }
+
+  // 'A' -> 1, 'B' -> 2 ... 'Z' -> 26. Fornecedores que numeram a
+  // parcela em letra (Formigres, Norcola, Caracol, Zagonel...): a
+  // letra e' a posicao da parcela. So' letra UNICA; 'ST', 'ICM', 'P1'
+  // nao sao parcela e devolvem null.
+  function parcelaDaLetra(p) {
+    var t = String(p == null ? '' : p).trim().toUpperCase();
+    if (!/^[A-Z]$/.test(t)) return null;
+    return String(t.charCodeAt(0) - 64);
   }
 
   function dataBrParaIso(s) {
@@ -373,6 +398,10 @@
     cnpjPagador: /^cnpj/
   };
   var OBRIGATORIAS_PLANILHA = ['vencimento', 'documento', 'beneficiario', 'nominal'];
+  // Tamanho em que a exportacao do Safra para (planilha real de 30
+  // dias: exatamente 500 linhas, 15/08 a 25/08, com o cabecalho
+  // dizendo "ate' 14/09").
+  var LIMITE_EXPORTACAO_SAFRA = 500;
 
   function celulaTexto(v) {
     if (v == null) return '';
@@ -481,7 +510,21 @@
       });
     }
 
-    return { periodo: periodo, registros: registros, ilegiveis: ilegiveis, origem: 'planilha' };
+    // O Safra corta a exportacao em 500 linhas SEM avisar: o periodo
+    // do cabecalho continua dizendo "ate' dia X", mas os boletos param
+    // antes. Detectado, o periodo encolhe ate' o ultimo vencimento
+    // lido (senao o check 8 acusaria "sem boleto" tudo que ficou fora
+    // do corte) e a tela avisa para exportar um periodo menor.
+    var aviso = null;
+    if (registros.length >= LIMITE_EXPORTACAO_SAFRA) {
+      var ultimo = registros.reduce(function (m, r) { return r.vencimento > m ? r.vencimento : m; }, '');
+      aviso = 'a planilha tem ' + registros.length + ' boletos — o Safra corta a exportação em ' +
+        LIMITE_EXPORTACAO_SAFRA + ' linhas. O que vence depois de ' + App.fmtData(ultimo) +
+        ' provavelmente ficou de fora: exporte um período menor (uma semana cabe).';
+      if (periodo && ultimo && ultimo < periodo.fim) periodo = { ini: periodo.ini, fim: ultimo, cortado: true };
+    }
+
+    return { periodo: periodo, registros: registros, ilegiveis: ilegiveis, origem: 'planilha', aviso: aviso };
   }
 
   /* ============================================================
@@ -537,10 +580,20 @@
       return resultado(rot, { ambiguo: true, candidatas: exatas, motivo: 'mais de uma duplicata com essa nota e parcela' });
     }
 
-    // Parcela do boleto em LETRA ('550072-D') e as nossas em numero:
-    // nao se converte letra em numero por conta propria — desempata
-    // por valor entre as duplicatas da nota, e o `como` registra.
+    // Parcela do boleto em LETRA ('550072-D', '1666488B H') e as
+    // nossas em numero: a letra e' a POSICAO da parcela (A = 1a, B =
+    // 2a — regra confirmada com o fornecedor real, 14/09/2026). Se a
+    // duplicata dessa posicao existe, casa por ela e o `como` diz que
+    // converteu; se nao existe (ou a "parcela" e' uma sigla), sobra o
+    // desempate por valor entre as duplicatas da nota, registrado.
     if (!/^\d+$/.test(doc.parcela)) {
+      var posicao = parcelaDaLetra(doc.parcela);
+      if (posicao) {
+        var daPosicao = daNota.filter(function (d) { return normalizarParcela(d.parcela) === posicao; });
+        if (daPosicao.length === 1) {
+          return resultado(rot, { duplicata: daPosicao[0], como: ['nota+parcela', 'parcela em letra (' + doc.parcela + ' = ' + posicao + 'ª)'] });
+        }
+      }
       var porValorL = daNota.filter(function (d) { return centavosDe(d.valor) === r.valorCentavos; });
       if (porValorL.length === 1) return resultado(rot, { duplicata: porValorL[0], como: ['nota', 'parcela em letra — desempate por valor'] });
       return resultado(rot, {
@@ -775,15 +828,22 @@
         problemas.push({ tipo: 'bancoBaixouNosNao', gravidade: GRAVIDADE.AMARELO,
           texto: 'o banco dá o boleto como "' + r.situacao + '", mas a duplicata não está baixada aqui' });
       } else if (situacaoBaixada(r.situacao) && d.pago !== true) {
+        // BAIXADO sem pagamento registrado aqui: o cedente tirou o
+        // boleto do DDA. Ou foi pago por outro canal, ou cancelado, ou
+        // — o caso que custa caro — o titulo esta' a caminho de
+        // cartorio/Serasa. Por isso o aviso pede contato, e o boleto
+        // NUNCA entra no lote.
         problemas.push({ tipo: 'baixadoNoBanco', gravidade: GRAVIDADE.AMARELO,
-          texto: 'o banco dá o boleto como "' + r.situacao + '" — pago por outro canal ou cancelado pelo cedente; ' +
-            'confira antes de marcar (não entra no lote)' });
+          texto: 'o banco dá o boleto como "' + r.situacao + '" e não há pagamento registrado aqui — ' +
+            'pago por outro canal, cancelado pelo cedente ou título a caminho de cartório/Serasa: ' +
+            'confira com o fornecedor (não entra no lote)' });
       }
 
       // Valor a pagar diferente do nominal (so' a planilha traz os
       // dois): juros ou desconto embutidos no boleto. Informativo —
-      // o que se compara com a duplicata e' sempre o nominal.
-      if (r.valorAPagarCentavos != null && r.valorAPagarCentavos !== r.valorCentavos && !situacaoBaixada(r.situacao)) {
+      // o que se compara com a duplicata e' sempre o nominal. Zero
+      // nao conta: pago e baixado vem com "a pagar" zerado.
+      if (r.valorAPagarCentavos != null && r.valorAPagarCentavos > 0 && r.valorAPagarCentavos !== r.valorCentavos) {
         problemas.push({ tipo: 'valorAPagarDiferente', gravidade: GRAVIDADE.BRANCO,
           texto: 'o valor a pagar do boleto difere do nominal (juros ou desconto embutidos)' });
       }
@@ -889,6 +949,7 @@
     semZeros: semZeros,
     normalizarParcela: normalizarParcela,
     dividirDocumento: dividirDocumento,
+    parcelaDaLetra: parcelaDaLetra,
     dataBrParaIso: dataBrParaIso,
     valorParaCentavos: valorParaCentavos,
 
