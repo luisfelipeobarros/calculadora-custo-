@@ -206,7 +206,7 @@
     // null (serverTimestamp ainda pendente na leitura local) virava
     // 31/12/1969; string ISO passava pelo fuso e perdia um dia.
     if (ts == null) return '-';
-    if (typeof ts === 'string') return fmtData(ts);
+    if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2}/.test(ts)) return fmtData(ts.slice(0, 10));
     try {
       var d = (ts && ts.toDate) ? ts.toDate() : new Date(ts);
       if (isNaN(d.getTime())) return '-';
