@@ -79,6 +79,20 @@ conferir('toNum decimal', App.toNum('12.5'), 12.5);
 // --- datas: a aritmetica que decide atraso e vencimento ---
 conferir('fmtData ISO', App.fmtData('2026-07-27'), '27/07/2026');
 conferir('fmtData vazia', App.fmtData(''), '--');
+
+// fmtDataFirestore: Timestamp (toDate), Date, string ISO e nulo — o
+// nulo e' o serverTimestamp ainda pendente na leitura local, e virava
+// 31/12/1969; a string ISO passava pelo fuso e perdia um dia.
+conferir('fmtDataFirestore com Timestamp', App.fmtDataFirestore({ toDate: () => new Date(2026, 8, 14) }), '14/09/2026');
+conferir('fmtDataFirestore com Date', App.fmtDataFirestore(new Date(2026, 0, 5)), '05/01/2026');
+conferir('fmtDataFirestore com string ISO nao perde um dia', App.fmtDataFirestore('2026-09-14'), '14/09/2026');
+conferir('fmtDataFirestore nulo = "-", nao 31/12/1969', App.fmtDataFirestore(null), '-');
+conferir('fmtDataFirestore undefined = "-"', App.fmtDataFirestore(undefined), '-');
+conferir('fmtDataFirestore com lixo = "-"', App.fmtDataFirestore('abc'), '-');
+
+// iso: data local, sem passar por UTC (23h de Sao Paulo ainda e' hoje).
+conferir('iso de Date local', App.iso(new Date(2026, 11, 31, 23, 30)), '2026-12-31');
+conferir('iso preenche mes e dia com zero', App.iso(new Date(2026, 0, 2)), '2026-01-02');
 // O fallback ESCAPADO: fmtData e' interpolado direto em innerHTML em
 // ~10 pontos dos apps — valor fora do padrao nao pode voltar cru.
 conferir('fmtData com lixo volta ESCAPADO (fecha o furo de XSS)',

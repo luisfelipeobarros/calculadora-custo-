@@ -217,7 +217,7 @@ Não precisa instalar nada. São vinte e cinco etapas, em dezoito frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 98 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 105 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
