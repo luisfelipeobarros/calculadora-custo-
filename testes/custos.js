@@ -201,6 +201,11 @@ eq('historico so decide em conta generica', g(L('4.2.4.1.0001', BRADESCO, 'TARIF
   ];
   const r = C.resumoDoMes(mes, {});
   eq('custo operacional = energia + salario - estorno', r.custoOperacionalCentavos, 590000);
+  eq('custo TOTAL = operacional + impostos + financeiro + a classificar (mercadoria, emprestimo e receita fora)',
+    r.custoTotalCentavos, 590000 + 200000 + 5000 + 30000);
+  eq('custo total com financeiro NEGATIVO (estorno maior que os juros) abate, nao some',
+    C.custoTotalCentavos({ operacional: 1000, imposto: 200, financeiro: -300, pendente: 50, cmv: 999999 }), 950);
+  eq('custo total sem tipos = 0', C.custoTotalCentavos(null), 0);
   eq('cmv = mercadoria + ICMS de fronteira, FORA do operacional', r.tipos.cmv, 4800000);
   eq('impostos e financeiro separados', [r.tipos.imposto, r.tipos.financeiro], [200000, 5000]);
   eq('parcelamento que entra e sai no mes se anula', r.tipos.financiamento, 0);

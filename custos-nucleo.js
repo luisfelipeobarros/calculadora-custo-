@@ -384,12 +384,25 @@
       grupos: lista,
       tipos: tipos,
       custoOperacionalCentavos: tipos.operacional,
+      custoTotalCentavos: custoTotalCentavos(tipos),
       pendentes: pendentes,
       pendenteCentavos: tipos.pendente,
       saidasCentavos: saidas,
       entradasCentavos: entradas,
       transferenciasCentavos: transferencias
     };
+  }
+
+  // Custo TOTAL da loja no mes (pedido de 22/09/2026): operacional +
+  // impostos + financeiro + o que ainda esta' a classificar. Fica de
+  // fora o custo da mercadoria (e' do produto), emprestimos e
+  // aplicacoes (nao sao despesa), socios e receita. O "a classificar"
+  // ENTRA de proposito: e' dinheiro que saiu e ainda nao tem nome —
+  // deixar de fora faria o custo parecer menor do que e'.
+  var TIPOS_DO_CUSTO_TOTAL = ['operacional', 'imposto', 'financeiro', 'pendente'];
+  function custoTotalCentavos(tipos) {
+    tipos = tipos || {};
+    return TIPOS_DO_CUSTO_TOTAL.reduce(function (s, t) { return s + (tipos[t] || 0); }, 0);
   }
 
   // Custo operacional como fracao do faturamento — o numero que a
@@ -410,6 +423,8 @@
     natureza: natureza,
     classificar: classificar,
     resumoDoMes: resumoDoMes,
+    TIPOS_DO_CUSTO_TOTAL: TIPOS_DO_CUSTO_TOTAL,
+    custoTotalCentavos: custoTotalCentavos,
     percentualDoFaturamento: percentualDoFaturamento
   };
 
