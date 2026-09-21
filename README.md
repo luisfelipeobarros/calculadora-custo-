@@ -5,7 +5,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 | Arquivo | O que é |
 |---|---|
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
-| `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador |
+| `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador, custos da loja (importa as planilhas do contador) |
 | `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
 | `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
 | `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login, instalável como app (`manifest-dashboard.json`) |
@@ -30,7 +30,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=16">
-<script src="app-shared.js?v=25"></script>
+<script src="app-shared.js?v=26"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -201,7 +201,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e cinco etapas, em dezoito frentes:
+Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -385,6 +385,18 @@ Não precisa instalar nada. São vinte e cinco etapas, em dezoito frentes:
     direto de lá — o Controle de Notas e o Dashboard usam a mesma
     função, sem cópia; a leitura do gviz é extraída do
     `controle-notas.html`.
+19. **Custos da loja** — 61 verificações em `custos-nucleo.js`, com dados
+    fabricados na forma das planilhas do contador (layout de 19 colunas, uma
+    por banco/caixa): leitura em pares D/C com o que não fecha indo para
+    "problemas" (nunca lançamento pela metade), natureza pelo caminho do
+    dinheiro (crédito em caixa/banco = saída; os dois lados em caixa =
+    transferência, fora de tudo), grupo por escolha manual > regra da
+    configuração > histórico (só em conta genérica) > conta, e o resumo do
+    mês. Trava as decisões de 21/09/2026: mercadoria, frete de compra e ICMS
+    de fronteira são custo do **produto**, não custo operacional; "valores a
+    regularizar" sem padrão reconhecido fica **a classificar**, nunca herda
+    grupo. Regra com nome de pessoa ou empresa **não** mora no código
+    (repositório público): vem de `config/custos`, no Firestore.
 
 Rode antes de publicar qualquer alteração.
 
@@ -494,7 +506,7 @@ As telas agora ficam no endereço, então dá para recarregar a página sem
 voltar ao início e para mandar um link já aberto na tela certa:
 
 - `controle-notas.html#Painel`, `#Importar` (Canceladas é um filtro aí dentro), `#Pagamentos`,
-  `#Lancamentos`, `#Dda`, `#Simulador`, `#Vendas`, `#Fornecedores`, `#Cadastros`
+  `#Lancamentos`, `#Custos`, `#Dda`, `#Simulador`, `#Vendas`, `#Fornecedores`, `#Cadastros`
 - `index.html#Calculadora`, `#Painel`, `#Historico`, `#Cotacao`, `#Concorrentes`, `#Fiscal`,
   `#Produtos`, `#Notas`, `#Frete`, `#Sync`
 

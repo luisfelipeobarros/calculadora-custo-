@@ -4,8 +4,8 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e cinco etapas,
-  em dezoito frentes (a lista canonica, com o que cada uma cobre,
+  Nao precisa instalar nada — so' o Node. Sao vinte e seis etapas,
+  em dezenove frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
@@ -42,6 +42,10 @@
                          controle-notas.html): partidas dobradas,
                          pendencias, arquivo da transferencia e o
                          layout de 19 colunas do contador.
+  - custos.js          — custo operacional a partir das planilhas do
+                         contador (layout de 19 colunas): leitura em
+                         pares D/C, natureza pelo caminho do dinheiro,
+                         grupo por conta/historico/regra e resumo do mes.
   - vendas-compras.js  — cruzamento vendas x compras x titulos por
                          fornecedor (planilha do dashboard x notas x
                          duplicatas pelo vencimento) e o vinculo
@@ -77,6 +81,7 @@ const etapas = [
   ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
   ['Assistencias e reclamacoes', 'assistencias.js', []],
   ['Lancamentos contabeis', 'lancamentos.js', []],
+  ['Custos da loja', 'custos.js', []],
   ['Dashboard de vendas', 'dashboard.js', []],
   ['Vendas × Compras (controle-notas)', 'vendas-compras.js', []]
 ];

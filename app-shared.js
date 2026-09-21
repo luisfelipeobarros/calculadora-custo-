@@ -198,6 +198,22 @@
     return alvoAno + '-' + String(alvoMes).padStart(2, '0') + '-' + String(dia).padStart(2, '0');
   }
 
+  // Data de uma celula de planilha, como o SheetJS entrega: Date (com
+  // cellDates), serial do Excel (numero), "dd/mm/aaaa" ou ISO. Qualquer
+  // outra coisa: null — quem chama decide o que fazer com linha sem data.
+  function dataDeCelula(v) {
+    if (v == null || v === '') return null;
+    if (v instanceof Date) return isNaN(v) ? null : iso(v);
+    if (typeof v === 'number') {
+      if (v < 20000 || v > 80000) return null; // serial plausivel: 1954..2119
+      return new Date(Math.round((v - 25569) * 86400000)).toISOString().slice(0, 10);
+    }
+    var t = String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+    var m = t.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    return m ? (m[3] + '-' + m[2] + '-' + m[1]) : null;
+  }
+
   function diasEntre(a, b) {
     return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 86400000);
   }
@@ -1698,6 +1714,7 @@
     somarMeses: somarMeses,
     diasEntre: diasEntre,
     fmtDataFirestore: fmtDataFirestore,
+    dataDeCelula: dataDeCelula,
     horaAgora: horaAgora,
 
     debounce: debounce,

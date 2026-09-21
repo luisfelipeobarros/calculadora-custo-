@@ -423,24 +423,9 @@
     return String(v).trim();
   }
 
-  // Data como o SheetJS entrega: Date (cellDates), serial do Excel
-  // (numero), 'dd/mm/aaaa' ou ISO. Qualquer outra coisa: null.
-  function dataDaCelula(v) {
-    if (v == null || v === '') return null;
-    if (v instanceof Date) {
-      if (isNaN(v)) return null;
-      var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
-      return v.getFullYear() + '-' + p2(v.getMonth() + 1) + '-' + p2(v.getDate());
-    }
-    if (typeof v === 'number') {
-      if (v < 20000 || v > 80000) return null; // serial plausivel: 1954..2119
-      var d = new Date(Math.round((v - 25569) * 86400000));
-      return d.toISOString().slice(0, 10);
-    }
-    var t = String(v).trim();
-    if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-    return dataBrParaIso(t);
-  }
+  // Data como o SheetJS entrega (Date, serial, dd/mm/aaaa, ISO): o
+  // leitor e' o do app-shared, o mesmo do nucleo de custos.
+  var dataDaCelula = App.dataDeCelula;
 
   // linhas: matriz de celulas (sheet_to_json com header:1), qualquer
   // planilha do Safra — a primeira aba, como o app abre.

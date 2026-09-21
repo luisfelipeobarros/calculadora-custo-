@@ -24,7 +24,7 @@
   .wrap{ padding:28px 20px 60px; }
   /* header.top ja' vem com este limite do app-shared.css */
   #viewPainel, #viewImportar, #viewPagamentos, #viewDda, #viewVendas,
-  #viewFornecedores, #viewSimulador, #viewLancamentosLc, #viewCadastrosLc{
+  #viewFornecedores, #viewSimulador, #viewLancamentosLc, #viewCadastrosLc, #viewCustos{
     max-width:1700px;
     margin-left:auto;
     margin-right:auto;
@@ -53,6 +53,19 @@
   .kpi .k-num.compacto{ font-size:22px; }
   .kpi .k-sub{ font-family:var(--font-mono); font-size:12px; color:var(--ink-soft); margin-top:2px; }
   .kpi.alerta .k-num{ color:var(--loss); }
+
+  /* Custos */
+  .cu-cards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:10px; margin-top:14px; }
+  .cu-card{ border:1.5px solid var(--line); border-radius:6px; padding:10px 12px; background:var(--card); }
+  .cu-card.destaque{ border-color:var(--ink); }
+  .cu-card .r{ font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; color:var(--ink-soft); }
+  .cu-card .v{ font-family:var(--font-mono); font-size:19px; font-weight:600; margin-top:2px; }
+  .cu-card .s{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); margin-top:2px; }
+  .cu-tipo td{ font-family:var(--font-mono); font-size:11px; text-transform:uppercase; background:var(--stripe); font-weight:600; }
+  .cu-detalhe td{ background:var(--stripe2); font-size:12px; }
+  .cu-num{ text-align:right; font-family:var(--font-mono); white-space:nowrap; }
+  .cu-regra{ display:inline-flex; gap:6px; align-items:center; border:1px solid var(--line); border-radius:12px; padding:2px 4px 2px 10px; margin:0 6px 6px 0; font-family:var(--font-mono); font-size:11.5px; }
+  .cu-regra button{ border:none; background:none; cursor:pointer; color:var(--loss); font-size:14px; line-height:1; }
 
   .badge{ display:inline-block; font-family:var(--font-mono); font-size:10.5px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); white-space:nowrap; }
   .badge.atrasado{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
@@ -310,6 +323,7 @@
       <button class="btn secondary" id="navImportar">📥 A importar <span id="countImportar"></span></button>
       <button class="btn secondary" id="navPagamentos">💰 Pagamentos <span id="countAtrasadas"></span></button>
       <button class="btn secondary" id="navLancamentos">📒 Lançamentos</button>
+      <button class="btn secondary" id="navCustos">💰 Custos</button>
       <button class="btn secondary" id="navDda">🏦 DDA</button>
       <button class="btn secondary" id="navSimulador">🧪 Simulador</button>
       <button class="btn secondary" id="navVendas">📈 Vendas</button>
@@ -631,6 +645,45 @@
   </div>
 
   <!-- ═══════════ LANÇAMENTOS (migrado do lancamentos.html) ═══════════ -->
+  <!-- ═══════════ CUSTOS ═══════════ -->
+  <div id="viewCustos" style="display:none;">
+    <div class="card">
+      <h2>Custos da loja</h2>
+      <p class="nota-explicativa">
+        Quanto a loja gasta para existir, mês a mês, a partir dos lançamentos que a contabilidade já faz
+        (uma planilha por banco ou caixa, no layout de 19 colunas). Mercadoria, frete de compra e ICMS de
+        fronteira ficam separados: são custo do produto e já entram no preço pela Calculadora. Transferência
+        entre contas não é custo nem receita. As planilhas são lidas aqui no navegador; só os lançamentos
+        vão para o banco de dados.
+      </p>
+      <div class="filtros" style="margin-top:12px;">
+        <label class="sr-only" for="cuMes">Mês</label>
+        <input type="month" id="cuMes">
+        <label class="acao-mini" for="cuArquivos" style="cursor:pointer;">📥 Importar planilhas do contador...</label>
+        <input type="file" id="cuArquivos" class="sr-only" multiple
+               accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+        <button type="button" class="acao-mini" id="cuApagarMes" style="display:none;">🗑 Apagar a importação do mês</button>
+        <span id="cuStatus" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
+      </div>
+      <div id="cuPrevia"></div>
+      <div id="cuResumo"></div>
+    </div>
+    <div class="card" id="cuCardPendentes" style="display:none;">
+      <h2>A classificar</h2>
+      <p class="nota-explicativa">
+        Pagamentos que caíram em conta genérica ("valores a regularizar") sem um padrão reconhecido.
+        Escolha o grupo de cada um, ou crie uma regra: todo histórico que contiver aquele texto passa a
+        ir para o grupo, neste mês e nos outros.
+      </p>
+      <div id="cuRegras" style="margin-top:10px;"></div>
+      <div class="table-wrap" style="margin-top:8px;"><div id="cuPendentes"></div></div>
+    </div>
+    <div class="card">
+      <h2>O ano</h2>
+      <div class="table-wrap"><div id="cuAno"></div></div>
+    </div>
+  </div>
+
   <div id="viewLancamentosLc" style="display:none;">
 
     <div class="card">
@@ -762,14 +815,15 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=25"></script>
+<script src="app-shared.js?v=26"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=5"></script>
+<script src="dda-nucleo.js?v=6"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=4"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=5"></script>
+<script src="custos-nucleo.js?v=1"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -2101,7 +2155,7 @@
     views: { Painel:'viewPainel', Importar:'viewImportar', Pagamentos:'viewPagamentos',
              Fornecedores:'viewFornecedores', Dda:'viewDda',
              Simulador:'viewSimulador', Vendas:'viewVendas',
-             Lancamentos:'viewLancamentosLc', Cadastros:'viewCadastrosLc' },
+             Lancamentos:'viewLancamentosLc', Cadastros:'viewCadastrosLc', Custos:'viewCustos' },
     padrao: 'Painel',
     aoEntrar: {
       Painel: renderPainel,
@@ -2112,14 +2166,15 @@
       Simulador: renderSimulador,
       Vendas: renderVendas,
       Lancamentos: renderLancamentos,
-      Cadastros: renderCadastrosLc
+      Cadastros: renderCadastrosLc,
+      Custos: entrarCustos
     },
     aoTrocar: function(nome){
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
        ['Dda','navDda'],
        ['Simulador','navSimulador'], ['Vendas','navVendas'],
-       ['Lancamentos','navLancamentos'], ['Cadastros','navCadastros']].forEach(function(par){
+       ['Lancamentos','navLancamentos'], ['Cadastros','navCadastros'], ['Custos','navCustos']].forEach(function(par){
         var b = $(par[1]);
         if(par[0] === nome) b.setAttribute('aria-current', 'page');
         else b.removeAttribute('aria-current');
@@ -2137,6 +2192,7 @@
   $('navSimulador').addEventListener('click', function(){ router.ir('Simulador'); });
   $('navVendas').addEventListener('click', function(){ router.ir('Vendas'); });
   $('navLancamentos').addEventListener('click', function(){ router.ir('Lancamentos'); });
+  $('navCustos').addEventListener('click', function(){ router.ir('Custos'); });
   $('navCadastros').addEventListener('click', function(){ router.ir('Cadastros'); });
 
   // Imprimir o Painel: preenche a linha de contexto que so' aparece no
@@ -2186,7 +2242,8 @@
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
                Dda:renderDda,
                Simulador:renderSimulador, Vendas:renderVendas,
-               Lancamentos:renderLancamentos, Cadastros:renderCadastrosLc }[router.atual()];
+               Lancamentos:renderLancamentos, Cadastros:renderCadastrosLc,
+               Custos:entrarCustos }[router.atual()];
     if(fn) fn();
     atualizarContadores();
 
@@ -5013,6 +5070,399 @@
         renderDda();
       });
   }
+
+  // ─── Custos da loja ─────────────────────────────────────────
+  // Toda a regra (leitura do layout, natureza, grupo, resumo) mora no
+  // custos-nucleo.js. Aqui: ler os arquivos, gravar, buscar o mes e
+  // desenhar.
+  //
+  // Os importados vivem na colecao `lancamentos` com `origem:
+  // 'importado'` e o mes em `mesCusto` — NAO em `mes`. A tela
+  // Lançamentos consulta por `mes`, entao nunca enxerga o historico do
+  // contador (nem o exporta de volta para ele). Os lancamentos feitos
+  // pelo proprio app (campo `mes`) entram no custo dos meses que NAO
+  // tem importacao; havendo os dois, vale o importado, com aviso.
+  //
+  // Configuracao em config/custos: { regras: [{contem, grupo}],
+  // porConta: {conta: grupo}, versao }. E' aqui que moram os nomes
+  // proprios — o repositorio e' publico, o Firestore nao.
+  // Resumo do ano em config/custosResumo_<ano>: um doc pequeno, para a
+  // tabela anual nao reler milhares de lancamentos.
+
+  var cu = { mes: null, importados: [], nativos: [], config: { regras: [], porConta: {}, versao: 0 },
+             faturamento: null, ano: {}, carregando: false, carregouMes: null, previa: null, abertos: {} };
+
+  function cuMesPadrao(){ return App.somarMeses(hojeISO().substring(0, 7) + '-01', -1).substring(0, 7); }
+
+  function entrarCustos(){
+    if(!$('cuMes').value) $('cuMes').value = cuMesPadrao();
+    // Snapshot das outras colecoes tambem passa por aqui: carga em andamento nao recomeca.
+    if(cu.carregando) return;
+    if(cu.carregouMes !== $('cuMes').value) carregarCustos(); else renderCustos();
+  }
+
+  $('cuMes').addEventListener('change', function(){ cu.previa = null; carregarCustos(); });
+
+  function cuDoDoc(doc){
+    var d = doc.data();
+    return { id: doc.id, data: d.data, mes: d.mesCusto || d.mes, valorCentavos: App.emCentavos(d.valor),
+      contaDebito: d.contaDebito, contaCredito: d.contaCredito, historico: d.historico || '',
+      grupoCusto: d.grupoCusto || null, arquivo: d.arquivo || null, importado: d.origem === 'importado' };
+  }
+
+  function carregarCustos(){
+    var mes = $('cuMes').value;
+    if(!db || !/^\d{4}-\d{2}$/.test(mes)) return Promise.resolve();
+    cu.mes = mes; cu.carregando = true; cu.abertos = {};
+    $('cuStatus').textContent = 'Carregando ' + mes + '...';
+    renderCustos();
+    var col = db.collection('lancamentos');
+    return App.comAuth(function(){
+      return Promise.all([
+        col.where('mesCusto', '==', mes).get(),
+        col.where('mes', '==', mes).get(),
+        db.collection('config').doc('custos').get(),
+        db.collection('metasMensais').doc(mes).get(),
+        db.collection('config').doc('custosResumo_' + mes.substring(0, 4)).get()
+      ]);
+    }).then(function(r){
+      if($('cuMes').value !== mes) return; // trocou de mes no meio
+      cu.importados = r[0].docs.map(cuDoDoc);
+      // Do app: so' o que tem partida montada (pendente nao tem conta para classificar).
+      cu.nativos = r[1].docs.map(cuDoDoc).filter(function(l){ return !l.importado && l.contaDebito && l.contaCredito && l.valorCentavos > 0; });
+      var c = r[2].exists ? r[2].data() : {};
+      cu.config = { regras: c.regras || [], porConta: c.porConta || {}, versao: c.versao || 0 };
+      var m = r[3].exists ? r[3].data() : null;
+      cu.faturamento = (m && m.faturamento && m.faturamento.acumulado != null) ? m.faturamento.acumulado : null;
+      cu.ano = r[4].exists ? (r[4].data().meses || {}) : {};
+      cu.carregouMes = mes; cu.carregando = false;
+      $('cuStatus').textContent = '';
+      renderCustos();
+      return cuGravarResumoSeMudou();
+    }).catch(function(e){
+      cu.carregando = false;
+      $('cuStatus').textContent = '';
+      App.toastErro('Erro ao carregar os custos', e);
+    });
+  }
+
+  function cuLancamentosDoMes(){ return cu.importados.length ? cu.importados : cu.nativos; }
+
+  // O resumo do ano acompanha o mes aberto: gravado so' quando muda.
+  function cuGravarResumoSeMudou(){
+    var lista = cuLancamentosDoMes();
+    var atual = cu.ano[cu.mes];
+    if(!lista.length){
+      if(!atual) return Promise.resolve();
+      delete cu.ano[cu.mes];
+    } else {
+      var res = CustosNucleo.resumoDoMes(lista, cu.config);
+      var novo = { tipos: res.tipos, qtd: lista.length, faturamento: cu.faturamento, versao: cu.config.versao,
+                   origem: cu.importados.length ? 'importado' : 'app' };
+      if(atual && JSON.stringify({ t: atual.tipos, q: atual.qtd, f: atual.faturamento, v: atual.versao, o: atual.origem }) ===
+                  JSON.stringify({ t: novo.tipos, q: novo.qtd, f: novo.faturamento, v: novo.versao, o: novo.origem })) return Promise.resolve();
+      novo.atualizadoEm = hojeISO();
+      cu.ano[cu.mes] = novo;
+    }
+    var ano = cu.mes.substring(0, 4);
+    return App.comAuth(function(){
+      return db.collection('config').doc('custosResumo_' + ano).set({ meses: cu.ano });
+    }).then(renderCustosAno).catch(function(e){ console.error('resumo do ano', e); });
+  }
+
+  var CU_ORDEM_TIPOS = ['operacional', 'cmv', 'imposto', 'financeiro', 'financiamento', 'socios', 'receita', 'pendente'];
+
+  function cuOpcoesGrupo(sel){
+    return '<option value="">— grupo —</option>' + CU_ORDEM_TIPOS.map(function(t){
+      var ops = Object.keys(CustosNucleo.GRUPOS).filter(function(g){ return CustosNucleo.GRUPOS[g].tipo === t && g !== 'a_classificar'; });
+      if(!ops.length) return '';
+      return '<optgroup label="' + escapeHtml(CustosNucleo.TIPOS[t]) + '">' + ops.map(function(g){
+        return '<option value="' + g + '"' + (g === sel ? ' selected' : '') + '>' + escapeHtml(CustosNucleo.GRUPOS[g].nome) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+  }
+
+  function renderCustos(){
+    var alvo = $('cuResumo');
+    renderCustosPrevia();
+    if(cu.carregando){ alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Carregando...</p>'; return; }
+    var lista = cuLancamentosDoMes();
+    $('cuApagarMes').style.display = cu.importados.length ? '' : 'none';
+    if(!lista.length){
+      alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Nenhum lançamento em ' + escapeHtml(cu.mes || '') +
+        '. Use "Importar planilhas do contador" e escolha todos os arquivos do mês de uma vez (bancos, caixa, devoluções).</p>';
+      $('cuCardPendentes').style.display = 'none';
+      renderCustosAno();
+      return;
+    }
+    var res = CustosNucleo.resumoDoMes(lista, cu.config);
+    var pct = CustosNucleo.percentualDoFaturamento(res.custoOperacionalCentavos, cu.faturamento);
+    var c = function(rot, val, sub, dest){ return '<div class="cu-card' + (dest ? ' destaque' : '') + '"><div class="r">' + rot + '</div><div class="v">' + val + '</div>' + (sub ? '<div class="s">' + sub + '</div>' : '') + '</div>'; };
+    var html = '';
+    if(cu.importados.length && cu.nativos.length){
+      html += '<p class="nota-explicativa" style="margin-top:12px;"><strong>⚠ Este mês tem ' + cu.importados.length + ' lançamentos importados e ' +
+        cu.nativos.length + ' feitos no app.</strong> O relatório usa só os importados, para não contar o mesmo pagamento duas vezes.</p>';
+    }
+    html += '<div class="cu-cards">' +
+      c('Custo operacional', brl(res.custoOperacionalCentavos / 100),
+        pct != null ? '<strong>' + App.pct(pct) + '</strong> do faturamento' : 'faturamento do mês não lançado no Painel de metas', true) +
+      c('Faturamento do mês', cu.faturamento != null ? brl(cu.faturamento) : '—', 'Painel de metas da Calculadora') +
+      c('Custo da mercadoria pago', brl(res.tipos.cmv / 100), 'fornecedor + frete de compra + ICMS de fronteira') +
+      c('Impostos', brl(res.tipos.imposto / 100), '') +
+      c('Financeiro', brl(res.tipos.financeiro / 100), 'tarifas, juros, IOF') +
+      c('A classificar', brl(res.pendenteCentavos / 100), res.pendentes.length + ' lançamento(s)') +
+      '</div>';
+
+    html += '<div class="table-wrap" style="margin-top:14px;"><table class="quote-table"><thead><tr><th></th><th>Grupo</th><th class="cu-num">Lançamentos</th><th class="cu-num">Total</th><th class="cu-num">% do faturamento</th></tr></thead><tbody>';
+    var fatCent = cu.faturamento > 0 ? App.emCentavos(cu.faturamento) : null;
+    CU_ORDEM_TIPOS.forEach(function(t){
+      var gs = res.grupos.filter(function(g){ return g.tipo === t; });
+      if(!gs.length) return;
+      html += '<tr class="cu-tipo"><td></td><td>' + escapeHtml(CustosNucleo.TIPOS[t]) + '</td><td></td><td class="cu-num">' + brl(res.tipos[t] / 100) +
+        '</td><td class="cu-num">' + (fatCent && t !== 'receita' ? App.pct(res.tipos[t] / fatCent) : '') + '</td></tr>';
+      gs.forEach(function(g){
+        var aberto = !!cu.abertos[g.id];
+        html += '<tr><td><button type="button" class="acao-mini" data-cu-grupo="' + g.id + '" aria-expanded="' + (aberto ? 'true' : 'false') +
+          '" aria-label="Ver lançamentos de ' + escapeHtml(g.nome) + '">' + (aberto ? '▼' : '▶') + '</button></td>' +
+          '<td>' + escapeHtml(g.nome) + '</td><td class="cu-num">' + g.qtd + '</td><td class="cu-num">' + brl(g.totalCentavos / 100) +
+          '</td><td class="cu-num">' + (fatCent && t !== 'receita' ? App.pct(g.totalCentavos / fatCent) : '') + '</td></tr>';
+        if(aberto) html += cuLinhasDoGrupo(lista, g.id);
+      });
+    });
+    html += '</tbody></table></div>' +
+      '<p class="nota-explicativa" style="margin-top:8px;">' + lista.length + ' lançamento(s) · saídas ' + brl(res.saidasCentavos / 100) +
+      ' · entradas ' + brl(res.entradasCentavos / 100) + ' · transferências entre contas ' + brl(res.transferenciasCentavos / 100) + ' (fora da conta)</p>';
+    alvo.innerHTML = html;
+
+    renderCustosPendentes(res);
+    renderCustosAno();
+  }
+
+  var CU_MAX_DETALHE = 300;
+  function cuLinhasDoGrupo(lista, grupo){
+    var ls = lista.filter(function(l){ return CustosNucleo.classificar(l, cu.config).grupo === grupo; })
+      .sort(function(a, b){ return b.valorCentavos - a.valorCentavos; });
+    var html = ls.slice(0, CU_MAX_DETALHE).map(function(l){
+      var k = CustosNucleo.classificar(l, cu.config);
+      return '<tr class="cu-detalhe"><td></td><td>' + fmtData(l.data) + ' · ' + escapeHtml(l.historico) +
+        ' <span class="badge" title="Como foi classificado">' + escapeHtml(k.como) + '</span></td>' +
+        '<td class="cu-num">' + escapeHtml(k.conta || '') + '</td><td class="cu-num">' + (k.sinal < 0 ? '−' : '') + brl(l.valorCentavos / 100) + '</td>' +
+        '<td><select data-cu-mover="' + escapeHtml(l.id) + '" aria-label="Mover para outro grupo">' + cuOpcoesGrupo(k.grupo) + '</select></td></tr>';
+    }).join('');
+    if(ls.length > CU_MAX_DETALHE) html += '<tr class="cu-detalhe"><td></td><td colspan="4">... mais ' + (ls.length - CU_MAX_DETALHE) + ' lançamento(s) de menor valor</td></tr>';
+    return html;
+  }
+
+  function renderCustosPendentes(res){
+    $('cuCardPendentes').style.display = (res.pendentes.length || cu.config.regras.length) ? '' : 'none';
+    $('cuRegras').innerHTML = cu.config.regras.length
+      ? '<div class="nota-explicativa" style="margin:0 0 6px;">Regras por histórico:</div>' + cu.config.regras.map(function(r, i){
+          return '<span class="cu-regra">"' + escapeHtml(r.contem) + '" → ' + escapeHtml((CustosNucleo.GRUPOS[r.grupo] || {}).nome || r.grupo) +
+            '<button type="button" data-cu-del-regra="' + i + '" aria-label="Remover a regra ' + escapeHtml(r.contem) + '">×</button></span>';
+        }).join('')
+      : '';
+    if(!res.pendentes.length){ $('cuPendentes').innerHTML = '<p class="nota-explicativa">Nada a classificar neste mês.</p>'; return; }
+    var ps = res.pendentes.slice().sort(function(a, b){ return b.valorCentavos - a.valorCentavos; });
+    $('cuPendentes').innerHTML = '<table class="quote-table"><thead><tr><th>Data</th><th>Histórico</th><th class="cu-num">Valor</th><th>Grupo</th><th></th></tr></thead><tbody>' +
+      ps.map(function(l){
+        return '<tr><td>' + fmtData(l.data) + '</td><td>' + escapeHtml(l.historico) + '</td><td class="cu-num">' + brl(l.valorCentavos / 100) + '</td>' +
+          '<td><select data-cu-mover="' + escapeHtml(l.id) + '" aria-label="Grupo de ' + escapeHtml(l.historico) + '">' + cuOpcoesGrupo('') + '</select></td>' +
+          '<td><button type="button" class="acao-mini" data-cu-regra="' + escapeHtml(l.id) + '">+ regra</button></td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  var NOMES_MES_CU = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  function renderCustosAno(){
+    var meses = Object.keys(cu.ano).sort();
+    if(!meses.length){ $('cuAno').innerHTML = '<p class="nota-explicativa">Nenhum mês importado ainda neste ano.</p>'; return; }
+    var soma = { operacional: 0, cmv: 0, imposto: 0, financeiro: 0, pendente: 0, fat: 0, fatOk: true };
+    var html = '<table class="quote-table"><thead><tr><th>Mês</th><th class="cu-num">Custo operacional</th><th class="cu-num">% do faturamento</th>' +
+      '<th class="cu-num">Faturamento</th><th class="cu-num">Custo da mercadoria</th><th class="cu-num">Impostos</th><th class="cu-num">Financeiro</th><th class="cu-num">A classificar</th><th></th></tr></thead><tbody>';
+    meses.forEach(function(m){
+      var r = cu.ano[m], t = r.tipos || {};
+      var p = CustosNucleo.percentualDoFaturamento(t.operacional, r.faturamento);
+      var velho = (r.versao || 0) < (cu.config.versao || 0);
+      ['operacional', 'cmv', 'imposto', 'financeiro', 'pendente'].forEach(function(k){ soma[k] += t[k] || 0; });
+      if(r.faturamento > 0) soma.fat += r.faturamento; else soma.fatOk = false;
+      html += '<tr><td><button type="button" class="acao-mini" data-cu-ir="' + m + '">' + NOMES_MES_CU[Number(m.substring(5, 7)) - 1] + '/' + m.substring(2, 4) + '</button></td>' +
+        '<td class="cu-num">' + brl((t.operacional || 0) / 100) + '</td><td class="cu-num">' + (p != null ? App.pct(p) : '—') + '</td>' +
+        '<td class="cu-num">' + (r.faturamento != null ? brl(r.faturamento) : '—') + '</td>' +
+        '<td class="cu-num">' + brl((t.cmv || 0) / 100) + '</td><td class="cu-num">' + brl((t.imposto || 0) / 100) + '</td>' +
+        '<td class="cu-num">' + brl((t.financeiro || 0) / 100) + '</td><td class="cu-num">' + brl((t.pendente || 0) / 100) + '</td>' +
+        '<td>' + (velho ? '<span class="badge" title="As regras mudaram depois deste cálculo: abra o mês para recalcular">⚠ recalcular</span>' : '') + '</td></tr>';
+    });
+    var pAno = soma.fatOk ? CustosNucleo.percentualDoFaturamento(soma.operacional, soma.fat) : null;
+    html += '<tr class="cu-tipo"><td>Total</td><td class="cu-num">' + brl(soma.operacional / 100) + '</td><td class="cu-num">' + (pAno != null ? App.pct(pAno) : '—') + '</td>' +
+      '<td class="cu-num">' + (soma.fatOk ? brl(soma.fat) : '—') + '</td><td class="cu-num">' + brl(soma.cmv / 100) + '</td><td class="cu-num">' + brl(soma.imposto / 100) + '</td>' +
+      '<td class="cu-num">' + brl(soma.financeiro / 100) + '</td><td class="cu-num">' + brl(soma.pendente / 100) + '</td><td></td></tr></tbody></table>';
+    $('cuAno').innerHTML = html;
+  }
+
+  // ── interacoes ──
+  App.delegar($('cuResumo'), 'click', '[data-cu-grupo]', function(b){ cu.abertos[b.dataset.cuGrupo] = !cu.abertos[b.dataset.cuGrupo]; renderCustos(); });
+  App.delegar($('cuAno'), 'click', '[data-cu-ir]', function(b){ $('cuMes').value = b.dataset.cuIr; cu.previa = null; carregarCustos(); });
+
+  function cuMover(sel){
+    var id = sel.dataset.cuMover, grupo = sel.value;
+    if(!grupo) return;
+    var l = cuLancamentosDoMes().find(function(x){ return x.id === id; });
+    if(!l) return;
+    sel.disabled = true;
+    App.comAuth(function(){ return db.collection('lancamentos').doc(id).set({ grupoCusto: grupo }, { merge:true }); })
+      .then(function(){ l.grupoCusto = grupo; renderCustos(); return cuGravarResumoSeMudou(); })
+      .catch(function(e){ sel.disabled = false; App.toastErro('Erro ao classificar', e); });
+  }
+  App.delegar($('cuResumo'), 'change', 'select[data-cu-mover]', cuMover);
+  App.delegar($('cuPendentes'), 'change', 'select[data-cu-mover]', cuMover);
+
+  function cuSalvarConfig(){
+    cu.config.versao = (cu.config.versao || 0) + 1;
+    return App.comAuth(function(){
+      return db.collection('config').doc('custos').set({ regras: cu.config.regras, porConta: cu.config.porConta, versao: cu.config.versao });
+    }).then(function(){ renderCustos(); return cuGravarResumoSeMudou(); });
+  }
+
+  App.delegar($('cuPendentes'), 'click', '[data-cu-regra]', function(b){
+    var l = cuLancamentosDoMes().find(function(x){ return x.id === b.dataset.cuRegra; });
+    var sel = b.closest('tr').querySelector('select[data-cu-mover]');
+    if(!l) return;
+    if(!sel.value){ App.toast('Escolha o grupo na linha antes de criar a regra.', 'info'); sel.focus(); return; }
+    var grupo = sel.value;
+    // Sugestao: o historico sem o prefixo padrao e sem numeros.
+    var sugestao = l.historico.replace(/^VALOR(ES)? (REF\.? ?(A|AO|AS)?|A REGULARIZAR)\s*/i, '').replace(/\s*\d[\d\/.-]*\s*$/, '').trim();
+    App.pedirTexto({
+      titulo: 'Nova regra',
+      mensagem: 'Todo lançamento cujo histórico contiver este texto vai para "' + CustosNucleo.GRUPOS[grupo].nome + '", em qualquer mês.',
+      rotulo: 'Texto do histórico', valor: sugestao, confirmar: 'Criar regra'
+    }).then(function(txt){
+      txt = (txt || '').trim();
+      if(!txt) return;
+      if(txt.length < 3){ App.toast('Texto curto demais para uma regra (mínimo 3 letras).', 'info'); return; }
+      cu.config.regras = cu.config.regras.filter(function(r){ return App.normalizarTexto(r.contem) !== App.normalizarTexto(txt); });
+      cu.config.regras.push({ contem: txt, grupo: grupo });
+      return cuSalvarConfig().then(function(){ App.toast('Regra criada.', 'ok'); });
+    }).catch(function(e){ App.toastErro('Erro ao criar a regra', e); });
+  });
+
+  App.delegar($('cuRegras'), 'click', '[data-cu-del-regra]', function(b){
+    var i = Number(b.dataset.cuDelRegra), r = cu.config.regras[i];
+    if(!r) return;
+    App.confirmar({ titulo: 'Remover a regra', mensagem: '"' + r.contem + '" deixa de classificar lançamentos. O que ela classificava volta para a conta ou para "A classificar".', confirmar: 'Remover', perigo: true })
+      .then(function(ok){ if(!ok) return; cu.config.regras.splice(i, 1); return cuSalvarConfig(); })
+      .catch(function(e){ App.toastErro('Erro ao remover a regra', e); });
+  });
+
+  // ── importacao ──
+  $('cuArquivos').addEventListener('change', function(){
+    var arquivos = Array.prototype.slice.call(this.files || []);
+    this.value = '';
+    if(!arquivos.length) return;
+    if(typeof XLSX === 'undefined'){ App.toastErro('Leitor de planilha', 'A biblioteca de planilha não carregou (sem internet?). Recarregue a página.'); return; }
+    $('cuStatus').textContent = 'Lendo ' + arquivos.length + ' arquivo(s)...';
+    Promise.all(arquivos.map(function(f){
+      return f.arrayBuffer().then(function(buf){
+        var wb = XLSX.read(new Uint8Array(buf), { type:'array', cellDates:true });
+        var matriz = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null });
+        var r = CustosNucleo.lerLayoutContador(matriz, f.name);
+        r.arquivo = f.name;
+        return r;
+      });
+    })).then(function(leituras){
+      var junto = CustosNucleo.juntarLeituras(leituras);
+      // O mes da importacao e' o da MAIORIA dos lancamentos: arquivo
+      // com data de outro mes (modelo antigo esquecido) fica de fora,
+      // listado, em vez de poluir o mes errado.
+      var porMes = {};
+      junto.lancamentos.forEach(function(l){ porMes[l.mes] = (porMes[l.mes] || 0) + 1; });
+      var mes = Object.keys(porMes).sort(function(a, b){ return porMes[b] - porMes[a]; })[0] || null;
+      cu.previa = { mes: mes, lancamentos: junto.lancamentos.filter(function(l){ return l.mes === mes; }),
+        foraDoMes: junto.lancamentos.filter(function(l){ return l.mes !== mes; }),
+        problemas: junto.problemas, ignorados: junto.ignorados, arquivos: arquivos.length };
+      $('cuStatus').textContent = '';
+      if(mes && $('cuMes').value !== mes){ $('cuMes').value = mes; return carregarCustos(); }
+      renderCustosPrevia();
+    }).catch(function(e){ $('cuStatus').textContent = ''; App.toastErro('Não consegui ler as planilhas', e); });
+  });
+
+  function renderCustosPrevia(){
+    var alvo = $('cuPrevia'), p = cu.previa;
+    if(!p){ alvo.innerHTML = ''; return; }
+    if(!p.lancamentos.length){
+      alvo.innerHTML = '<div class="dda-ilegiveis" style="margin-top:12px;"><strong>Nenhum lançamento reconhecido nos ' + p.arquivos + ' arquivo(s).</strong> ' +
+        'Espero o layout de 19 colunas do contador (número, data, valor, conta, D/C, histórico).</div>';
+      return;
+    }
+    var res = CustosNucleo.resumoDoMes(p.lancamentos, cu.config);
+    var lista = function(titulo, itens){ return itens.length ? '<details style="margin-top:6px;"><summary>' + titulo + '</summary><ul style="margin:6px 0 0 18px; font-size:12.5px;">' +
+      itens.map(function(t){ return '<li>' + escapeHtml(t) + '</li>'; }).join('') + '</ul></details>' : ''; };
+    alvo.innerHTML = '<div style="margin-top:12px; padding:12px; border:1.5px solid var(--line); border-radius:6px;">' +
+      '<strong>Prévia da importação de ' + escapeHtml(p.mes) + ':</strong> ' + p.lancamentos.length + ' lançamento(s) em ' + p.arquivos + ' arquivo(s) · custo operacional ' +
+      brl(res.custoOperacionalCentavos / 100) + ' · a classificar ' + brl(res.pendenteCentavos / 100) +
+      (cu.importados.length ? '<br><span class="nota-explicativa" style="margin:0;">Este mês já tem ' + cu.importados.length + ' lançamento(s) importado(s): os iguais são atualizados, sem duplicar, e o que você classificou à mão é mantido.</span>' : '') +
+      lista('⚠ ' + p.problemas.length + ' linha(s) que não consegui ler (ficam de fora)', p.problemas.map(function(x){ return x.texto; })) +
+      lista(p.foraDoMes.length + ' lançamento(s) de outro mês (ficam de fora)', p.foraDoMes.map(function(l){ return (l.arquivo || '') + ' · ' + fmtData(l.data) + ' · ' + l.historico + ' · ' + brl(l.valorCentavos / 100); })) +
+      lista(p.ignorados.length + ' arquivo(s) ignorado(s)', p.ignorados.map(function(i){ return i.arquivo + ' — ' + i.motivo; })) +
+      '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
+      '<button type="button" class="btn" id="cuGravarBtn">Gravar ' + p.lancamentos.length + ' lançamento(s)</button>' +
+      '<button type="button" class="btn secondary" id="cuCancelarPrevia">Cancelar</button></div></div>';
+  }
+
+  App.delegar($('cuPrevia'), 'click', '#cuCancelarPrevia', function(){ cu.previa = null; renderCustosPrevia(); });
+  App.delegar($('cuPrevia'), 'click', '#cuGravarBtn', function(btn){
+    var p = cu.previa;
+    if(!p || !p.lancamentos.length) return;
+    btn.disabled = true;
+    var itens = p.lancamentos, gravados = 0;
+    function bloco(i){
+      if(i >= itens.length) return Promise.resolve();
+      var pedaco = itens.slice(i, i + LOTE_FIRESTORE);
+      btn.textContent = 'Gravando... ' + Math.min(i + LOTE_FIRESTORE, itens.length) + '/' + itens.length;
+      return App.comAuth(function(){
+        var batch = db.batch();
+        pedaco.forEach(function(l){
+          // SEM o campo `mes` (a tela Lançamentos consulta por ele) e
+          // sem `grupoCusto` (merge preserva a classificacao feita a mao).
+          batch.set(db.collection('lancamentos').doc(CustosNucleo.idImportado(l)), {
+            origem: 'importado', mesCusto: l.mes, data: l.data, valor: l.valorCentavos / 100,
+            contaDebito: l.contaDebito, contaCredito: l.contaCredito, historico: l.historico,
+            arquivo: l.arquivo || null, numero: l.numero || null, importadoEm: hojeISO()
+          }, { merge:true });
+        });
+        return batch.commit();
+      }).then(function(){ gravados += pedaco.length; return bloco(i + LOTE_FIRESTORE); });
+    }
+    bloco(0).then(function(){
+      App.toast(gravados + ' lançamento(s) importado(s) em ' + p.mes + '.', 'ok');
+      cu.previa = null;
+      return carregarCustos();
+    }).catch(function(e){
+      btn.disabled = false; btn.textContent = 'Gravar ' + itens.length + ' lançamento(s)';
+      App.toastErro('Erro na importação — ' + gravados + ' de ' + itens.length + ' gravados. Pode repetir: nada duplica.', e);
+    });
+  });
+
+  $('cuApagarMes').addEventListener('click', function(){
+    var mes = cu.mes, ids = cu.importados.map(function(l){ return l.id; });
+    if(!ids.length) return;
+    App.confirmar({ titulo: 'Apagar a importação de ' + mes,
+      mensagem: ids.length + ' lançamento(s) importado(s) serão apagados, junto com o que foi classificado à mão neles. As regras continuam. Os lançamentos feitos no app não são tocados.',
+      confirmar: 'Apagar', perigo: true
+    }).then(function(ok){
+      if(!ok) return;
+      var btn = $('cuApagarMes'); btn.disabled = true;
+      function bloco(i){
+        if(i >= ids.length) return Promise.resolve();
+        return App.comAuth(function(){
+          var batch = db.batch();
+          ids.slice(i, i + LOTE_FIRESTORE).forEach(function(id){ batch.delete(db.collection('lancamentos').doc(id)); });
+          return batch.commit();
+        }).then(function(){ return bloco(i + LOTE_FIRESTORE); });
+      }
+      return bloco(0).then(function(){ App.toast('Importação de ' + mes + ' apagada.', 'ok'); })
+        .catch(function(e){ App.toastErro('Erro ao apagar', e); })
+        .then(function(){ btn.disabled = false; return carregarCustos(); });
+    });
+  });
 
   // ─── Simulador de compra ────────────────────────────────────
   // Toda a matematica mora no simulador-nucleo.js; aqui e' so' estado,
