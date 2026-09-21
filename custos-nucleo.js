@@ -78,6 +78,7 @@
     impostos:       { nome: 'Impostos e parcelamentos de tributo',    tipo: 'imposto' },
     financeiras:    { nome: 'Tarifas, juros, IOF e seguros de operação', tipo: 'financeiro' },
     emprestimos:    { nome: 'Empréstimos, giro e parcelamentos',      tipo: 'financiamento' },
+    aplicacoes:     { nome: 'Aplicações e resgates',                  tipo: 'financiamento' },
     socios:         { nome: 'Retiradas e distribuição a sócios',      tipo: 'socios' },
     recebimentos:   { nome: 'Recebimentos de clientes e cartões',     tipo: 'receita' },
     devolucao_cliente: { nome: 'Devoluções a clientes',               tipo: 'receita' },
@@ -138,12 +139,18 @@
     { re: /devolucao de fornecedor/,              grupo: 'mercadoria' },
     { re: /\b(juros|multa|mora|iof|encargos?)\b/, grupo: 'financeiras' },
     { re: /seguro de operacao/,                   grupo: 'financeiras' },
-    { re: /parcelamento|emprestimo|capital de giro|\bgiro\b|giropre|renegocia|liquidacao/, grupo: 'emprestimos' },
+    // "parcelam": a contabilidade abrevia ("PARCIAL PARCELAM 12/36").
+    { re: /parcelam|emprestimo|capital de giro|\bgiro\b|giropre|renegocia|liquidacao/, grupo: 'emprestimos' },
+    { re: /aplicac|resgate|\bcdb\b|rend\.? ?aplic/, grupo: 'aplicacoes' },
+    { re: /venda cancelada/,                      grupo: 'devolucao_cliente' },
+    { re: /\bipva\b|\biptu\b|\bdarf\b|\bdae\b/,   grupo: 'impostos' },
+    { re: /\baluguel\b/,                         grupo: 'ocupacao' },
     { re: /\bfrete\b|\bcte\b|ct-e/,               grupo: 'frete_compra' },
     { re: /advogad|juridic|honorario/,            grupo: 'servicos' },
     { re: /contab|contador/,                      grupo: 'servicos' },
     { re: /marketing|publicidade|agencia/,        grupo: 'servicos' },
     { re: /seguranca|vigilancia/,                 grupo: 'servicos' },
+    { re: /eletricista|serralheiro|pedreiro|pintor|encanador|manutenc|\bservicos?\b/, grupo: 'servicos' },
     { re: /\bextra\b|\bdiaria\b/,                 grupo: 'extras' }
   ];
 
@@ -167,6 +174,11 @@
   // contador se REPETE entre arquivos — nao identifica nada sozinho).
   function lerLayoutContador(matriz, arquivo) {
     var lancamentos = [], problemas = [];
+    // Pernas com conta e D/C mas SEM data e SEM valor: sobra do mes
+    // anterior na planilha que a contabilidade reaproveita como modelo e
+    // ainda nao preencheu. Contadas, nao listadas uma a uma — o agosto
+    // real, ainda em fechamento, tinha 404.
+    var linhasDeModelo = 0;
     var grupo = null;
 
     function fechar() {
@@ -180,6 +192,7 @@
         problemas.push({ tipo: 'pernas', linha: ref.linha, texto: onde + ': esperava uma perna a débito e uma a crédito, veio ' + deb.length + ' D e ' + cre.length + ' C — "' + ref.historico + '"' });
         return;
       }
+      if (!ref.data && ref.valorCentavos == null) { linhasDeModelo += g.linhas.length; return; }
       if (!ref.data) { problemas.push({ tipo: 'semData', linha: ref.linha, texto: onde + ': sem data — "' + ref.historico + '"' }); return; }
       if (ref.valorCentavos == null || !(ref.valorCentavos > 0)) {
         problemas.push({ tipo: 'semValor', linha: ref.linha, texto: onde + ': sem valor — "' + ref.historico + '"' }); return;
@@ -223,7 +236,10 @@
     });
     fechar();
 
-    return { lancamentos: lancamentos, problemas: problemas };
+    // Arquivo que nao rendeu NADA e so' tem "linha estranha" e' outro
+    // formato (relacao de notas de servico): os avisos seriam ruido.
+    if (!lancamentos.length && !linhasDeModelo && problemas.every(function (p) { return p.tipo === 'linhaEstranha'; })) problemas = [];
+    return { lancamentos: lancamentos, problemas: problemas, linhasDeModelo: linhasDeModelo };
   }
 
   // Varios arquivos de uma vez. Copia do mesmo arquivo ("BANCO (1).XLS")
@@ -233,12 +249,14 @@
   // ignorado em vez de sumir.
   function juntarLeituras(leituras) {
     var vistos = Object.create(null);
-    var lancamentos = [], problemas = [], ignorados = [];
+    var lancamentos = [], problemas = [], ignorados = [], linhasDeModelo = 0;
     (leituras || []).forEach(function (r) {
       var nome = r.arquivo || '?';
+      linhasDeModelo += r.linhasDeModelo || 0;
       problemas = problemas.concat(r.problemas || []);
       if (!r.lancamentos || !r.lancamentos.length) {
-        ignorados.push({ arquivo: nome, motivo: (r.problemas && r.problemas.length) ? 'nenhum lançamento válido' : 'outro formato (documento de apoio)' });
+        ignorados.push({ arquivo: nome, motivo: r.linhasDeModelo ? 'só linhas de modelo, sem data nem valor'
+          : ((r.problemas && r.problemas.length) ? 'nenhum lançamento válido' : 'outro formato (documento de apoio)') });
         return;
       }
       var novos = r.lancamentos.filter(function (l) {
@@ -250,7 +268,7 @@
       if (!novos.length) ignorados.push({ arquivo: nome, motivo: 'cópia de outro arquivo do lote' });
       lancamentos = lancamentos.concat(novos);
     });
-    return { lancamentos: lancamentos, problemas: problemas, ignorados: ignorados };
+    return { lancamentos: lancamentos, problemas: problemas, ignorados: ignorados, linhasDeModelo: linhasDeModelo };
   }
 
   // Id deterministico para gravar: reimportar nao duplica, nem com o

@@ -64,11 +64,30 @@ const BRADESCO = '1.1.1.2.0001', ITAU = '1.1.1.2.0002', CAIXA = '1.1.1.1.0001', 
     ['2.1.1.1.0001', BRADESCO, 'BANCO TESTE.XLS']);
   eq('leitura: o que nao fecha vai para problemas, com o tipo',
     r.problemas.map(p => p.tipo), ['pernas', 'semData', 'semValor', 'valoresDiferentes', 'linhaEstranha']);
+  eq('leitura: nenhuma linha de modelo neste arquivo', r.linhasDeModelo, 0);
   eq('leitura: o problema diz arquivo, linha e historico',
     /BANCO TESTE\.XLS, linha 6 .*UMA PERNA SO/.test(r.problemas[0].texto), true);
-  eq('leitura: matriz vazia', C.lerLayoutContador([], 'x'), { lancamentos: [], problemas: [] });
+  eq('leitura: matriz vazia', C.lerLayoutContador([], 'x'), { lancamentos: [], problemas: [], linhasDeModelo: 0 });
   eq('leitura: planilha de outro formato (folha por funcionario) nao rende lancamento',
     C.lerLayoutContador([['Funcionario', 'VALOR', 'Banco'], ['FULANO', 1182.04, 'DINHEIRO'], ['TOTAL', 26331.52]], 'FOLHA.xlsx').lancamentos.length, 0);
+}
+
+// Sobra do modelo do mes anterior: conta e D/C preenchidos, data e
+// valor em branco. Contada, nao vira problema nem lancamento.
+{
+  const m = [].concat(
+    par('00000001', new Date(2026, 7, 3), 100, '4.2.4.1.0001', BRADESCO, 'TARIFA', 1),
+    par('00000002', null, null, '2.1.4.1.0001', CAIXA, 'SALARIO EM DINHEIRO', 3),
+    par('00000003', null, null, '4.2.1.1.0042', CAIXA, 'EXTRA', 5));
+  const r = C.lerLayoutContador(m, 'CAIXA AGOSTO.xls');
+  eq('modelo: so o lancamento preenchido vale', [r.lancamentos.length, r.problemas.length, r.linhasDeModelo], [1, 0, 4]);
+  const soModelo = C.lerLayoutContador(par('00000009', null, null, '4.2.4.1.0001', ITAU, 'TARIFA'), 'BANCO VAZIO.XLS');
+  const j = C.juntarLeituras([Object.assign({ arquivo: 'CAIXA AGOSTO.xls' }, r), Object.assign({ arquivo: 'BANCO VAZIO.XLS' }, soModelo)]);
+  eq('modelo: o lote soma as linhas e diz por que o arquivo vazio ficou de fora',
+    [j.linhasDeModelo, j.ignorados], [6, [{ arquivo: 'BANCO VAZIO.XLS', motivo: 'só linhas de modelo, sem data nem valor' }]]);
+  // Outro formato (relacao de notas de servico): zero avisos, e' so' ignorado.
+  const outro = C.lerLayoutContador([['DATA', 'NFS', 'FORNECEDOR', 'DESCRICAO', 'VALOR', 'PAGAMENTO', 80], ['x', 1, 'y', 'z', 10, 'BOLETO', null]], 'SERVICOS.xlsx');
+  eq('outro formato: nenhum lancamento e NENHUM aviso', [outro.lancamentos.length, outro.problemas.length], [0, 0]);
 }
 
 // Numero do contador repetido entre arquivos: ids diferentes; mesmo
@@ -128,6 +147,14 @@ eq('frete pago na hora (entrega) CONTINUA operacional', t(L('4.2.1.1.0021', CAIX
 const REG = '1.1.2.4.0001';
 eq('a regularizar + PARCELAMENTO = emprestimos', g(L(REG, ITAU, 'PARCELAMENTO')), 'emprestimos');
 eq('a regularizar + CAPITAL DE GIRO = emprestimos', g(L(REG, BRADESCO, 'OPERAÇÃO CAPITAL DE GIRO 12/36')), 'emprestimos');
+eq('a regularizar + "PARCIAL PARCELAM 12/36" (abreviado) = emprestimos', g(L(REG, ITAU, 'PARCIAL PARCELAM 12/36')), 'emprestimos');
+eq('a regularizar + aplicacao/resgate de CDB = aplicacoes (fora do custo)',
+  [g(L(REG, ITAU, 'APLICAÇÃO CDB AUTOMATICO')), g(L(ITAU, REG, 'RESGATE CDB AUTOMATICO')), t(L(REG, ITAU, 'APLICAÇÃO CDB'))], ['aplicacoes', 'aplicacoes', 'financiamento']);
+eq('a regularizar + venda cancelada = deducao de receita', g(L(REG, CAIXA, 'VALOR REF A VENDA CANCELADA')), 'devolucao_cliente');
+eq('a regularizar + IPVA = impostos', g(L(REG, BRADESCO, 'VALOR REF A TRIBUTO IPVA')), 'impostos');
+eq('a regularizar + aluguel = ocupacao', g(L(REG, BRADESCO, 'VALOR REF A ALUGUEL')), 'ocupacao');
+eq('a regularizar + eletricista/serralheiro/manutencao = servicos',
+  [g(L(REG, CAIXA, 'PAGTO DE SERVIÇO DE ELETRICISTA')), g(L(REG, CAIXA, 'PAGTO DE SERRALHEIRO')), g(L(REG, CAIXA, 'PAGTO MANUTENÇÃO DO AR'))], ['servicos', 'servicos', 'servicos']);
 eq('a regularizar + JUROS = financeiras (juros vence emprestimo)', g(L(REG, ITAU, 'JUROS MORA GIRO 23/42')), 'financeiras');
 eq('a regularizar + advogada = servicos', g(L(REG, BRADESCO, 'VALORES A REGULARIZAR PAGTO ADVOGADA FULANA')), 'servicos');
 eq('a regularizar + contabilidade = servicos', g(L(REG, BRADESCO, 'PAGTO XYZ SOLUÇÕES CONTABEIS')), 'servicos');

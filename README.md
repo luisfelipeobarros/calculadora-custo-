@@ -385,7 +385,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     direto de lá — o Controle de Notas e o Dashboard usam a mesma
     função, sem cópia; a leitura do gviz é extraída do
     `controle-notas.html`.
-19. **Custos da loja** — 61 verificações em `custos-nucleo.js`, com dados
+19. **Custos da loja** — 71 verificações em `custos-nucleo.js`, com dados
     fabricados na forma das planilhas do contador (layout de 19 colunas, uma
     por banco/caixa): leitura em pares D/C com o que não fecha indo para
     "problemas" (nunca lançamento pela metade), natureza pelo caminho do

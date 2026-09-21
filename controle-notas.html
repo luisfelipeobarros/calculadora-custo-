@@ -823,7 +823,7 @@
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=5"></script>
-<script src="custos-nucleo.js?v=1"></script>
+<script src="custos-nucleo.js?v=2"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -5377,7 +5377,7 @@
       var mes = Object.keys(porMes).sort(function(a, b){ return porMes[b] - porMes[a]; })[0] || null;
       cu.previa = { mes: mes, lancamentos: junto.lancamentos.filter(function(l){ return l.mes === mes; }),
         foraDoMes: junto.lancamentos.filter(function(l){ return l.mes !== mes; }),
-        problemas: junto.problemas, ignorados: junto.ignorados, arquivos: arquivos.length };
+        problemas: junto.problemas, ignorados: junto.ignorados, linhasDeModelo: junto.linhasDeModelo, arquivos: arquivos.length };
       $('cuStatus').textContent = '';
       if(mes && $('cuMes').value !== mes){ $('cuMes').value = mes; return carregarCustos(); }
       renderCustosPrevia();
@@ -5402,6 +5402,9 @@
       lista('⚠ ' + p.problemas.length + ' linha(s) que não consegui ler (ficam de fora)', p.problemas.map(function(x){ return x.texto; })) +
       lista(p.foraDoMes.length + ' lançamento(s) de outro mês (ficam de fora)', p.foraDoMes.map(function(l){ return (l.arquivo || '') + ' · ' + fmtData(l.data) + ' · ' + l.historico + ' · ' + brl(l.valorCentavos / 100); })) +
       lista(p.ignorados.length + ' arquivo(s) ignorado(s)', p.ignorados.map(function(i){ return i.arquivo + ' — ' + i.motivo; })) +
+      (p.linhasDeModelo ? '<p class="nota-explicativa" style="margin:6px 0 0;">' + p.linhasDeModelo +
+        ' linha(s) de modelo sem data nem valor (sobra do mês anterior na planilha, ainda não preenchida) ficaram de fora. ' +
+        'Se a contabilidade ainda está fechando o mês, reimporte quando terminar: nada duplica.</p>' : '') +
       '<div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">' +
       '<button type="button" class="btn" id="cuGravarBtn">Gravar ' + p.lancamentos.length + ' lançamento(s)</button>' +
       '<button type="button" class="btn secondary" id="cuCancelarPrevia">Cancelar</button></div></div>';
