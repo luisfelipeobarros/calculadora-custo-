@@ -82,7 +82,13 @@
        altura da tabela de fornecedores) — sem faixa branca sobrando. */
     .bloco.b-combomes{ display:flex; flex-direction:column; }
     .b-combomes .grafico-caixa{ height:auto; flex:1; min-height:340px; }
+    /* Categorias (pedido de 25/09/2026): a tabela mostra TODAS as linhas,
+       sem rolagem — sao ~13 categorias e vao continuar assim —, e o
+       grafico ao lado estica ate' a altura que a tabela der ao bloco. */
+    .bloco.b-partcat{ display:flex; flex-direction:column; }
+    .b-partcat .grafico-caixa{ height:auto; flex:1; min-height:300px; }
   }
+  #tabelaCategoria, #tabelaCategoria .rolagem{ max-height:none; overflow:visible; }
   /* Ordem de empilhamento no celular (pedida no layout) */
   .b-combomes{ order:1; } .b-partcat{ order:2; }
   .b-tabcat{ order:3; } .b-tabforn{ order:4; } .b-pizza{ order:5; } .b-cresc{ order:6; }
@@ -1127,7 +1133,7 @@
     novoChart('gPartCat', {
       type: 'bar',
       data: { labels: parte.map(p => p.nome),
-        datasets: [{ data: parte.map(p => p.pct), backgroundColor: AZUL, maxBarThickness: 26 }] },
+        datasets: [{ data: parte.map(p => p.pct), backgroundColor: AZUL, maxBarThickness: 34, categoryPercentage: 0.85 }] },
       options: {
         indexAxis: 'y', responsive: true, maintainAspectRatio: false,
         layout: { padding: { right: 64 } },
