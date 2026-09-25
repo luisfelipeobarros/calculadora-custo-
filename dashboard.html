@@ -125,6 +125,10 @@
     font-variant-numeric:tabular-nums; }
   tr.total td{ font-weight:700; border-top:2px solid var(--preto); background:#fff; }
   td.neg{ color:var(--vermelho); }
+  /* Margem (pedido de 25/09/2026): abaixo de 10% amarelo, abaixo de 7%
+     vermelho — fundo, para saltar aos olhos na tabela inteira. */
+  td.margem-atencao{ background:#FFF3B0; color:#7a5a00; font-weight:700; }
+  td.margem-baixa{ background:#F8D0D0; color:var(--vermelho); font-weight:700; }
   /* Clique-filtra: linhas clicáveis, e a linha do filtro ativo fica
      marcada de amarelo (o mesmo gesto do Power BI). */
   tbody tr[data-filtro]{ cursor:pointer; }
@@ -1078,6 +1082,15 @@
     });
   }
 
+  // Faixas de margem (pedido de 25/09/2026): < 7% vermelho, < 10% amarelo.
+  const MARGEM_BAIXA = 0.07, MARGEM_ATENCAO = 0.10;
+  function classeMargem(m){
+    if(m == null) return '';
+    if(m < MARGEM_BAIXA) return 'margem-baixa';
+    if(m < MARGEM_ATENCAO) return 'margem-atencao';
+    return '';
+  }
+
   function renderTabela(alvoId, dados, chaveOrdem, rotulo){
     const o = ordem[chaveOrdem];
     const lista = dados.lista.slice().sort((a, b) => {
@@ -1099,10 +1112,10 @@
         '<td>' + escapeHtml(g.nome) + '</td>' +
         '<td>' + fmtNum(g.faturamento) + '</td>' +
         '<td class="' + (g.lucro < 0 ? 'neg' : '') + '">' + fmtNum(g.lucro) + '</td>' +
-        '<td class="' + (g.margem != null && g.margem < 0 ? 'neg' : '') + '">' + fmtPct(g.margem) + '</td></tr>';
+        '<td class="' + classeMargem(g.margem) + '">' + fmtPct(g.margem) + '</td></tr>';
     });
     html += '<tr class="total"><td>Total</td><td>' + fmtNum(dados.total.faturamento) + '</td>' +
-      '<td>' + fmtNum(dados.total.lucro) + '</td><td>' + fmtPct(dados.total.margem) + '</td></tr>';
+      '<td>' + fmtNum(dados.total.lucro) + '</td><td class="' + classeMargem(dados.total.margem) + '">' + fmtPct(dados.total.margem) + '</td></tr>';
     $(alvoId).innerHTML = html + '</tbody></table>';
     $(alvoId).querySelectorAll('th[data-ord]').forEach(th => {
       const campo = th.dataset.ord;
