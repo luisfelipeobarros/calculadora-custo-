@@ -3606,6 +3606,14 @@
 
     var totalFiltrado = lista.length;
     var somaFiltrada = lista.reduce(function(s,d){ return s + d.valor; }, 0);
+    // Atrasado x a vencer (pedido de 28/09/2026), com o MESMO corte do
+    // Painel (inicioJanelaHoje): pago fica fora dos dois.
+    var corteAtraso = inicioJanelaHoje();
+    var somaAtrasada = 0, somaAVencer = 0;
+    lista.forEach(function(d){
+      if(d.pago === true) return;
+      if(d.vencimento && d.vencimento < corteAtraso) somaAtrasada += d.valor; else somaAVencer += d.valor;
+    });
     var visiveis = lista.slice(0, limitePag);
     $('maisPagBtn').style.display = totalFiltrado > limitePag ? 'inline-block' : 'none';
 
@@ -3741,7 +3749,11 @@
     });
 
     $('tabelaPag').innerHTML = html + '</tbody></table></div>';
-    $('totalPag').textContent = totalFiltrado + ' item(ns) · total ' + brl(somaFiltrada) +
+    var partes = [];
+    if(somaAtrasada > 0) partes.push('atrasado ' + brl(somaAtrasada));
+    if(somaAVencer > 0) partes.push('a vencer ' + brl(somaAVencer));
+    $('totalPag').textContent = totalFiltrado + ' item(ns)' + (partes.length ? ' · ' + partes.join(' · ') : '') +
+      ' · total ' + brl(somaFiltrada) +
       (totalFiltrado > visiveis.length ? ' · mostrando ' + visiveis.length : '');
   }
 
