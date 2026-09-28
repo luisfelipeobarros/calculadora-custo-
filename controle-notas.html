@@ -4924,7 +4924,11 @@
         html += '<div class="dda-meta">casou com: ' + escapeHtml(fornecedorDaDuplicata(d)) +
           ' — nota ' + escapeHtml(String(d.numeroNota || '?')) + ' parc. ' + escapeHtml(String(d.parcela || '?')) +
           ' · nosso valor ' + brl(d.valor || 0) + ' · nosso venc. ' + fmtData(d.vencimento) +
-          (d.pago === true ? ' · <span class="badge pago">paga</span>' : '') + '</div>';
+          (d.pago === true ? ' · <span class="badge pago">paga</span>' : '') +
+          (DdaNucleo.situacaoPaga(r.situacao) && d.pago !== true && d.id
+            ? ' · <button type="button" class="acao-mini no-print" data-baixar-dda="' + escapeHtml(d.id) + '">✓ Marcar paga' +
+              (g === 3 ? ' mesmo assim' : '') + '</button>'
+            : '') + '</div>';
         if(l.extrato && l.extrato.lancamento){
           html += '<div class="dda-meta">saiu da conta em <strong>' + fmtData(l.extrato.data) + '</strong> · ' +
             brl(l.extrato.valorPagoCentavos / 100) +
@@ -4951,6 +4955,7 @@
     // entra). Acompanha o filtro de fornecedor. O botao some na
     // impressao — papel nao tem clique.
     ddaBaixaveis = linhasVisiveis.filter(function(l){ return rel.baixaveis.indexOf(l) !== -1; });
+    ddaRelatorio = rel.linhas;
     if(ddaBaixaveis.length){
       var somaBaixa = ddaBaixaveis.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
       html += '<div class="dda-baixa no-print" style="margin-top:16px; padding:12px; border:1.5px solid var(--line);' +
@@ -4988,9 +4993,15 @@
   // As linhas oferecidas pelo ultimo renderDda (ja' filtradas). O
   // botao e' redesenhado a cada render, por isso o clique e' delegado.
   var ddaBaixaveis = [];
+  var ddaRelatorio = null; // linhas do ultimo conferir(), para o botao de cada linha
 
   App.delegar($('resultadoDda'), 'click', '#btnBaixarDda', function(btn){
     baixarPelaDda(btn);
+  });
+  App.delegar($('resultadoDda'), 'click', '[data-baixar-dda]', function(btn){
+    var id = btn.dataset.baixarDda;
+    var linha = (ddaRelatorio || []).find(function(l){ return l.casamento.duplicata && l.casamento.duplicata.id === id; });
+    if(linha) baixarPelaDda(btn, [linha]);
   });
 
   // Marca como pagas, em lote, as duplicatas que o DDA diz que o banco
@@ -5001,9 +5012,12 @@
   // se tratam um a um, na aba Pagamentos) e a data pode ficar em
   // branco: cada boleto recebe o proprio vencimento, que e' o dia em
   // que o banco debitou o DDA.
-  function baixarPelaDda(btn){
+  // Um a um (botao da linha, inclusive linha vermelha de valor
+  // divergente — quem clica esta' dizendo que aquele boleto E' aquela
+  // duplicata) ou em lote (so' as linhas sem vermelho).
+  function baixarPelaDda(btn, escolhidos){
     if(pagandoId) return;
-    var itens = ddaBaixaveis.slice();
+    var itens = (escolhidos || ddaBaixaveis).slice();
     if(!itens.length) return;
     pagandoId = 'dda';
     var soma = itens.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
@@ -5012,19 +5026,29 @@
     // Diferenca de ate' 10 centavos entre o que saiu da conta e a
     // duplicata e' arredondamento (DdaNucleo.TOLERANCIA_CENTAVOS): grava
     // o valor da duplicata, sem lancamento de juros de 3 centavos.
+    // Sem extrato e com o boleto valendo outra coisa que a duplicata
+    // (a linha vermelha, baixada pelo botao da linha): o que o banco
+    // cobrou e' o valor do boleto — a diferenca vira juros (ou fica
+    // como pagamento menor), nunca some.
     var valorPagoDe = function(l){
       var dup = l.casamento.duplicata.valor || 0;
-      if(!(l.extrato && l.extrato.lancamento)) return dup;
-      var doExtrato = l.extrato.valorPagoCentavos / 100;
-      return DdaNucleo.valorBate(l.extrato.valorPagoCentavos, Math.round(dup * 100)) ? dup : doExtrato;
+      var dupCent = Math.round(dup * 100);
+      if(l.extrato && l.extrato.lancamento){
+        return DdaNucleo.valorBate(l.extrato.valorPagoCentavos, dupCent) ? dup : l.extrato.valorPagoCentavos / 100;
+      }
+      if(l.registro.valorCentavos != null && !DdaNucleo.valorBate(l.registro.valorCentavos, dupCent)) return l.registro.valorCentavos / 100;
+      return dup;
     };
     var comExtrato = itens.filter(function(l){ return l.extrato && l.extrato.lancamento; }).length;
     var jurosTotal = itens.reduce(function(s2, l){ return s2 + ((l.extrato && l.extrato.jurosCentavos) || 0); }, 0);
 
     carregarContabil().then(function(contabil){
       return pedirPagamento({
-        titulo: 'Marcar como pagas pelo DDA',
-        mensagem: itens.length + ' boleto(s) · ' + brl(soma) +
+        titulo: itens.length === 1 ? 'Marcar como paga pelo DDA' : 'Marcar como pagas pelo DDA',
+        mensagem: (itens.length === 1
+          ? fornecedorDaDuplicata(itens[0].casamento.duplicata) + ' · duplicata ' + brl(soma) +
+            (Math.round(valorPagoDe(itens[0]) * 100) !== Math.round(soma * 100) ? ' · pago ' + brl(valorPagoDe(itens[0])) + ' (o valor do boleto)' : '')
+          : itens.length + ' boleto(s) · ' + brl(soma)) +
           (extratoLido
             ? ' · ' + comExtrato + ' com data e valor do extrato' + (jurosTotal ? ' (juros ' + brl(jurosTotal / 100) + ')' : '')
             : ' · cada um pelo valor da própria duplicata'),
