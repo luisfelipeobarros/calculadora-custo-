@@ -194,7 +194,7 @@
 
   /* O visual do DANFE simplificado mora no app-shared.css: e' o mesmo
      documento nas paginas que o mostram (aqui e na NF-e Emitidas da Calculadora). */
-  #filtroFornDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
+  #filtroFornDda, #filtroDataDda{ padding:6px 8px; border:1.5px solid var(--line); border-radius:4px; background:var(--card); color:var(--ink); font-family:var(--font-mono); font-size:12px; max-width:320px; }
 
   .so-imprimir{ display:none; }
 
@@ -567,6 +567,8 @@
                accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
         <label class="sr-only" for="filtroFornDda">Filtrar por fornecedor</label>
         <select id="filtroFornDda" style="display:none;"></select>
+        <label class="sr-only" for="filtroDataDda">Filtrar por vencimento</label>
+        <input type="date" id="filtroDataDda" style="display:none;" title="Só os boletos com este vencimento (em branco = todos)">
         <button type="button" class="acao-mini" id="btnImprimirDda" style="display:none;">🖨 Imprimir</button>
         <span id="statusDda" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
         <span id="statusExtrato" class="nota-explicativa" style="margin-top:0;" role="status" aria-live="polite"></span>
@@ -4664,6 +4666,10 @@
   // sao opcoes separadas). Vazio = todos. Boleto que nao casou nao tem
   // fornecedor nosso — ganha uma opcao propria em vez de sumir.
   var filtroFornDda = '';
+  // Filtro por VENCIMENTO do boleto (pedido de 28/09/2026): conferir
+  // um dia de cada vez. Vazio = todos.
+  var filtroDataDda = '';
+  $('filtroDataDda').addEventListener('change', function(){ filtroDataDda = this.value; renderDda(); });
   var SEM_FORNECEDOR = '__sem__';
 
   $('filtroFornDda').addEventListener('change', function(){
@@ -4829,17 +4835,20 @@
       (temSemForn ? '<option value="' + SEM_FORNECEDOR + '">Sem fornecedor (não casaram)</option>' : '');
     sel.value = filtroFornDda;
     sel.style.display = '';
+    $('filtroDataDda').style.display = '';
     $('btnImprimirDda').style.display = '';
 
     var fornecedorDaLinha = function(l){
       return l.casamento.duplicata ? fornecedorDaDuplicata(l.casamento.duplicata) : null;
     };
     var linhasVisiveis = rel.linhas.filter(function(l){
+      if(filtroDataDda && l.registro.vencimento !== filtroDataDda) return false;
       if(!filtroFornDda) return true;
       if(filtroFornDda === SEM_FORNECEDOR) return !l.casamento.duplicata;
       return fornecedorDaLinha(l) === filtroFornDda;
     });
     var foraVisiveis = rel.foraDoDda.filter(function(d2){
+      if(filtroDataDda && d2.vencimento !== filtroDataDda) return false;
       if(!filtroFornDda) return true;
       if(filtroFornDda === SEM_FORNECEDOR) return false;
       return fornecedorDaDuplicata(d2) === filtroFornDda;
@@ -4869,8 +4878,11 @@
           (rel.periodo.cortado ? ' (até onde a planilha foi)' : '')
         : '<strong>⚠ não achei o período no cabeçalho do arquivo</strong> — a checagem de títulos nossos fora do DDA foi pulada') +
       ' · arquivo ' + escapeHtml(ddaLido.nomeArquivo || '?') +
-      (filtroFornDda
-        ? ' · <strong>filtro: ' + escapeHtml(filtroFornDda === SEM_FORNECEDOR ? 'sem fornecedor (não casaram)' : filtroFornDda) +
+      ((filtroFornDda || filtroDataDda)
+        ? ' · <strong>filtro: ' + [
+            filtroDataDda ? 'vencimento ' + fmtData(filtroDataDda) : '',
+            filtroFornDda ? escapeHtml(filtroFornDda === SEM_FORNECEDOR ? 'sem fornecedor (não casaram)' : filtroFornDda) : ''
+          ].filter(Boolean).join(' + ') +
           '</strong> · mostrando ' + linhasVisiveis.length + ' de ' + rel.linhas.length + ' boleto(s)'
         : ' · ' + rel.linhas.length + ' boleto(s)') +
       ' · total ' + brl(resumo.totalCentavos / 100) +
