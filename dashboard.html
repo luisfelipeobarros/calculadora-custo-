@@ -805,16 +805,26 @@
               spanGaps: false, pointRadius: 4.5 },
             { label: String(anoSel - 1), data: sAnt,
               borderColor: '#9a9a9a', backgroundColor: '#9a9a9a', borderWidth: 2, borderDash: [6, 4],
-              tension: 0.25, spanGaps: false, pointRadius: 3 }
+              tension: 0.25, spanGaps: false, pointRadius: 3, pointHitRadius: 10 }
           ] },
           options: {
             responsive: true, maintainAspectRatio: false,
             layout: { padding: { top: 20, right: 26, left: 10 } },
+            // Mouse em cima do ponto mostra o valor (pedido de 01/10/2026):
+            // a linha do ano anterior nao tem rotulo, e e' nela que a
+            // dica mais importa.
+            interaction: { mode: 'nearest', intersect: false, axis: 'x' },
             plugins: {
               legend: { display: true, position: 'top',
                 labels: { boxWidth: 10, boxHeight: 10, padding: 6,
                   font: { family: "'Barlow Condensed', sans-serif", size: 11, weight: 700 } } },
-              tooltip: { enabled: false },
+              tooltip: { enabled: true, displayColors: true,
+                titleFont: { family: "'Barlow Condensed', sans-serif", size: 13, weight: 700 },
+                bodyFont: { family: "'Barlow Condensed', sans-serif", size: 13 },
+                callbacks: {
+                  title: items => items.length ? MESES_CHEIOS[items[0].dataIndex] : '',
+                  label: ctx => ' ' + ctx.dataset.label + ': ' + (ctx.parsed.y == null ? '—' : formatar(ctx.parsed.y))
+                } },
               rotulosBarras: { fonte: '700 13px "Barlow Condensed", sans-serif',
                 formatadores: [{ formatar: v => v == null ? '' : formatar(v) }, null] }
             },
