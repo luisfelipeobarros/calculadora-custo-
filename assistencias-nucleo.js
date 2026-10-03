@@ -178,6 +178,89 @@
     });
   }
 
+  /* ============================================================
+     Ordem de entrega de material (impressao da ocorrencia)
+
+     O mesmo formulario de papel que a loja ja' usa (pedido de
+     03/10/2026): cabecalho do cliente, "produtos a ser entregue",
+     "produto devolvido", descricao da ocorrencia e as assinaturas.
+     O que a ficha sabe vem preenchido; o que ela nao tem (endereco,
+     CPF, telefone, data da entrega) fica em linha para a caneta.
+
+     Qual tabela recebe o produto depende do TIPO DE SOLUCAO: troca
+     entrega e recolhe; devolucao e credito so' recolhem; nos outros
+     casos (ou sem solucao definida) as duas ficam em branco — a ordem
+     nao inventa uma entrega que ninguem decidiu.
+     ============================================================ */
+
+  var LINHAS_DA_TABELA = 6;   // como no formulario de papel
+  var LINHAS_DA_OCORRENCIA = 5;
+
+  function itensDaOrdem(a) {
+    a = a || {};
+    var temProduto = !!(a.produto || a.codigo);
+    var desc = String(a.produto || '') + (a.tonalidade ? ' — tonalidade ' + a.tonalidade : '');
+    var qtd = (a.quantidade == null || a.quantidade === '') ? '' : Number(a.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+    var item = { codigo: String(a.codigo || ''), descricao: desc, quantidade: qtd };
+    var t = App.normalizarTexto(a.tipoSolucao || '');
+    if (!temProduto) return { entregar: [], devolver: [] };
+    if (t.indexOf('troca') === 0) return { entregar: [item], devolver: [item] };
+    if (t.indexOf('devolucao') === 0 || t.indexOf('credito') === 0) return { entregar: [], devolver: [item] };
+    return { entregar: [], devolver: [] };
+  }
+
+  // HTML pronto para o papel. Todo dado da ficha passa por escapeHtml.
+  function htmlOrdemEntrega(a, opcoes) {
+    a = a || {};
+    var o = opcoes || {};
+    var e = App.escapeHtml;
+    var itens = itensDaOrdem(a);
+
+    function linha(rotulo, valor, classe) {
+      return '<div class="oe-linha' + (classe ? ' ' + classe : '') + '"><span class="oe-r">' + e(rotulo) + '</span>' +
+        '<span class="oe-v">' + e(valor == null ? '' : String(valor)) + '</span></div>';
+    }
+    function tabela(titulo, lista) {
+      var h = '<div class="oe-secao">' + e(titulo) + '</div><table class="oe-tab"><thead><tr>' +
+        '<th class="oe-cod">CÓD</th><th>DISCRIMINAÇÃO</th><th class="oe-qtd">QTDA</th></tr></thead><tbody>';
+      for (var i = 0; i < Math.max(LINHAS_DA_TABELA, lista.length); i++) {
+        var it = lista[i] || { codigo: '', descricao: '', quantidade: '' };
+        h += '<tr><td>' + e(it.codigo) + '</td><td>' + e(it.descricao) + '</td><td class="oe-qtd">' + e(it.quantidade) + '</td></tr>';
+      }
+      return h + '</tbody></table>' + linha('OBS.', '');
+    }
+
+    // Texto da ocorrencia: problema, causa e solucao, cada um numa linha;
+    // o resto das linhas fica em branco para completar a mao.
+    var textos = [];
+    if (a.problema) textos.push(String(a.problema));
+    if (a.causa) textos.push('Causa: ' + a.causa);
+    if (a.tipoSolucao || a.solucao) textos.push('Solução: ' + [a.tipoSolucao, a.solucao].filter(Boolean).join(' — '));
+    var ocorrencia = textos.map(function (t) { return '<div class="oe-pauta oe-texto">' + e(t) + '</div>'; }).join('');
+    for (var k = textos.length; k < LINHAS_DA_OCORRENCIA; k++) ocorrencia += '<div class="oe-pauta"></div>';
+
+    var ref = [a.nfVenda ? 'NF ' + a.nfVenda : '', a.sequencia ? 'seq. ' + a.sequencia : ''].filter(Boolean).join(' · ');
+
+    return '<div class="oe">' +
+      '<div class="oe-loja">' + e(o.loja || 'LOJÃO DA CONSTRUÇÃO') + '</div>' +
+      '<div class="oe-titulo">ORDEM DE ENTREGA DE MATERIAL</div>' +
+      '<div class="oe-ref">' + (a.sequencia ? 'Assistência nº ' + e(a.sequencia) : 'Assistência') +
+        (a.dataAbertura ? ' · aberta em ' + e(App.fmtData(a.dataAbertura)) : '') + '</div>' +
+      linha('CLIENTE:', a.cliente) +
+      linha('ENDEREÇO:', '') +
+      '<div class="oe-dupla">' + linha('CNPJ/CPF:', '') + linha('FONE:', '') + '</div>' +
+      linha('NOTA FISCAL NR OU NR DO PEDIDO:', ref) +
+      '<div class="oe-dupla">' + linha('DATA DA NOTA FISCAL:', '____/____/______', 'oe-curta') + linha('ENTREGA:', '____/____/______', 'oe-curta') + '</div>' +
+      tabela('PRODUTOS A SER ENTREGUE', itens.entregar) +
+      tabela('PRODUTO DEVOLVIDO', itens.devolver) +
+      '<div class="oe-secao">DISCRIMINAÇÃO DA OCORRÊNCIA</div>' + ocorrencia +
+      '<div class="oe-assina">' +
+        linha('RESPONSÁVEL PELA OCORRÊNCIA:', a.responsavel) +
+        linha('RESPONSÁVEL PELA ENTREGA:', '') +
+        linha('VISTO DO CLIENTE OU RESPONSÁVEL:', '') +
+      '</div></div>';
+  }
+
   var AssistenciasNucleo = {
     STATUS: STATUS,
     CAUSAS: CAUSAS,
@@ -190,7 +273,9 @@
     separarFotos: separarFotos,
     juntarFotos: juntarFotos,
     parseDinheiroBR: parseDinheiroBR,
-    linhasExcel: linhasExcel
+    linhasExcel: linhasExcel,
+    itensDaOrdem: itensDaOrdem,
+    htmlOrdemEntrega: htmlOrdemEntrega
   };
 
   global.AssistenciasNucleo = AssistenciasNucleo;

@@ -139,5 +139,37 @@ eq('round-trip do render com 2 casas fecha',
     linhas[1]['Custo líquido (R$)'], '');
 }
 
+// ── Ordem de entrega de material (impressao) ─────────────────
+
+{
+  const base = { sequencia: '1167310', cliente: 'Fulano <b>de Tal</b>', codigo: '4455', produto: 'Piso 46x46', tonalidade: 'B2',
+    quantidade: 12.5, nfVenda: '9876', problema: 'Peças trincadas', causa: 'Quebra no transporte', responsavel: 'Gerente', dataAbertura: '2026-10-03' };
+  const item = { codigo: '4455', descricao: 'Piso 46x46 — tonalidade B2', quantidade: '12,5' };
+  eq('ordem: TROCA entrega e recolhe o produto', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Troca' }, base)), { entregar: [item], devolver: [item] });
+  eq('ordem: DEVOLUCAO so recolhe', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Devolução (dinheiro)' }, base)), { entregar: [], devolver: [item] });
+  eq('ordem: CREDITO na loja so recolhe', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Crédito na Loja' }, base)), { entregar: [], devolver: [item] });
+  eq('ordem: abatimento / assistencia da fabrica / sem solucao = tabelas em branco (nao inventa entrega)',
+    [N.itensDaOrdem(Object.assign({ tipoSolucao: 'Abatimento do pedido' }, base)), N.itensDaOrdem(Object.assign({ tipoSolucao: 'Assistência da fábrica' }, base)), N.itensDaOrdem(base)],
+    [{ entregar: [], devolver: [] }, { entregar: [], devolver: [] }, { entregar: [], devolver: [] }]);
+  eq('ordem: sem produto na ficha, nada nas tabelas mesmo na troca', N.itensDaOrdem({ tipoSolucao: 'Troca' }), { entregar: [], devolver: [] });
+  eq('ordem: quantidade inteira sem casas, e vazia quando nao ha',
+    [N.itensDaOrdem({ tipoSolucao: 'Troca', produto: 'X', quantidade: 30 }).entregar[0].quantidade, N.itensDaOrdem({ tipoSolucao: 'Troca', produto: 'X' }).entregar[0].quantidade], ['30', '']);
+
+  const html = N.htmlOrdemEntrega(Object.assign({ tipoSolucao: 'Troca', solucao: 'trocar as 3 caixas' }, base));
+  eq('ordem: titulo e as secoes do formulario de papel',
+    ['ORDEM DE ENTREGA DE MATERIAL', 'PRODUTOS A SER ENTREGUE', 'PRODUTO DEVOLVIDO', 'DISCRIMINAÇÃO DA OCORRÊNCIA',
+     'RESPONSÁVEL PELA OCORRÊNCIA:', 'RESPONSÁVEL PELA ENTREGA:', 'VISTO DO CLIENTE OU RESPONSÁVEL:'].every(s => html.indexOf(s) !== -1), true);
+  eq('ordem: dado da ficha sai ESCAPADO (cliente com HTML nao vira tag)',
+    [html.indexOf('<b>de Tal</b>') === -1, html.indexOf('Fulano &lt;b&gt;de Tal&lt;/b&gt;') !== -1], [true, true]);
+  eq('ordem: NF e sequencia na linha da nota, data de abertura no cabecalho',
+    [html.indexOf('NF 9876 · seq. 1167310') !== -1, html.indexOf('aberta em 03/10/2026') !== -1], [true, true]);
+  eq('ordem: problema, causa e solucao no texto da ocorrencia',
+    ['Peças trincadas', 'Causa: Quebra no transporte', 'Solução: Troca — trocar as 3 caixas'].every(s => html.indexOf(s) !== -1), true);
+  eq('ordem: cada tabela tem as 6 linhas do papel (1 preenchida + 5 em branco)',
+    (html.match(/<tr><td>/g) || []).length, 12);
+  eq('ordem: ficha vazia ainda rende o formulario inteiro, sem "null" nem "undefined"',
+    [/null|undefined/.test(N.htmlOrdemEntrega({})), N.htmlOrdemEntrega({}).indexOf('ORDEM DE ENTREGA') !== -1], [false, true]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

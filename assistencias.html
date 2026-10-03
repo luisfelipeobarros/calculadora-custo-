@@ -40,6 +40,33 @@
   .asst-kpi .k-val{ font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
   .asst-kpi .k-val.neg{ color:var(--loss); }
 
+  /* Ordem de entrega de material: invisivel na tela, sozinha no papel. */
+  #ordemImpressao{ display:none; }
+  @media print{
+    body.imprimindo-ordem .wrap, body.imprimindo-ordem .modal-fundo, body.imprimindo-ordem .toast{ display:none !important; }
+    body.imprimindo-ordem{ background:#fff; }
+    body.imprimindo-ordem #ordemImpressao{ display:block; }
+    @page{ size:A4; margin:16mm 14mm; }
+  }
+  .oe{ font-family:Arial, Helvetica, sans-serif; color:#000; font-size:12px; }
+  .oe-loja{ text-align:center; font-size:17px; font-weight:700; }
+  .oe-titulo{ text-align:center; font-size:15px; font-weight:700; text-decoration:underline; margin-top:10px; }
+  .oe-ref{ text-align:center; font-size:10.5px; margin:4px 0 12px; }
+  .oe-linha{ display:flex; align-items:flex-end; gap:6px; margin-top:7px; flex:1; }
+  .oe-r{ font-weight:700; white-space:nowrap; }
+  .oe-v{ flex:1; border-bottom:1px solid #000; min-height:15px; padding:0 4px 1px; }
+  .oe-curta .oe-v{ flex:0 0 auto; border-bottom:none; }
+  .oe-dupla{ display:flex; gap:18px; }
+  .oe-secao{ font-weight:700; margin:16px 0 4px; }
+  .oe-tab{ width:100%; border-collapse:collapse; }
+  .oe-tab th{ background:#222; color:#fff; font-size:11px; padding:4px 6px; border:1px solid #000;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .oe-tab td{ border:1px solid #000; height:20px; padding:2px 6px; }
+  .oe-cod{ width:17%; } .oe-qtd{ width:16%; text-align:center; }
+  .oe-pauta{ border-bottom:1px solid #000; min-height:21px; padding:3px 4px 1px; }
+  .oe-assina{ margin-top:22px; }
+  .oe-assina .oe-linha{ margin-top:20px; }
+
   .asst-item{ display:block; width:100%; box-sizing:border-box; text-align:left; font:inherit; color:inherit;
     border:1px solid var(--line); border-radius:6px; background:var(--card); padding:10px 12px; margin-bottom:8px; cursor:pointer; }
   .asst-item:hover{ background:var(--stripe2); }
@@ -190,6 +217,7 @@
 
       <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
         <button type="button" class="btn" id="afSalvarBtn" style="flex:1;">💾 Salvar</button>
+        <button type="button" class="btn secondary" id="afImprimirBtn" title="Ordem de entrega de material, com o que está na ficha">🖨 Imprimir ordem</button>
       </div>
       <div class="empty-note" id="afMsg" style="display:block; margin-top:8px;"></div>
     </div>
@@ -199,12 +227,16 @@
   <footer class="note">Assistências e reclamações · dados no Firebase da empresa · uso interno.</footer>
 </div>
 
+<!-- Ordem de entrega: so' existe no papel. Preenchida pelo nucleo
+     (N.htmlOrdemEntrega) na hora de imprimir. -->
+<div id="ordemImpressao" aria-hidden="true"></div>
+
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=27"></script>
-<script src="assistencias-nucleo.js?v=3"></script>
+<script src="assistencias-nucleo.js?v=4"></script>
 <script>
 (() => {
   'use strict';
@@ -576,6 +608,22 @@
     }
   }
   $('afSalvarBtn').addEventListener('click', salvar);
+
+  // Imprime a ordem de entrega com o que esta' NA FICHA agora (salvo
+  // ou nao): quem esta' atendendo preenche e imprime de uma vez.
+  $('afImprimirBtn').addEventListener('click', () => {
+    const dados = {};
+    CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
+    CAMPOS_NUMERO.forEach(([elId, campo]) => { dados[campo] = N.parseDinheiroBR($(elId).value); });
+    dados.dataAbertura = $('afDataAbertura').value || App.hojeISO();
+    dados.causa = $('afCausa').value || null;
+    dados.tipoSolucao = $('afTipoSolucao').value || null;
+    $('ordemImpressao').innerHTML = N.htmlOrdemEntrega(dados);
+    document.body.classList.add('imprimindo-ordem');
+    const limpar = () => { document.body.classList.remove('imprimindo-ordem'); window.removeEventListener('afterprint', limpar); };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+  });
 
   // ─── Exportar (a lista FILTRADA, como está na tela) ───
   $('asstExportarBtn').addEventListener('click', () => {
