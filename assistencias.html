@@ -160,6 +160,12 @@
           <input id="afDataAbertura" type="date"></div>
         <div class="af-campo cheio"><label for="afCliente">Cliente</label>
           <input id="afCliente" autocomplete="off"></div>
+        <div class="af-campo cheio"><label for="afEndereco">Endereço da entrega</label>
+          <input id="afEndereco" autocomplete="off"></div>
+        <div class="af-campo"><label for="afDocumento">CNPJ / CPF</label>
+          <input id="afDocumento" inputmode="numeric" autocomplete="off"></div>
+        <div class="af-campo"><label for="afTelefone">Telefone</label>
+          <input id="afTelefone" inputmode="tel" autocomplete="off"></div>
         <div class="af-campo"><label for="afCodigo">Código do produto</label>
           <input id="afCodigo" autocomplete="off"></div>
         <div class="af-campo"><label for="afProduto">Produto</label>
@@ -172,6 +178,10 @@
           <input id="afValor" inputmode="decimal"></div>
         <div class="af-campo"><label for="afNfVenda">NF-e de venda</label>
           <input id="afNfVenda" inputmode="numeric" autocomplete="off"></div>
+        <div class="af-campo"><label for="afDataNota">Data da nota fiscal</label>
+          <input id="afDataNota" type="date"></div>
+        <div class="af-campo"><label for="afDataEntrega">Data da entrega (da venda)</label>
+          <input id="afDataEntrega" type="date"></div>
         <div class="af-campo cheio"><label for="afProblema">Problema</label>
           <textarea id="afProblema"></textarea></div>
         <div class="af-campo"><label for="afCausa">Causa</label>
@@ -236,7 +246,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=27"></script>
-<script src="assistencias-nucleo.js?v=4"></script>
+<script src="assistencias-nucleo.js?v=5"></script>
 <script>
 (() => {
   'use strict';
@@ -341,6 +351,9 @@
   // ─── Ficha ───
   const CAMPOS_TEXTO = [
     ['afSequencia', 'sequencia'], ['afCliente', 'cliente'], ['afCodigo', 'codigo'],
+    ['afEndereco', 'endereco'], ['afDocumento', 'documento'], ['afTelefone', 'telefone'],
+    // datas: o <input type=date> ja' entrega aaaa-mm-dd, que e' como se grava
+    ['afDataNota', 'dataNota'], ['afDataEntrega', 'dataEntrega'],
     ['afProduto', 'produto'], ['afTonalidade', 'tonalidade'], ['afNfVenda', 'nfVenda'],
     ['afProblema', 'problema'], ['afSolucao', 'solucao'], ['afResponsavel', 'responsavel']
   ];

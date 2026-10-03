@@ -184,8 +184,10 @@
      O mesmo formulario de papel que a loja ja' usa (pedido de
      03/10/2026): cabecalho do cliente, "produtos a ser entregue",
      "produto devolvido", descricao da ocorrencia e as assinaturas.
-     O que a ficha sabe vem preenchido; o que ela nao tem (endereco,
-     CPF, telefone, data da entrega) fica em linha para a caneta.
+     Tudo que a ficha tem vem preenchido — cliente, endereco, CNPJ/CPF,
+     telefone, nota, data da nota e data da entrega da venda (campos
+     criados em 05/10/2026 para a ordem sair completa). Para a caneta
+     ficam so' a data da troca/entrega e as assinaturas.
 
      Qual tabela recebe o produto depende do TIPO DE SOLUCAO: troca
      entrega e recolhe; devolucao e credito so' recolhem; nos outros
@@ -195,6 +197,7 @@
 
   var LINHAS_DA_TABELA = 6;   // como no formulario de papel
   var LINHAS_DA_OCORRENCIA = 5;
+  var EM_BRANCO = '____/____/______';   // data para preencher a mao
 
   function itensDaOrdem(a) {
     a = a || {};
@@ -247,14 +250,16 @@
       '<div class="oe-ref">' + (a.sequencia ? 'Assistência nº ' + e(a.sequencia) : 'Assistência') +
         (a.dataAbertura ? ' · aberta em ' + e(App.fmtData(a.dataAbertura)) : '') + '</div>' +
       linha('CLIENTE:', a.cliente) +
-      linha('ENDEREÇO:', '') +
-      '<div class="oe-dupla">' + linha('CNPJ/CPF:', '') + linha('FONE:', '') + '</div>' +
+      linha('ENDEREÇO:', a.endereco) +
+      '<div class="oe-dupla">' + linha('CNPJ/CPF:', a.documento) + linha('FONE:', a.telefone) + '</div>' +
       linha('NOTA FISCAL NR OU NR DO PEDIDO:', ref) +
-      '<div class="oe-dupla">' + linha('DATA DA NOTA FISCAL:', '____/____/______', 'oe-curta') + linha('ENTREGA:', '____/____/______', 'oe-curta') + '</div>' +
+      '<div class="oe-dupla">' + linha('DATA DA NOTA FISCAL:', a.dataNota ? App.fmtData(a.dataNota) : EM_BRANCO, 'oe-curta') +
+        linha('ENTREGA:', a.dataEntrega ? App.fmtData(a.dataEntrega) : EM_BRANCO, 'oe-curta') + '</div>' +
       tabela('PRODUTOS A SER ENTREGUE', itens.entregar) +
       tabela('PRODUTO DEVOLVIDO', itens.devolver) +
       '<div class="oe-secao">DISCRIMINAÇÃO DA OCORRÊNCIA</div>' + ocorrencia +
       '<div class="oe-assina">' +
+        linha('DATA DA TROCA / ENTREGA:', EM_BRANCO, 'oe-curta') +
         linha('RESPONSÁVEL PELA OCORRÊNCIA:', a.responsavel) +
         linha('RESPONSÁVEL PELA ENTREGA:', '') +
         linha('VISTO DO CLIENTE OU RESPONSÁVEL:', '') +

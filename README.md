@@ -328,7 +328,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 56 verificações em
+15. **Assistências e reclamações** — 59 verificações em
     `assistencias-nucleo.js`: as listas de status/causa/solução e a cor
     do badge (status desconhecido cai no **vermelho**, nunca parece
     resolvido), o resumo dos cartões (em aberto = tudo que não está

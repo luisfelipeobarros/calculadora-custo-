@@ -167,6 +167,15 @@ eq('round-trip do render com 2 casas fecha',
     ['Peças trincadas', 'Causa: Quebra no transporte', 'Solução: Troca — trocar as 3 caixas'].every(s => html.indexOf(s) !== -1), true);
   eq('ordem: cada tabela tem as 6 linhas do papel (1 preenchida + 5 em branco)',
     (html.match(/<tr><td>/g) || []).length, 12);
+  // Campos criados para a ordem sair completa (05/10/2026).
+  const completa = N.htmlOrdemEntrega(Object.assign({ endereco: 'Rua das Flores, 100 — Centro', documento: '000.111.222-33',
+    telefone: '(81) 90000-0000', dataNota: '2026-09-20', dataEntrega: '2026-09-22', tipoSolucao: 'Troca' }, base));
+  eq('ordem: endereco, CNPJ/CPF, telefone, data da nota e data da entrega saem preenchidos',
+    ['Rua das Flores, 100 — Centro', '000.111.222-33', '(81) 90000-0000', '20/09/2026', '22/09/2026'].every(s => completa.indexOf(s) !== -1), true);
+  eq('ordem: so a data da troca/entrega fica em branco para a caneta (uma unica lacuna de data)',
+    [completa.indexOf('DATA DA TROCA / ENTREGA:') !== -1, completa.split('____/____/______').length - 1], [true, 1]);
+  eq('ordem: sem as datas na ficha, as tres lacunas ficam para a caneta',
+    html.split('____/____/______').length - 1, 3);
   eq('ordem: ficha vazia ainda rende o formulario inteiro, sem "null" nem "undefined"',
     [/null|undefined/.test(N.htmlOrdemEntrega({})), N.htmlOrdemEntrega({}).indexOf('ORDEM DE ENTREGA') !== -1], [false, true]);
 }
