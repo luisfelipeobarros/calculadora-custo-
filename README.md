@@ -236,7 +236,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 50 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 55 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de

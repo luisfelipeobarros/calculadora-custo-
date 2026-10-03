@@ -1647,7 +1647,9 @@
   // ─── Salvar (novo ou edição) ───
   async function salvarLancamento(){
     const data = $('lcData').value;
-    const valor = App.parseNumeroBR($('lcValor').value);
+    // parseDinheiroBR: "1.500" digitado num campo de dinheiro e' mil e
+    // quinhentos (o leitor de numero de planilha leria 1,50).
+    const valor = App.parseDinheiroBR($('lcValor').value);
     const partida = partidaDoFormulario();
     if(!partida){
       App.toast(tipoAtual === 'transferencia'
@@ -3202,7 +3204,10 @@
       // marcarem o mesmo pagamento como pago quase juntas, as duas
       // gravam o MESMO documento, em vez de cada uma criar um
       // lancamento duplicado do proximo mes.
-      return db.collection('pagamentosInternos').doc(pgto.id + '_' + proxVenc).set(novo);
+      // A base e' o id da PRIMEIRA parcela: sem tirar as datas ja'
+      // penduradas, o id crescia 11 letras por mes (id_2026-03-15_2026-04-15_...).
+      var base = String(pgto.id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '');
+      return db.collection('pagamentosInternos').doc(base + '_' + proxVenc).set(novo);
     }).then(function(){
       return proxVenc;
     });
@@ -3917,7 +3922,7 @@
         juros.style.cssText = 'font-family:var(--font-mono); font-size:11.5px; color:var(--loss); margin:4px 0 0; min-height:15px;';
         caixa.appendChild(juros);
         valor.addEventListener('input', function(){
-          var v = App.parseNumeroBR(valor.value);
+          var v = App.parseDinheiroBR(valor.value);
           var dif = (v != null && o.valorBase != null) ? App.centavos(v - o.valorBase) : 0;
           juros.textContent = dif > 0 ? 'Juros: ' + brl(dif)
             : (dif < 0 ? 'Atenção: menor que o devido (' + brl(o.valorBase) + ')' : '');
@@ -3951,7 +3956,7 @@
         if(!/^\d{4}-\d{2}-\d{2}$/.test(data.value) && !(o.dataOpcional && data.value === '')){
           erro.textContent = 'Escolha a data do pagamento.'; erro.style.display = ''; data.focus(); return;
         }
-        var v = o.semValor ? null : App.parseNumeroBR(valor.value);
+        var v = o.semValor ? null : App.parseDinheiroBR(valor.value);
         if(!o.semValor && !o.valorOpcional && (v == null || !(v > 0))){
           erro.textContent = 'Informe o valor pago.'; erro.style.display = ''; valor.focus(); return;
         }
@@ -4043,8 +4048,12 @@
             App.toast('Pago' + (dif > 0 ? ' com juros de ' + brl(dif) : '') + ' — lançamento contábil criado.', 'ok');
           });
       });
-    }).catch(function(e){ App.toastErro('Erro ao gravar o pagamento', e); })
-      .then(function(){ pagandoId = null; });
+    }).catch(function(e){
+      // Sem gravacao nao ha' snapshot para redesenhar a linha: o botao
+      // ficava desabilitado ate' o F5.
+      b.disabled = false;
+      App.toastErro('Erro ao gravar o pagamento', e);
+    }).then(function(){ pagandoId = null; });
   });
 
   // Pagamento interno: mesmo dialogo (com recorrencia preservada)
@@ -5641,19 +5650,19 @@
     if(!info) return { erro: 'fornecedor não encontrado — escolha um da lista (digite para buscar)' };
     var prazo = SimuladorNucleo.parsePrazo(l.prazo);
     if(!prazo) return { info: info, erro: 'prazo inválido — use "70/84/98", "28" ou "à vista"' };
-    var valor = App.parseNumeroBR(l.valor);
+    var valor = App.parseDinheiroBR(l.valor);
     if(valor == null || valor <= 0) return { info: info, erro: 'informe o valor da compra mensal' };
     var valorCent = Math.round(valor * 100);
     // ST e frete sao ADICIONAIS: total da linha = compra + ST + frete.
     var stCent = null;
     if(String(l.st || '').trim() !== ''){
-      var sv = App.parseNumeroBR(l.st);
+      var sv = App.parseDinheiroBR(l.st);
       if(sv == null || sv < 0) return { info: info, erro: 'valor de ST inválido' };
       stCent = Math.round(sv * 100);
     }
     var freteCent = null;
     if(String(l.frete || '').trim() !== ''){
-      var fv = App.parseNumeroBR(l.frete);
+      var fv = App.parseDinheiroBR(l.frete);
       if(fv == null || fv < 0) return { info: info, erro: 'valor de frete inválido' };
       freteCent = Math.round(fv * 100);
     }
@@ -5684,7 +5693,7 @@
   // O que nao parsear fica como esta' — e' o caso invalido, que a
   // validacao ja' aponta; mascarar aqui esconderia o erro.
   function fmtDinheiroSim(txt){
-    var v = App.parseNumeroBR(txt);
+    var v = App.parseDinheiroBR(txt);
     if(v == null) return txt || '';
     return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }

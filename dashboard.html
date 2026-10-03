@@ -1438,7 +1438,9 @@
     // Janela: do primeiro ano da planilha em diante — é o que a
     // comparação consegue usar.
     const anos = linhasTodas.map(l => l.ano);
-    const ini = (anos.length ? Math.min.apply(null, anos) : new Date().getFullYear() - 1) + '-01-01';
+    // reduce, nao Math.min.apply: com dezenas de milhares de linhas o
+    // apply estoura o limite de argumentos do navegador.
+    const ini = (anos.length ? anos.reduce((m, a) => a < m ? a : m, anos[0]) : new Date().getFullYear() - 1) + '-01-01';
     return Promise.all([
       vxp.db.collection('notas').where('dataEmissao', '>=', ini).get(),
       vxp.db.collection('duplicatas').where('vencimento', '>=', ini).get(),

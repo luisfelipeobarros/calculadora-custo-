@@ -208,5 +208,28 @@ eq('todo pagamento nasce com pago definido', gravaPagoFalse >= 2, true);
 // pago nao o torna pendente de novo.
 eq('editar nao mexe em pago', /delete dados\.pago;/.test(html), true);
 
+// ── Dinheiro digitado nunca passa por parseNumeroBR ──────────
+// parseNumeroBR le "1.500" como 1,5 (serve para preco unitario de
+// planilha); num campo de valor pago ou de lancamento isso trocaria
+// mil e quinhentos reais por um real e cinquenta. Toda entrada de
+// dinheiro desta pagina usa App.parseDinheiroBR.
+eq('controle-notas.html nao chama parseNumeroBR em lugar nenhum (dinheiro digitado = parseDinheiroBR)',
+  html.split('parseNumeroBR(').length - 1, 0);
+{
+  const App = require('../app-shared.js');
+  eq('parseDinheiroBR: "1.500" = 1500, "1.500,50" = 1500.5, "1500" = 1500, "15,5" = 15.5',
+    [App.parseDinheiroBR('1.500'), App.parseDinheiroBR('1.500,50'), App.parseDinheiroBR('1500'), App.parseDinheiroBR('15,5')].join(' | '), '1500 | 1500.5 | 1500 | 15.5');
+}
+// O proximo recorrente nasce com o id da PRIMEIRA parcela + a data:
+// sem isso o id crescia 11 letras por mes.
+eq('id do proximo recorrente tira as datas ja penduradas',
+  html.indexOf("var base = String(pgto.id).replace(") !== -1 && html.indexOf(".doc(base + '_' + proxVenc)") !== -1, true);
+eq('  ...e a regra da certo nos dois casos',
+  ['abc123_2026-03-15_2026-04-15', 'abc123'].map(id => id.replace(/(_\d{4}-\d{2}-\d{2})+$/, '')).join(' | '), 'abc123 | abc123');
+// A expressao que esta' na pagina e' a MESMA do teste acima (com as
+// barras — sem elas, "\d" virava a letra d e nada era removido).
+eq('  ...com a regex escrita com as barras na pagina',
+  html.indexOf("replace(/(_\\d{4}-\\d{2}-\\d{2})+$/, '')") !== -1, true);
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;
