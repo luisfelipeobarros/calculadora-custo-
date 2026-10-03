@@ -245,14 +245,17 @@
   function filtrarLancamentos(lista, f) {
     var o = f || {};
     var termo = App.normalizarTexto(o.termo || '');
+    // Varios termos (busca com etiquetas): casa com QUALQUER um.
+    var termos = (o.termos && o.termos.length) ? o.termos.map(App.normalizarTexto).filter(Boolean) : (termo ? [termo] : []);
     return (lista || []).filter(function (l) {
       if (o.mes && l.mes !== o.mes) return false;
       if (o.bancoId && l.bancoId !== o.bancoId && l.bancoDestinoId !== o.bancoId) return false;
       if (o.tipo && l.tipo !== o.tipo) return false;
       if (o.categoriaId && l.categoriaId !== o.categoriaId) return false;
-      if (termo &&
-          App.normalizarTexto(l.historico).indexOf(termo) === -1 &&
-          App.normalizarTexto(l.fornecedor).indexOf(termo) === -1) return false;
+      if (termos.length) {
+        var hist = App.normalizarTexto(l.historico), forn = App.normalizarTexto(l.fornecedor);
+        if (!termos.some(function (t) { return hist.indexOf(t) !== -1 || forn.indexOf(t) !== -1; })) return false;
+      }
       return true;
     });
   }

@@ -914,3 +914,14 @@
   #danfeView .no-print{ display:none !important; }
   #danfeDoc a.btn{ display:none !important; }
 }
+
+/* ============================================================
+   Busca com varios termos (App.buscaComChips): as etiquetas ficam
+   na frente do campo, na mesma linha, e quebram junto com ele.
+   ============================================================ */
+.campo-chips{ display:inline-flex; flex-wrap:wrap; align-items:center; gap:4px; flex:1; min-width:220px; }
+.campo-chips > input{ flex:1; min-width:150px; }
+.chips-lista{ display:contents; }
+.chip-termo{ display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:12px; padding:2px 4px 2px 10px; background:var(--stripe); font-family:var(--font-mono); font-size:12px; white-space:nowrap; }
+.chip-termo button{ border:none; background:var(--ink-soft); color:#fff; border-radius:50%; width:16px; height:16px; line-height:15px; font-size:12px; cursor:pointer; padding:0; }
+.chip-termo button:hover{ background:var(--loss); }

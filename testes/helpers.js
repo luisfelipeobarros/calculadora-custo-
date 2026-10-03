@@ -141,6 +141,13 @@ conferir('ordem alfabetica = ordem cronologica', ['2026-10-01', '2026-02-01', '2
 // --- busca sem acento ---
 conferir('normalizarTexto tira acento', App.normalizarTexto('Porcelanato AÇÃO Ônix'), 'porcelanato acao onix');
 conferir('normalizarTexto nulo', App.normalizarTexto(null), '');
+
+// --- busca com varios termos (etiquetas) ---
+conferir('termosDaBusca: etiquetas + texto em digitacao, normalizados',
+  App.termosDaBusca({ _chips: ['132500', ' Cerâmica '], value: ' 185066 ' }), ['132500', 'ceramica', '185066']);
+conferir('termosDaBusca: campo sem etiqueta vale o texto', App.termosDaBusca({ value: 'Vetrus' }), ['vetrus']);
+conferir('termosDaBusca: tudo vazio = lista vazia', App.termosDaBusca({ _chips: [], value: '  ' }), []);
+conferir('termosDaBusca: sem campo = lista vazia', App.termosDaBusca(null), []);
 conferir('normalizarTexto acha com acento no termo',
          App.normalizarTexto('CERÂMICA').includes(App.normalizarTexto('ceramica')), true);
 

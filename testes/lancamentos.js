@@ -86,6 +86,11 @@ eq('filtro por banco pega origem E destino da transferencia',
 eq('filtro por tipo', L.filtrarLancamentos(lista, { tipo: 'entrada' }).map(l => l.id), ['d']);
 eq('busca sem acento no historico ("compesa")',
   L.filtrarLancamentos(lista, { termo: 'compesa' }).map(l => l.id), ['a']);
+// Busca com etiquetas: casa com QUALQUER termo; termo inexistente nao zera o resto.
+eq('varios termos = uniao',
+  L.filtrarLancamentos(lista, { termos: ['compesa', 'nao-existe-zzz'] }).map(l => l.id), ['a']);
+eq('lista de termos vazia = sem filtro de texto',
+  L.filtrarLancamentos(lista, { termos: [] }).length, L.filtrarLancamentos(lista, {}).length);
 {
   const t = L.totaisDoFiltro(L.filtrarLancamentos(lista, { mes: '2026-07' }));
   eq('totais: transferencia NAO soma em saida nem entrada',

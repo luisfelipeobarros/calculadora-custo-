@@ -38,10 +38,11 @@ const m = new Function(
   extrair('marketShareFornecedores') + '\n' +
   extrair('crescimentoAnual') + '\n' +
   extrair('crescimentoMensalComparado') + '\n' +
+  extrair('crescimentoAcumulado') + '\n' +
   extrair('canonizarNomes') + '\n' +
   extrair('precoVersusVolume') + '\n' +
   extrair('destaquesAutomaticos') + '\n' +
-  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, crescimentoMensalComparado, canonizarNomes, precoVersusVolume, destaquesAutomaticos };'
+  'return { parseGvizTexto, linhasDaResposta, filtrarLinhas, resumoKpis, agruparPor, seriesMensais, participacaoCategorias, marketShareFornecedores, crescimentoAnual, crescimentoMensalComparado, crescimentoAcumulado, canonizarNomes, precoVersusVolume, destaquesAutomaticos };'
 )();
 
 let problemas = 0;
@@ -235,6 +236,34 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
   eq('sempre 12 posições, com a flag de base', [r.valores.length, r.temBase], [12, true]);
   eq('nenhum mês comparável -> temBase false (a tela avisa)',
     m.crescimentoMensalComparado([l(2026, 1, 10)], 2026).temBase, false);
+}
+
+// ── Crescimento ACUMULADO do ano de um recorte ───────────────
+
+{
+  // 2026 vendeu em jan, fev e mar; 2025 tem o ano inteiro. O acumulado
+  // compara jan–mar × jan–mar: abril em diante de 2025 fica de fora.
+  const l = (ano, mes, fat, qtd) =>
+    ({ ano, mes, fornecedor: 'F', categoria: 'C', quantidade: qtd, faturamento: fat, lucro: 1 });
+  const dados = [
+    l(2025, 1, 100, 10), l(2025, 2, 200, 20), l(2025, 3, 100, 10), l(2025, 4, 999, 99), l(2025, 12, 500, 50),
+    l(2026, 1, 150, 10), l(2026, 2, 150, 10), l(2026, 3, 180, 12)
+  ];
+  const r = m.crescimentoAcumulado(dados, 2026);
+  eq('acumulado: periodo = meses com venda no ano', [r.de, r.ate, r.meses], [1, 3, 3]);
+  eq('acumulado: faturamento 480 × 400 dos MESMOS meses = +20%',
+    [r.faturamento.atual, r.faturamento.anterior, Math.round(r.faturamento.cresc * 1000) / 1000], [480, 400, 0.2]);
+  eq('acumulado: quantidade 32 × 40 = -20%', [r.quantidade.atual, r.quantidade.anterior, Math.round(r.quantidade.cresc * 1000) / 1000], [32, 40, -0.2]);
+  eq('acumulado: preco medio do PERIODO (480/32 = 15 × 400/40 = 10) = +50%, nao a media dos meses',
+    [r.preco.atual, r.preco.anterior, Math.round(r.preco.cresc * 1000) / 1000], [15, 10, 0.5]);
+  // Mes sem venda no meio do ano em curso nao entra na comparacao.
+  const comBuraco = m.crescimentoAcumulado([l(2025, 1, 100, 1), l(2025, 2, 100, 1), l(2025, 3, 100, 1), l(2026, 1, 100, 1), l(2026, 3, 100, 1)], 2026);
+  eq('acumulado: mes sem venda no ano fica fora dos dois lados', [comBuraco.meses, comBuraco.faturamento.anterior, comBuraco.faturamento.cresc], [2, 200, 0]);
+  eq('acumulado: sem base no ano anterior = cresc null, nunca infinito',
+    m.crescimentoAcumulado([l(2026, 1, 100, 1)], 2026).faturamento.cresc, null);
+  eq('acumulado: ano sem venda = null', m.crescimentoAcumulado([l(2025, 1, 100, 1)], 2026), null);
+  eq('acumulado: sem quantidade na planilha, preco medio null',
+    m.crescimentoAcumulado([l(2025, 1, 100, 0), l(2026, 1, 100, 0)], 2026).preco.atual, null);
 }
 
 // ── Canonização de nomes (o caso real "Outros"/"OUTROS") ─────

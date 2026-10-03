@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=16">
+<link rel="stylesheet" href="app-shared.css?v=17">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -820,14 +820,14 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=26"></script>
+<script src="app-shared.js?v=27"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=6"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
 <script src="simulador-nucleo.js?v=4"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
-<script src="lancamentos-nucleo.js?v=5"></script>
+<script src="lancamentos-nucleo.js?v=6"></script>
 <script src="custos-nucleo.js?v=3"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -850,6 +850,9 @@
   var normalizarTexto = App.normalizarTexto, safeUrl = App.safeUrl;
 
   App.instalarErroGlobal();
+  // Busca com varios termos: Enter vira etiqueta, o resultado e' a uniao.
+  ['buscaImportar', 'buscaCanc', 'buscaProdutoImportar', 'buscaPag', 'buscaForn', 'buscaVinculo', 'lcBusca']
+    .forEach(function(id){ App.buscaComChips(document.getElementById(id)); });
 
   var db = null;
   var notas = [];        // [{id(chave), ...campos}]
@@ -1454,11 +1457,13 @@
     // esta' ate' salvar.
     if(Object.keys(vinculosEdicao).length) return;
 
-    var termo = normalizarTexto($('buscaVinculo').value);
+    var termos = App.termosDaBusca($('buscaVinculo'));
     var grupos = gruposDeFornecedores();
-    if(termo) grupos = grupos.filter(function(g){
-      return normalizarTexto(g.rotulo).includes(termo) ||
-        g.cnpjs.some(function(c){ return c.indexOf(termo) !== -1; });
+    if(termos.length) grupos = grupos.filter(function(g){
+      return termos.some(function(termo){
+        return normalizarTexto(g.rotulo).includes(termo) ||
+          g.cnpjs.some(function(c){ return c.indexOf(termo) !== -1; });
+      });
     });
     if(!grupos.length){
       $('tabelaVinculos').innerHTML = '<p class="nota-explicativa">Nenhum fornecedor nas notas carregadas.</p>';
@@ -1771,7 +1776,7 @@
     bancoId: $('lcBancoFiltro').value,
     tipo: $('lcTipoFiltro').value,
     categoriaId: $('lcCategoriaFiltro').value,
-    termo: $('lcBusca').value
+    termos: App.termosDaBusca($('lcBusca'))
   });
 
   function renderLancamentos(){
@@ -2606,8 +2611,8 @@
     $('tituloImportar').textContent = canc ? 'Notas canceladas' : 'Notas a importar para o sistema';
     $('explicaImportar').style.display = canc ? 'none' : '';
     $('explicaCanceladas').style.display = canc ? '' : 'none';
-    $('buscaImportar').style.display = canc ? 'none' : '';
-    $('buscaCanc').style.display = canc ? '' : 'none';
+    App.mostrarBusca($('buscaImportar'), !canc);
+    App.mostrarBusca($('buscaCanc'), canc);
     $('ordDataBtn').style.display = canc ? 'none' : '';
     $('zonaImportar').style.display = canc ? 'none' : '';
     $('zonaCanceladas').style.display = canc ? '' : 'none';
@@ -2631,8 +2636,8 @@
   var COLUNAS_IMPORTAR = 9;
 
   function renderImportar(){
-    var termo = normalizarTexto($('buscaImportar').value);
-    var termoProduto = normalizarTexto($('buscaProdutoImportar').value);
+    var termos = App.termosDaBusca($('buscaImportar'));
+    var termosProduto = App.termosDaBusca($('buscaProdutoImportar'));
     var excluirProduto = $('excluirProdutoImportar').checked;
 
     var pendentes = notas.filter(notaAImportar);
@@ -2666,12 +2671,17 @@
       ? ehNfse
       : function(n){ return !ehNfse(n); });
 
-    if(termo) lista = lista.filter(function(n){
-      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
-        normalizarTexto(n.numero).includes(termo) || normalizarTexto(n.id).includes(termo);
+    if(termos.length) lista = lista.filter(function(n){
+      return termos.some(function(termo){
+        return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
+          normalizarTexto(n.numero).includes(termo) || normalizarTexto(n.id).includes(termo);
+      });
     });
-    if(termoProduto) lista = lista.filter(function(n){
-      var contem = (n.produtosResumo || []).some(function(p){ return normalizarTexto(p).includes(termoProduto); });
+    if(termosProduto.length) lista = lista.filter(function(n){
+      var contem = (n.produtosResumo || []).some(function(p){
+        var np = normalizarTexto(p);
+        return termosProduto.some(function(t){ return np.includes(t); });
+      });
       return excluirProduto ? !contem : contem;
     });
 
@@ -2682,7 +2692,7 @@
 
     if(!lista.length){
       $('tabelaImportar').innerHTML = '<p class="nota-explicativa">' +
-        ((termo || termoProduto) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
+        ((termos.length || termosProduto.length) ? 'Nada encontrado com esses filtros.' : 'Nenhuma nota pendente de importação. 🎉') + '</p>';
       $('totalImportar').textContent = '';
       $('maisImportarBtn').style.display = 'none';
       return;
@@ -3542,7 +3552,7 @@
 
     var hoje = hojeISO();
     var inicioHoje = inicioJanelaHoje();
-    var termo = normalizarTexto($('buscaPag').value);
+    var termos = App.termosDaBusca($('buscaPag'));
 
     // Monta lista conforme escopo
     var lista = [];
@@ -3553,9 +3563,11 @@
         var pago = d.pago === true;
         if(!passaFiltroPag(pago, d.vencimento, hoje, inicioHoje)) return;
         var rotulo = fornecedorDaDuplicata(d);
-        if(termo && !(casaFornecedor(rotulo, d.nomeEmitente, termo) ||
-           normalizarTexto(d.numeroNota).includes(termo) ||
-           (d.obsPagamento && normalizarTexto(d.obsPagamento).includes(termo)))) return;
+        if(termos.length && !termos.some(function(termo){
+          return casaFornecedor(rotulo, d.nomeEmitente, termo) ||
+            normalizarTexto(d.numeroNota).includes(termo) ||
+            (d.obsPagamento && normalizarTexto(d.obsPagamento).includes(termo));
+        })) return;
         lista.push({
           id: d.id,
           _tipo: 'fornecedor',
@@ -3580,9 +3592,11 @@
         if(!passaFiltroPag(pago, p.vencimento, hoje, inicioHoje)) return;
         var descricao = p.descricao || 'Sem descrição';
         var categoria = p.categoria || 'outro';
-        if(termo && normalizarTexto(descricao).indexOf(termo) === -1 &&
-           normalizarTexto(categoriaPorValor(categoria).rotulo).indexOf(termo) === -1 &&
-           !(p.obsPagamento && normalizarTexto(p.obsPagamento).includes(termo))) return;
+        if(termos.length && !termos.some(function(termo){
+          return normalizarTexto(descricao).indexOf(termo) !== -1 ||
+            normalizarTexto(categoriaPorValor(categoria).rotulo).indexOf(termo) !== -1 ||
+            (p.obsPagamento && normalizarTexto(p.obsPagamento).includes(termo));
+        })) return;
         lista.push({
           id: p.id,
           _tipo: 'interno',
@@ -4379,13 +4393,16 @@
       return;
     }
 
-    var termo = normalizarTexto($('buscaForn').value);
+    var termos = App.termosDaBusca($('buscaForn'));
 
     // O slice protege o cache: o sort logo abaixo reordena a copia,
     // nao o mapa compartilhado com o Simulador.
     var linhas = mapaFornecedores().slice();
 
-    if(termo) linhas = linhas.filter(function(l){ return normalizarTexto(l.fornecedor).indexOf(termo) !== -1; });
+    if(termos.length) linhas = linhas.filter(function(l){
+      var nf = normalizarTexto(l.fornecedor);
+      return termos.some(function(t){ return nf.indexOf(t) !== -1; });
+    });
 
     // Ocultos saem ANTES do laco de calculo: linha oculta nao paga
     // media de compra nem prazo medio. O chip conta quantos sao.
@@ -4398,7 +4415,7 @@
 
     if(!linhas.length){
       $('tabelaForn').innerHTML = '<p class="nota-explicativa">' +
-        (termo ? 'Nenhum fornecedor com esse nome.'
+        (termos.length ? 'Nenhum fornecedor com esse nome.'
           : (qtdOcultos ? 'Todos os fornecedores estão ocultos — use "Mostrar ocultos".'
             : 'Nenhuma nota com data de emissão no período carregado.')) + '</p>';
       $('totalForn').textContent = '';
@@ -4513,14 +4530,16 @@
   var COLUNAS_CANCELADAS = 8;
 
   function renderCanceladas(){
-    var termo = normalizarTexto($('buscaCanc').value);
+    var termos = App.termosDaBusca($('buscaCanc'));
     var lista = notas.filter(function(n){ return !notaAtiva(n); });
     if(termo) lista = lista.filter(function(n){
       // O numero da nota DEVOLVIDA tambem acha a cancelada: e' assim
       // que se responde "cadê a devolução da 375912?".
-      return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
-        normalizarTexto(n.numero).includes(termo) ||
-        (n.devolucaoDe && normalizarTexto(n.devolucaoDe).includes(termo));
+      return termos.some(function(termo){
+        return casaFornecedor(fornecedorDaNota(n), n.nomeEmitente, termo) ||
+          normalizarTexto(n.numero).includes(termo) ||
+          (n.devolucaoDe && normalizarTexto(n.devolucaoDe).includes(termo));
+      });
     });
     lista.sort(function(a,b){
       return (b.canceladaEm || b.dataEmissao || '').localeCompare(a.canceladaEm || a.dataEmissao || '');

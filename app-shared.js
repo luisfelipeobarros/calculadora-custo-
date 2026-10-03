@@ -1508,6 +1508,88 @@
   }
 
   /* ============================================================
+     9d-bis. Busca com varios termos (pedido de 03/10/2026)
+
+     O campo de busca continua sendo o MESMO <input>: digitar filtra
+     na hora, como sempre. Enter transforma o que foi digitado numa
+     etiqueta e libera o campo para o proximo termo; o resultado e' a
+     UNIAO — aparece o que casar com QUALQUER etiqueta (ou com o texto
+     ainda em digitacao). Backspace no campo vazio tira a ultima.
+
+     Cada tela continua decidindo o que e' "casar"; daqui so' sai a
+     lista de termos, ja' normalizados.
+     ============================================================ */
+
+  function termosDaBusca(input) {
+    if (!input) return [];
+    var ts = (input._chips || []).slice();
+    var vivo = String(input.value || '').trim();
+    if (vivo) ts.push(vivo);
+    return ts.map(function (t) { return normalizarTexto(t).trim(); }).filter(Boolean);
+  }
+
+  function buscaComChips(input) {
+    if (!input || input._chips) return;
+    input._chips = [];
+    // DOM de teste (ou pagina sem o campo no lugar): sem etiqueta
+    // desenhada, mas termosDaBusca continua valendo com o texto vivo.
+    if (!input.parentNode || typeof document === 'undefined' || !input.addEventListener) return;
+
+    var caixa = document.createElement('span');
+    caixa.className = 'campo-chips';
+    var lista = document.createElement('span');
+    lista.className = 'chips-lista';
+    if (input.style && input.style.display === 'none') caixa.style.display = 'none';
+    input.parentNode.insertBefore(caixa, input);
+    caixa.appendChild(lista);
+    caixa.appendChild(input);
+    if (input.style) input.style.display = '';
+    input._caixaChips = caixa;
+    input.title = 'Digite e pressione Enter para somar mais um termo à busca';
+
+    function avisar() {
+      // As telas ja' escutam 'input' para refiltrar: o mesmo evento serve.
+      if (typeof Event === 'function') input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    function desenhar() {
+      lista.innerHTML = '';
+      input._chips.forEach(function (t, i) {
+        var chip = document.createElement('span');
+        chip.className = 'chip-termo';
+        var txt = document.createElement('span');
+        txt.textContent = t;
+        var x = document.createElement('button');
+        x.type = 'button';
+        x.textContent = '×';
+        x.setAttribute('aria-label', 'Remover o termo ' + t);
+        x.addEventListener('click', function () { input._chips.splice(i, 1); desenhar(); avisar(); input.focus(); });
+        chip.appendChild(txt); chip.appendChild(x); lista.appendChild(chip);
+      });
+    }
+    input.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') {
+        ev.preventDefault();
+        var v = input.value.trim();
+        if (!v) return;
+        var ja = input._chips.map(normalizarTexto).indexOf(normalizarTexto(v)) !== -1;
+        if (!ja) input._chips.push(v);
+        input.value = '';
+        desenhar(); avisar();
+      } else if (ev.key === 'Backspace' && input.value === '' && input._chips.length) {
+        input._chips.pop();
+        desenhar(); avisar();
+      }
+    });
+  }
+
+  // Mostrar/esconder o campo junto com as etiquetas dele.
+  function mostrarBusca(input, visivel) {
+    if (!input) return;
+    var alvo = input._caixaChips || input;
+    alvo.style.display = visivel ? '' : 'none';
+  }
+
+  /* ============================================================
      9e. Vendas x Compras (Controle de Notas e Dashboard)
      ============================================================
 
@@ -1759,6 +1841,9 @@
     chaveMarca: chaveMarca,
     marcaDoVinculo: marcaDoVinculo,
     cruzarVendasCompras: cruzarVendasCompras,
+    termosDaBusca: termosDaBusca,
+    buscaComChips: buscaComChips,
+    mostrarBusca: mostrarBusca,
 
     instalarErroGlobal: instalarErroGlobal
   };

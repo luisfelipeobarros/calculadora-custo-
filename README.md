@@ -29,8 +29,8 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=16">
-<script src="app-shared.js?v=26"></script>
+<link rel="stylesheet" href="app-shared.css?v=17">
+<script src="app-shared.js?v=27"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -217,7 +217,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 106 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 110 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -340,7 +340,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-16. **Lançamentos contábeis** — 60 verificações em
+16. **Lançamentos contábeis** — 62 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
     transferência = D destino / C origem — dado faltando não monta
@@ -359,7 +359,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
 
-17. **Dashboard de vendas** — 60 verificações extraídas do próprio
+17. **Dashboard de vendas** — 68 verificações extraídas do próprio
     `dashboard.html` (o teste mede o código que roda na tela): o
     desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
     (ordem e acento não importam), a **regra de ouro** da margem

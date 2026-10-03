@@ -159,6 +159,12 @@
       <h2>Relatório de vendas</h2>
       <span class="sub-periodo">Acesso restrito — entre com o usuário do sistema</span>
       <div id="loginConteudo"><div class="estado">Carregando...</div></div>
+      <div class="vxp-rodape" id="instalarCaixa" style="display:none; margin-top:10px;">
+        <button type="button" id="instalarAppBtn">📲 Instalar no celular</button>
+      </div>
+      <span class="sub-periodo" id="instalarDicaIos" style="display:none; margin-top:10px;">
+        No iPhone: toque em Compartilhar e depois em "Adicionar à Tela de Início".
+      </span>
     </div>
   </div>
 
@@ -229,6 +235,7 @@
         <button type="button" data-modo="preco" aria-pressed="false">Preço médio</button>
       </div>
       <span class="sub-periodo" id="crescPeriodo"></span>
+      <span class="sub-periodo" id="crescAcumulado" style="display:none; font-weight:700;"></span>
       <div class="grafico-caixa"><canvas id="gCrescAnual"></canvas></div>
       <div class="estado" id="crescVazio" style="display:none; padding:24px;"></div>
     </div>
@@ -246,6 +253,7 @@
 
   <div class="rodape" id="rodapeDash" style="display:none;">
     <span id="rodapeInfo"></span>
+    <button type="button" id="instalarAppBtn2" style="display:none;">📲 Instalar app</button>
     <button type="button" id="recarregarDadosBtn">↻ Recarregar dados</button>
     <button type="button" id="sairBtn">Sair</button>
   </div>
@@ -465,6 +473,33 @@
       return v / anterior[i] - 1;
     });
     return { valores, temBase };
+  }
+
+  // Crescimento ACUMULADO do ano de um recorte ja' filtrado (pedido de
+  // 03/10/2026): a linha mes a mes mostra o ritmo, mas nao responde
+  // "e no ano, como esta'?". Soma os meses em que o ANO tem venda
+  // contra os MESMOS meses do ano anterior — o ano em curso so' se
+  // compara com o pedaco equivalente do anterior. Sem base no ano
+  // anterior o crescimento e' null (nunca infinito).
+  function crescimentoAcumulado(linhas, ano){
+    const fa = new Array(12).fill(0), fn = new Array(12).fill(0);
+    const qa = new Array(12).fill(0), qn = new Array(12).fill(0);
+    linhas.forEach(l => {
+      if(l.ano === ano){ fa[l.mes - 1] += l.faturamento; qa[l.mes - 1] += (l.quantidade || 0); }
+      else if(l.ano === ano - 1){ fn[l.mes - 1] += l.faturamento; qn[l.mes - 1] += (l.quantidade || 0); }
+    });
+    const meses = [];
+    fa.forEach((v, i) => { if(v > 0) meses.push(i); });
+    if(!meses.length) return null;
+    const soma = (arr) => meses.reduce((s, i) => s + arr[i], 0);
+    const par = (atual, anterior) => ({ atual, anterior, cresc: anterior > 0 ? atual / anterior - 1 : null });
+    const fatA = soma(fa), fatN = soma(fn), qtdA = soma(qa), qtdN = soma(qn);
+    return {
+      de: meses[0] + 1, ate: meses[meses.length - 1] + 1, meses: meses.length,
+      faturamento: par(fatA, fatN),
+      quantidade: par(qtdA, qtdN),
+      preco: par(qtdA > 0 ? fatA / qtdA : null, qtdN > 0 ? fatN / qtdN : null)
+    };
   }
 
   // A planilha traz o MESMO nome com grafias diferentes ("Outros" em
@@ -764,8 +799,28 @@
     $('toggleVisaoCresc').style.display = recorteAtivo ? 'none' : '';
     $('toggleModoLinha').style.display = recorteAtivo ? '' : 'none';
 
+    $('crescAcumulado').style.display = 'none';
     if(recorteAtivo){
       const nomeRecorte = [fornSel, catSel].filter(Boolean).join(' · ');
+
+      // Acumulado do ano, na grandeza do modo aberto: % e R$ falam de
+      // faturamento; Qtd, de quantidade; Preco medio, do preco medio do
+      // periodo inteiro (faturamento ÷ quantidade, nao a media dos meses).
+      const ac = crescimentoAcumulado(base, anoSel);
+      if(ac){
+        const campo = linhaModo === 'qtd' ? 'quantidade' : (linhaModo === 'preco' ? 'preco' : 'faturamento');
+        const p = ac[campo];
+        const fmtAc = linhaModo === 'qtd' ? (v => fmtNum(v, 0)) : (linhaModo === 'preco' ? (v => 'R$ ' + fmtNum(v, 2)) : (v => 'R$ ' + fmtMi(v)));
+        const periodo = ac.de === ac.ate ? MESES[ac.de - 1] : MESES[ac.de - 1] + '–' + MESES[ac.ate - 1];
+        const el = $('crescAcumulado');
+        if(p.atual != null){
+          el.style.display = '';
+          el.style.color = p.cresc == null ? '' : (p.cresc >= 0 ? '#2E9E5B' : '#D91F26');
+          el.textContent = 'Acumulado ' + periodo + ' de ' + anoSel + ': ' +
+            (p.cresc == null ? 'sem base em ' + (anoSel - 1) : pctS(p.cresc)) +
+            ' (' + fmtAc(p.atual) + (p.anterior != null && p.cresc != null ? ' × ' + fmtAc(p.anterior) + ' em ' + (anoSel - 1) : '') + ')';
+        }
+      }
 
       // Modos R$ e Qtd: o faturamento (ou a quantidade vendida) mês a
       // mês do recorte, ano selecionado (azul, com os valores) × ano
@@ -1293,7 +1348,7 @@
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
-    'app-shared.js?v=26'
+    'app-shared.js?v=27'
   ];
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
@@ -1473,6 +1528,27 @@
       }));
     $('recarregarDadosBtn').addEventListener('click', () => { carregarDados().then(vxpBaixar); });
     $('sairBtn').addEventListener('click', sair);
+
+    // Instalar como app (pedido de 03/10/2026). O navegador so' entrega
+    // o convite (beforeinstallprompt) quando a pagina e' instalavel e
+    // ainda nao esta' instalada; ate' la' o botao nem aparece. No
+    // iPhone esse evento nao existe: vale a dica do Compartilhar.
+    let conviteInstalar = null;
+    const emApp = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    const mostrarInstalar = (sim) => {
+      $('instalarCaixa').style.display = sim ? '' : 'none';
+      $('instalarAppBtn2').style.display = sim ? '' : 'none';
+    };
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); conviteInstalar = e; mostrarInstalar(true); });
+    window.addEventListener('appinstalled', () => { conviteInstalar = null; mostrarInstalar(false); });
+    const instalar = () => {
+      if(!conviteInstalar) return;
+      conviteInstalar.prompt();
+      conviteInstalar.userChoice.then(() => { conviteInstalar = null; mostrarInstalar(false); });
+    };
+    $('instalarAppBtn').addEventListener('click', instalar);
+    $('instalarAppBtn2').addEventListener('click', instalar);
+    if(!emApp && /iphone|ipad|ipod/i.test(window.navigator.userAgent || '')) $('instalarDicaIos').style.display = '';
 
     // O formulário de login é redesenhado a cada estado, então as
     // escutas ficam no contêiner.
