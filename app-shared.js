@@ -1800,6 +1800,231 @@
   }
 
   /* ============================================================
+     9d-quater. Carimbo de alteracao em notas e duplicatas (06/10/2026)
+
+     Toda gravacao em `notas` e `duplicatas` marca `alteradoEm` com a
+     hora do servidor — o Apps Script (updateTransforms) e os apps
+     (gravarCarimbado). Com isso a tela guarda a base no cache do
+     navegador e ESCUTA AO VIVO so' o que tem carimbo mais novo: fica
+     em tempo real pagando pelo que mudou, nao pela janela inteira.
+
+     Quem liga a leitura por carimbo e' o documento config/notasSync
+     ({ carimbo: true }), gravado pela funcao ligarLeituraPorCarimbo do
+     Apps Script — so' depois de as regras e o script novos estarem no
+     ar. Desligado, as telas leem exatamente como antes.
+     ============================================================ */
+
+  var CAMPO_CARIMBO = 'alteradoEm';
+  // Preferencia da sessao. Enquanto as regras antigas estiverem no ar,
+  // elas recusam o campo novo: a gravacao e' refeita sem ele e a sessao
+  // passa a gravar sem. Com as regras novas (que EXIGEM o carimbo) e' o
+  // contrario. Assim o app funciona antes e depois da publicacao das
+  // regras, sem depender da ordem.
+  var carimboAceito = true;
+  // Quem esta' lendo por carimbo precisa saber quando as regras o
+  // recusam: sem carimbo, a gravacao feita AQUI nao voltaria pela
+  // escuta — a tela tem de voltar para a leitura inteira.
+  var ouvintesDeRecusa = [];
+  function aoRecusarCarimbo(fn) { ouvintesDeRecusa.push(fn); }
+
+  // fn(carimbar) faz a gravacao e devolve a Promise; carimbar(campos)
+  // devolve os campos com (ou sem) o carimbo. Use para TODA gravacao em
+  // notas/duplicatas — um teste trava isso.
+  function gravarCarimbado(fn) {
+    function tentar(com) {
+      var usou = false;
+      var p;
+      try {
+        p = fn(function (campos) {
+          usou = true;
+          if (!com) return campos;
+          var c = Object.assign({}, campos);
+          c[CAMPO_CARIMBO] = global.firebase.firestore.FieldValue.serverTimestamp();
+          return c;
+        });
+      } catch (e) { p = Promise.reject(e); }
+      return { promessa: Promise.resolve(p), usou: function () { return usou; } };
+    }
+    var primeira = carimboAceito;
+    var t = tentar(primeira);
+    return t.promessa.catch(function (e) {
+      // Sem carimbo na gravacao, tentar "do outro jeito" seria repetir a mesma coisa.
+      if (!ehPermissaoNegada(e) || !t.usou()) throw e;
+      return tentar(!primeira).promessa.then(function (r) {
+        carimboAceito = !primeira;
+        if (!carimboAceito) ouvintesDeRecusa.forEach(function (f) { try { f(); } catch (x) { console.error(x); } });
+        return r;
+      }, function () { throw e; });
+    });
+  }
+
+  // Le config/notasSync. Devolve { exclusoes } quando a leitura por
+  // carimbo esta' ligada, null quando nao (ou quando nao deu para saber).
+  function lerSincNotas(db) {
+    if (!carimboAceito) return Promise.resolve(null); // as regras no ar ainda nao aceitam o carimbo
+    return db.collection('config').doc('notasSync').get().then(function (d) {
+      var x = d && d.exists ? d.data() : null;
+      return (x && x.carimbo === true) ? { exclusoes: Number(x.exclusoes) || 0 } : null;
+    }).catch(function (e) {
+      console.error('Nao foi possivel ler config/notasSync:', e);
+      return null;
+    });
+  }
+
+  // escutarComDelta — a versao AO VIVO do lerComDelta.
+  //
+  // o: { consultas, delta, campo, chave, hoje, versao?, aceita,
+  //      aoReceber, aoFalhar, armazenamento?, deMillis? }
+  //   consultas — as consultas que se escutaria inteiras; a tela mostra
+  //     a UNIAO delas (ex.: notas da janela + canceladas de qualquer epoca);
+  //   delta — a colecao pura, base da escuta "carimbo mais novo que";
+  //   aceita(dados) — o documento pertence a' uniao das consultas? O que
+  //     chega pelo carimbo pode ter saido dela (nota reativada fora da
+  //     janela, duplicata sem vencimento que ganhou data antiga);
+  //   aoReceber(mudancas, info) — mudancas: [{ id, dados }], dados null
+  //     quando o documento saiu; info: { modo, motivo }.
+  //
+  // Modo "completa": escuta as consultas inteiras, como sempre — primeira
+  //   vez do navegador, virada do dia, exclusao em outra maquina (versao),
+  //   cache menor do que deveria. Quando todas estao em dia com o
+  //   servidor, guarda o controle { dia, versao, ultima, qtd }.
+  // Modo "delta": base = as consultas lidas do CACHE; ao vivo = so' a
+  //   escuta por carimbo. Nada e' lido do servidor alem do que mudou.
+  //
+  // Devolve { parar, modo }.
+  function escutarComDelta(o) {
+    var arm = o.armazenamento === undefined ? armazenamentoPadrao() : o.armazenamento;
+    var versao = o.versao == null ? null : o.versao;
+    var deMillis = o.deMillis || function (ms) { return global.firebase.firestore.Timestamp.fromMillis(ms); };
+    var cancelar = [];
+    var parado = false;
+    var modo = null;
+    var VIVO = { includeMetadataChanges: true }; // avisa quando a escuta fica em dia com o servidor
+
+    function carimboDe(doc) {
+      var v = doc.get ? doc.get(o.campo) : doc.data()[o.campo];
+      return v && v.toMillis ? v.toMillis() : 0;
+    }
+    function maiorCarimbo(docs, atual) {
+      docs.forEach(function (d) { var ms = carimboDe(d); if (ms > atual) atual = ms; });
+      return atual;
+    }
+    function falha(e) { if (!parado && o.aoFalhar) o.aoFalhar(e); }
+
+    function completa(motivo) {
+      modo = 'completa';
+      var n = o.consultas.length;
+      var mapas = [], chegou = [], emDia = [], varrida = [];
+      for (var k = 0; k < n; k++) { mapas.push(new Map()); chegou.push(false); emDia.push(false); varrida.push(false); }
+      var ultima = 0;
+      var avisou = false;
+
+      function naUniao(id) {
+        for (var j = 0; j < n; j++) if (mapas[j].has(id)) return mapas[j].get(id);
+        return null;
+      }
+      function tamanhoDaUniao() {
+        var ids = new Set();
+        mapas.forEach(function (m) { m.forEach(function (_, id) { ids.add(id); }); });
+        return ids.size;
+      }
+
+      o.consultas.forEach(function (q, i) {
+        cancelar.push(q.onSnapshot(VIVO, function (snap) {
+          if (parado) return;
+          var mexidos = [];
+          snap.docChanges().forEach(function (ch) {
+            if (ch.type === 'removed') mapas[i].delete(ch.doc.id);
+            else mapas[i].set(ch.doc.id, ch.doc.data());
+            mexidos.push(ch.doc);
+          });
+          chegou[i] = true;
+          emDia[i] = !snap.metadata.fromCache;
+          if (emDia[i]) {
+            // Na primeira vez em dia, o conjunto inteiro; depois, so' o que mudou.
+            if (!varrida[i]) { varrida[i] = true; ultima = maiorCarimbo(listaDeDocs(snap), ultima); }
+            else ultima = maiorCarimbo(mexidos, ultima);
+          }
+          if (chegou.indexOf(false) !== -1) return; // a tela so' recebe quando todas chegaram
+
+          if (emDia.indexOf(false) === -1) {
+            gravarMetaLeitura(o.chave, { dia: o.hoje, versao: versao, ultima: ultima, qtd: tamanhoDaUniao() }, arm);
+          }
+          var mudancas;
+          if (!avisou) {
+            avisou = true;
+            var vistos = new Set();
+            mudancas = [];
+            mapas.forEach(function (m) {
+              m.forEach(function (dados, id) {
+                if (!vistos.has(id)) { vistos.add(id); mudancas.push({ id: id, dados: dados }); }
+              });
+            });
+          } else {
+            // Saiu de uma consulta mas continua em outra: continua na tela.
+            mudancas = mexidos.map(function (d) { return { id: d.id, dados: naUniao(d.id) }; });
+            if (!mudancas.length) return;
+          }
+          o.aoReceber(mudancas, { modo: 'completa', motivo: motivo });
+        }, falha));
+      });
+    }
+
+    function delta(meta) {
+      Promise.all(o.consultas.map(function (q) { return q.get({ source: 'cache' }); })).then(function (snaps) {
+        if (parado) return;
+        var uniao = new Map();
+        snaps.forEach(function (s) { s.forEach(function (d) { uniao.set(d.id, d.data()); }); });
+        if (uniao.size < meta.qtd) { completa('cache do navegador incompleto'); return; }
+
+        modo = 'delta';
+        var ultima = meta.ultima || 0;
+        var avisou = false;
+        var desde = deMillis(Math.max(0, ultima - FOLGA_DELTA_MS));
+        cancelar.push(o.delta.where(o.campo, '>', desde).onSnapshot(VIVO, function (snap) {
+          if (parado) return;
+          var mudancas = [];
+          snap.docChanges().forEach(function (ch) {
+            var id = ch.doc.id;
+            var dados = ch.type === 'removed' ? null : ch.doc.data(); // removido daqui = apagado
+            if (dados && o.aceita(dados)) { uniao.set(id, dados); mudancas.push({ id: id, dados: dados }); }
+            else if (uniao.has(id)) { uniao.delete(id); mudancas.push({ id: id, dados: null }); }
+          });
+          // So' a escuta em dia com o servidor garante que NADA mais novo
+          // ficou de fora: e' a unica que pode avancar o controle.
+          if (!snap.metadata.fromCache) {
+            ultima = maiorCarimbo(listaDeDocs(snap), ultima);
+            gravarMetaLeitura(o.chave, { dia: meta.dia, versao: versao, ultima: ultima, qtd: uniao.size }, arm);
+          }
+          if (!avisou) {
+            avisou = true;
+            mudancas = [];
+            uniao.forEach(function (dados, id) { mudancas.push({ id: id, dados: dados }); });
+          } else if (!mudancas.length) {
+            return;
+          }
+          o.aoReceber(mudancas, { modo: 'delta', motivo: null });
+        }, falha));
+      }, function () { if (!parado) completa('cache do navegador indisponível'); });
+    }
+
+    var meta = lerMetaLeitura(o.chave, arm);
+    if (!meta) completa('primeira leitura neste navegador');
+    else if (meta.dia !== o.hoje) completa('renovação diária');
+    else if (meta.versao !== versao) completa('houve exclusão em outra máquina');
+    else delta(meta);
+
+    return {
+      parar: function () {
+        parado = true;
+        cancelar.forEach(function (c) { try { c(); } catch (e) { /* ja' cancelada */ } });
+        cancelar = [];
+      },
+      modo: function () { return modo; }
+    };
+  }
+
+  /* ============================================================
      9e. Vendas x Compras (Controle de Notas e Dashboard)
      ============================================================
 
@@ -2055,6 +2280,10 @@
     lerFaixaComCache: lerFaixaComCache,
     esquecerLeitura: esquecerLeitura,
     itensQueFaltam: itensQueFaltam,
+    gravarCarimbado: gravarCarimbado,
+    aoRecusarCarimbo: aoRecusarCarimbo,
+    lerSincNotas: lerSincNotas,
+    escutarComDelta: escutarComDelta,
     ajustarLeitura: ajustarLeitura,
     termosDaBusca: termosDaBusca,
     buscaComChips: buscaComChips,

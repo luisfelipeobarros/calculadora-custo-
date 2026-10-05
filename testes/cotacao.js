@@ -306,8 +306,9 @@ if(/function escutarEstadoNotas\(corteISO\)\{ if\(pararEscutaNotas\)\{ pararEscu
 } else {
   erro('escutarEstadoNotas nao cancela a anterior — cada Recarregar somaria uma escuta');
 }
-if((ix.match(/collection\('notas'\)\.where\('dataEmissao', '>=', corteISO\)\s*\.onSnapshot\(/g) || []).length === 1 &&
-   !/collection\('notas'\)\.where\('dataEmissao', '>=', corteISO\)\.get\(\)/.test(ix)){
+if(/const consulta = colNotas\.where\('dataEmissao', '>=', corteISO\);/.test(ix) &&
+   (ix.match(/consulta\.onSnapshot\(/g) || []).length === 1 && /consultas: \[consulta\], delta: colNotas/.test(ix) &&
+   !/where\('dataEmissao', '>=', corteISO\)\.get\(\)/.test(ix)){
   ok('o estado das notas emitidas e uma escuta ao vivo (nao um get por sessao)');
 } else {
   erro('o estado das notas emitidas voltou a ser lido uma vez so — a aba fica parada no tempo');

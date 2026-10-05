@@ -63,6 +63,16 @@ service cloud.firestore {
         || request.resource.data[campo] is number;
     }
 
+    // Carimbo de alteracao (notas e duplicatas): TODA gravacao vinda do
+    // navegador tem de marcar alteradoEm com a hora do servidor. E' por
+    // esse campo que os apps leem so' o que mudou — uma gravacao sem
+    // ele ficaria invisivel para os outros computadores ate' o dia
+    // seguinte. Aba antiga do app (aberta antes da atualizacao) tem a
+    // gravacao recusada ate' recarregar a pagina: e' de proposito.
+    function carimbado() {
+      return request.resource.data.alteradoEm == request.time;
+    }
+
     // ------------------------------------------------------------
     // Colecoes alimentadas pelo Apps Script (importacao de XML).
     // O navegador so' precisa LER e marcar alguns campos de controle;
@@ -80,7 +90,8 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['status', 'canceladaEm', 'noSistema', 'noSistemaManual',
                        'previsaoEntrega', 'disponivelRetirada',
-                       'devolucao', 'devolucaoDe'])
+                       'devolucao', 'devolucaoDe', 'alteradoEm'])
+        && carimbado()
         && (!mudou('status') || request.resource.data.status in ['ativa', 'cancelada'])
         && boolValido('noSistema')
         && boolValido('noSistemaManual')
@@ -97,7 +108,8 @@ service cloud.firestore {
       allow update: if autenticado()
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['pago', 'dataPagamento', 'pagoEmLote', 'vencimento', 'obsPagamento',
-                       'bancoPagamento', 'valorPago'])
+                       'bancoPagamento', 'valorPago', 'alteradoEm'])
+        && carimbado()
         && boolValido('pago')
         && boolValido('pagoEmLote')
         && textoValido('obsPagamento', 200)

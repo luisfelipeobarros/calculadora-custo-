@@ -275,5 +275,44 @@ eq('  ...com a regex escrita com as barras na pagina',
   });
 })();
 
+// --- Carimbo de alteracao (06/10/2026) ---
+// As regras novas RECUSAM gravacao em notas/duplicatas sem alteradoEm, e
+// quem le so' o que mudou nao enxerga gravacao sem carimbo. Entao toda
+// gravacao nessas colecoes, nas duas paginas, passa por carimbar().
+(function(){
+  const paginas = { 'controle-notas.html': html, 'index.html': fs.readFileSync(path.join(raiz, 'index.html'), 'utf8') };
+  Object.keys(paginas).forEach(nome => {
+    const t = paginas[nome];
+    const gravacoes = [...t.matchAll(/collection\('(notas|duplicatas)'\)\.doc\([^)]*\)(?:\.set\(|,\s*)(\w+)/g)];
+    eq(nome + ': toda gravacao em notas/duplicatas leva o carimbo',
+      gravacoes.filter(m => m[2] !== 'carimbar').map(m => m[0]).join(' | '), '');
+    eq(nome + ': ...e ha gravacoes para conferir', gravacoes.length > 0, true);
+    eq(nome + ': nenhum update() direto nessas colecoes',
+      /collection\('(notas|duplicatas)'\)\.doc\([^)]*\)\.update\(/.test(t), false);
+  });
+  eq('o lote de Pagamentos carimba so o que e duplicata',
+    /c\.colecao === 'duplicatas' \? carimbar\(c\.dados\) : c\.dados/.test(html), true);
+
+  const regras = fs.readFileSync(path.join(raiz, 'firestore.rules'), 'utf8');
+  ['notas', 'duplicatas'].forEach(col => {
+    const i = regras.indexOf('match /' + col + '/{');
+    const trecho = regras.slice(i, regras.indexOf('match /', i + 10));
+    eq('regras de ' + col + ': aceitam e exigem o carimbo',
+      /'alteradoEm'\]\)/.test(trecho) && /&& carimbado\(\)/.test(trecho), true);
+  });
+  eq('regras: o carimbo tem de ser a hora do servidor',
+    /function carimbado\(\) \{\s*return request\.resource\.data\.alteradoEm == request\.time;/.test(regras), true);
+
+  // Ligado, as duas colecoes leem pelo carimbo; desligado, o controle guardado e' apagado.
+  eq('notas e duplicatas usam a escuta por carimbo quando ligada',
+    (html.match(/App\.escutarComDelta\(\{/g) || []).length, 2);
+  eq('desligado, o controle guardado nao sobrevive',
+    /if\(!sinc && !carregarTudo\)\{[\s\S]{0,260}App\.esquecerLeitura\(LEITURA_NOTAS\);\s*App\.esquecerLeitura\(LEITURA_DUPLICATAS\);/.test(html), true);
+  eq('historico completo nunca le por carimbo',
+    /var espera = carregarTudo \? Promise\.resolve\(null\) : App\.lerSincNotas\(db\);/.test(html), true);
+  eq('regras que recusam o carimbo fazem a tela voltar para a leitura inteira',
+    /App\.aoRecusarCarimbo\(function\(\)\{ if\(db && escutasAbertas\) escutarColecoes\(\); \}\);/.test(html), true);
+})();
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

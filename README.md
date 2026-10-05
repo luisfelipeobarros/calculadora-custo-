@@ -30,7 +30,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=17">
-<script src="app-shared.js?v=29"></script>
+<script src="app-shared.js?v=30"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -105,7 +105,8 @@ sozinho a operação que falhou.
 
 - `notas`, `duplicatas`, `itensNotas` — o navegador **lê**, mas só pode
   alterar os campos de controle (`pago`, `status`, `previsaoEntrega`,
-  `noSistema`, `vencimento`…). Criar e apagar nota fica proibido pelo
+  `noSistema`, `vencimento`…), e toda alteração tem de vir com o carimbo
+  `alteradoEm` (ver "Carimbo de alteração"). Criar e apagar nota fica proibido pelo
   navegador. O Apps Script usa conta de serviço e ignora estas regras,
   então a importação de XML continua igual.
 
@@ -162,10 +163,42 @@ Três telas precisam mostrar o dado mais recente possível, e ficam em
   (`App.lerFaixaComCache`), e a nota que aparece na escuta sem itens
   carregados tem os itens buscados um a um (`App.itensQueFaltam`).
 
-As escutas do Controle de Notas ainda pagam a janela inteira a cada
-abertura fria (mais de 30 minutos depois da última). Para pagar só o que
-mudou falta um **carimbo de alteração** em `notas` e `duplicatas`,
-gravado pelo Apps Script e pelo app e liberado nas regras.
+### Carimbo de alteração (`alteradoEm`)
+
+Sem carimbo, cada abertura fria das escutas (mais de 30 minutos depois
+da última) paga a janela inteira de notas e duplicatas. Com ele, paga só
+o que mudou:
+
+- **Quem carimba.** Toda gravação em `notas` e `duplicatas` marca
+  `alteradoEm` com a hora do servidor: o Apps Script (`updateTransforms`
+  em `fsUpsertNota` e `fsCriarDuplicataSeNova`) e os apps
+  (`App.gravarCarimbado` — um teste trava que nenhuma gravação escape).
+  As regras **exigem** o carimbo em toda gravação vinda do navegador.
+- **Quem lê.** `App.escutarComDelta`: a base vem do cache do navegador e
+  fica aberta **uma escuta ao vivo** só do que tem carimbo mais novo que
+  o último visto. Continua em tempo real. Vale para as notas e
+  duplicatas do Controle de Notas e para o estado das notas na NF-e
+  Emitidas da Calculadora. (`pagamentosInternos` segue como estava: é
+  pequeno e tem exclusão pelo app.)
+- **Na dúvida, leitura completa**: primeira vez do navegador, primeira
+  abertura de cada dia, cache menor do que deveria, "carregar histórico
+  completo", e quando o contador `config/notasSync.exclusoes` muda (a
+  limpeza de duplicatas gêmeas do Apps Script apaga documentos — e
+  documento apagado não tem carimbo).
+- **Liga/desliga.** O documento `config/notasSync` (`{ carimbo: true }`)
+  é gravado pela função `ligarLeituraPorCarimbo` do Apps Script;
+  `desligarLeituraPorCarimbo` volta tudo à leitura de antes na hora, sem
+  publicar nada. Desligado, os apps leem exatamente como antes do
+  carimbo. A linha de status do Controle de Notas mostra o modo
+  ("lendo só o que mudou" ou "leitura completa (motivo)").
+- **Ordem da implantação**: (1) publicar o `firestore.rules`, (2) colar
+  o Apps Script novo, (3) rodar `ligarLeituraPorCarimbo`. O app funciona
+  antes e depois das regras novas: se as regras no ar recusam o carimbo,
+  ele regrava sem e volta para a leitura inteira sozinho.
+- **Limite conhecido**: gravação feita por fora (Console do Firebase,
+  script antigo) não tem carimbo e só aparece nos outros computadores na
+  leitura completa do dia seguinte. Aba do app aberta desde antes da
+  atualização tem a gravação recusada pelas regras até dar F5.
 
 ---
 
@@ -260,7 +293,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 141 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 169 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -279,7 +312,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 68 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 82 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de

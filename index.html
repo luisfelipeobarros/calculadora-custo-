@@ -919,7 +919,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=29"></script>
+<script src="app-shared.js?v=30"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -3714,30 +3714,70 @@ Tupan</textarea>
 
   // Resolve no primeiro retrato (e' quando a aba pode desenhar); dali
   // em diante cada mudanca redesenha a lista sozinha.
-  function escutarEstadoNotas(corteISO){
+  //
+  // Com o carimbo de alteracao ligado (config/notasSync), a escuta nao
+  // paga a janela inteira a cada abertura: a base vem do cache do
+  // navegador e so' o que tem carimbo mais novo e' lido do servidor
+  // (App.escutarComDelta — na duvida ele mesmo escuta a consulta inteira).
+  const LEITURA_ESTADO_NOTAS = 'leituraCalcNotas_v1';
+  let modoEscutaNotas = '';
+
+  async function escutarEstadoNotas(corteISO){
     if(pararEscutaNotas){ pararEscutaNotas(); pararEscutaNotas = null; }
+    const sinc = await App.lerSincNotas(firestoreDb);
+    if(!sinc) App.esquecerLeitura(LEITURA_ESTADO_NOTAS);
+    modoEscutaNotas = '';
     return new Promise((resolve, reject) => {
       let primeiro = true;
+      let parar = null;
       const mapa = {};
-      const parar = firestoreDb.collection('notas').where('dataEmissao', '>=', corteISO)
-        .onSnapshot(snap => {
+      const chegou = () => {
+        notasInfoPorChave = mapa;
+        if(primeiro){ primeiro = false; resolve(); return; }
+        aoMudarEstadoNotas();
+      };
+      const falhou = e => {
+        if(parar) parar();
+        if(pararEscutaNotas === parar) pararEscutaNotas = null; // a proxima abertura da aba religa
+        if(primeiro){ primeiro = false; reject(e); return; }
+        console.error('Escuta das notas emitidas caiu:', e);
+        setNotasMsg('A atualização ao vivo parou (' + App.erroDe(e) + ') — clique em Recarregar.');
+      };
+      const colNotas = firestoreDb.collection('notas');
+      const consulta = colNotas.where('dataEmissao', '>=', corteISO);
+      if(sinc){
+        parar = App.escutarComDelta({
+          consultas: [consulta], delta: colNotas, campo: 'alteradoEm',
+          chave: LEITURA_ESTADO_NOTAS, hoje: App.hojeISO(), versao: sinc.exclusoes,
+          aceita: n => typeof n.dataEmissao === 'string' && n.dataEmissao >= corteISO,
+          aoReceber: (mudancas, info) => {
+            mudancas.forEach(m => { if(m.dados === null) delete mapa[m.id]; else mapa[m.id] = m.dados; });
+            modoEscutaNotas = info.modo === 'delta' ? ' · lendo só o que mudou' : '';
+            chegou();
+          },
+          aoFalhar: falhou
+        }).parar;
+      } else {
+        parar = consulta.onSnapshot(snap => {
           snap.docChanges().forEach(ch => {
             if(ch.type === 'removed') delete mapa[ch.doc.id];
             else mapa[ch.doc.id] = ch.doc.data();
           });
-          notasInfoPorChave = mapa;
-          if(primeiro){ primeiro = false; resolve(); return; }
-          aoMudarEstadoNotas();
-        }, e => {
-          parar();
-          if(pararEscutaNotas === parar) pararEscutaNotas = null; // a proxima abertura da aba religa
-          if(primeiro){ primeiro = false; reject(e); return; }
-          console.error('Escuta das notas emitidas caiu:', e);
-          setNotasMsg('A atualização ao vivo parou (' + App.erroDe(e) + ') — clique em Recarregar.');
-        });
+          chegou();
+        }, falhou);
+      }
       pararEscutaNotas = parar;
     });
   }
+
+  // As regras no ar recusaram o carimbo (ainda sao as antigas): quem
+  // estava lendo so' o que mudou nao veria nem a propria gravacao.
+  // Religa a escuta — App.lerSincNotas passa a responder "desligado".
+  App.aoRecusarCarimbo(() => {
+    if(!pararEscutaNotas) return;
+    pararEscutaNotas(); pararEscutaNotas = null;
+    carregarNotasEmitidas(false);
+  });
 
   async function buscarItensQueFaltam(){
     if(!notasEmitidasCache) return 0;
@@ -3790,7 +3830,7 @@ Tupan</textarea>
       }
       return;
     }
-    if(pararEscutaNotas) setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora());
+    if(pararEscutaNotas) setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora() + modoEscutaNotas);
     if(router.atual() === 'Notas') renderNotasEmitidas();
     const cmp = $('listaNotasEmitidasCmp');
     if(cmp && cmp.offsetParent !== null) renderListaNotasCmp();
@@ -3841,7 +3881,7 @@ Tupan</textarea>
       });
       ordenarNotasEmitidas();
       await buscarItensQueFaltam();
-      setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora());
+      setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora() + modoEscutaNotas);
       renderNotasEmitidas();
       renderListaNotasCmp();
     }catch(e){
@@ -4044,7 +4084,8 @@ Tupan</textarea>
       const chave = chk.dataset.disp;
       const marcado = chk.checked;
       chk.disabled = true;
-      App.comAuth(()=> exigirDb().collection('notas').doc(chave).set({ disponivelRetirada: marcado }, { merge: true }))
+      App.comAuth(()=> App.gravarCarimbado(carimbar =>
+        exigirDb().collection('notas').doc(chave).set(carimbar({ disponivelRetirada: marcado }), { merge: true })))
         .then(()=>{
           notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { disponivelRetirada: marcado });
           renderListaNotas(suf);
@@ -4055,7 +4096,8 @@ Tupan</textarea>
       const chave = inp.dataset.prev;
       const valor = inp.value || null;
       inp.disabled = true;
-      App.comAuth(()=> exigirDb().collection('notas').doc(chave).set({ previsaoEntrega: valor }, { merge: true }))
+      App.comAuth(()=> App.gravarCarimbado(carimbar =>
+        exigirDb().collection('notas').doc(chave).set(carimbar({ previsaoEntrega: valor }), { merge: true })))
         .then(()=>{
           notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { previsaoEntrega: valor });
           renderListaNotas(suf);

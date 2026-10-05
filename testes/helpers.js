@@ -484,6 +484,242 @@ assincrono('lerFaixaComCache: faixa com fim; ano passado inteiro nao paga leitur
     [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 0, 'a,b', ['cache:2']]);
 });
 
+// --- carimbo de alteracao: escuta ao vivo so' do que mudou ---
+//
+// Firestore de mentira com escuta: `mudar`/`apagar` mexem no servidor e
+// avisam quem esta' escutando. O log conta o que cada escuta recebeu do
+// servidor (e' o que se paga) e o que foi lido do cache.
+function firestoreVivo(servidor, cache, log) {
+  const ouvintes = [];
+  const valor = (v) => (v && v.toMillis ? v.toMillis() : v);
+  const casa = (dados, filtros) => filtros.every(([c, op, v]) => {
+    const a = valor(dados[c]), b = valor(v);
+    if (op === '==') return a !== undefined && a === b;
+    if (a == null) return false;
+    return op === '>' ? a > b : op === '>=' ? a >= b : false;
+  });
+  const doc = (x) => ({ id: x.id, data: () => Object.assign({}, x.dados), get: (c) => x.dados[c] });
+  function entregar(o) {
+    if (!o.ativo) return;
+    const agora = servidor.filter(x => casa(x.dados, o.filtros));
+    const ids = new Set(agora.map(x => x.id));
+    const mud = [];
+    agora.forEach(x => {
+      const antes = o.vistos.get(x.id);
+      if (antes !== x.dados) mud.push({ type: antes ? 'modified' : 'added', doc: doc(x) });
+      o.vistos.set(x.id, x.dados);
+    });
+    Array.from(o.vistos.keys()).forEach(id => {
+      if (!ids.has(id)) { mud.push({ type: 'removed', doc: { id, data: () => ({}), get: () => undefined } }); o.vistos.delete(id); }
+    });
+    const pagos = mud.filter(m => m.type !== 'removed').length;
+    if (pagos) log.push('servidor:' + pagos);
+    if (cache) agora.forEach(x => {
+      const i = cache.findIndex(y => y.id === x.id);
+      if (i === -1) cache.push(x); else cache[i] = x;
+    });
+    o.ok({ metadata: { fromCache: false }, docChanges: () => mud, forEach: (fn) => agora.map(doc).forEach(fn) });
+  }
+  function consulta(filtros) {
+    return {
+      where(c, op, v) { return consulta(filtros.concat([[c, op, v]])); },
+      get() {
+        if (cache === null) return Promise.reject(new Error('sem cache'));
+        const l = cache.filter(x => casa(x.dados, filtros));
+        log.push('cache:' + l.length);
+        return Promise.resolve({ size: l.length, forEach: (fn) => l.map(doc).forEach(fn) });
+      },
+      onSnapshot(opcoes, ok) {
+        const o = { filtros, ok, vistos: new Map(), ativo: true };
+        ouvintes.push(o);
+        Promise.resolve().then(() => entregar(o));
+        return () => { o.ativo = false; };
+      }
+    };
+  }
+  const avisar = () => ouvintes.forEach(entregar);
+  return {
+    col: consulta([]),
+    mudar(id, dados) {
+      const i = servidor.findIndex(x => x.id === id);
+      if (i === -1) servidor.push({ id, dados }); else servidor[i] = { id, dados };
+      avisar();
+    },
+    apagar(id) { servidor.splice(servidor.findIndex(x => x.id === id), 1); avisar(); },
+    ativos: () => ouvintes.filter(o => o.ativo).length
+  };
+}
+const respiro = () => new Promise(r => setImmediate(r));
+
+assincrono('escutarComDelta: completa na primeira vez, depois so o que mudou — e ao vivo', async () => {
+  // Janela: emissao >= 2026-01-01, mais as canceladas de qualquer epoca.
+  const servidor = [
+    { id: 'n1', dados: { dataEmissao: '2026-03-01', alteradoEm: carimbo(10 * HORA) } },
+    { id: 'n0', dados: { dataEmissao: '2026-02-01' } },                                   // nunca carimbadas
+    { id: 'n2', dados: { dataEmissao: '2026-05-01' } },
+    { id: 'velha', dados: { dataEmissao: '2024-01-01', status: 'cancelada', alteradoEm: carimbo(20 * HORA) } },
+    { id: 'fora', dados: { dataEmissao: '2024-02-02' } }
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const fs1 = firestoreVivo(servidor, cache, log);
+  const telas = [];
+  const abrir = (fb, extra) => {
+    const tela = { mapa: {}, eventos: [] };
+    telas.push(tela);
+    tela.escuta = App.escutarComDelta(Object.assign({
+      consultas: [fb.col.where('dataEmissao', '>=', '2026-01-01'), fb.col.where('status', '==', 'cancelada')],
+      delta: fb.col, campo: 'alteradoEm', chave: 'kn', hoje: '2026-10-06', versao: 0,
+      armazenamento: arm, deMillis: carimbo,
+      aceita: (n) => (n.dataEmissao || '') >= '2026-01-01' || n.status === 'cancelada',
+      aoReceber: (mud, info) => {
+        mud.forEach(m => { if (m.dados === null) delete tela.mapa[m.id]; else tela.mapa[m.id] = m.dados; });
+        tela.eventos.push(info.modo + ':' + mud.map(m => m.id + (m.dados === null ? '-' : '')).sort().join(','));
+      }
+    }, extra));
+    return tela;
+  };
+  const chaves = (t) => Object.keys(t.mapa).sort().join(',');
+
+  const t1 = abrir(fs1);
+  await respiro();
+  conferir('carimbo: primeira vez e completa, a tela recebe a uniao de uma vez so',
+    [t1.escuta.modo(), t1.eventos, chaves(t1)], ['completa', ['completa:n0,n1,n2,velha'], 'n0,n1,n2,velha']);
+  conferir('carimbo: a completa paga as duas consultas inteiras', log, ['servidor:3', 'servidor:1']);
+  conferir('carimbo: o controle guarda o dia, o total e o ultimo carimbo',
+    JSON.parse(arm.m.kn), { dia: '2026-10-06', versao: 0, ultima: 20 * HORA, qtd: 4 });
+
+  // Completa: nota cancelada que tambem esta' na janela sai de UMA consulta e fica na tela.
+  fs1.mudar('n1', { dataEmissao: '2026-03-01', status: 'cancelada', alteradoEm: carimbo(21 * HORA) });
+  fs1.mudar('n1', { dataEmissao: '2026-03-01', status: 'ativa', alteradoEm: carimbo(22 * HORA) });
+  await respiro();
+  conferir('carimbo: sair de uma consulta e continuar em outra nao tira da tela',
+    [chaves(t1), t1.mapa.n1.status], ['n0,n1,n2,velha', 'ativa']);
+  t1.escuta.parar();
+  conferir('carimbo: parar cancela todas as escutas', fs1.ativos(), 0);
+
+  // Segunda abertura no mesmo dia: base do cache, servidor so' com o carimbo novo.
+  log.length = 0;
+  const fs2 = firestoreVivo(servidor, cache, log);
+  const t2 = abrir(fs2);
+  await respiro();
+  conferir('carimbo: segunda abertura le a base do cache e paga so o ultimo carimbo',
+    [t2.escuta.modo(), log, chaves(t2)], ['delta', ['cache:3', 'cache:1', 'servidor:1'], 'n0,n1,n2,velha']);
+  conferir('carimbo: uma escuta so no modo delta', fs2.ativos(), 1);
+
+  // Ao vivo: nota nova do Apps Script, entrada no ERP, e nota que sai da uniao.
+  log.length = 0;
+  fs2.mudar('n3', { dataEmissao: '2026-10-06', emitida: true, alteradoEm: carimbo(30 * HORA) });
+  await respiro();
+  fs2.mudar('n2', { dataEmissao: '2026-05-01', noSistema: true, alteradoEm: carimbo(31 * HORA) });
+  await respiro();
+  fs2.mudar('velha', { dataEmissao: '2024-01-01', status: 'ativa', alteradoEm: carimbo(32 * HORA) });
+  await respiro();
+  conferir('carimbo: o que muda chega ao vivo, um documento por vez',
+    [t2.eventos.slice(1), log, chaves(t2), t2.mapa.n2.noSistema],
+    [['delta:n3', 'delta:n2', 'delta:velha-'], ['servidor:1', 'servidor:1', 'servidor:1'], 'n0,n1,n2,n3', true]);
+  conferir('carimbo: o controle avanca com o que chegou', JSON.parse(arm.m.kn).ultima, 32 * HORA);
+
+  // O limite conhecido: gravacao SEM carimbo nao chega no modo delta...
+  fs2.mudar('n0', { dataEmissao: '2026-02-01', noSistema: true });
+  fs2.mudar('fora', { dataEmissao: '2024-02-02', alteradoEm: carimbo(33 * HORA) }); // carimbada, mas fora da janela
+  await respiro();
+  conferir('carimbo: gravacao sem carimbo nao aparece no delta; a de fora da janela e ignorada',
+    [t2.mapa.n0.noSistema, chaves(t2)], [undefined, 'n0,n1,n2,n3']);
+  // ...apagar com a escuta aberta sai na hora (o documento tinha carimbo recente).
+  fs2.apagar('n3');
+  await respiro();
+  conferir('carimbo: documento apagado sai da tela', chaves(t2), 'n0,n1,n2');
+  t2.escuta.parar();
+
+  // ...e a virada do dia relê tudo: a gravacao sem carimbo aparece.
+  log.length = 0;
+  const t3 = abrir(firestoreVivo(servidor, cache, log), { hoje: '2026-10-07' });
+  await respiro();
+  conferir('carimbo: no dia seguinte a leitura e completa e pega o que ficou sem carimbo',
+    [t3.escuta.modo(), t3.eventos[0].slice(0, 8), t3.mapa.n0.noSistema], ['completa', 'completa', true]);
+  t3.escuta.parar();
+
+  // Exclusao avisada pelo contador, cache menor que o guardado, navegador sem cache.
+  const t4 = abrir(firestoreVivo(servidor, cache, log), { hoje: '2026-10-07', versao: 1 });
+  await respiro();
+  conferir('carimbo: contador de exclusoes diferente = completa', t4.escuta.modo(), 'completa');
+  t4.escuta.parar();
+  const t5 = abrir(firestoreVivo(servidor, cache.slice(0, 1), log), { hoje: '2026-10-07', versao: 1 });
+  await respiro();
+  conferir('carimbo: cache menor que o guardado = completa', [t5.escuta.modo(), chaves(t5)], ['completa', 'n0,n1,n2']);
+  t5.escuta.parar();
+  const t6 = abrir(firestoreVivo(servidor, null, log), { hoje: '2026-10-07', versao: 1 });
+  await respiro();
+  conferir('carimbo: navegador sem cache = completa', [t6.escuta.modo(), chaves(t6)], ['completa', 'n0,n1,n2']);
+  t6.escuta.parar();
+  const t7 = abrir(firestoreVivo(servidor, cache, log), { hoje: '2026-10-07', versao: 1, armazenamento: null });
+  await respiro();
+  conferir('carimbo: sem localStorage, sempre completa', t7.escuta.modo(), 'completa');
+  t7.escuta.parar();
+});
+
+assincrono('gravarCarimbado: grava com carimbo e se ajusta as regras que estiverem no ar', async () => {
+  const negada = () => Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' });
+  let regras = 'novas';          // 'antigas' recusam o campo; 'novas' exigem; 'fechadas' recusam tudo
+  const tentativas = [];
+  const gravar = () => App.gravarCarimbado((carimbar) => {
+    const campos = carimbar({ pago: true });
+    const com = 'alteradoEm' in campos;
+    tentativas.push(com ? 'com' : 'sem');
+    if (regras === 'fechadas' || (regras === 'antigas') === com) return Promise.reject(negada());
+    return Promise.resolve(campos);
+  });
+  let recusas = 0;
+  App.aoRecusarCarimbo(() => { recusas++; });
+
+  const g1 = await gravar();
+  conferir('carimbo na gravacao: vai com a hora do servidor', [tentativas, g1], [['com'], { pago: true, alteradoEm: 'ts' }]);
+
+  tentativas.length = 0; regras = 'antigas';
+  const g2 = await gravar();
+  conferir('regras antigas recusam o campo: a gravacao e refeita sem ele', [tentativas, g2, recusas], [['com', 'sem'], { pago: true }, 1]);
+  tentativas.length = 0;
+  await gravar();
+  conferir('  ...e a sessao passa a gravar sem, direto', tentativas, ['sem']);
+  conferir('  ...com a leitura por carimbo respondendo "desligada" sem nem consultar',
+    await App.lerSincNotas({ collection() { throw new Error('nao era para ler'); } }), null);
+
+  tentativas.length = 0; regras = 'novas';
+  await gravar();
+  conferir('regras novas publicadas com o app aberto: volta a carimbar sozinho', [tentativas, recusas], [['sem', 'com'], 1]);
+  tentativas.length = 0;
+  await gravar();
+  conferir('  ...e segue carimbando', tentativas, ['com']);
+
+  tentativas.length = 0; regras = 'fechadas';
+  const erro = await gravar().then(() => null, e => e.code);
+  conferir('recusado dos dois jeitos: devolve o erro de permissao (quem chama pede o login)',
+    [tentativas, erro], [['com', 'sem'], 'permission-denied']);
+  tentativas.length = 0; regras = 'novas';
+  await gravar();
+  conferir('  ...sem mudar a preferencia da sessao', tentativas, ['com']);
+
+  let chamadas = 0;
+  const outro = await App.gravarCarimbado((carimbar) => { chamadas++; carimbar({}); return Promise.reject(new Error('rede')); })
+    .then(() => null, e => e.message);
+  conferir('erro que nao e de permissao nao repete a gravacao', [chamadas, outro], [1, 'rede']);
+  chamadas = 0;
+  await App.gravarCarimbado(() => { chamadas++; return Promise.reject(negada()); }).catch(() => {});
+  conferir('lote sem nenhuma nota/duplicata nao e repetido', chamadas, 1);
+
+  const banco = (dados, falha) => ({ collection: () => ({ doc: () => ({
+    get: () => falha ? Promise.reject(new Error('offline')) : Promise.resolve({ exists: dados !== null, data: () => dados })
+  }) }) });
+  const erroOriginal = console.error; console.error = () => {};
+  conferir('config/notasSync ligado devolve o contador de exclusoes',
+    [await App.lerSincNotas(banco({ carimbo: true, exclusoes: 4 })), await App.lerSincNotas(banco({ carimbo: true }))],
+    [{ exclusoes: 4 }, { exclusoes: 0 }]);
+  conferir('config/notasSync desligado, ausente ou ilegivel = leitura de sempre',
+    [await App.lerSincNotas(banco({ carimbo: false })), await App.lerSincNotas(banco(null)), await App.lerSincNotas(banco(null, true))],
+    [null, null, null]);
+  console.error = erroOriginal;
+});
+
 // --- itensQueFaltam: quais itens buscar um a um (NF-e Emitidas ao vivo) ---
 (function () {
   const info = {

@@ -820,7 +820,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=29"></script>
+<script src="app-shared.js?v=30"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=6"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -974,7 +974,8 @@
   function setStatus(txt){ $('statusConexao').textContent = txt; }
 
   function resumoCarga(){
-    return notas.length + ' notas e ' + duplicatas.length + ' duplicatas · ' + App.horaAgora();
+    return notas.length + ' notas e ' + duplicatas.length + ' duplicatas · ' + App.horaAgora() +
+      (leituraPorCarimbo ? ' · ' + leituraPorCarimbo : '');
   }
 
   // onSnapshot em vez de get(): a tela fica viva (o que o Apps Script
@@ -988,6 +989,33 @@
     // contra um app do Firebase ja' deletado, e todas cobradas por
     // documento lido.
     pararEscutas();
+
+    // A leitura por carimbo esta' ligada (config/notasSync)? A resposta
+    // chega antes de abrir as escutas; se outra chamada vier nesse
+    // meio tempo, esta e' abandonada.
+    var geracao = ++geracaoEscuta;
+    var espera = carregarTudo ? Promise.resolve(null) : App.lerSincNotas(db);
+    espera.then(function(sinc){
+      if(geracao !== geracaoEscuta) return;
+      abrirEscutas(sinc);
+    });
+  }
+
+  var geracaoEscuta = 0;
+  // Controle da leitura por carimbo (App.escutarComDelta) e o texto do
+  // modo, que vai para a linha de status.
+  var LEITURA_NOTAS = 'leituraCtrlNotas_v1', LEITURA_DUPLICATAS = 'leituraCtrlDuplicatas_v1';
+  var leituraPorCarimbo = null;
+
+  // sinc: { exclusoes } com o carimbo ligado; null = leitura de sempre.
+  function abrirEscutas(sinc){
+    if(!sinc && !carregarTudo){
+      // Desligado: o controle guardado nao vale para quando religarem
+      // (o que mudou sem carimbo nesse intervalo ficaria de fora).
+      App.esquecerLeitura(LEITURA_NOTAS);
+      App.esquecerLeitura(LEITURA_DUPLICATAS);
+    }
+    leituraPorCarimbo = null;
 
     var col = db.collection('notas');
 
@@ -1039,15 +1067,43 @@
 
     // 1) Notas da janela — cobrem a lista de importacao e as duplicatas
     //    carregadas. Com folga extra: a nota vem antes do vencimento.
-    var qNotas = carregarTudo ? col
-      : col.where('dataEmissao', '>=', cortePorMeses(MESES_HISTORICO + MESES_FOLGA_NOTAS));
-    assinaturas.push(qNotas.onSnapshot(receberEm(mapaRecentes), aoFalhar('notas')));
+    // Com o carimbo ligado, as consultas 1 e 2 viram UMA escuta do que
+    // mudou: a base vem do cache do navegador e so' o que tem carimbo
+    // mais novo e' lido do servidor (App.escutarComDelta decide; na
+    // duvida ele mesmo abre as duas consultas inteiras).
+    function receberMudancasEm(mapa, aplicar){
+      return function(mudancas, info){
+        mudancas.forEach(function(m){
+          if(m.dados === null){ delete mapa[m.id]; return; }
+          m.dados.id = m.id;
+          mapa[m.id] = m.dados;
+        });
+        leituraPorCarimbo = info.modo === 'delta' ? 'lendo só o que mudou'
+          : 'leitura completa (' + info.motivo + ')';
+        aplicar();
+      };
+    }
+    var corteNotas = cortePorMeses(MESES_HISTORICO + MESES_FOLGA_NOTAS);
+    if(sinc){
+      assinaturas.push(App.escutarComDelta({
+        consultas: [col.where('dataEmissao', '>=', corteNotas), col.where('status', '==', 'cancelada')],
+        delta: col, campo: 'alteradoEm', chave: LEITURA_NOTAS, hoje: hojeISO(), versao: sinc.exclusoes,
+        aceita: function(n){
+          return (typeof n.dataEmissao === 'string' && n.dataEmissao >= corteNotas) || n.status === 'cancelada';
+        },
+        aoReceber: receberMudancasEm(mapaRecentes, aplicarNotas),
+        aoFalhar: aoFalhar('notas')
+      }).parar);
+    } else {
+      var qNotas = carregarTudo ? col : col.where('dataEmissao', '>=', corteNotas);
+      assinaturas.push(qNotas.onSnapshot(receberEm(mapaRecentes), aoFalhar('notas')));
+    }
 
     // 2) Canceladas de qualquer epoca — a tela de canceladas nao pode
     //    ficar incompleta so' porque a nota e' antiga. Com o historico
     //    completo carregado a consulta 1 ja' traz TUDO: manter esta
     //    dobraria a leitura de cada cancelada sem ganho nenhum.
-    if(!carregarTudo){
+    if(!carregarTudo && !sinc){
       assinaturas.push(
         col.where('status', '==', 'cancelada')
            .onSnapshot(receberEm(mapaCanceladas), aoFalhar('notas canceladas')));
@@ -1086,6 +1142,19 @@
 
     if(carregarTudo){
       assinaturas.push(colDup.onSnapshot(receberDupEm(mapaDupJanela), aoFalhar('duplicatas')));
+    } else if(sinc){
+      // As mesmas duas consultas de baixo (janela + sem vencimento),
+      // lidas do cache e mantidas em dia pelo carimbo.
+      var corteDup = cortePorMeses(MESES_HISTORICO);
+      assinaturas.push(App.escutarComDelta({
+        consultas: [colDup.where('vencimento', '>=', corteDup), colDup.where('vencimento', '==', null)],
+        delta: colDup, campo: 'alteradoEm', chave: LEITURA_DUPLICATAS, hoje: hojeISO(), versao: sinc.exclusoes,
+        aceita: function(d){
+          return d.vencimento === null || (typeof d.vencimento === 'string' && d.vencimento >= corteDup);
+        },
+        aoReceber: receberMudancasEm(mapaDupJanela, aplicarDuplicatas),
+        aoFalhar: aoFalhar('duplicatas')
+      }).parar);
     } else {
       assinaturas.push(
         colDup.where('vencimento', '>=', cortePorMeses(MESES_HISTORICO))
@@ -1233,20 +1302,33 @@
   }
   window.__aoEntrar = function(){ if(db) renderAtual(); };
 
+  // As regras no ar recusaram o carimbo (ainda sao as antigas): quem
+  // estava lendo so' o que mudou nao veria nem a propria gravacao.
+  // Reabre as escutas — App.lerSincNotas passa a responder "desligado".
+  App.aoRecusarCarimbo(function(){ if(db && escutasAbertas) escutarColecoes(); });
+
   // ─── Gravacao ───────────────────────────────────────────────
 
+  // TODA gravacao em notas/duplicatas passa por App.gravarCarimbado: e'
+  // o carimbo (alteradoEm) que faz a mudanca chegar a quem esta' lendo
+  // so' o que mudou, e as regras novas recusam gravacao sem ele.
+  //
   // Nao precisa mais mexer no cache na mao: o onSnapshot devolve a
   // alteracao na hora (o Firestore aplica a escrita localmente antes
   // mesmo de o servidor confirmar) e a tela se redesenha sozinha.
   function atualizarNota(chave, campos){
     return App.comAuth(function(){
-      return db.collection('notas').doc(chave).set(campos, { merge: true });
+      return App.gravarCarimbado(function(carimbar){
+        return db.collection('notas').doc(chave).set(carimbar(campos), { merge: true });
+      });
     });
   }
 
   function atualizarDuplicata(id, campos){
     return App.comAuth(function(){
-      return db.collection('duplicatas').doc(id).set(campos, { merge: true });
+      return App.gravarCarimbado(function(carimbar){
+        return db.collection('duplicatas').doc(id).set(carimbar(campos), { merge: true });
+      });
     });
   }
 
@@ -3332,12 +3414,15 @@
       var pedaco = ids.slice(i, i + LOTE_FIRESTORE);
       botao.textContent = verbo + '... ' + Math.min(i + LOTE_FIRESTORE, ids.length) + '/' + ids.length;
       return App.comAuth(function(){
-        var batch = db.batch();
-        pedaco.forEach(function(id){
-          var c = camposDe(itensPorId.get(id));
-          if(c) batch.set(db.collection(c.colecao).doc(id), c.dados, { merge:true });
+        return App.gravarCarimbado(function(carimbar){
+          var batch = db.batch();
+          pedaco.forEach(function(id){
+            var c = camposDe(itensPorId.get(id));
+            if(c) batch.set(db.collection(c.colecao).doc(id),
+              c.colecao === 'duplicatas' ? carimbar(c.dados) : c.dados, { merge:true });
+          });
+          return batch.commit();
         });
-        return batch.commit();
       }).then(function(){
         // O bloco JA' esta gravado: conta antes do pos-processamento,
         // senao uma falha ali fazia a mensagem de erro dizer "0 de N
@@ -5136,16 +5221,19 @@
           var pedaco = itens.slice(i, i + LOTE_FIRESTORE);
           if(btn) btn.textContent = 'Gravando... ' + Math.min(i + LOTE_FIRESTORE, itens.length) + '/' + itens.length;
           var pares = [];
-          return App.comAuth(function(){
+          return App.comAuth(function(){ return App.gravarCarimbado(function(carimbar){
+            // A funcao pode rodar de novo (login refeito, regras que
+            // recusam o carimbo): os pares recomecam do zero.
+            pares = [];
             var batch = db.batch();
             pedaco.forEach(function(l){
               var d = l.casamento.duplicata;
               var dataPgto = r.data || (l.extrato && l.extrato.data) || l.registro.vencimento;
               var valorPago = valorPagoDe(l);
-              batch.set(db.collection('duplicatas').doc(d.id), {
+              batch.set(db.collection('duplicatas').doc(d.id), carimbar({
                 pago:true, dataPagamento:dataPgto, obsPagamento:(r.obs || 'conferido no DDA'),
                 bancoPagamento:r.bancoId, valorPago:valorPago, pagoEmLote:true
-              }, { merge:true });
+              }), { merge:true });
               pares = pares.concat(LancamentosNucleo.lancamentosDePagamento({
                 tipo:'fornecedor', id:d.id, data:dataPgto, valor:d.valor || 0, valorPago:valorPago,
                 bancoId:r.bancoId,
@@ -5154,7 +5242,7 @@
               }, contabil.mapa, contabil.bancos, contabil.categorias));
             });
             return batch.commit();
-          }).then(function(){
+          }); }).then(function(){
             // O bloco JA' esta gravado: conta antes dos lancamentos,
             // senao uma falha ali diria "0 de N" com N pagos no banco.
             gravadas += pedaco.length;
