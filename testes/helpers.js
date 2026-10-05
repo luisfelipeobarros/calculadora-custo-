@@ -484,6 +484,35 @@ assincrono('lerFaixaComCache: faixa com fim; ano passado inteiro nao paga leitur
     [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 0, 'a,b', ['cache:2']]);
 });
 
+// --- itensQueFaltam: quais itens buscar um a um (NF-e Emitidas ao vivo) ---
+(function () {
+  const info = {
+    A: { emitida: true, dataEmissao: '2026-10-01' },
+    B: { emitida: true, dataEmissao: '2026-10-03' },
+    C: { emitida: true, dataEmissao: '2026-10-02', tipo: 'nfse' },
+    D: { emitida: false, dataEmissao: '2026-10-04' },
+    E: { emitida: true, dataEmissao: '2026-05-01' },
+    F: { emitida: true, dataEmissao: '2026-10-05', status: 'cancelada' }
+  };
+  const com = new Set(['A']);
+  conferir('itensQueFaltam: so nota emitida, NF-e, na janela e sem itens — mais nova primeiro',
+    App.itensQueFaltam(info, com, {}, { agora: 1000, corte: '2026-06-01' }), ['F', 'B']);
+  conferir('itensQueFaltam: sem corte, a antiga tambem entra',
+    App.itensQueFaltam(info, com, {}, { agora: 1000 }), ['F', 'B', 'E']);
+  conferir('itensQueFaltam: o limite corta o que e antigo',
+    App.itensQueFaltam(info, com, {}, { agora: 1000, limite: 1 }), ['F']);
+  conferir('itensQueFaltam: chave ja buscada conta no limite da sessao',
+    App.itensQueFaltam(info, com, { X: { n: 3, em: 0 } }, { agora: 1000, limite: 2 }), ['F']);
+  conferir('itensQueFaltam: tentativa recente espera',
+    App.itensQueFaltam(info, com, { B: { n: 1, em: 1000 } }, { agora: 2000, corte: '2026-06-01' }), ['F']);
+  conferir('itensQueFaltam: passada a espera, tenta de novo',
+    App.itensQueFaltam(info, com, { B: { n: 1, em: 1000 } }, { agora: 70000, corte: '2026-06-01' }), ['F', 'B']);
+  conferir('itensQueFaltam: desiste depois de 3 tentativas',
+    App.itensQueFaltam(info, com, { B: { n: 3, em: 0 } }, { agora: 9e9, corte: '2026-06-01' }), ['F']);
+  conferir('itensQueFaltam: nada falta quando todas tem itens',
+    App.itensQueFaltam(info, new Set(['A', 'B', 'E', 'F']), {}, { agora: 1 }), []);
+})();
+
 // E o confirmar nao pode voltar a aceitar inputDate por engano.
 conferir('confirmar nao tem mais inputDate',
   /inputDate/.test(fs.readFileSync(path.resolve(__dirname, '..', 'app-shared.js'), 'utf8')), false);

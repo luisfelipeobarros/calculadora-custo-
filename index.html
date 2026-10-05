@@ -919,7 +919,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=28"></script>
+<script src="app-shared.js?v=29"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -3686,26 +3686,162 @@ Tupan</textarea>
   // duas telas ficam sincronizadas por construcao.
   let notasInfoPorChave = {};
 
-  async function carregarNotasEmitidas(forcar){
-    if(!firestoreDb){
-      setNotasMsg('Firebase não conectado — configure na tela de Sincronização.');
+  // ─── Leitura da aba: estado AO VIVO, itens pelo cache ───
+  // Pedido de 05/10/2026: esta aba precisa estar sempre atualizada.
+  //
+  // - O ESTADO (colecao "notas") e' uma escuta ao vivo, aberta na
+  //   primeira vez que a aba (ou a comparacao, ou NCM & ST) e' aberta
+  //   e mantida ate' fechar a pagina: nota nova, entrada no ERP,
+  //   cancelamento e previsao aparecem sozinhos, sem Recarregar.
+  // - Os ITENS (itensNotas) nao mudam depois de gravados: so' os
+  //   ultimos DIAS_ITENS_SERVIDOR dias vem do servidor, o resto do
+  //   cache do navegador (App.lerFaixaComCache — a faixa inteira e'
+  //   relida a cada 7 dias e no botao Recarregar).
+  // - Nota que aparece na escuta sem itens carregados tem os itens
+  //   buscados um a um (App.itensQueFaltam decide quais).
+  const DIAS_ITENS_SERVIDOR = 30;
+  const LEITURA_ITENS_NOTAS = 'leituraItensNotas_v1';
+  const MAX_ITENS_AVULSOS = 60;
+  let pararEscutaNotas = null;      // cancela a escuta; null = nao ha' escuta viva
+  let cargaNotasEmAndamento = null; // duas abas pedindo ao mesmo tempo = uma carga so'
+  let corteNotasEmitidas = '';
+  const tentativasItens = {};       // { chave: { n, em } } das buscas avulsas
+  const itensEmBusca = new Set();
+  let novaBuscaItens = null;        // timer da proxima tentativa
+
+  const ordenarNotasEmitidas = () =>
+    notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
+
+  // Resolve no primeiro retrato (e' quando a aba pode desenhar); dali
+  // em diante cada mudanca redesenha a lista sozinha.
+  function escutarEstadoNotas(corteISO){
+    if(pararEscutaNotas){ pararEscutaNotas(); pararEscutaNotas = null; }
+    return new Promise((resolve, reject) => {
+      let primeiro = true;
+      const mapa = {};
+      const parar = firestoreDb.collection('notas').where('dataEmissao', '>=', corteISO)
+        .onSnapshot(snap => {
+          snap.docChanges().forEach(ch => {
+            if(ch.type === 'removed') delete mapa[ch.doc.id];
+            else mapa[ch.doc.id] = ch.doc.data();
+          });
+          notasInfoPorChave = mapa;
+          if(primeiro){ primeiro = false; resolve(); return; }
+          aoMudarEstadoNotas();
+        }, e => {
+          parar();
+          if(pararEscutaNotas === parar) pararEscutaNotas = null; // a proxima abertura da aba religa
+          if(primeiro){ primeiro = false; reject(e); return; }
+          console.error('Escuta das notas emitidas caiu:', e);
+          setNotasMsg('A atualização ao vivo parou (' + App.erroDe(e) + ') — clique em Recarregar.');
+        });
+      pararEscutaNotas = parar;
+    });
+  }
+
+  async function buscarItensQueFaltam(){
+    if(!notasEmitidasCache) return 0;
+    const tenho = new Set(notasEmitidasCache.map(n => n.chave));
+    itensEmBusca.forEach(ch => tenho.add(ch));
+    const faltam = App.itensQueFaltam(notasInfoPorChave, tenho, tentativasItens, {
+      agora: Date.now(), corte: corteNotasEmitidas, limite: MAX_ITENS_AVULSOS
+    });
+    if(!faltam.length) return 0;
+    faltam.forEach(ch => itensEmBusca.add(ch));
+    const docs = await Promise.all(faltam.map(ch =>
+      firestoreDb.collection('itensNotas').doc(ch).get()
+        .catch(e => { console.error('Erro ao buscar itens da nota:', e); return null; })));
+    let novos = 0, semItens = 0;
+    docs.forEach((doc, i) => {
+      const ch = faltam[i];
+      itensEmBusca.delete(ch);
+      const t = tentativasItens[ch] || { n: 0, em: 0 };
+      tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
+      if(doc && doc.exists && notasEmitidasCache){
+        if(!notasEmitidasCache.some(n => n.chave === ch)) notasEmitidasCache.push({ chave: ch, ...doc.data() });
+        novos++;
+      } else {
+        semItens++;
+      }
+    });
+    if(novos) ordenarNotasEmitidas();
+    // O Apps Script grava a nota e os itens em chamadas separadas: se
+    // a nota chegou primeiro, os itens sao procurados de novo logo mais.
+    if(semItens && !novaBuscaItens){
+      novaBuscaItens = setTimeout(() => { novaBuscaItens = null; aoMudarEstadoNotas(); }, 90000);
+    }
+    return novos;
+  }
+
+  function aoMudarEstadoNotas(){
+    buscarItensQueFaltam().catch(e => { console.error(e); }).then(redesenharNotasAoVivo);
+  }
+
+  let redesenhoNotasAdiado = false;
+  function redesenharNotasAoVivo(){
+    if(!notasEmitidasCache) return;
+    // Previsao de entrega sendo preenchida: redesenhar agora trocaria
+    // o campo debaixo do dedo. Espera a pessoa sair dele.
+    const ativo = document.activeElement;
+    if(ativo && ativo.matches && ativo.matches('input[data-prev]')){
+      if(!redesenhoNotasAdiado){
+        redesenhoNotasAdiado = true;
+        ativo.addEventListener('blur', () => { redesenhoNotasAdiado = false; redesenharNotasAoVivo(); }, { once: true });
+      }
       return;
     }
-    if(notasEmitidasCache && !forcar){ renderNotasEmitidas(); return; }
+    if(pararEscutaNotas) setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora());
+    if(router.atual() === 'Notas') renderNotasEmitidas();
+    const cmp = $('listaNotasEmitidasCmp');
+    if(cmp && cmp.offsetParent !== null) renderListaNotasCmp();
+  }
+
+  function carregarNotasEmitidas(forcar){
+    if(!firestoreDb){
+      setNotasMsg('Firebase não conectado — configure na tela de Sincronização.');
+      return Promise.resolve();
+    }
+    // Com a escuta viva o estado ja' esta' em dia: e' so' desenhar.
+    if(notasEmitidasCache && pararEscutaNotas && !forcar){ renderNotasEmitidas(); return Promise.resolve(); }
+    if(!cargaNotasEmAndamento){
+      cargaNotasEmAndamento = baixarNotasEmitidas(!!forcar).then(() => { cargaNotasEmAndamento = null; });
+    }
+    return cargaNotasEmAndamento;
+  }
+
+  async function baixarNotasEmitidas(forcar){
     setNotasMsg('Carregando notas dos últimos ' + DIAS_NOTAS_EMITIDAS + ' dias...');
     try{
-      const corte = new Date(Date.now() - DIAS_NOTAS_EMITIDAS*86400000);
-      const corteISO = App.iso(corte);
-      const [snap, snapNotas] = await Promise.all([
-        App.comAuth(()=> firestoreDb.collection('itensNotas').where('dataEmissao', '>=', corteISO).get()),
-        App.comAuth(()=> firestoreDb.collection('notas').where('dataEmissao', '>=', corteISO).get())
+      const hoje = App.hojeISO();
+      const corteISO = App.somarDias(hoje, -DIAS_NOTAS_EMITIDAS);
+      // O inicio da faixa dos itens fica preso ao dia 1 do mes: uma
+      // faixa que andasse um dia por dia nunca casaria com a guardada
+      // e toda leitura seria completa. O excedente sai no filtro abaixo.
+      const [leitura] = await Promise.all([
+        App.comAuth(()=> App.lerFaixaComCache({
+          col: firestoreDb.collection('itensNotas'), campo: 'dataEmissao',
+          ini: corteISO.slice(0, 8) + '01',
+          corte: App.somarDias(hoje, -DIAS_ITENS_SERVIDOR),
+          chave: LEITURA_ITENS_NOTAS, hoje: hoje, forcar: forcar
+        })),
+        App.comAuth(()=> escutarEstadoNotas(corteISO))
       ]);
-      notasInfoPorChave = {};
-      snapNotas.forEach(doc => { notasInfoPorChave[doc.id] = doc.data(); });
+      corteNotasEmitidas = corteISO;
+      const anteriores = notasEmitidasCache || [];
       notasEmitidasCache = [];
-      snap.forEach(doc => notasEmitidasCache.push({ chave: doc.id, ...doc.data() }));
-      notasEmitidasCache.sort((a,b)=>(b.dataEmissao||'').localeCompare(a.dataEmissao||''));
-      setNotasMsg('');
+      leitura.docs.forEach(doc => {
+        const d = doc.data();
+        if((d.dataEmissao || '') >= corteISO) notasEmitidasCache.push({ chave: doc.id, ...d });
+      });
+      // O que ja' foi buscado um a um nesta sessao continua valendo:
+      // essas chaves nao sao pedidas de novo.
+      const lidas = new Set(notasEmitidasCache.map(n => n.chave));
+      anteriores.forEach(n => {
+        if(tentativasItens[n.chave] && !lidas.has(n.chave) && (n.dataEmissao || '') >= corteISO) notasEmitidasCache.push(n);
+      });
+      ordenarNotasEmitidas();
+      await buscarItensQueFaltam();
+      setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora());
       renderNotasEmitidas();
       renderListaNotasCmp();
     }catch(e){

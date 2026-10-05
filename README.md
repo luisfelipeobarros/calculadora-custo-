@@ -30,7 +30,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=17">
-<script src="app-shared.js?v=28"></script>
+<script src="app-shared.js?v=29"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -145,11 +145,27 @@ dado. Exclusão de produto avisa os outros navegadores por um contador em
 `config/produtosSync`. No dashboard, o botão "Recarregar dados" força a
 leitura completa.
 
-O que **não** usa isso, de propósito: as escutas em tempo real do
-Controle de Notas (notas, duplicatas, pagamentos). Elas já reaproveitam
-o cache quando a página é reaberta em até 30 minutos; para ir além,
-seria preciso um carimbo de alteração gravado pelo Apps Script e
-liberado nas regras.
+### O que fica em tempo real
+
+Três telas precisam mostrar o dado mais recente possível, e ficam em
+**escuta ao vivo** (o que muda no banco aparece sozinho, sem recarregar):
+
+- **A importar** e **Pagamentos** (Controle de Notas) — as seis escutas
+  de notas, duplicatas e pagamentos. Elas só são abertas quando uma tela
+  que usa esses dados é aberta: entrar (ou dar F5) em **Lançamentos**,
+  **Custos** ou **Cadastros** não lê nota nenhuma. Depois de abertas,
+  ficam vivas até fechar a página — trocar de tela não desliga.
+- **NF-e Emitidas** (Calculadora) — o estado das notas (entrou no ERP,
+  cancelada, previsão, disponível) é uma escuta ao vivo, aberta na
+  primeira vez que a aba é usada. Os itens das notas não mudam depois de
+  gravados: só os últimos 30 dias vêm do servidor, o resto do cache
+  (`App.lerFaixaComCache`), e a nota que aparece na escuta sem itens
+  carregados tem os itens buscados um a um (`App.itensQueFaltam`).
+
+As escutas do Controle de Notas ainda pagam a janela inteira a cada
+abertura fria (mais de 30 minutos depois da última). Para pagar só o que
+mudou falta um **carimbo de alteração** em `notas` e `duplicatas`,
+gravado pelo Apps Script e pelo app e liberado nas regras.
 
 ---
 
@@ -244,7 +260,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 133 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 141 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -263,7 +279,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 55 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 68 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de

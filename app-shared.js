@@ -1754,6 +1754,51 @@
     });
   }
 
+  // 3. itensQueFaltam — NF-e Emitidas da Calculadora. O ESTADO das
+  //    notas (colecao "notas") fica numa escuta ao vivo; os ITENS
+  //    (itensNotas, que nao mudam depois de gravados) vem de
+  //    lerFaixaComCache. Nota que aparece na escuta sem os itens
+  //    carregados — XML que acabou de chegar, ou que chegou com atraso
+  //    maior que a faixa lida no servidor — tem os itens buscados um a
+  //    um. Aqui so' se decide QUAIS buscar (puro; quem le e' a pagina).
+  //
+  //    tentativas: { chave: { n, em } } — o documento de itens pode
+  //    nascer segundos depois do da nota, entao uma chave sem itens e'
+  //    tentada de novo apos `espera`, ate' `maxTentativas`. `limite`
+  //    trava o total de chaves buscadas na sessao: se a suposicao
+  //    "toda nota emitida tem itens" falhar, o custo fica pequeno.
+  // o: { agora, corte?, limite?, maxTentativas?, espera? }
+  function itensQueFaltam(infoPorChave, chavesComItens, tentativas, o) {
+    o = o || {};
+    var limite = o.limite == null ? 60 : o.limite;
+    var maxTentativas = o.maxTentativas || 3;
+    var espera = o.espera == null ? 60000 : o.espera;
+    var agora = o.agora || 0;
+    var vagas = limite - Object.keys(tentativas).length;
+
+    var candidatas = Object.keys(infoPorChave).filter(function (ch) {
+      var n = infoPorChave[ch];
+      if (!n || n.emitida !== true || n.tipo === 'nfse') return false;
+      if (o.corte && (n.dataEmissao || '') < o.corte) return false;
+      return !chavesComItens.has(ch);
+    });
+    // As mais novas primeiro: se o limite cortar, corta o que e' antigo.
+    candidatas.sort(function (a, b) {
+      return (infoPorChave[b].dataEmissao || '').localeCompare(infoPorChave[a].dataEmissao || '');
+    });
+
+    var faltam = [];
+    candidatas.forEach(function (ch) {
+      var t = tentativas[ch];
+      if (t) {
+        if (t.n < maxTentativas && agora - t.em >= espera) faltam.push(ch);
+        return;
+      }
+      if (vagas > 0) { vagas--; faltam.push(ch); }
+    });
+    return faltam;
+  }
+
   /* ============================================================
      9e. Vendas x Compras (Controle de Notas e Dashboard)
      ============================================================
@@ -2009,6 +2054,7 @@
     lerComDelta: lerComDelta,
     lerFaixaComCache: lerFaixaComCache,
     esquecerLeitura: esquecerLeitura,
+    itensQueFaltam: itensQueFaltam,
     ajustarLeitura: ajustarLeitura,
     termosDaBusca: termosDaBusca,
     buscaComChips: buscaComChips,

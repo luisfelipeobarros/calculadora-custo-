@@ -820,7 +820,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=28"></script>
+<script src="app-shared.js?v=29"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=6"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -1183,6 +1183,24 @@
   // recriando o app do Firebase e abrindo mais quatro escutas.
   var iniciando = false;
 
+  // ─── Carga sob demanda ──────────────────────────────────────
+  // Lancamentos, Custos e Cadastros nao usam notas, duplicatas nem
+  // pagamentos. Abrir o app (ou dar F5) numa delas nao abre as seis
+  // escutas — cada abertura fria paga a janela inteira de documentos.
+  // Elas nascem quando uma tela que precisa e' aberta e dai' ficam
+  // vivas ate' fechar a pagina: trocar de tela nao desliga nada, e'
+  // isso que mantem A importar e Pagamentos em tempo real.
+  var TELAS_SEM_NOTAS = { Lancamentos: true, Cadastros: true, Custos: true };
+  var prontoParaEscutar = false; // ha' banco e alguem logado
+  var escutasAbertas = false;
+
+  function garantirEscutas(tela){
+    if(!prontoParaEscutar || escutasAbertas || TELAS_SEM_NOTAS[tela]) return;
+    escutasAbertas = true;
+    setStatus('Carregando notas...');
+    escutarColecoes();
+  }
+
   function iniciar(){
     if(iniciando) return;
     iniciando = true;
@@ -1196,8 +1214,16 @@
       setStatus('Verificando acesso...');
       return App.exigirLogin();
     }).then(function(){
-      setStatus('Carregando notas...');
-      escutarColecoes();
+      prontoParaEscutar = true;
+      // Login refeito com as escutas ja' abertas: reabre (o app do
+      // Firebase e' outro). Senao, so' abre se a tela atual usa notas.
+      if(escutasAbertas){
+        setStatus('Carregando notas...');
+        escutarColecoes();
+      } else {
+        garantirEscutas(router.atual());
+        if(!escutasAbertas) setStatus('Conectado · notas e pagamentos carregam ao abrir uma tela que usa');
+      }
       iniciarLancamentos();
       carregarFornOcultos();
     }).catch(function(e){
@@ -2182,6 +2208,7 @@
       Custos: entrarCustos
     },
     aoTrocar: function(nome){
+      garantirEscutas(nome);
       [['Painel','navPainel'], ['Importar','navImportar'],
        ['Pagamentos','navPagamentos'], ['Fornecedores','navFornecedores'],
        ['Dda','navDda'],
@@ -2241,7 +2268,9 @@
   }
 
   function renderAtual(){
-    if(!carregouNotas && !carregouDuplicatas) return;
+    // As telas sem notas (Lancamentos, Custos, Cadastros) nao esperam
+    // por uma carga que, nelas, pode nem ter sido pedida.
+    if(!TELAS_SEM_NOTAS[router.atual()] && !carregouNotas && !carregouDuplicatas) return;
     var ativo = document.activeElement;
     var chaveFoco = (ativo && ativo.dataset) ? ativo.dataset.previsao : null;
     // O numero da nota devolvida e' digitado direto na tabela de

@@ -231,5 +231,49 @@ eq('  ...e a regra da certo nos dois casos',
 eq('  ...com a regex escrita com as barras na pagina',
   html.indexOf("replace(/(_\\d{4}-\\d{2}-\\d{2})+$/, '')") !== -1, true);
 
+// --- Carga sob demanda (05/10/2026) ---
+// As seis escutas so' abrem quando uma tela que usa notas/pagamentos
+// e' aberta. A funcao e' a da pagina, rodando contra contadores.
+(function(){
+  const telas = bloco(/var TELAS_SEM_NOTAS = \{[^}]*\};/, 'TELAS_SEM_NOTAS');
+  function cenario(pronto){
+    const f = new Function(
+      'var prontoParaEscutar = ' + pronto + ', escutasAbertas = false, aberturas = 0, status = "";' +
+      'function setStatus(t){ status = t; } function escutarColecoes(){ aberturas++; }' +
+      telas + extrair('garantirEscutas') +
+      'return { ir: garantirEscutas, ver: function(){ return aberturas; } };');
+    return f();
+  }
+  const c = cenario(true);
+  ['Lancamentos', 'Custos', 'Cadastros'].forEach(t => c.ir(t));
+  eq('Lancamentos, Custos e Cadastros nao abrem escuta nenhuma', c.ver(), 0);
+  c.ir('Pagamentos');
+  eq('abrir Pagamentos abre as escutas', c.ver(), 1);
+  ['Importar', 'Painel', 'Lancamentos', 'Pagamentos', 'Dda'].forEach(t => c.ir(t));
+  eq('trocar de tela depois nao abre de novo (nem fecha)', c.ver(), 1);
+  const s = cenario(false);
+  s.ir('Pagamentos');
+  eq('antes do login nada e aberto', s.ver(), 0);
+
+  // Toda tela fora da lista TEM que abrir as escutas: uma tela nova
+  // que use notas e ficasse de fora mostraria "Carregando" para sempre.
+  const views = bloco(/views: \{ Painel:'viewPainel'[\s\S]*?\}/, 'views do router');
+  const nomes = [...views.matchAll(/(\w+):'view/g)].map(m => m[1]);
+  const semNotas = [...telas.matchAll(/(\w+): true/g)].map(m => m[1]);
+  eq('as telas sem notas existem no router', semNotas.filter(t => nomes.indexOf(t) === -1).join(','), '');
+  eq('so tres telas ficam sem notas', semNotas.sort().join(','), 'Cadastros,Custos,Lancamentos');
+  eq('o router chama garantirEscutas a cada troca de tela',
+    /aoTrocar: function\(nome\)\{\s*garantirEscutas\(nome\);/.test(html), true);
+  eq('a entrada nao abre mais as escutas direto',
+    /setStatus\('Carregando notas\.\.\.'\);\s*escutarColecoes\(\);\s*iniciarLancamentos\(\);/.test(html), false);
+  eq('login refeito reabre o que ja estava aberto',
+    /if\(escutasAbertas\)\{\s*setStatus\('Carregando notas\.\.\.'\);\s*escutarColecoes\(\);/.test(html), true);
+  // As telas sem notas nao podem ler as colecoes que nao foram pedidas.
+  const usa = /(^|[^a-zA-Z_.'])(notas|duplicatas|pagamentosInternos|notasPorChave)(\.|\[)/;
+  ['renderLancamentos', 'renderCadastrosLc', 'entrarCustos', 'carregarCustos'].forEach(fn => {
+    eq(fn + ' nao le notas/duplicatas/pagamentos', usa.test(extrair(fn)), false);
+  });
+})();
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

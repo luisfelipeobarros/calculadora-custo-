@@ -297,6 +297,33 @@ if(/\}\)\.then\(function\(\)\{ iniciando = false; \}\);/.test(cn)){
   erro('a guarda de iniciar() nunca e liberada — uma falha travaria o app para sempre');
 }
 
+// NF-e Emitidas ao vivo (05/10/2026): o estado vem de UMA escuta, os
+// itens do cache + ultimos dias, e a escuta anterior e' cancelada
+// antes de abrir outra.
+const ix = html.replace(/\s+/g, ' ');
+if(/function escutarEstadoNotas\(corteISO\)\{ if\(pararEscutaNotas\)\{ pararEscutaNotas\(\); pararEscutaNotas = null; \}/.test(ix)){
+  ok('escutarEstadoNotas cancela a escuta anterior antes de abrir outra');
+} else {
+  erro('escutarEstadoNotas nao cancela a anterior — cada Recarregar somaria uma escuta');
+}
+if((ix.match(/collection\('notas'\)\.where\('dataEmissao', '>=', corteISO\)\s*\.onSnapshot\(/g) || []).length === 1 &&
+   !/collection\('notas'\)\.where\('dataEmissao', '>=', corteISO\)\.get\(\)/.test(ix)){
+  ok('o estado das notas emitidas e uma escuta ao vivo (nao um get por sessao)');
+} else {
+  erro('o estado das notas emitidas voltou a ser lido uma vez so — a aba fica parada no tempo');
+}
+if(/App\.lerFaixaComCache\(\{ col: firestoreDb\.collection\('itensNotas'\)/.test(ix) &&
+   !/collection\('itensNotas'\)\.where\('dataEmissao', '>=', corteISO\)\.get\(\)/.test(ix)){
+  ok('os itens das notas vem do cache do navegador + ultimos dias');
+} else {
+  erro('os itens das notas voltaram a ser lidos inteiros do servidor a cada abertura');
+}
+if(/if\(notasEmitidasCache && pararEscutaNotas && !forcar\)/.test(ix) && /if\(!cargaNotasEmAndamento\)\{/.test(ix)){
+  ok('reabrir a aba so reaproveita a memoria com a escuta viva; cargas simultaneas viram uma');
+} else {
+  erro('carregarNotasEmitidas sem as guardas de escuta viva / carga unica');
+}
+
 // ============================================================
 // Recebimento derivado do vinculo cotacao <-> NF-e
 // ============================================================
