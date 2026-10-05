@@ -1348,7 +1348,7 @@
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
-    'app-shared.js?v=27'
+    'app-shared.js?v=28'
   ];
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
@@ -1425,7 +1425,7 @@
     // A janela do Vendas × Compras depende do primeiro ano da planilha:
     // baixar o Firestore antes de a planilha chegar usaria "ano passado"
     // e zeraria Comprado/Títulos nos anos mais antigos.
-    carregarDados().then(vxpBaixar);
+    carregarDados().then(() => vxpBaixar());
   }
 
   function sair(){
@@ -1433,7 +1433,7 @@
       .then(() => location.reload());
   }
 
-  function vxpBaixar(){
+  function vxpBaixar(forcar){
     vxp.fase = 'carregando'; renderVxp();
     // Janela: do primeiro ano da planilha em diante — é o que a
     // comparação consegue usar.
@@ -1441,11 +1441,24 @@
     // reduce, nao Math.min.apply: com dezenas de milhares de linhas o
     // apply estoura o limite de argumentos do navegador.
     const ini = (anos.length ? anos.reduce((m, a) => a < m ? a : m, anos[0]) : new Date().getFullYear() - 1) + '-01-01';
+    // Leitura economica (05/10/2026): eram TODAS as notas e duplicatas
+    // desde o primeiro ano da planilha, a cada login. O que tem mais de
+    // 60 dias vem do cache do navegador, so' o resto vai ao servidor, e
+    // a faixa inteira e' relida a cada 7 dias — ou na hora, pelo botao
+    // "Recarregar dados" (forcar). Em qualquer duvida a leitura e'
+    // completa (App.lerFaixaComCache).
+    const hojeLeitura = window.App.hojeISO();
+    const corteLeitura = window.App.somarDias(hojeLeitura, -60);
+    const faixa = (colecao, campo) => window.App.lerFaixaComCache({
+      col: vxp.db.collection(colecao), campo: campo, ini: ini, corte: corteLeitura,
+      chave: 'leituraVxp_' + colecao, hoje: hojeLeitura, forcar: forcar === true
+    });
     return Promise.all([
-      vxp.db.collection('notas').where('dataEmissao', '>=', ini).get(),
-      vxp.db.collection('duplicatas').where('vencimento', '>=', ini).get(),
+      faixa('notas', 'dataEmissao'),
+      faixa('duplicatas', 'vencimento'),
       vxp.db.collection('config').doc('vendasCompras').get()
     ]).then(([ns, ds, cfg]) => {
+      vxp.leitura = { notas: ns.modo, duplicatas: ds.modo, lidas: ns.lidasNoServidor + ds.lidasNoServidor };
       vxp.notas = ns.docs.map(d => Object.assign({ id: d.id }, d.data()));
       vxp.duplicatas = ds.docs.map(d => d.data());
       const c = cfg.exists ? cfg.data() : null;
@@ -1528,7 +1541,8 @@
           x.setAttribute('aria-pressed', String(x === b)));
         renderCrescimentoAnual();
       }));
-    $('recarregarDadosBtn').addEventListener('click', () => { carregarDados().then(vxpBaixar); });
+    // O botao e' o pedido explicito de dado fresco: compras e titulos relidos por inteiro.
+    $('recarregarDadosBtn').addEventListener('click', () => { carregarDados().then(() => vxpBaixar(true)); });
     $('sairBtn').addEventListener('click', sair);
 
     // Instalar como app (pedido de 03/10/2026). O navegador so' entrega
@@ -1564,7 +1578,7 @@
       if(e.target && e.target.id === 'loginTentarBtn') iniciarLogin();
     });
     $('vxpConteudo').addEventListener('click', function(e){
-      if(e.target && e.target.id === 'vxpBtnTentar') vxpBaixar();
+      if(e.target && e.target.id === 'vxpBtnTentar') vxpBaixar(true);
     });
 
     // O portão: nada é buscado nem desenhado antes do login —

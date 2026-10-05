@@ -919,7 +919,7 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=27"></script>
+<script src="app-shared.js?v=28"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
 <script src="calculo-nucleo.js?v=7"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
@@ -1359,10 +1359,32 @@ Tupan</textarea>
     return firestoreDb;
   }
 
+  // Chaves do controle de leitura economica (App.lerComDelta / lerFaixaComCache).
+  const LEITURA_PRODUTOS = 'leituraProdutos_v1';
+  const LEITURA_CONCORRENTES = 'leituraConcorrentes_v1';
+
+  // A lista de produtos e' relida a cada abertura E a cada ficha salva.
+  // Com milhares de fichas isso era a colecao inteira paga toda vez
+  // (05/10/2026: 4 mil fichas importadas da planilha de precos). Agora:
+  // cache do navegador + so' o que tem `atualizadoEm` mais novo. Quem
+  // EXCLUI uma ficha avisa os outros navegadores por um contador em
+  // config/produtosSync (uma leitura por abertura); e a primeira
+  // leitura de cada dia e' completa de qualquer jeito.
   async function firebaseListar(){
-    const snap = await App.comAuth(() => exigirDb().collection('produtos').get());
+    const db = exigirDb();
+    let exclusoes = null;
+    try{
+      const s = await App.comAuth(() => db.collection('config').doc('produtosSync').get());
+      exclusoes = (s.exists && s.data().exclusoes) || 0;
+    }catch(e){ console.warn('contador de exclusões de produtos indisponível — leitura completa:', e); }
+    const leitura = exclusoes === null
+      ? { docs: (await App.comAuth(() => db.collection('produtos').get())).docs }
+      : await App.comAuth(() => App.lerComDelta({
+          consulta: db.collection('produtos'), campo: 'atualizadoEm',
+          chave: LEITURA_PRODUTOS, hoje: App.hojeISO(), versao: exclusoes
+        }));
     const produtos = {};
-    snap.forEach(doc=>{
+    leitura.docs.forEach(doc=>{
       const d = doc.data();
       // O nome gravado vale mais que o id; e um id que nao veio de
       // encodeURIComponent ("%" solto) nao pode derrubar a lista inteira.
@@ -1387,6 +1409,20 @@ Tupan</textarea>
   async function firebaseExcluir(nome){
     await App.comAuth(() =>
       exigirDb().collection('produtos').doc(encodeURIComponent(nome)).delete());
+    // Exclusao nao deixa carimbo para o delta enxergar: o contador muda
+    // e os OUTROS navegadores fazem uma leitura completa na proxima
+    // abertura. Este aqui so' ajusta a propria conta (uma ficha a
+    // menos, contador um a mais) e segue lendo do cache.
+    try{
+      await App.comAuth(() => exigirDb().collection('config').doc('produtosSync')
+        .set({ exclusoes: firebase.firestore.FieldValue.increment(1) }, { merge: true }));
+      App.ajustarLeitura(LEITURA_PRODUTOS, (m) => { m.qtd -= 1; m.versao = (m.versao || 0) + 1; });
+    }catch(e){
+      // Sem o aviso, os outros so' percebem na renovacao diaria; aqui a
+      // proxima leitura e' completa, para nao depender de conta errada.
+      console.warn('não consegui avisar a exclusão aos outros navegadores:', e);
+      App.esquecerLeitura(LEITURA_PRODUTOS);
+    }
   }
 
   function detectarBackendInicial(){
@@ -3137,10 +3173,18 @@ Tupan</textarea>
     // Só documentos com o campo "codigo" (as pesquisas vindas da
     // planilha): pesquisa antiga sem código não tem como casar com o
     // catálogo sem adivinhação por texto — e adivinhação está fora.
-    const snap = await App.comAuth(()=> exigirDb().collection('concorrentes')
-      .where('codigo', '>=', '').get());
+    // Pesquisa salva nao muda depois de gravada e leva a hora do
+    // servidor em `data`: cache + so' as mais novas que a ultima vista
+    // (antes era a colecao inteira a cada entrada na aba). O delta usa
+    // a colecao pura — duas desigualdades em campos diferentes pediriam
+    // indice — e descarta aqui o que vier sem codigo.
+    const colConc = exigirDb().collection('concorrentes');
+    const leitura = await App.comAuth(()=> App.lerComDelta({
+      consulta: colConc.where('codigo', '>=', ''), delta: colConc, aceita: (d) => !!d.data().codigo,
+      campo: 'data', chave: LEITURA_CONCORRENTES, hoje: App.hojeISO()
+    }));
     const idx = {};
-    snap.forEach(doc => {
+    leitura.docs.forEach(doc => {
       const d = doc.data();
       if(!d.codigo) return;
       // Pesquisas de PEDIDOS do histórico também contam (09/09/2026:
@@ -4381,6 +4425,9 @@ Tupan</textarea>
     if(!ok) return;
     try{
       await App.comAuth(()=> firestoreDb.collection('concorrentes').doc(id).delete());
+      // O indice "ultima pesquisa por codigo" le do cache: exclusao e'
+      // rara, entao a proxima leitura dele e' completa.
+      App.esquecerLeitura(LEITURA_CONCORRENTES);
       App.toast('Comparação excluída.', 'ok');
       // Tira do cache e redesenha, em vez de reler a coleção.
       concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== id);
@@ -6337,9 +6384,16 @@ Tupan</textarea>
         // Ate junho do ANO SEGUINTE: as notas de agora ja' vencem no
         // ano que vem, e a linha do 1º semestre embaixo do total
         // mostra isso sem trocar de ano.
-        App.comAuth(() => firestoreDb.collection('duplicatas')
-          .where('vencimento', '>=', ano + '-01-01')
-          .where('vencimento', '<=', (ano + 1) + '-06-30').get()),
+        // Um ano e meio de duplicatas a cada abertura do Painel era a
+        // leitura mais cara da Calculadora. O que venceu ha' mais de 60
+        // dias vem do cache do navegador; so' o resto vai ao servidor,
+        // e a faixa inteira e' relida a cada 7 dias (App.lerFaixaComCache).
+        App.comAuth(() => App.lerFaixaComCache({
+          col: firestoreDb.collection('duplicatas'), campo: 'vencimento',
+          ini: ano + '-01-01', fim: (ano + 1) + '-06-30',
+          corte: App.somarDias(App.hojeISO(), -60),
+          chave: 'leituraPainelDup_' + ano, hoje: App.hojeISO()
+        }).then(r => r.docs)),
         // So' as canceladas, para excluir as duplicatas delas do "a
         // pagar" — baixar todas as notas do ano custaria muito mais
         // leitura para usar um campo so'.

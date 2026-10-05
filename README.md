@@ -30,7 +30,7 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=17">
-<script src="app-shared.js?v=27"></script>
+<script src="app-shared.js?v=28"></script>
 <script src="calculo-nucleo.js?v=7"></script>
 ```
 
@@ -126,6 +126,33 @@ sozinho a operação que falhou.
 
 ---
 
+## Leituras do Firestore: cache do navegador
+
+O Firestore cobra por documento lido **no servidor**. Um `get()` comum
+paga a coleção inteira toda vez, mesmo com o cache local ligado. Duas
+funções do `app-shared.js` (seção 9d-ter) pagam só pelo que mudou:
+
+| Função | Para quê | Onde é usada |
+|---|---|---|
+| `App.lerComDelta` | coleção em que toda gravação carimba a hora do servidor: lê o cache e busca só o que tem carimbo mais novo | produtos salvos (`atualizadoEm`) e o índice de pesquisas de concorrentes (`data`) |
+| `App.lerFaixaComCache` | coleção consultada por data, sem carimbo de alteração: o que tem mais de 60 dias vem do cache, o resto do servidor, e tudo é relido a cada 7 dias | duplicatas do Painel de metas; notas e duplicatas do Vendas × Compras no dashboard |
+
+A regra de segurança é a mesma nas duas: **na dúvida, leitura completa**
+— primeiro acesso do navegador, cache vazio ou menor do que deveria,
+navegador sem cache, virada do dia (ou da semana). O risco assumido é
+ver com atraso o que outra máquina alterou em dado antigo; nunca perder
+dado. Exclusão de produto avisa os outros navegadores por um contador em
+`config/produtosSync`. No dashboard, o botão "Recarregar dados" força a
+leitura completa.
+
+O que **não** usa isso, de propósito: as escutas em tempo real do
+Controle de Notas (notas, duplicatas, pagamentos). Elas já reaproveitam
+o cache quando a página é reaberta em até 30 minutos; para ir além,
+seria preciso um carimbo de alteração gravado pelo Apps Script e
+liberado nas regras.
+
+---
+
 ## O preço de venda mora em um lugar só
 
 O preço de venda de um produto fica em **Produtos salvos**
@@ -217,7 +244,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 110 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 133 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para

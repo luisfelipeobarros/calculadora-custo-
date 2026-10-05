@@ -304,6 +304,186 @@ assincrono('pedirTexto confirmado em branco devolve "" (limpar), nao null', () =
   return p.then(v => conferir('pedirTexto confirmado em branco devolve "" (limpar), nao null', v, ''));
 });
 
+// --- leitura economica: cache do navegador + so' o que mudou ---
+//
+// Firestore de mentira: uma lista "servidor" e uma lista "cache". Toda
+// leitura do servidor ALIMENTA o cache (como o SDK faz) e fica
+// registrada em `log`, que e' o que os testes conferem: quantos
+// documentos cada caminho pagou.
+function firestoreFalso(servidor, cache, log) {
+  const doc = (x) => ({ id: x.id, data: () => x.dados });
+  const valor = (v) => (v && v.toMillis ? v.toMillis() : v);
+  function consulta(filtros) {
+    return {
+      where(campo, op, v) { return consulta(filtros.concat([[campo, op, v]])); },
+      get(opts) {
+        const deCache = !!(opts && opts.source === 'cache');
+        if (deCache && cache === null) return Promise.reject(new Error('sem cache'));
+        const lista = (deCache ? cache : servidor).filter(x => filtros.every(([c, op, v]) => {
+          const a = valor(x.dados[c]), b = valor(v);
+          if (a == null) return false;
+          return op === '>' ? a > b : op === '>=' ? a >= b : op === '<' ? a < b : op === '<=' ? a <= b : a === b;
+        }));
+        log.push((deCache ? 'cache' : 'servidor') + ':' + lista.length);
+        if (!deCache && cache) lista.forEach(x => {
+          const i = cache.findIndex(y => y.id === x.id);
+          if (i === -1) cache.push(x); else cache[i] = x;
+        });
+        return Promise.resolve({ size: lista.length, forEach: (fn) => lista.map(doc).forEach(fn) });
+      }
+    };
+  }
+  return consulta([]);
+}
+const carimbo = (ms) => ({ toMillis: () => ms });
+const HORA = 3600000;
+function armazenamentoFalso() {
+  const m = {};
+  return { m, getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = v; }, removeItem: k => { delete m[k]; } };
+}
+const ids = (r) => r.docs.map(d => d.id).sort().join(',');
+
+assincrono('lerComDelta: completa na primeira vez, delta depois, e completa de novo na duvida', async () => {
+  const servidor = [
+    { id: 'a', dados: { v: 1, atualizadoEm: carimbo(10 * HORA) } },
+    { id: 'b', dados: { v: 1, atualizadoEm: carimbo(20 * HORA) } },
+    { id: 'c', dados: { v: 1 } } // ficha antiga, sem carimbo
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const ler = (extra) => App.lerComDelta(Object.assign({
+    consulta: firestoreFalso(servidor, cache, log), campo: 'atualizadoEm', chave: 'k', hoje: '2026-10-05',
+    versao: 0, armazenamento: arm, deMillis: carimbo
+  }, extra));
+
+  const r1 = await ler();
+  conferir('delta: primeira leitura e completa e paga tudo', [r1.modo, r1.lidasNoServidor, ids(r1)], ['completa', 3, 'a,b,c']);
+
+  log.length = 0;
+  const r2 = await ler();
+  conferir('delta: segunda leitura vem do cache e paga so o que esta na folga do ultimo carimbo',
+    [r2.modo, r2.lidasNoServidor, ids(r2), log], ['delta', 1, 'a,b,c', ['cache:3', 'servidor:1']]);
+
+  // Outra maquina alterou "a" e criou "d".
+  servidor[0] = { id: 'a', dados: { v: 2, atualizadoEm: carimbo(30 * HORA) } };
+  servidor.push({ id: 'd', dados: { v: 1, atualizadoEm: carimbo(31 * HORA) } });
+  const r3 = await ler();
+  // 3 leituras: as duas novidades + "b", que estava dentro da folga do ultimo carimbo.
+  conferir('delta: traz a ficha alterada e a nova, com o valor NOVO',
+    [r3.modo, r3.lidasNoServidor, ids(r3), r3.docs.find(d => d.id === 'a').data().v], ['delta', 3, 'a,b,c,d', 2]);
+  conferir('delta: o controle avanca para o ultimo carimbo visto', [JSON.parse(arm.m.k).ultima, JSON.parse(arm.m.k).qtd], [31 * HORA, 4]);
+
+  const r4 = await ler({ hoje: '2026-10-06' });
+  conferir('delta: primeira leitura de outro dia e completa', [r4.modo, r4.motivo], ['completa', 'renovação diária']);
+  const r5 = await ler({ hoje: '2026-10-06', versao: 1 });
+  conferir('delta: contador de exclusao diferente = completa', [r5.modo, r5.motivo], ['completa', 'houve exclusão em outra máquina']);
+
+  // O navegador limpou parte do cache: menos documentos do que o controle diz.
+  cache.splice(0, 2);
+  const r6 = await ler({ hoje: '2026-10-06', versao: 1 });
+  conferir('delta: cache menor que o esperado = completa (nunca lista pela metade)', [r6.modo, r6.motivo, ids(r6)], ['completa', 'cache do navegador incompleto', 'a,b,c,d']);
+
+  // Exclusao feita AQUI: some do cache local, e o controle e ajustado
+  // para a propria maquina nao pagar uma leitura inteira por isso.
+  servidor.splice(servidor.findIndex(x => x.id === 'd'), 1);
+  cache.splice(cache.findIndex(x => x.id === 'd'), 1);
+  App.ajustarLeitura('k', (m) => { m.qtd -= 1; m.versao += 1; }, arm);
+  const r7 = await ler({ hoje: '2026-10-06', versao: 2 });
+  conferir('delta: depois de excluir aqui e ajustar o controle, continua em delta', [r7.modo, ids(r7)], ['delta', 'a,b,c']);
+
+  App.esquecerLeitura('k', arm);
+  const r8 = await ler({ hoje: '2026-10-06', versao: 2 });
+  conferir('delta: controle apagado = completa', r8.modo, 'completa');
+});
+
+assincrono('lerComDelta: navegador sem cache cai na leitura completa', async () => {
+  const servidor = [{ id: 'a', dados: { atualizadoEm: carimbo(HORA) } }];
+  const arm = armazenamentoFalso(), log = [];
+  const o = { campo: 'atualizadoEm', chave: 'k', hoje: '2026-10-05', armazenamento: arm, deMillis: carimbo };
+  await App.lerComDelta(Object.assign({ consulta: firestoreFalso(servidor, [], log) }, o));
+  const r = await App.lerComDelta(Object.assign({ consulta: firestoreFalso(servidor, null, log) }, o));
+  conferir('delta: erro ao ler o cache = completa', [r.modo, r.motivo, ids(r)], ['completa', 'cache do navegador indisponível', 'a']);
+  const semLS = await App.lerComDelta(Object.assign({ consulta: firestoreFalso(servidor, [], log) }, o, { armazenamento: null }));
+  conferir('delta: sem localStorage, sempre completa', semLS.modo, 'completa');
+});
+
+assincrono('lerComDelta: consulta com filtro proprio usa a colecao pura no delta e filtra o que chega', async () => {
+  const servidor = [
+    { id: 'p1', dados: { codigo: '10', data: carimbo(10 * HORA) } },
+    { id: 's1', dados: { data: carimbo(11 * HORA) } } // pesquisa sem codigo: fora da consulta
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const col = firestoreFalso(servidor, cache, log);
+  const o = { consulta: col.where('codigo', '>=', ''), delta: col, aceita: d => !!d.data().codigo,
+    campo: 'data', chave: 'c', hoje: '2026-10-05', armazenamento: arm, deMillis: carimbo };
+  const r1 = await App.lerComDelta(o);
+  conferir('delta com filtro: a completa respeita a consulta', ids(r1), 'p1');
+  servidor.push({ id: 'p2', dados: { codigo: '11', data: carimbo(12 * HORA) } }, { id: 's2', dados: { data: carimbo(13 * HORA) } });
+  const r2 = await App.lerComDelta(o);
+  conferir('delta com filtro: o que chega sem codigo e descartado, mas o carimbo avanca',
+    [r2.modo, ids(r2), JSON.parse(arm.m.c).ultima], ['delta', 'p1,p2', 13 * HORA]);
+});
+
+assincrono('lerFaixaComCache: passado do cache, recente do servidor, completa a cada 7 dias', async () => {
+  const servidor = [
+    { id: 'jan', dados: { vencimento: '2026-01-10', valor: 1 } },
+    { id: 'jun', dados: { vencimento: '2026-06-10', valor: 1 } },
+    { id: 'set', dados: { vencimento: '2026-09-20', valor: 1 } },
+    { id: 'out', dados: { vencimento: '2026-10-02', valor: 1 } },
+    { id: 'antes', dados: { vencimento: '2025-12-31', valor: 1 } } // fora da faixa
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const ler = (extra) => App.lerFaixaComCache(Object.assign({
+    col: firestoreFalso(servidor, cache, log), campo: 'vencimento', ini: '2026-01-01', corte: '2026-08-06',
+    chave: 'f', hoje: '2026-10-05', armazenamento: arm
+  }, extra));
+
+  const r1 = await ler();
+  conferir('faixa: primeira leitura e completa', [r1.modo, r1.lidasNoServidor, ids(r1)], ['completa', 4, 'jan,jun,out,set']);
+
+  log.length = 0;
+  const r2 = await ler({ hoje: '2026-10-06' });
+  conferir('faixa: no dia seguinte, so os recentes pagam leitura; servidor ANTES do cache',
+    [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 2, 'jan,jun,out,set', ['servidor:2', 'cache:2']]);
+
+  // "jun" foi prorrogado para outubro em outra maquina: chega pelo
+  // servidor e NAO pode aparecer duas vezes nem com a data velha.
+  servidor[1] = { id: 'jun', dados: { vencimento: '2026-10-20', valor: 1 } };
+  const r3 = await ler({ hoje: '2026-10-06' });
+  conferir('faixa: documento que mudou de data entra uma vez so, com a data nova',
+    [ids(r3), r3.docs.find(d => d.id === 'jun').data().vencimento, r3.lidasNoServidor], ['jan,jun,out,set', '2026-10-20', 3]);
+
+  const r4 = await ler({ hoje: '2026-10-12' });
+  conferir('faixa: depois de 7 dias, completa', [r4.modo, r4.motivo], ['completa', 'renovação a cada 7 dias']);
+  const r5 = await ler({ hoje: '2026-10-13', forcar: true });
+  conferir('faixa: recarga pedida = completa', [r5.modo, r5.motivo], ['completa', 'recarga pedida']);
+  const r6 = await ler({ hoje: '2026-10-13', ini: '2025-01-01' });
+  conferir('faixa: periodo diferente do guardado = completa', [r6.modo, ids(r6)], ['completa', 'antes,jan,jun,out,set']);
+
+  cache.splice(cache.findIndex(x => x.id === 'jan'), 1);
+  const r7 = await ler({ hoje: '2026-10-14', ini: '2025-01-01' });
+  conferir('faixa: cache menor que o esperado = completa', [r7.modo, r7.motivo, ids(r7)], ['completa', 'cache do navegador incompleto', 'antes,jan,jun,out,set']);
+
+  const semCache = await App.lerFaixaComCache({ col: firestoreFalso(servidor, null, log), campo: 'vencimento', ini: '2025-01-01',
+    corte: '2026-08-06', chave: 'f', hoje: '2026-10-14', armazenamento: arm });
+  conferir('faixa: erro ao ler o cache = completa', [semCache.modo, semCache.motivo], ['completa', 'cache do navegador indisponível']);
+});
+
+assincrono('lerFaixaComCache: faixa com fim; ano passado inteiro nao paga leitura nenhuma', async () => {
+  const servidor = [
+    { id: 'a', dados: { vencimento: '2025-03-10' } }, { id: 'b', dados: { vencimento: '2025-11-10' } },
+    { id: 'c', dados: { vencimento: '2026-07-10' } } // depois do fim
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const o = { col: firestoreFalso(servidor, cache, log), campo: 'vencimento', ini: '2025-01-01', fim: '2026-06-30',
+    corte: '2026-08-06', chave: 'p', hoje: '2026-10-05', armazenamento: arm };
+  const r1 = await App.lerFaixaComCache(o);
+  conferir('faixa com fim: a completa respeita o fim', ids(r1), 'a,b');
+  log.length = 0;
+  const r2 = await App.lerFaixaComCache(Object.assign({}, o, { hoje: '2026-10-06' }));
+  conferir('faixa com fim antes do corte: tudo do cache, zero leitura no servidor',
+    [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 0, 'a,b', ['cache:2']]);
+});
+
 // E o confirmar nao pode voltar a aceitar inputDate por engano.
 conferir('confirmar nao tem mais inputDate',
   /inputDate/.test(fs.readFileSync(path.resolve(__dirname, '..', 'app-shared.js'), 'utf8')), false);

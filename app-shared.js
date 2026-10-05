@@ -1590,6 +1590,171 @@
   }
 
   /* ============================================================
+     9d-ter. Leitura economica — cache do navegador (05/10/2026)
+
+     O Firestore cobra por documento LIDO NO SERVIDOR. Com o cache
+     local ligado (enablePersistence), um get() comum ainda vai ao
+     servidor e paga a colecao inteira toda vez. Aqui ha' dois jeitos
+     de pagar so' pelo que mudou, e os dois tem a MESMA regra de
+     seguranca: na duvida, leitura completa. Cache vazio, cache menor
+     do que deveria, navegador sem cache, primeiro acesso do dia (ou
+     da semana) — tudo isso cai no get() inteiro de sempre. O que se
+     arrisca e' ver um dado de outra maquina com atraso, nunca perder
+     dado.
+
+     1. lerComDelta — colecao em que TODA gravacao carimba um campo
+        com a hora do servidor (produtos: atualizadoEm; concorrentes:
+        data). Le o cache e busca no servidor so' o que tem carimbo
+        mais novo que o ultimo visto. Exclusao feita em outra maquina
+        nao tem carimbo: quem exclui avisa por um contador (`versao`)
+        e, de qualquer jeito, a primeira leitura de cada dia e' inteira.
+
+     2. lerFaixaComCache — colecao consultada por DATA que nao tem
+        carimbo de alteracao (notas, duplicatas — gravadas pelo Apps
+        Script). O passado quase nao muda: vem do cache. Os ultimos
+        dias (a partir de `corte`) vem do servidor. E a cada
+        `diasCompleta` dias a faixa inteira e' relida.
+
+     O que fica guardado no localStorage e' so' o controle (dia, total
+     de documentos, ultimo carimbo) — os documentos moram no cache do
+     proprio Firestore.
+     ============================================================ */
+
+  var FOLGA_DELTA_MS = 5 * 60 * 1000; // gravacoes quase simultaneas ao ultimo carimbo visto
+
+  function armazenamentoPadrao() {
+    try { return global.localStorage || null; } catch (e) { return null; }
+  }
+  function lerMetaLeitura(chave, arm) {
+    try { var t = arm && arm.getItem(chave); return t ? JSON.parse(t) : null; } catch (e) { return null; }
+  }
+  function gravarMetaLeitura(chave, meta, arm) {
+    try { if (arm) arm.setItem(chave, JSON.stringify(meta)); } catch (e) { /* sem controle = proxima leitura completa */ }
+  }
+  // Apaga o controle: a proxima leitura daquela chave e' completa.
+  function esquecerLeitura(chave, arm) {
+    arm = arm === undefined ? armazenamentoPadrao() : arm;
+    try { if (arm) arm.removeItem(chave); } catch (e) { /* idem */ }
+  }
+  // Ajusta o controle depois de uma mudanca feita AQUI (ex.: excluir um
+  // documento: um a menos na conta, versao um a mais), para a propria
+  // maquina nao pagar uma leitura completa por causa do que ela fez.
+  function ajustarLeitura(chave, ajuste, arm) {
+    arm = arm === undefined ? armazenamentoPadrao() : arm;
+    var meta = lerMetaLeitura(chave, arm);
+    if (!meta) return;
+    ajuste(meta);
+    gravarMetaLeitura(chave, meta, arm);
+  }
+
+  function listaDeDocs(snap) {
+    var l = [];
+    snap.forEach(function (d) { l.push(d); });
+    return l;
+  }
+  function carimboMaximo(docs, campo) {
+    var max = 0;
+    docs.forEach(function (d) {
+      var v = d.data()[campo];
+      var ms = v && v.toMillis ? v.toMillis() : 0;
+      if (ms > max) max = ms;
+    });
+    return max;
+  }
+
+  // o: { consulta, campo, chave, hoje, versao?, delta?, aceita?,
+  //      armazenamento?, deMillis? }
+  //   consulta — o que se leria inteiro (colecao ou query); delta — a
+  //   base da consulta "mais novo que" (padrao: a propria consulta; use
+  //   a colecao pura quando a consulta ja' tem outra desigualdade);
+  //   aceita(doc) — filtra o que veio no delta.
+  // Devolve { docs, modo: 'completa'|'delta', motivo, lidasNoServidor }.
+  function lerComDelta(o) {
+    var arm = o.armazenamento === undefined ? armazenamentoPadrao() : o.armazenamento;
+    var versao = o.versao == null ? null : o.versao;
+    var deMillis = o.deMillis || function (ms) { return global.firebase.firestore.Timestamp.fromMillis(ms); };
+    var meta = lerMetaLeitura(o.chave, arm);
+
+    function completa(motivo) {
+      return o.consulta.get().then(function (snap) {
+        var docs = listaDeDocs(snap);
+        gravarMetaLeitura(o.chave, { dia: o.hoje, versao: versao, ultima: carimboMaximo(docs, o.campo), qtd: docs.length }, arm);
+        return { docs: docs, modo: 'completa', motivo: motivo, lidasNoServidor: docs.length };
+      });
+    }
+
+    if (!meta) return completa('primeira leitura neste navegador');
+    if (meta.dia !== o.hoje) return completa('renovação diária');
+    if (meta.versao !== versao) return completa('houve exclusão em outra máquina');
+
+    return o.consulta.get({ source: 'cache' }).then(function (cache) {
+      var emCache = listaDeDocs(cache);
+      if (emCache.length < meta.qtd) return completa('cache do navegador incompleto');
+      var desde = deMillis(Math.max(0, (meta.ultima || 0) - FOLGA_DELTA_MS));
+      return (o.delta || o.consulta).where(o.campo, '>', desde).get().then(function (delta) {
+        var porId = new Map();
+        emCache.forEach(function (d) { porId.set(d.id, d); });
+        var novos = listaDeDocs(delta);
+        var aceitos = o.aceita ? novos.filter(o.aceita) : novos;
+        aceitos.forEach(function (d) { porId.set(d.id, d); });
+        var docs = Array.from(porId.values());
+        gravarMetaLeitura(o.chave, {
+          dia: meta.dia, versao: versao,
+          ultima: Math.max(meta.ultima || 0, carimboMaximo(novos, o.campo)), qtd: docs.length
+        }, arm);
+        return { docs: docs, modo: 'delta', motivo: null, lidasNoServidor: novos.length };
+      });
+    }, function () { return completa('cache do navegador indisponível'); });
+  }
+
+  // o: { col, campo, ini, fim?, corte, chave, hoje, diasCompleta?,
+  //      forcar?, armazenamento? } — datas em 'aaaa-mm-dd'.
+  // Devolve { docs, modo: 'completa'|'parcial', motivo, lidasNoServidor }.
+  function lerFaixaComCache(o) {
+    var arm = o.armazenamento === undefined ? armazenamentoPadrao() : o.armazenamento;
+    var fim = o.fim == null ? null : o.fim;
+    var dias = o.diasCompleta || 7;
+    var meta = lerMetaLeitura(o.chave, arm);
+
+    function faixa(de, ate, exclusivo) {
+      var q = o.col.where(o.campo, '>=', de);
+      if (ate != null) q = q.where(o.campo, exclusivo ? '<' : '<=', ate);
+      return q;
+    }
+    function completa(motivo) {
+      return faixa(o.ini, fim).get().then(function (snap) {
+        var docs = listaDeDocs(snap);
+        gravarMetaLeitura(o.chave, { dia: o.hoje, ini: o.ini, fim: fim, qtd: docs.length }, arm);
+        return { docs: docs, modo: 'completa', motivo: motivo, lidasNoServidor: docs.length };
+      });
+    }
+
+    if (o.forcar) return completa('recarga pedida');
+    if (!meta) return completa('primeira leitura neste navegador');
+    if (meta.ini !== o.ini || meta.fim !== fim) return completa('período diferente do guardado');
+    var idade = diasEntre(meta.dia, o.hoje);
+    if (!(idade >= 0) || idade >= dias) return completa('renovação a cada ' + dias + ' dias');
+    if (!(o.corte > o.ini)) return completa('período curto demais para dividir');
+
+    // Servidor PRIMEIRO, cache depois: um documento que mudou de data
+    // (vencimento prorrogado) chega atualizado e sai da faixa antiga
+    // antes de ela ser lida do cache.
+    var temRecente = fim == null || o.corte <= fim;
+    var recentes = temRecente ? faixa(o.corte, fim).get() : Promise.resolve(null);
+    return recentes.then(function (rec) {
+      var antiga = temRecente ? faixa(o.ini, o.corte, true) : faixa(o.ini, fim);
+      return antiga.get({ source: 'cache' }).then(function (ant) {
+        var porId = new Map();
+        listaDeDocs(ant).forEach(function (d) { porId.set(d.id, d); });
+        var doServidor = rec ? listaDeDocs(rec) : [];
+        doServidor.forEach(function (d) { porId.set(d.id, d); });
+        if (porId.size < meta.qtd) return completa('cache do navegador incompleto');
+        return { docs: Array.from(porId.values()), modo: 'parcial', motivo: null, lidasNoServidor: doServidor.length };
+      }, function () { return completa('cache do navegador indisponível'); });
+    });
+  }
+
+  /* ============================================================
      9e. Vendas x Compras (Controle de Notas e Dashboard)
      ============================================================
 
@@ -1841,6 +2006,10 @@
     chaveMarca: chaveMarca,
     marcaDoVinculo: marcaDoVinculo,
     cruzarVendasCompras: cruzarVendasCompras,
+    lerComDelta: lerComDelta,
+    lerFaixaComCache: lerFaixaComCache,
+    esquecerLeitura: esquecerLeitura,
+    ajustarLeitura: ajustarLeitura,
     termosDaBusca: termosDaBusca,
     buscaComChips: buscaComChips,
     mostrarBusca: mostrarBusca,
