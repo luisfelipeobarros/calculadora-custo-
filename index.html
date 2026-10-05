@@ -2243,15 +2243,50 @@ Tupan</textarea>
 
     let importados = 0;
     const falhas = [];
-    for(const nome of nomes){
-      try{
-        await storageSet(chaveDoProduto(nome), JSON.stringify(produtos[nome]));
-        importados++;
-      }catch(e){
-        console.error('falha ao importar ' + nome, e);
-        falhas.push(nome);
+    const btnImportar = $('restoreBtn');
+    const rotuloImportar = btnImportar ? btnImportar.textContent : '';
+    const progresso = (n) => { if(btnImportar) btnImportar.textContent = 'Importando... ' + n + '/' + nomes.length; };
+    if(btnImportar) btnImportar.disabled = true;
+
+    if(storageBackend === 'firebase' && firestoreDb){
+      // Em lotes: uma ida ao servidor a cada LOTE fichas. Uma a uma,
+      // 4 mil fichas (a planilha de precos inteira, 05/10/2026) levavam
+      // mais de dez minutos e qualquer oscilacao rebaixava o backend
+      // para o navegador no meio do caminho. Aqui uma falha so' marca
+      // o lote como falho — nada muda de lugar em silencio.
+      const LOTE = 300;
+      for(let i = 0; i < nomes.length; i += LOTE){
+        const pedaco = nomes.slice(i, i + LOTE);
+        progresso(Math.min(i + LOTE, nomes.length));
+        try{
+          await App.comAuth(() => {
+            const batch = exigirDb().batch();
+            pedaco.forEach(nome => {
+              batch.set(exigirDb().collection('produtos').doc(encodeURIComponent(nome)), {
+                nome, dados: produtos[nome], atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+              });
+            });
+            return batch.commit();
+          });
+          importados += pedaco.length;
+        }catch(e){
+          console.error('falha ao importar o lote que começa em ' + pedaco[0], e);
+          pedaco.forEach(n => falhas.push(n));
+        }
+      }
+    } else {
+      for(const nome of nomes){
+        try{
+          await storageSet(chaveDoProduto(nome), JSON.stringify(produtos[nome]));
+          importados++;
+          if(importados % 50 === 0) progresso(importados);
+        }catch(e){
+          console.error('falha ao importar ' + nome, e);
+          falhas.push(nome);
+        }
       }
     }
+    if(btnImportar){ btnImportar.disabled = false; btnImportar.textContent = rotuloImportar; }
     await atualizarListaSalvos();
     if(falhas.length){
       App.toast(importados + ' produto(s) importado(s); ' + falhas.length + ' falharam: ' +
