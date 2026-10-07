@@ -33,6 +33,28 @@ eq('sete tipos de solucao — a troca virou reposicao e troca por produto novo',
   [N.TIPOS_SOLUCAO.length, N.TIPOS_SOLUCAO[0], N.TIPOS_SOLUCAO[1]], [7, N.REPOSICAO, N.TROCA_NOVO]);
 eq('troca por produto novo e reconhecida sem acento e sem caixa', N.ehTrocaPorNovo('troca por PRODUTO novo'), true);
 
+// ── Avarias ──────────────────────────────────────────────────
+
+{
+  eq('motivos de avaria: carregamento (nao "descarregamento"), estoque, entrega, fabrica, outro',
+    N.MOTIVOS_AVARIA, ['Carregamento', 'Manuseio no estoque', 'Entrega', 'Defeito de fábrica', 'Outro']);
+  const lista = [
+    { status: 'Aberta', dataAbertura: '2026-10-02', custoLoja: 100, cliente: 'A', sequencia: '1' },
+    { tipo: 'avaria', status: 'Resolvida', dataAbertura: '2026-10-03', custoLoja: 40.5, motivo: 'Carregamento', itens: [{ produto: 'Piso' }] },
+    { tipo: 'avaria', status: 'Resolvida', dataAbertura: '2026-09-03', custoLoja: 9, motivo: 'Entrega' }
+  ];
+  const r = N.resumoAssistencias(lista, '2026-10-07');
+  eq('resumo: avaria nao conta em aberto nem no custo das assistencias; soma a parte, so do mes',
+    [r.emAberto, r.custoMes, r.avariasMes, r.avariasQtdMes], [1, 100, 40.5, 1]);
+  eq('filtro: sem tipo lista so assistencias; tipo avaria lista so avarias (ignorando status)',
+    [N.filtrarAssistencias(lista, {}).length, N.filtrarAssistencias(lista, { status: 'Aberta' }).length,
+     N.filtrarAssistencias(lista, { tipo: 'avaria', status: 'Aberta' }).length], [1, 1, 2]);
+  eq('filtro: a busca acha a avaria pelo motivo', N.filtrarAssistencias(lista, { tipo: 'avaria', termo: 'entrega' }).length, 1);
+  const linhas = N.linhasExcel(lista);
+  eq('planilha: coluna de tipo e motivo', [linhas[0]['Tipo'], linhas[1]['Tipo'], linhas[1]['Motivo da avaria']], ['Assistência', 'Avaria', 'Carregamento']);
+  eq('ehAvaria', [N.ehAvaria(lista[1]), N.ehAvaria(lista[0]), N.ehAvaria(null)], [true, false, false]);
+}
+
 // ── Produtos da ocorrencia (varios por ficha) ────────────────
 
 {
@@ -83,7 +105,7 @@ const lista = [
   eq('liquido do mes desconta o ressarcimento (600 - 200)', r.liquidoMes, 400);
 }
 eq('lista vazia: resumo zerado de verdade',
-  N.resumoAssistencias([], '2026-08-31'), { emAberto: 0, custoMes: 0, liquidoMes: 0 });
+  N.resumoAssistencias([], '2026-08-31'), { emAberto: 0, custoMes: 0, liquidoMes: 0, avariasMes: 0, avariasQtdMes: 0 });
 
 // ── Filtro e ordenacao ───────────────────────────────────────
 

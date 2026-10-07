@@ -33,8 +33,9 @@
   .badge-st.st-analise{ background:#F5EAD2; color:#8A6414; border-color:#8A6414; }
   .badge-st.st-fabrica{ background:var(--azul-fundo); color:var(--azul); border-color:var(--azul); }
   .badge-st.st-resolvida{ background:#E1EFE6; color:var(--profit); border-color:var(--profit); }
+  .badge-st.st-avaria{ background:#EFE6F7; color:#5B3A8A; border-color:#5B3A8A; }
 
-  .asst-resumo{ display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px; }
+  .asst-resumo{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:12px; }
   .asst-kpi{ background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
   .asst-kpi .k-rot{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:block; }
   .asst-kpi .k-val{ font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
@@ -131,6 +132,7 @@
 
     <div style="display:flex; gap:8px; margin-bottom:10px;">
       <button type="button" class="btn" id="asstNovaBtn" style="flex:1;">＋ Nova assistência</button>
+      <button type="button" class="btn secondary" id="asstAvariaBtn" title="Perda de mercadoria sem cliente: carregamento, estoque, entrega, fábrica">⚠ Lançar avaria</button>
       <button type="button" class="btn secondary" id="asstExportarBtn">⬇ Excel</button>
     </div>
 
@@ -153,6 +155,40 @@
   </div>
 
   <!-- ═══════════ FICHA (nova / edição) ═══════════ -->
+  <!-- ═══════════ AVARIA (ficha curta) ═══════════ -->
+  <div id="viewAvariaAsst" style="display:none;">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <h2 id="avTitulo" style="margin:0;">Lançar avaria</h2>
+        <button type="button" class="btn secondary" id="avVoltarBtn">← Lista</button>
+      </div>
+      <p class="empty-note" style="display:block; margin:8px 0 0;">Perda de mercadoria sem cliente envolvido. Entra no custo do mês, separada das assistências.</p>
+
+      <div class="af-grid" style="margin-top:14px;">
+        <div class="af-campo"><label for="avData">Data</label>
+          <input id="avData" type="date"></div>
+        <div class="af-campo"><label for="avMotivo">Motivo</label>
+          <select id="avMotivo"></select></div>
+        <div class="af-campo cheio">
+          <label id="avItensRotulo">Produtos avariados (código · produto · tonalidade · qtd)</label>
+          <div class="af-itens" id="avItens" role="group" aria-labelledby="avItensRotulo"></div>
+          <button type="button" class="btn secondary af-item-mais" id="avItemMaisBtn">＋ Adicionar produto</button>
+        </div>
+        <div class="af-campo"><label for="avValor">Valor da perda (R$)</label>
+          <input id="avValor" inputmode="decimal"></div>
+        <div class="af-campo"><label for="avResponsavel">Responsável</label>
+          <input id="avResponsavel" autocomplete="off"></div>
+        <div class="af-campo cheio"><label for="avObs">Observação</label>
+          <textarea id="avObs"></textarea></div>
+      </div>
+
+      <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
+        <button type="button" class="btn" id="avSalvarBtn" style="flex:1;">💾 Salvar avaria</button>
+      </div>
+      <div class="empty-note" id="avMsg" style="display:block; margin-top:8px;"></div>
+    </div>
+  </div>
+
   <div id="viewFichaAsst" style="display:none;">
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
@@ -282,9 +318,9 @@
 
   // ─── Roteador ───
   const router = App.criarRouter({
-    views: { Lista: 'viewListaAsst', Ficha: 'viewFichaAsst' },
+    views: { Lista: 'viewListaAsst', Ficha: 'viewFichaAsst', Avaria: 'viewAvariaAsst' },
     padrao: 'Lista',
-    naoRestauraveis: ['Ficha'] // a ficha depende do item aberto; F5 volta para a lista
+    naoRestauraveis: ['Ficha', 'Avaria'] // dependem do item aberto; F5 volta para a lista
   });
 
   // ─── Selects e chips a partir do núcleo (um lugar só) ───
@@ -295,14 +331,18 @@
   encherSelect($('afCausa'), N.CAUSAS, true);
   encherSelect($('afStatus'), N.STATUS, false);
   encherSelect($('afTipoSolucao'), N.TIPOS_SOLUCAO, true);
+  encherSelect($('avMotivo'), N.MOTIVOS_AVARIA, true);
   $('asstCausaFiltro').innerHTML = '<option value="">— causa —</option>' +
     N.CAUSAS.map(c => '<option value="' + escapeHtml(c) + '">' + escapeHtml(c) + '</option>').join('');
   $('asstChips').innerHTML = '<button type="button" class="chip-filtro" data-st="" aria-pressed="true">Todas</button>' +
-    N.STATUS.map(s => '<button type="button" class="chip-filtro" data-st="' + escapeHtml(s) + '" aria-pressed="false">' + escapeHtml(s) + '</button>').join('');
+    N.STATUS.map(s => '<button type="button" class="chip-filtro" data-st="' + escapeHtml(s) + '" aria-pressed="false">' + escapeHtml(s) + '</button>').join('') +
+    '<button type="button" class="chip-filtro" data-st="avaria" aria-pressed="false">⚠ Avarias</button>';
 
   // ─── Lista ───
+  // O chip "Avarias" e' um TIPO, nao um status: lista so' as avarias.
   const filtrosAtuais = () => ({
-    status: filtroStatus,
+    tipo: filtroStatus === 'avaria' ? 'avaria' : '',
+    status: filtroStatus === 'avaria' ? '' : filtroStatus,
     causa: $('asstCausaFiltro').value,
     de: $('asstDe').value,
     ate: $('asstAte').value,
@@ -316,7 +356,8 @@
     $('asstResumo').innerHTML =
       '<div class="asst-kpi"><span class="k-rot">Em aberto</span><span class="k-val' + (r.emAberto ? ' neg' : '') + '">' + r.emAberto + '</span></div>' +
       '<div class="asst-kpi"><span class="k-rot">Custo loja no mês</span><span class="k-val">' + brl(r.custoMes) + '</span></div>' +
-      '<div class="asst-kpi"><span class="k-rot">Custo líquido no mês</span><span class="k-val">' + brl(r.liquidoMes) + '</span></div>';
+      '<div class="asst-kpi"><span class="k-rot">Custo líquido no mês</span><span class="k-val">' + brl(r.liquidoMes) + '</span></div>' +
+      '<div class="asst-kpi"><span class="k-rot">Avarias no mês' + (r.avariasQtdMes ? ' (' + r.avariasQtdMes + ')' : '') + '</span><span class="k-val' + (r.avariasMes ? ' neg' : '') + '">' + brl(r.avariasMes) + '</span></div>';
 
     const lista = N.ordenarAssistencias(N.filtrarAssistencias(assistencias, filtrosAtuais()));
     if(!lista.length){
@@ -325,10 +366,21 @@
         ? 'Nada com esses filtros.' : 'Nenhuma assistência registrada ainda — toque em "Nova assistência".';
       return;
     }
-    $('asstListaMsg').textContent = lista.length + ' assistência(s)' +
-      (lista.length !== assistencias.length ? ' (de ' + assistencias.length + ')' : '');
-    $('asstLista').innerHTML = lista.map(a =>
-      '<button type="button" class="asst-item" data-abrir="' + escapeHtml(a.id) + '"' +
+    const soAvarias = filtroStatus === 'avaria';
+    const total = assistencias.filter(a => N.ehAvaria(a) === soAvarias).length;
+    $('asstListaMsg').textContent = lista.length + (soAvarias ? ' avaria(s)' : ' assistência(s)') +
+      (lista.length !== total ? ' (de ' + total + ')' : '');
+    $('asstLista').innerHTML = lista.map(a => N.ehAvaria(a)
+      ? '<button type="button" class="asst-item" data-abrir="' + escapeHtml(a.id) + '"' +
+        ' aria-label="Abrir avaria de ' + escapeHtml(App.fmtData(a.dataAbertura)) + '">' +
+        '<div class="linha1"><span class="seq">' + escapeHtml(App.fmtData(a.dataAbertura)) + '</span>' +
+          '<span class="badge-st st-avaria">Avaria</span></div>' +
+        '<div class="cliente">' + escapeHtml(N.resumoProdutos(N.produtosDaFicha(a)) || '(sem produto)') + '</div>' +
+        '<div class="meta">' + escapeHtml(a.motivo || 'sem motivo') +
+          (a.custoLoja != null ? ' · perda ' + brl(a.custoLoja) : '') +
+          (a.responsavel ? ' · ' + escapeHtml(a.responsavel) : '') + '</div>' +
+      '</button>'
+      : '<button type="button" class="asst-item" data-abrir="' + escapeHtml(a.id) + '"' +
         ' aria-label="Abrir assistência ' + escapeHtml(a.sequencia || '') + ' de ' + escapeHtml(a.cliente || '') + '">' +
         '<div class="linha1"><span class="seq">#' + escapeHtml(a.sequencia || '—') + '</span>' +
           '<span class="badge-st ' + N.classeStatus(a.status) + '">' + escapeHtml(a.status || 'Aberta') + '</span></div>' +
@@ -404,7 +456,7 @@
       return { codigo: v('codigo'), produto: v('produto'), tonalidade: v('tonalidade'), quantidade: N.parseDinheiroBR(v('quantidade')) };
     }).filter(it => it.codigo || it.produto || it.tonalidade || it.quantidade != null);
   }
-  ['afItens', 'afItensNovos'].forEach(elId => {
+  ['afItens', 'afItensNovos', 'avItens'].forEach(elId => {
     App.delegar($(elId), 'click', '.tirar-item', (b) => {
       b.closest('.af-item').remove();
       if(!$(elId).children.length) montarItens(elId, []);
@@ -412,6 +464,7 @@
   });
   $('afItemMaisBtn').addEventListener('click', () => adicionarItem('afItens'));
   $('afItemNovoMaisBtn').addEventListener('click', () => adicionarItem('afItensNovos'));
+  $('avItemMaisBtn').addEventListener('click', () => adicionarItem('avItens'));
   function mostrarItensNovos(){
     $('afItensNovosBloco').style.display = N.ehTrocaPorNovo($('afTipoSolucao').value) ? '' : 'none';
   }
@@ -451,6 +504,7 @@
       App.toast('Essa assistência não está mais na lista — pode ter sido alterada ou excluída.', 'info');
       return;
     }
+    if(N.ehAvaria(a)){ abrirAvaria(a); return; }
     editandoId = a ? a.id : null;
     fichaToken++; // upload de foto da ficha anterior ainda em andamento morre aqui
     fichaAbertaJson = a ? JSON.stringify(a) : null;
@@ -488,6 +542,76 @@
 
   $('asstNovaBtn').addEventListener('click', () => abrirFicha(null));
   $('asstVoltarBtn').addEventListener('click', () => router.ir('Lista'));
+
+  // ─── Avaria: ficha curta ───
+  let editandoAvariaId = null;
+  function abrirAvaria(a){
+    editandoAvariaId = a ? a.id : null;
+    $('avTitulo').textContent = a ? 'Avaria de ' + App.fmtData(a.dataAbertura) : 'Lançar avaria';
+    $('avData').value = (a && a.dataAbertura) || App.hojeISO();
+    selecionarComForaDaLista('avMotivo', N.MOTIVOS_AVARIA, (a && a.motivo) || '', true);
+    montarItens('avItens', N.produtosDaFicha(a));
+    const v = a && a.custoLoja != null ? a.custoLoja : null;
+    $('avValor').value = v == null ? '' : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    $('avResponsavel').value = (a && a.responsavel) || '';
+    $('avObs').value = (a && a.obs) || '';
+    $('avMsg').textContent = '';
+    router.ir('Avaria', { forcar: true });
+    window.scrollTo(0, 0);
+  }
+  $('asstAvariaBtn').addEventListener('click', () => abrirAvaria(null));
+  $('avVoltarBtn').addEventListener('click', () => router.ir('Lista'));
+
+  async function salvarAvaria(){
+    const btn = $('avSalvarBtn');
+    if(btn.disabled) return;
+    btn.disabled = true;
+    try{
+      const itens = lerItens('avItens');
+      if(!itens.length){
+        App.toast('Informe pelo menos um produto avariado.', 'info');
+        const primeiro = $('avItens').querySelector('[data-campo="produto"]');
+        if(primeiro) primeiro.focus();
+        return;
+      }
+      const data = $('avData').value || App.hojeISO();
+      const p1 = itens[0];
+      // Mesmos campos da assistencia (itens, custoLoja, responsavel,
+      // dataAbertura) para a lista, a planilha e o resumo nao precisarem
+      // de caso especial; o que e' so' da avaria: tipo, motivo, obs.
+      const dados = {
+        tipo: 'avaria', status: 'Resolvida', dataAbertura: data, dataResolucao: data,
+        itens: itens, codigo: p1.codigo || null, produto: p1.produto || null,
+        tonalidade: p1.tonalidade || null, quantidade: p1.quantidade != null ? p1.quantidade : null,
+        motivo: $('avMotivo').value || null,
+        custoLoja: N.parseDinheiroBR($('avValor').value),
+        responsavel: $('avResponsavel').value.trim() || null,
+        obs: $('avObs').value.trim() || null,
+        sequencia: null, cliente: null, causa: null, tipoSolucao: null
+      };
+      $('avMsg').textContent = 'Salvando...';
+      if(editandoAvariaId){
+        await App.comAuth(() => db.collection('assistencias').doc(editandoAvariaId).set(dados, { merge: true }));
+      } else {
+        dados.fotos = [];
+        await App.comAuth(() => db.collection('assistencias').add(dados));
+      }
+      App.toast('Avaria salva.', 'ok');
+      $('avMsg').textContent = '';
+      filtroStatus = 'avaria';
+      $('asstChips').querySelectorAll('.chip-filtro').forEach(c =>
+        c.setAttribute('aria-pressed', c.dataset.st === 'avaria' ? 'true' : 'false'));
+      router.ir('Lista');
+      renderLista();
+    }catch(e){
+      console.error(e);
+      $('avMsg').textContent = 'Erro ao salvar: ' + App.erroDe(e);
+      App.toastErro('Erro ao salvar', e);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+  $('avSalvarBtn').addEventListener('click', salvarAvaria);
 
   // ─── Fotos: compressão no cliente ───
   // O limite do Firestore é 1 MB por documento; cada foto vira JPEG de

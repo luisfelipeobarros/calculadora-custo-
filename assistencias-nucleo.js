@@ -43,6 +43,19 @@
   var TROCA_NOVO = 'Troca por produto novo';
   var TIPOS_SOLUCAO = [REPOSICAO, TROCA_NOVO, 'Devolução (dinheiro)', 'Crédito na Loja',
     'Abatimento do pedido', 'Assistência da fábrica', 'Outro'];
+  /* ============================================================
+     Avarias (07/10/2026)
+
+     Perda de mercadoria sem cliente envolvido: quebra no carregamento,
+     no manuseio do estoque, na entrega, defeito de fabrica. Mora na
+     MESMA colecao das assistencias, marcada com tipo: 'avaria' e ja'
+     resolvida — nada novo nas regras do Firestore, e a lista, a
+     planilha e o custo do mes servem de graca. O valor da perda vai
+     em custoLoja, o mesmo campo das assistencias.
+     ============================================================ */
+  var MOTIVOS_AVARIA = ['Carregamento', 'Manuseio no estoque', 'Entrega', 'Defeito de fábrica', 'Outro'];
+  function ehAvaria(a) { return !!a && a.tipo === 'avaria'; }
+
   function ehTrocaPorNovo(tipo) { return App.normalizarTexto(tipo || '') === App.normalizarTexto(TROCA_NOVO); }
 
   /* ============================================================
@@ -116,10 +129,16 @@
   // lançado é custo nenhum, aqui não há "zero inventado".
   function resumoAssistencias(lista, hoje) {
     var mes = String(hoje).substring(0, 7);
-    var emAberto = 0, custoMes = 0, liquidoMes = 0;
+    var emAberto = 0, custoMes = 0, liquidoMes = 0, avariasMes = 0, avariasQtdMes = 0;
     (lista || []).forEach(function (a) {
+      var doMes = (a.dataAbertura || '').substring(0, 7) === mes;
+      // Avaria e' perda, nao atendimento: conta a parte, nunca em "em aberto".
+      if (ehAvaria(a)) {
+        if (doMes) { avariasMes += a.custoLoja || 0; avariasQtdMes++; }
+        return;
+      }
       if (a.status !== 'Resolvida') emAberto++;
-      if ((a.dataAbertura || '').substring(0, 7) === mes) {
+      if (doMes) {
         custoMes += a.custoLoja || 0;
         liquidoMes += (a.custoLoja || 0) - (a.ressarcimentoFabrica || 0);
       }
@@ -127,23 +146,30 @@
     return {
       emAberto: emAberto,
       custoMes: App.centavos(custoMes),
-      liquidoMes: App.centavos(liquidoMes)
+      liquidoMes: App.centavos(liquidoMes),
+      avariasMes: App.centavos(avariasMes),
+      avariasQtdMes: avariasQtdMes
     };
   }
 
-  // f: { status, causa, de, ate, termo }. Vazio = não filtra. A busca
-  // por texto procura em cliente E sequência, sem acento.
+  // f: { tipo, status, causa, de, ate, termo }. Vazio = não filtra. A
+  // busca por texto procura em cliente, sequência, produtos e motivo,
+  // sem acento. tipo 'avaria' lista SO' as avarias (e ignora o status);
+  // qualquer outro valor lista so' as assistências.
   function filtrarAssistencias(lista, f) {
     var o = f || {};
     var termo = App.normalizarTexto(o.termo || '');
+    var soAvarias = o.tipo === 'avaria';
     return (lista || []).filter(function (a) {
-      if (o.status && a.status !== o.status) return false;
+      if (ehAvaria(a) !== soAvarias) return false;
+      if (!soAvarias && o.status && a.status !== o.status) return false;
       if (o.causa && a.causa !== o.causa) return false;
       if (o.de && (a.dataAbertura || '') < o.de) return false;
       if (o.ate && (a.dataAbertura || '') > o.ate) return false;
       if (termo &&
           App.normalizarTexto(a.cliente).indexOf(termo) === -1 &&
           App.normalizarTexto(a.sequencia).indexOf(termo) === -1 &&
+          App.normalizarTexto(a.motivo).indexOf(termo) === -1 &&
           App.normalizarTexto(resumoProdutos(produtosDaFicha(a))).indexOf(termo) === -1) return false;
       return true;
     });
@@ -215,6 +241,7 @@
         return itens.map(function (it) { return it[campo] == null ? '' : it[campo]; }).join('; ');
       };
       return {
+        'Tipo': ehAvaria(a) ? 'Avaria' : 'Assistência',
         'Sequência': a.sequencia || '',
         'Abertura': a.dataAbertura || '',
         'Cliente': a.cliente || '',
@@ -227,6 +254,8 @@
         'NF venda': a.nfVenda || '',
         'Problema': a.problema || '',
         'Causa': a.causa || '',
+        'Motivo da avaria': a.motivo || '',
+        'Observação': a.obs || '',
         'Status': a.status || '',
         'Tipo de solução': a.tipoSolucao || '',
         'Solução': a.solucao || '',
@@ -347,6 +376,8 @@
     STATUS: STATUS,
     CAUSAS: CAUSAS,
     TIPOS_SOLUCAO: TIPOS_SOLUCAO,
+    MOTIVOS_AVARIA: MOTIVOS_AVARIA,
+    ehAvaria: ehAvaria,
     REPOSICAO: REPOSICAO,
     TROCA_NOVO: TROCA_NOVO,
     ehTrocaPorNovo: ehTrocaPorNovo,

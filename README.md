@@ -6,7 +6,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 |---|---|
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador, custos da loja (importa as planilhas do contador) |
-| `assistencias.html` | Assistências/reclamações (gerentes de vendas, no celular) |
+| `assistencias.html` | Assistências/reclamações e avarias (gerentes de vendas, no celular) |
 | `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
 | `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login, instalável como app (`manifest-dashboard.json`) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
@@ -404,8 +404,10 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 72 verificações em
-    `assistencias-nucleo.js`: as listas de status/causa/solução (a troca
+15. **Assistências e reclamações** — 78 verificações em
+    `assistencias-nucleo.js`: as **avarias** (perda sem cliente, na mesma
+    coleção com `tipo: 'avaria'`: motivos, somadas à parte no mês, nunca
+    "em aberto", chip e coluna próprios), as listas de status/causa/solução (a troca
     é duas: **reposição** do mesmo produto e **troca por produto novo**,
     que guarda o que o cliente leva), os **vários produtos por ficha**
     (`itens`; documento antigo com um produto nos campos soltos continua
