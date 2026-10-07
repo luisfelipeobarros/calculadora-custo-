@@ -404,8 +404,13 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 59 verificações em
-    `assistencias-nucleo.js`: as listas de status/causa/solução e a cor
+15. **Assistências e reclamações** — 72 verificações em
+    `assistencias-nucleo.js`: as listas de status/causa/solução (a troca
+    é duas: **reposição** do mesmo produto e **troca por produto novo**,
+    que guarda o que o cliente leva), os **vários produtos por ficha**
+    (`itens`; documento antigo com um produto nos campos soltos continua
+    valendo), a ordem de entrega (a tabela "a ser entregue" só sai
+    quando há o que entregar) e a cor
     do badge (status desconhecido cai no **vermelho**, nunca parece
     resolvido), o resumo dos cartões (em aberto = tudo que não está
     resolvido; custos só do mês corrente; líquido = custo −

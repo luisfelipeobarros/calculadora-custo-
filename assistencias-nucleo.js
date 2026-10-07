@@ -35,8 +35,66 @@
   var STATUS = ['Aberta', 'Em análise', 'Aguardando fábrica', 'Resolvida'];
   var CAUSAS = ['Defeito de fabricação', 'Entrega errada', 'Quebra no transporte',
     'Erro do cliente', 'Desistência', 'Outro'];
-  var TIPOS_SOLUCAO = ['Troca', 'Devolução (dinheiro)', 'Crédito na Loja',
+  // "Troca" virou duas (pedido de 07/10/2026): reposicao do MESMO
+  // produto, ou troca por produto DIFERENTE — nesta a ficha guarda
+  // tambem o que o cliente leva (itensNovos). Documento antigo com
+  // "Troca" continua valendo como reposicao.
+  var REPOSICAO = 'Reposição (mesmo produto)';
+  var TROCA_NOVO = 'Troca por produto novo';
+  var TIPOS_SOLUCAO = [REPOSICAO, TROCA_NOVO, 'Devolução (dinheiro)', 'Crédito na Loja',
     'Abatimento do pedido', 'Assistência da fábrica', 'Outro'];
+  function ehTrocaPorNovo(tipo) { return App.normalizarTexto(tipo || '') === App.normalizarTexto(TROCA_NOVO); }
+
+  /* ============================================================
+     Produtos da ocorrencia
+
+     Uma assistencia pode ter mais de um produto (pedido de
+     07/10/2026): a ficha grava "itens" [{ codigo, produto, tonalidade,
+     quantidade }]. Documento antigo tem um produto so', nos campos
+     soltos (codigo/produto/tonalidade/quantidade) — e' lido do mesmo
+     jeito. Na troca por produto novo, "itensNovos" e' o que o cliente
+     leva, no mesmo formato.
+     ============================================================ */
+
+  function itemLimpo(it) {
+    it = it || {};
+    var q = it.quantidade;
+    return {
+      codigo: String(it.codigo == null ? '' : it.codigo).trim(),
+      produto: String(it.produto == null ? '' : it.produto).trim(),
+      tonalidade: String(it.tonalidade == null ? '' : it.tonalidade).trim(),
+      quantidade: (q == null || q === '' || isNaN(Number(q))) ? null : Number(q)
+    };
+  }
+  function itemVazio(it) { return !it.codigo && !it.produto && !it.tonalidade && it.quantidade == null; }
+
+  function produtosDaFicha(a) {
+    a = a || {};
+    var lista = Array.isArray(a.itens) ? a.itens
+      : (a.produto || a.codigo || a.tonalidade || a.quantidade != null)
+        ? [{ codigo: a.codigo, produto: a.produto, tonalidade: a.tonalidade, quantidade: a.quantidade }]
+        : [];
+    return lista.map(itemLimpo).filter(function (it) { return !itemVazio(it); });
+  }
+  function produtosNovos(a) {
+    a = a || {};
+    if (!ehTrocaPorNovo(a.tipoSolucao) || !Array.isArray(a.itensNovos)) return [];
+    return a.itensNovos.map(itemLimpo).filter(function (it) { return !itemVazio(it); });
+  }
+
+  function fmtQuantidade(q) {
+    return q == null ? '' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+  }
+  // "4455 Piso 46x46 (ton. B2) × 12,5" — lista e planilha.
+  function textoDoItem(it) {
+    var partes = [it.codigo, it.produto].filter(Boolean).join(' ');
+    if (it.tonalidade) partes += ' (ton. ' + it.tonalidade + ')';
+    if (it.quantidade != null) partes += ' × ' + fmtQuantidade(it.quantidade);
+    return partes;
+  }
+  function resumoProdutos(itens) {
+    return (itens || []).map(textoDoItem).filter(Boolean).join('; ');
+  }
 
   // Badge: aberta = vermelho, em análise = amarelo, aguardando
   // fábrica = azul, resolvida = verde (classes no CSS da página).
@@ -85,7 +143,8 @@
       if (o.ate && (a.dataAbertura || '') > o.ate) return false;
       if (termo &&
           App.normalizarTexto(a.cliente).indexOf(termo) === -1 &&
-          App.normalizarTexto(a.sequencia).indexOf(termo) === -1) return false;
+          App.normalizarTexto(a.sequencia).indexOf(termo) === -1 &&
+          App.normalizarTexto(resumoProdutos(produtosDaFicha(a))).indexOf(termo) === -1) return false;
       return true;
     });
   }
@@ -149,14 +208,21 @@
   function linhasExcel(lista) {
     return (lista || []).map(function (a) {
       var fotos = separarFotos(a.fotos);
+      // Varios produtos numa celula so', separados por "; " (uma linha
+      // por assistencia, como a planilha sempre foi).
+      var itens = produtosDaFicha(a);
+      var coluna = function (campo) {
+        return itens.map(function (it) { return it[campo] == null ? '' : it[campo]; }).join('; ');
+      };
       return {
         'Sequência': a.sequencia || '',
         'Abertura': a.dataAbertura || '',
         'Cliente': a.cliente || '',
-        'Código': a.codigo || '',
-        'Produto': a.produto || '',
-        'Tonalidade': a.tonalidade || '',
-        'Qtd': a.quantidade != null ? a.quantidade : '',
+        'Código': coluna('codigo'),
+        'Produto': coluna('produto'),
+        'Tonalidade': coluna('tonalidade'),
+        'Qtd': itens.length === 1 ? (itens[0].quantidade != null ? itens[0].quantidade : '') : coluna('quantidade'),
+        'Produto novo (troca)': resumoProdutos(produtosNovos(a)),
         'Valor (R$)': a.valor != null ? a.valor : '',
         'NF venda': a.nfVenda || '',
         'Problema': a.problema || '',
@@ -189,26 +255,37 @@
      criados em 05/10/2026 para a ordem sair completa). Para a caneta
      ficam so' a data da troca/entrega e as assinaturas.
 
-     Qual tabela recebe o produto depende do TIPO DE SOLUCAO: troca
-     entrega e recolhe; devolucao e credito so' recolhem; nos outros
-     casos (ou sem solucao definida) as duas ficam em branco — a ordem
-     nao inventa uma entrega que ninguem decidiu.
+     Qual tabela recebe o produto depende do TIPO DE SOLUCAO:
+     reposicao (ou "Troca" antiga) entrega e recolhe o mesmo produto;
+     troca por produto novo recolhe o da ficha e entrega o que o
+     cliente leva; devolucao e credito so' recolhem; nos outros casos
+     (ou sem solucao definida) nada e' entregue — a ordem nao inventa
+     uma entrega que ninguem decidiu. A tabela "produtos a ser
+     entregue" so' e' impressa quando ha' o que entregar (pedido de
+     07/10/2026); a de "produto devolvido" sai sempre, como no papel.
      ============================================================ */
 
   var LINHAS_DA_TABELA = 6;   // como no formulario de papel
   var LINHAS_DA_OCORRENCIA = 5;
   var EM_BRANCO = '____/____/______';   // data para preencher a mao
 
+  function linhaDaOrdem(it) {
+    return {
+      codigo: it.codigo,
+      descricao: it.produto + (it.tonalidade ? ' — tonalidade ' + it.tonalidade : ''),
+      quantidade: fmtQuantidade(it.quantidade)
+    };
+  }
   function itensDaOrdem(a) {
     a = a || {};
-    var temProduto = !!(a.produto || a.codigo);
-    var desc = String(a.produto || '') + (a.tonalidade ? ' — tonalidade ' + a.tonalidade : '');
-    var qtd = (a.quantidade == null || a.quantidade === '') ? '' : Number(a.quantidade).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
-    var item = { codigo: String(a.codigo || ''), descricao: desc, quantidade: qtd };
+    var devolver = produtosDaFicha(a).map(linhaDaOrdem);
     var t = App.normalizarTexto(a.tipoSolucao || '');
-    if (!temProduto) return { entregar: [], devolver: [] };
-    if (t.indexOf('troca') === 0) return { entregar: [item], devolver: [item] };
-    if (t.indexOf('devolucao') === 0 || t.indexOf('credito') === 0) return { entregar: [], devolver: [item] };
+    if (!devolver.length) return { entregar: [], devolver: [] };
+    if (ehTrocaPorNovo(a.tipoSolucao)) return { entregar: produtosNovos(a).map(linhaDaOrdem), devolver: devolver };
+    if (t.indexOf('reposicao') === 0 || t.indexOf('troca') === 0) return { entregar: devolver.slice(), devolver: devolver };
+    if (t.indexOf('devolucao') === 0 || t.indexOf('credito') === 0) return { entregar: [], devolver: devolver };
+    // Abatimento, assistencia da fabrica, outro, sem solucao: o produto
+    // fica com o cliente — nada e' entregue nem recolhido.
     return { entregar: [], devolver: [] };
   }
 
@@ -255,7 +332,7 @@
       linha('NOTA FISCAL NR OU NR DO PEDIDO:', ref) +
       '<div class="oe-dupla">' + linha('DATA DA NOTA FISCAL:', a.dataNota ? App.fmtData(a.dataNota) : EM_BRANCO, 'oe-curta') +
         linha('ENTREGA:', a.dataEntrega ? App.fmtData(a.dataEntrega) : EM_BRANCO, 'oe-curta') + '</div>' +
-      tabela('PRODUTOS A SER ENTREGUE', itens.entregar) +
+      (itens.entregar.length ? tabela('PRODUTOS A SER ENTREGUE', itens.entregar) : '') +
       tabela('PRODUTO DEVOLVIDO', itens.devolver) +
       '<div class="oe-secao">DISCRIMINAÇÃO DA OCORRÊNCIA</div>' + ocorrencia +
       '<div class="oe-assina">' +
@@ -270,6 +347,12 @@
     STATUS: STATUS,
     CAUSAS: CAUSAS,
     TIPOS_SOLUCAO: TIPOS_SOLUCAO,
+    REPOSICAO: REPOSICAO,
+    TROCA_NOVO: TROCA_NOVO,
+    ehTrocaPorNovo: ehTrocaPorNovo,
+    produtosDaFicha: produtosDaFicha,
+    produtosNovos: produtosNovos,
+    resumoProdutos: resumoProdutos,
     classeStatus: classeStatus,
     resumoAssistencias: resumoAssistencias,
     filtrarAssistencias: filtrarAssistencias,

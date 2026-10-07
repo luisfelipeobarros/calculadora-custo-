@@ -29,7 +29,35 @@ const eq = (t, a, b) => {
 eq('quatro status, na ordem do fluxo',
   N.STATUS, ['Aberta', 'Em análise', 'Aguardando fábrica', 'Resolvida']);
 eq('seis causas', N.CAUSAS.length, 6);
-eq('seis tipos de solucao', N.TIPOS_SOLUCAO.length, 6);
+eq('sete tipos de solucao — a troca virou reposicao e troca por produto novo',
+  [N.TIPOS_SOLUCAO.length, N.TIPOS_SOLUCAO[0], N.TIPOS_SOLUCAO[1]], [7, N.REPOSICAO, N.TROCA_NOVO]);
+eq('troca por produto novo e reconhecida sem acento e sem caixa', N.ehTrocaPorNovo('troca por PRODUTO novo'), true);
+
+// ── Produtos da ocorrencia (varios por ficha) ────────────────
+
+{
+  const antigo = { codigo: '4455', produto: 'Piso 46x46', tonalidade: 'B2', quantidade: 12.5 };
+  eq('documento antigo: os campos soltos viram um item',
+    N.produtosDaFicha(antigo), [{ codigo: '4455', produto: 'Piso 46x46', tonalidade: 'B2', quantidade: 12.5 }]);
+  eq('documento novo: a lista "itens" vale, linha vazia e ignorada, quantidade em texto vira numero',
+    N.produtosDaFicha({ itens: [{ codigo: '1', produto: 'A', quantidade: '3' }, {}, { produto: ' B ', quantidade: 'x' }], produto: 'ignorado' }),
+    [{ codigo: '1', produto: 'A', tonalidade: '', quantidade: 3 }, { codigo: '', produto: 'B', tonalidade: '', quantidade: null }]);
+  eq('sem produto nenhum, lista vazia', [N.produtosDaFicha({}), N.produtosDaFicha(null)], [[], []]);
+  eq('produtos novos so na troca por produto novo',
+    [N.produtosNovos({ tipoSolucao: N.TROCA_NOVO, itensNovos: [{ produto: 'C', quantidade: 2 }] }).length,
+     N.produtosNovos({ tipoSolucao: N.REPOSICAO, itensNovos: [{ produto: 'C' }] }).length], [1, 0]);
+  eq('resumo para a lista e a planilha',
+    N.resumoProdutos([{ codigo: '4455', produto: 'Piso 46x46', tonalidade: 'B2', quantidade: 12.5 }, { codigo: '', produto: 'Rejunte', tonalidade: '', quantidade: 2 }]),
+    '4455 Piso 46x46 (ton. B2) × 12,5; Rejunte × 2');
+  eq('a busca acha pelo produto',
+    N.filtrarAssistencias([{ cliente: 'X', sequencia: '1', itens: [{ produto: 'Porcelanato Cinza' }] }], { termo: 'cinza' }).length, 1);
+  const linha = N.linhasExcel([{ itens: [{ codigo: '1', produto: 'A', tonalidade: 'T', quantidade: 3 }, { codigo: '2', produto: 'B', quantidade: 1.5 }],
+    tipoSolucao: N.TROCA_NOVO, itensNovos: [{ codigo: '9', produto: 'Z', quantidade: 4 }] }])[0];
+  eq('planilha: varios produtos na mesma linha, e o produto novo da troca',
+    [linha['Código'], linha['Produto'], linha['Tonalidade'], linha['Qtd'], linha['Produto novo (troca)']],
+    ['1; 2', 'A; B', 'T; ', '3; 1.5', '9 Z × 4']);
+  eq('planilha: um produto so mantem a quantidade como numero', N.linhasExcel([{ produto: 'A', quantidade: 3 }])[0]['Qtd'], 3);
+}
 eq('badge: aberta e vermelha', N.classeStatus('Aberta'), 'st-aberta');
 eq('badge: em analise e amarela', N.classeStatus('Em análise'), 'st-analise');
 eq('badge: aguardando fabrica e azul', N.classeStatus('Aguardando fábrica'), 'st-fabrica');
@@ -145,7 +173,13 @@ eq('round-trip do render com 2 casas fecha',
   const base = { sequencia: '1167310', cliente: 'Fulano <b>de Tal</b>', codigo: '4455', produto: 'Piso 46x46', tonalidade: 'B2',
     quantidade: 12.5, nfVenda: '9876', problema: 'Peças trincadas', causa: 'Quebra no transporte', responsavel: 'Gerente', dataAbertura: '2026-10-03' };
   const item = { codigo: '4455', descricao: 'Piso 46x46 — tonalidade B2', quantidade: '12,5' };
-  eq('ordem: TROCA entrega e recolhe o produto', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Troca' }, base)), { entregar: [item], devolver: [item] });
+  eq('ordem: REPOSICAO entrega e recolhe o produto', N.itensDaOrdem(Object.assign({ tipoSolucao: N.REPOSICAO }, base)), { entregar: [item], devolver: [item] });
+  eq('ordem: "Troca" de documento antigo vale como reposicao', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Troca' }, base)), { entregar: [item], devolver: [item] });
+  eq('ordem: TROCA POR PRODUTO NOVO recolhe o da ficha e entrega o que o cliente leva',
+    N.itensDaOrdem(Object.assign({ tipoSolucao: N.TROCA_NOVO, itensNovos: [{ codigo: '7', produto: 'Piso 60x60', tonalidade: 'A1', quantidade: 10 }] }, base)),
+    { entregar: [{ codigo: '7', descricao: 'Piso 60x60 — tonalidade A1', quantidade: '10' }], devolver: [item] });
+  eq('ordem: varios produtos, todos nas tabelas',
+    N.itensDaOrdem({ tipoSolucao: N.REPOSICAO, itens: [{ produto: 'A', quantidade: 1 }, { produto: 'B', quantidade: 2 }] }).devolver.map(i => i.descricao), ['A', 'B']);
   eq('ordem: DEVOLUCAO so recolhe', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Devolução (dinheiro)' }, base)), { entregar: [], devolver: [item] });
   eq('ordem: CREDITO na loja so recolhe', N.itensDaOrdem(Object.assign({ tipoSolucao: 'Crédito na Loja' }, base)), { entregar: [], devolver: [item] });
   eq('ordem: abatimento / assistencia da fabrica / sem solucao = tabelas em branco (nao inventa entrega)',
@@ -155,7 +189,11 @@ eq('round-trip do render com 2 casas fecha',
   eq('ordem: quantidade inteira sem casas, e vazia quando nao ha',
     [N.itensDaOrdem({ tipoSolucao: 'Troca', produto: 'X', quantidade: 30 }).entregar[0].quantidade, N.itensDaOrdem({ tipoSolucao: 'Troca', produto: 'X' }).entregar[0].quantidade], ['30', '']);
 
+  const credito = N.htmlOrdemEntrega(Object.assign({ tipoSolucao: 'Crédito na Loja' }, base));
+  eq('impressao: sem produto a entregar, a tabela "a ser entregue" nao sai; a de devolvido sai',
+    [credito.indexOf('PRODUTOS A SER ENTREGUE') === -1, credito.indexOf('PRODUTO DEVOLVIDO') !== -1], [true, true]);
   const html = N.htmlOrdemEntrega(Object.assign({ tipoSolucao: 'Troca', solucao: 'trocar as 3 caixas' }, base));
+  eq('impressao: na troca as duas tabelas saem', html.indexOf('PRODUTOS A SER ENTREGUE') !== -1, true);
   eq('ordem: titulo e as secoes do formulario de papel',
     ['ORDEM DE ENTREGA DE MATERIAL', 'PRODUTOS A SER ENTREGUE', 'PRODUTO DEVOLVIDO', 'DISCRIMINAÇÃO DA OCORRÊNCIA',
      'RESPONSÁVEL PELA OCORRÊNCIA:', 'RESPONSÁVEL PELA ENTREGA:', 'VISTO DO CLIENTE OU RESPONSÁVEL:'].every(s => html.indexOf(s) !== -1), true);

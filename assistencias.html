@@ -86,6 +86,13 @@
   .af-campo input, .af-campo select, .af-campo textarea{ width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
   .af-campo textarea{ min-height:70px; resize:vertical; }
 
+  /* Produtos da ocorrencia: uma linha por produto, quantas precisar. */
+  .af-itens{ display:flex; flex-direction:column; gap:6px; margin-bottom:6px; }
+  .af-item{ display:grid; grid-template-columns:88px 1fr 84px 72px 32px; gap:6px; align-items:center; }
+  .af-item .tirar-item{ height:36px; border:1.5px solid var(--loss); background:#fff; color:var(--loss); border-radius:4px; font-weight:700; cursor:pointer; }
+  .af-item-mais{ font-size:13px; padding:6px 10px; }
+  @media (max-width:560px){ .af-item{ grid-template-columns:1fr 1fr 1fr 32px; } .af-item .i-produto{ grid-column:1 / -1; } }
+
   .af-fotos{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
   .af-fotos .foto{ position:relative; }
   .af-fotos img{ width:86px; height:86px; object-fit:cover; border-radius:4px; border:1px solid var(--line); cursor:pointer; display:block; }
@@ -166,14 +173,11 @@
           <input id="afDocumento" inputmode="numeric" autocomplete="off"></div>
         <div class="af-campo"><label for="afTelefone">Telefone</label>
           <input id="afTelefone" inputmode="tel" autocomplete="off"></div>
-        <div class="af-campo"><label for="afCodigo">Código do produto</label>
-          <input id="afCodigo" autocomplete="off"></div>
-        <div class="af-campo"><label for="afProduto">Produto</label>
-          <input id="afProduto" autocomplete="off"></div>
-        <div class="af-campo"><label for="afTonalidade">Tonalidade</label>
-          <input id="afTonalidade" autocomplete="off"></div>
-        <div class="af-campo"><label for="afQuantidade">Quantidade</label>
-          <input id="afQuantidade" inputmode="decimal"></div>
+        <div class="af-campo cheio">
+          <label id="afItensRotulo">Produtos da ocorrência (código · produto · tonalidade · qtd)</label>
+          <div class="af-itens" id="afItens" role="group" aria-labelledby="afItensRotulo"></div>
+          <button type="button" class="btn secondary af-item-mais" id="afItemMaisBtn">＋ Adicionar produto</button>
+        </div>
         <div class="af-campo"><label for="afValor">Valor da venda (R$)</label>
           <input id="afValor" inputmode="decimal"></div>
         <div class="af-campo"><label for="afNfVenda">NF-e de venda</label>
@@ -192,6 +196,12 @@
           <select id="afTipoSolucao"></select></div>
         <div class="af-campo"><label for="afDataResolucao">Data de resolução</label>
           <input id="afDataResolucao" type="date"></div>
+        <!-- So' na troca por produto novo: o que o cliente leva no lugar. -->
+        <div class="af-campo cheio" id="afItensNovosBloco" style="display:none;">
+          <label id="afItensNovosRotulo">Produtos que o cliente leva (código · produto · tonalidade · qtd)</label>
+          <div class="af-itens" id="afItensNovos" role="group" aria-labelledby="afItensNovosRotulo"></div>
+          <button type="button" class="btn secondary af-item-mais" id="afItemNovoMaisBtn">＋ Adicionar produto</button>
+        </div>
         <div class="af-campo cheio"><label for="afSolucao">Solução (o que foi feito)</label>
           <textarea id="afSolucao"></textarea></div>
         <div class="af-campo"><label for="afCustoLoja">Custo para a loja (R$)</label>
@@ -246,7 +256,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=30"></script>
-<script src="assistencias-nucleo.js?v=5"></script>
+<script src="assistencias-nucleo.js?v=6"></script>
 <script>
 (() => {
   'use strict';
@@ -324,7 +334,7 @@
           '<span class="badge-st ' + N.classeStatus(a.status) + '">' + escapeHtml(a.status || 'Aberta') + '</span></div>' +
         '<div class="cliente">' + escapeHtml(a.cliente || '(sem cliente)') + '</div>' +
         '<div class="meta">' + escapeHtml(App.fmtData(a.dataAbertura)) +
-          (a.produto ? ' · ' + escapeHtml(a.produto) : '') +
+          (() => { const p = N.resumoProdutos(N.produtosDaFicha(a)); return p ? ' · ' + escapeHtml(p) : ''; })() +
           (a.causa ? ' · ' + escapeHtml(a.causa) : '') +
           (a.custoLoja != null ? ' · custo ' + brl(a.custoLoja) : '') +
           (() => {
@@ -350,17 +360,87 @@
 
   // ─── Ficha ───
   const CAMPOS_TEXTO = [
-    ['afSequencia', 'sequencia'], ['afCliente', 'cliente'], ['afCodigo', 'codigo'],
+    ['afSequencia', 'sequencia'], ['afCliente', 'cliente'],
     ['afEndereco', 'endereco'], ['afDocumento', 'documento'], ['afTelefone', 'telefone'],
     // datas: o <input type=date> ja' entrega aaaa-mm-dd, que e' como se grava
     ['afDataNota', 'dataNota'], ['afDataEntrega', 'dataEntrega'],
-    ['afProduto', 'produto'], ['afTonalidade', 'tonalidade'], ['afNfVenda', 'nfVenda'],
+    ['afNfVenda', 'nfVenda'],
     ['afProblema', 'problema'], ['afSolucao', 'solucao'], ['afResponsavel', 'responsavel']
   ];
   const CAMPOS_NUMERO = [
-    ['afQuantidade', 'quantidade'], ['afValor', 'valor'],
+    ['afValor', 'valor'],
     ['afCustoLoja', 'custoLoja'], ['afRessarcimento', 'ressarcimentoFabrica']
   ];
+
+  // ─── Produtos da ocorrencia (varios por ficha) ───
+  // Duas listas iguais: a dos produtos reclamados e, na troca por
+  // produto novo, a do que o cliente leva. Linha em branco e' ignorada.
+  const fmtQtd = (v) => v == null ? '' : Number.isInteger(v) ? String(v)
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function htmlItem(it){
+    it = it || {};
+    const campo = (nome, rotulo, extra, valor) =>
+      '<input data-campo="' + nome + '" class="i-' + nome + '" placeholder="' + rotulo + '" aria-label="' + rotulo + '" autocomplete="off"' +
+      (extra || '') + ' value="' + escapeHtml(valor == null ? '' : String(valor)) + '">';
+    return '<div class="af-item">' +
+      campo('codigo', 'Código', '', it.codigo) +
+      campo('produto', 'Produto', '', it.produto) +
+      campo('tonalidade', 'Tonalidade', '', it.tonalidade) +
+      campo('quantidade', 'Qtd', ' inputmode="decimal"', fmtQtd(it.quantidade)) +
+      '<button type="button" class="tirar-item" title="Tirar este produto" aria-label="Tirar este produto">×</button></div>';
+  }
+  function montarItens(elId, lista){
+    $(elId).innerHTML = (lista && lista.length ? lista : [{}]).map(htmlItem).join('');
+  }
+  function adicionarItem(elId){
+    $(elId).insertAdjacentHTML('beforeend', htmlItem({}));
+    const novo = $(elId).lastElementChild.querySelector('[data-campo="codigo"]');
+    if(novo) novo.focus();
+  }
+  function lerItens(elId){
+    return [...$(elId).querySelectorAll('.af-item')].map(linha => {
+      const v = (c) => linha.querySelector('[data-campo="' + c + '"]').value.trim();
+      // parseDinheiroBR tambem para a quantidade: "1.000" e' mil, "12,5" e' doze e meio.
+      return { codigo: v('codigo'), produto: v('produto'), tonalidade: v('tonalidade'), quantidade: N.parseDinheiroBR(v('quantidade')) };
+    }).filter(it => it.codigo || it.produto || it.tonalidade || it.quantidade != null);
+  }
+  ['afItens', 'afItensNovos'].forEach(elId => {
+    App.delegar($(elId), 'click', '.tirar-item', (b) => {
+      b.closest('.af-item').remove();
+      if(!$(elId).children.length) montarItens(elId, []);
+    });
+  });
+  $('afItemMaisBtn').addEventListener('click', () => adicionarItem('afItens'));
+  $('afItemNovoMaisBtn').addEventListener('click', () => adicionarItem('afItensNovos'));
+  function mostrarItensNovos(){
+    $('afItensNovosBloco').style.display = N.ehTrocaPorNovo($('afTipoSolucao').value) ? '' : 'none';
+  }
+  $('afTipoSolucao').addEventListener('change', mostrarItensNovos);
+
+  // Le os produtos do formulario para dentro de `dados` (salvar e
+  // imprimir). Os campos soltos (codigo/produto/tonalidade/quantidade)
+  // recebem o PRIMEIRO item: quem le documento antigo continua achando.
+  function lerProdutosDoFormulario(dados){
+    dados.itens = lerItens('afItens');
+    dados.itensNovos = N.ehTrocaPorNovo(dados.tipoSolucao) ? lerItens('afItensNovos') : null;
+    const p1 = dados.itens[0] || {};
+    dados.codigo = p1.codigo || null;
+    dados.produto = p1.produto || null;
+    dados.tonalidade = p1.tonalidade || null;
+    dados.quantidade = p1.quantidade != null ? p1.quantidade : null;
+  }
+
+  // Valor gravado fora da lista do nucleo (documento antigo: "Troca")
+  // entra como opcao, para nao ser trocado em silencio ao salvar.
+  function selecionarComForaDaLista(elId, opcoes, valor, comVazio){
+    encherSelect($(elId), opcoes, comVazio);
+    if(valor && opcoes.indexOf(valor) === -1){
+      const op = document.createElement('option');
+      op.value = valor; op.textContent = valor + ' (fora da lista)';
+      $(elId).appendChild(op);
+    }
+    $(elId).value = valor || '';
+  }
 
   function abrirFicha(id){
     const a = id ? assistencias.find(x => x.id === id) : null;
@@ -392,18 +472,14 @@
         : (campo === 'quantidade' && Number.isInteger(v)) ? String(v)
         : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     });
+    montarItens('afItens', N.produtosDaFicha(a));
+    montarItens('afItensNovos', a && Array.isArray(a.itensNovos) ? a.itensNovos : []);
     $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
     $('afDataResolucao').value = (a && a.dataResolucao) || '';
     $('afCausa').value = (a && a.causa) || '';
-    // Status gravado fora da lista do nucleo (documento antigo): entra
-    // como opcao para nao ser trocado por "Aberta" em silencio ao salvar.
-    if(a && a.status && N.STATUS.indexOf(a.status) === -1){
-      const op = document.createElement('option');
-      op.value = a.status; op.textContent = a.status + ' (fora da lista)';
-      $('afStatus').appendChild(op);
-    }
-    $('afStatus').value = (a && a.status) || 'Aberta';
-    $('afTipoSolucao').value = (a && a.tipoSolucao) || '';
+    selecionarComForaDaLista('afStatus', N.STATUS, (a && a.status) || 'Aberta', false);
+    selecionarComForaDaLista('afTipoSolucao', N.TIPOS_SOLUCAO, (a && a.tipoSolucao) || '', true);
+    mostrarItensNovos();
     $('afMsg').textContent = '';
     renderFotos();
     router.ir('Ficha', { forcar: true });
@@ -596,6 +672,7 @@
       dados.causa = $('afCausa').value || null;
       dados.status = $('afStatus').value || 'Aberta';
       dados.tipoSolucao = $('afTipoSolucao').value || null;
+      lerProdutosDoFormulario(dados);
       // Resolvida sem data de resolução ganha a de hoje; e voltar o
       // status limpa a data — assistência aberta com data de resolução
       // estragaria qualquer relatório de tempo de atendimento.
@@ -631,6 +708,7 @@
     dados.dataAbertura = $('afDataAbertura').value || App.hojeISO();
     dados.causa = $('afCausa').value || null;
     dados.tipoSolucao = $('afTipoSolucao').value || null;
+    lerProdutosDoFormulario(dados);
     $('ordemImpressao').innerHTML = N.htmlOrdemEntrega(dados);
     document.body.classList.add('imprimindo-ordem');
     const limpar = () => { document.body.classList.remove('imprimindo-ordem'); window.removeEventListener('afterprint', limpar); };
