@@ -179,12 +179,13 @@
   const N = EtiquetasNucleo;
 
   // ─── Janela e leitura ───
-  // Uma nota comprada e nao recebida em 90 dias e' raridade; depois
-  // disso a linha sai sozinha. Os itens (itensNotas) nao mudam depois
+  // Uma nota comprada e nao recebida em 45 dias e' raridade; depois
+  // disso a linha sai sozinha — menos a que ainda tem etiqueta na
+  // gondola, que e' buscada a parte (ver pendenciasForaDaJanela). Os itens (itensNotas) nao mudam depois
   // de gravados: so' os ultimos 30 dias vem do servidor, o resto do
   // cache do navegador (App.lerFaixaComCache). O ESTADO das notas
   // (entrou no ERP = mercadoria chegou) fica numa escuta ao vivo.
-  const DIAS_TRANSITO = 90;
+  const DIAS_TRANSITO = 45;
   const DIAS_ITENS_SERVIDOR = 30;
   const LEITURA_ITENS = 'leituraEtqItens_v1';
   const LEITURA_NOTAS = 'leituraEtqNotas_v1';
@@ -472,6 +473,25 @@
     if(semItens && !novaBuscaItens) novaBuscaItens = setTimeout(() => { novaBuscaItens = null; aoMudarEstado(); }, 90000);
     return novos;
   }
+  // Etiqueta colocada e ainda nao retirada numa nota mais velha que a
+  // janela: sem isto ela sumiria da tela com a etiqueta na gondola.
+  // Busca a nota e os itens uma vez (sao poucas; nao ficam ao vivo).
+  const foraDaJanela = new Set();
+  async function pendenciasForaDaJanela(){
+    const chaves = [...new Set(Object.values(etiquetasPorId)
+      .filter(e => e.etiquetada === true && e.retirada !== true && e.chaveAcesso && !itensPorChave[e.chaveAcesso] && !foraDaJanela.has(e.chaveAcesso))
+      .map(e => e.chaveAcesso))].slice(0, 40);
+    if(!chaves.length) return;
+    chaves.forEach(ch => foraDaJanela.add(ch));
+    await Promise.all(chaves.map(async ch => {
+      try{
+        const [it, nt] = await Promise.all([db.collection('itensNotas').doc(ch).get(), db.collection('notas').doc(ch).get()]);
+        if(it.exists) itensPorChave[ch] = { chave: ch, ...it.data() };
+        if(nt.exists && !notasPorChave[ch]) notasPorChave[ch] = nt.data();
+      }catch(e){ console.error('Pendência fora da janela:', ch, e); }
+    }));
+  }
+
   function aoMudarEstado(){
     buscarItensQueFaltam().catch(e => console.error(e)).then(render);
   }
@@ -504,6 +524,7 @@
       itensPorChave = mapa;
       carregouItens = true;
       await buscarItensQueFaltam();
+      await pendenciasForaDaJanela();
       setStatus(Object.keys(itensPorChave).length + ' nota(s) nos últimos ' + DIAS_TRANSITO + ' dias · ao vivo' +
         (sinc ? ' · lendo só o que mudou' : ''));
       render();
