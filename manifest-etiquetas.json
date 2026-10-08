@@ -1,0 +1,16 @@
+{
+  "name": "Etiquetas",
+  "short_name": "Etiquetas",
+  "description": "Etiquetas azul e vermelha: produto comprado em trânsito e produto sem estoque ainda não faturado.",
+  "id": "./etiquetas.html",
+  "start_url": "./etiquetas.html",
+  "scope": "./etiquetas.html",
+  "display": "standalone",
+  "background_color": "#F6F3E7",
+  "theme_color": "#335C8E",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icon-etiquetas-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-etiquetas-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

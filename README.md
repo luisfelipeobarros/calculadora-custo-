@@ -7,6 +7,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador, custos da loja (importa as planilhas do contador) |
 | `assistencias.html` | Assistências/reclamações e avarias (gerentes de vendas, no celular) |
+| `etiquetas.html` | Etiquetas de gôndola: azul (comprado, em trânsito) e vermelha (sem estoque, não faturado) — instalável (`manifest-etiquetas.json`) |
 | `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
 | `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login, instalável como app (`manifest-dashboard.json`) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
@@ -119,7 +120,7 @@ sozinho a operação que falhou.
   uma NF-e for reemitida com vencimentos diferentes, as duplicatas
   antigas **não** são atualizadas — corrigir isso é na mão, pelo app.
 - `produtos`, `cotacoes`, `concorrentes`, `pagamentosInternos`,
-  `assistencias`, `bancos`, `categorias`, `lancamentos`, `config`,
+  `assistencias`, `etiquetas`, `bancos`, `categorias`, `lancamentos`, `config`,
   `metasMensais`, `fiscaisNcm` — leitura e escrita para quem está
   autenticado (cada uma com as travas descritas no próprio
   `firestore.rules`).
@@ -423,6 +424,14 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
+15b. **Etiquetas de produto em trânsito** — 33 verificações em
+    `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
+    ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
+    dispensada / retirada), uma linha por item de NF-e com o fornecedor
+    rotulado pela regra comum, contagem, ordem (ação primeiro), filtro
+    com chips, as **vermelhas** (pendentes e a dica quando o produto
+    aparece faturado) e o relatório impresso (retirar, etiquetar,
+    vermelhas; por fornecedor; escapado).
 16. **Lançamentos contábeis** — 62 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;

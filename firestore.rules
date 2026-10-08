@@ -151,6 +151,14 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
+    // Etiquetas de produto em transito (etiquetas.html): um documento
+    // por item de NF-e (id chave_n: etiquetada / dispensada / retirada)
+    // e as etiquetas vermelhas manuais (tipo 'vermelha'). As notas e
+    // os itens continuam vindo das colecoes do Apps Script, so' lidas.
+    match /etiquetas/{id} {
+      allow read, write: if autenticado();
+    }
+
     // Lancamentos contabeis (telas do controle-notas.html): bancos e categorias
     // (seed + cadastro), os lancamentos com as partidas montadas pelo
     // app e o doc de config com os contadores continuos da exportacao

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Etiquetas</title>
+<link rel="manifest" href="manifest-etiquetas.json">
+<link rel="icon" href="icon-etiquetas-192.png">
+<link rel="apple-touch-icon" href="icon-etiquetas-192.png">
+<meta name="theme-color" content="#335C8E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Etiquetas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Design system comum aos apps da empresa. Ver app-shared.css -->
+<link rel="stylesheet" href="app-shared.css?v=17">
+<style>
+  /* Somente o que e' exclusivo do app de Etiquetas. Feito para o
+     celular (quem etiqueta anda pela loja com o telefone), mas a
+     tabela aparece inteira no computador. */
+  .wrap{ padding:16px 12px 60px; max-width:1100px; margin:0 auto; }
+
+  .etq-resumo{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:12px; }
+  .etq-kpi{ background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+  .etq-kpi[aria-pressed="true"]{ outline:2px solid var(--brick); }
+  .etq-kpi .k-rot{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:block; }
+  .etq-kpi .k-val{ font-family:var(--font-display); font-size:20px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
+  .etq-kpi .k-val.alerta{ color:var(--loss); }
+  .etq-kpi .k-val.azul{ color:#335C8E; }
+
+  .etq-acoes{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .etq-filtros{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .etq-filtros input[type="search"]{ flex:1; min-width:180px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  .chip-filtro{ font-family:var(--font-mono); font-size:11.5px; padding:6px 12px; border:1.5px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink-soft); cursor:pointer; }
+  .chip-filtro[aria-pressed="true"]{ background:var(--brick); border-color:var(--brick); color:#fff; }
+
+  /* Situacao: a cor diz o que fazer. */
+  .si{ font-family:var(--font-mono); font-size:10.5px; font-weight:600; padding:3px 8px; border-radius:10px; border:1.5px solid; white-space:nowrap; }
+  .si-retirar{ background:#F7E2DF; color:var(--loss); border-color:var(--loss); }
+  .si-etiquetar{ background:#E3ECF7; color:#335C8E; border-color:#335C8E; }
+  .si-transito{ background:#335C8E; color:#fff; border-color:#335C8E; }
+  .si-dispensada{ background:var(--stripe2); color:var(--ink-soft); border-color:var(--line); }
+  .si-recebida{ background:var(--stripe2); color:var(--ink-soft); border-color:var(--line); }
+  .si-concluida{ background:#E1EFE6; color:var(--profit); border-color:var(--profit); }
+  .si-vermelha{ background:var(--loss); color:#fff; border-color:var(--loss); }
+
+  .etq-tab{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:6px; }
+  .etq-tab th{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); text-align:left; padding:8px 8px; border-bottom:1px solid var(--line); background:var(--stripe2); }
+  .etq-tab td{ padding:8px 8px; border-bottom:1px solid var(--line); vertical-align:top; font-size:13.5px; }
+  .etq-tab tr.linha-retirar td{ background:#FDF3F1; }
+  .etq-tab .mono{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); }
+  .etq-tab .prod{ font-weight:600; }
+  .etq-tab .acoes{ white-space:nowrap; }
+  .etq-tab .acoes button{ font-size:12px; padding:5px 9px; margin:2px 4px 2px 0; }
+  .btn.mini{ font-size:12px; padding:5px 9px; }
+  .btn.perigo{ color:var(--loss); border-color:var(--loss); }
+
+  /* No celular a tabela vira cartoes: cada celula com o seu rotulo. */
+  @media (max-width:720px){
+    .etq-resumo{ grid-template-columns:1fr 1fr; }
+    .etq-tab, .etq-tab tbody, .etq-tab tr, .etq-tab td{ display:block; }
+    .etq-tab thead{ display:none; }
+    .etq-tab{ border:none; background:transparent; }
+    .etq-tab tr{ background:var(--card); border:1px solid var(--line); border-radius:6px; margin-bottom:8px; padding:6px 10px; }
+    .etq-tab tr.linha-retirar{ border-color:var(--loss); }
+    .etq-tab td{ border:none; padding:3px 0; }
+    .etq-tab td::before{ content:attr(data-r); font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:inline-block; min-width:88px; }
+    .etq-tab td.sem-rotulo::before{ content:none; }
+  }
+
+  .verm-form{ display:grid; grid-template-columns:1fr 2fr 2fr auto; gap:8px; align-items:end; }
+  .verm-form label{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+  .verm-form input{ width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  @media (max-width:720px){ .verm-form{ grid-template-columns:1fr; } }
+  .dica{ font-family:var(--font-mono); font-size:11px; color:#335C8E; margin-top:3px; }
+
+  /* Relatorio: invisivel na tela, sozinho no papel. */
+  #relatorioImpressao{ display:none; }
+  @media print{
+    body.imprimindo .wrap, body.imprimindo .modal-fundo, body.imprimindo .toast{ display:none !important; }
+    body.imprimindo{ background:#fff; }
+    body.imprimindo #relatorioImpressao{ display:block; }
+    @page{ size:A4; margin:14mm 12mm; }
+  }
+  .rl{ font-family:Arial, Helvetica, sans-serif; color:#000; font-size:11.5px; }
+  .rl-loja{ text-align:center; font-size:16px; font-weight:700; }
+  .rl-titulo{ text-align:center; font-size:14px; font-weight:700; text-decoration:underline; margin-top:6px; }
+  .rl-ref{ text-align:center; font-size:10.5px; margin:4px 0 10px; }
+  .rl-secao{ font-weight:700; font-size:12.5px; margin:16px 0 4px; padding:4px 6px; background:#ddd; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .rl-qtd{ font-weight:400; }
+  .rl-vazio{ padding:4px 6px; color:#444; }
+  .rl-forn{ font-weight:700; margin:8px 0 2px; }
+  .rl-tab{ width:100%; border-collapse:collapse; }
+  .rl-tab th{ font-size:10px; text-align:left; padding:2px 5px; border-bottom:1px solid #000; }
+  .rl-tab td{ padding:3px 5px; border-bottom:1px solid #bbb; vertical-align:top; }
+  .rl-ok{ width:22px; } .rl-cod{ width:12%; } .rl-q{ width:14%; text-align:right; } .rl-nf{ width:20%; white-space:nowrap; }
+  .rl-caixa{ display:inline-block; width:12px; height:12px; border:1px solid #000; }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+<div class="wrap">
+
+  <header class="top">
+    <div class="title-block">
+      <h1>Etiquetas</h1>
+      <p>AZUL: FATURADO, EM TRÂNSITO · VERMELHA: SEM ESTOQUE, NÃO FATURADO</p>
+    </div>
+    <nav class="telas" aria-label="Conta">
+      <div id="etqContaBarra"></div>
+      <div class="stamp">Uso interno</div>
+    </nav>
+  </header>
+
+  <div class="barra-status">
+    <span id="etqConexao" role="status" aria-live="polite">Conectando...</span>
+  </div>
+
+  <main id="conteudo">
+
+    <!-- Os quatro numeros que importam; tocar num deles filtra a lista. -->
+    <div class="etq-resumo" id="etqResumo"></div>
+
+    <div class="etq-acoes">
+      <button type="button" class="btn" id="etqImprimirBtn">🖨 Imprimir relatório</button>
+      <button type="button" class="btn secondary" id="etqVermelhaBtn">🔴 Etiqueta vermelha</button>
+      <button type="button" class="btn secondary" id="etqRecarregarBtn" title="Relê tudo do servidor">⟳ Recarregar</button>
+    </div>
+
+    <div class="etq-filtros" id="etqChips">
+      <!-- chips montados pelo script, a partir do nucleo -->
+    </div>
+    <div class="etq-filtros">
+      <label class="sr-only" for="etqBusca">Buscar por fornecedor, produto, código ou nota</label>
+      <input type="search" id="etqBusca" placeholder="Buscar por fornecedor, produto, código ou nota... (Enter para mais de um)">
+    </div>
+
+    <!-- Etiquetas vermelhas: so' aparece no chip "Vermelhas". -->
+    <div class="card" id="etqVermelhas" style="display:none; margin-bottom:12px;">
+      <h2 style="margin:0 0 8px;">Etiquetas vermelhas — sem estoque, ainda não faturado</h2>
+      <p class="empty-note" style="display:block; margin:0 0 10px;">Registro manual: o produto não tem nota para puxar. Quando um produto parecido aparecer faturado, a linha avisa para trocar a vermelha pela azul.</p>
+      <div class="verm-form">
+        <div><label for="vmCodigo">Código</label><input id="vmCodigo" autocomplete="off"></div>
+        <div><label for="vmProduto">Produto *</label><input id="vmProduto" autocomplete="off"></div>
+        <div><label for="vmObs">Observação (fornecedor, previsão...)</label><input id="vmObs" autocomplete="off"></div>
+        <div><button type="button" class="btn" id="vmSalvarBtn">＋ Registrar</button></div>
+      </div>
+      <div id="vmLista" style="margin-top:12px;"></div>
+      <p class="empty-note" id="vmMsg" style="display:block;"></p>
+    </div>
+
+    <div id="etqLista"></div>
+    <p class="empty-note" id="etqListaMsg" style="display:block;"></p>
+
+  </main>
+  <footer class="note">Etiquetas de produto em trânsito · notas do Apps Script, etiquetas no Firebase da empresa · uso interno.</footer>
+</div>
+
+<!-- Relatorio: so' existe no papel (N.htmlRelatorio). -->
+<div id="relatorioImpressao" aria-hidden="true"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="app-shared.js?v=30"></script>
+<script src="etiquetas-nucleo.js?v=1"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = App.$;
+  App.instalarErroGlobal();
+  const escapeHtml = App.escapeHtml;
+  const N = EtiquetasNucleo;
+
+  // ─── Janela e leitura ───
+  // Uma nota comprada e nao recebida em 90 dias e' raridade; depois
+  // disso a linha sai sozinha. Os itens (itensNotas) nao mudam depois
+  // de gravados: so' os ultimos 30 dias vem do servidor, o resto do
+  // cache do navegador (App.lerFaixaComCache). O ESTADO das notas
+  // (entrou no ERP = mercadoria chegou) fica numa escuta ao vivo.
+  const DIAS_TRANSITO = 90;
+  const DIAS_ITENS_SERVIDOR = 30;
+  const LEITURA_ITENS = 'leituraEtqItens_v1';
+  const LEITURA_NOTAS = 'leituraEtqNotas_v1';
+  const MAX_ITENS_AVULSOS = 60;
+
+  let db = null;
+  let itensPorChave = {};      // documentos de itensNotas, por chave da NF-e
+  let notasPorChave = {};      // estado das notas (noSistema, status, previsaoEntrega)
+  let etiquetasPorId = {};     // documentos de `etiquetas` das linhas (chave_n)
+  let vermelhas = [];          // documentos de `etiquetas` com tipo 'vermelha'
+  let carregouItens = false, carregouNotas = false, carregouEtiquetas = false;
+  let pararNotas = null, pararEtiquetas = null;
+  let corteISO = '';
+  let grupo = '';              // chip ativo: '', situacao, 'encerradas' ou 'vermelhas'
+  let retirarAntes = null;     // para avisar quando chega mercadoria etiquetada
+  const tentativasItens = {};
+  const itensEmBusca = new Set();
+  let novaBuscaItens = null;
+
+  function setStatus(txt){ $('etqConexao').textContent = txt; }
+
+  App.buscaComChips($('etqBusca'));
+
+  // ─── Chips ───
+  const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
+    ['dispensada', 'Sem etiqueta'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
+  $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
+    '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');
+  function irParaGrupo(g){
+    grupo = g;
+    $('etqChips').querySelectorAll('.chip-filtro').forEach(c => c.setAttribute('aria-pressed', c.dataset.g === g ? 'true' : 'false'));
+    render();
+  }
+  App.delegar($('etqChips'), 'click', '.chip-filtro', (b) => irParaGrupo(b.dataset.g));
+  $('etqBusca').addEventListener('input', App.debounce(render, 250));
+
+  // ─── Lista ───
+  function linhasAtuais(){
+    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId);
+  }
+  const fmtQtd = (q) => q == null ? '' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
+
+  function htmlAcoes(l){
+    const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
+    switch(l.situacao){
+      case 'etiquetar':  return b('etiquetar', '🏷 Etiquetei') + b('dispensar', 'Sem etiqueta');
+      case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩');
+      case 'transito':   return b('desfazer', '↩ Desfazer');
+      case 'retirar':    return b('retirar', '✔ Retirei a etiqueta');
+      case 'concluida':  return b('desfazer-retirada', '↩ Desfazer');
+      default: return '<span class="mono">—</span>';
+    }
+  }
+  function htmlRecebimento(l){
+    if(l.recebida) return '<span class="si si-concluida">Recebida</span>';
+    return '<span class="mono">em trânsito' + (l.previsaoEntrega ? ' · prev. ' + escapeHtml(App.fmtData(l.previsaoEntrega)) : '') + '</span>';
+  }
+
+  function render(){
+    const linhas = linhasAtuais();
+    const c = N.contar(linhas);
+    const verm = N.vermelhasPendentes(vermelhas);
+    const pronto = carregouItens && carregouNotas && carregouEtiquetas;
+
+    $('etqResumo').innerHTML = [
+      ['retirar', 'Retirar etiqueta', c.retirar, c.retirar ? 'alerta' : ''],
+      ['etiquetar', 'Para etiquetar', c.etiquetar, 'azul'],
+      ['transito', 'Etiquetadas em trânsito', c.transito, ''],
+      ['vermelhas', 'Vermelhas pendentes', verm.length, verm.length ? 'alerta' : '']
+    ].map(([g, rot, val, cls]) =>
+      '<button type="button" class="etq-kpi" data-g="' + g + '" aria-pressed="' + (grupo === g ? 'true' : 'false') + '">' +
+      '<span class="k-rot">' + rot + '</span><span class="k-val ' + cls + '">' + (pronto ? val : '…') + '</span></button>').join('');
+
+    // Mercadoria etiquetada chegou: avisa uma vez por mudanca, nao a cada render.
+    if(pronto){
+      if(retirarAntes != null && c.retirar > retirarAntes){
+        App.toast('Chegou mercadoria com etiqueta: ' + c.retirar + ' produto(s) para retirar a etiqueta.', 'info');
+      }
+      retirarAntes = c.retirar;
+    }
+
+    $('etqVermelhas').style.display = grupo === 'vermelhas' ? '' : 'none';
+    if(grupo === 'vermelhas'){
+      renderVermelhas(linhas);
+      $('etqLista').innerHTML = '';
+      $('etqListaMsg').textContent = '';
+      return;
+    }
+
+    if(!pronto){
+      $('etqLista').innerHTML = '';
+      $('etqListaMsg').textContent = 'Carregando...';
+      return;
+    }
+    const lista = N.ordenar(N.filtrar(linhas, { grupo, termos: App.termosDaBusca($('etqBusca')) }));
+    if(!lista.length){
+      $('etqLista').innerHTML = '';
+      $('etqListaMsg').textContent = linhas.length ? 'Nada com esse filtro.' : 'Nenhuma nota nos últimos ' + DIAS_TRANSITO + ' dias.';
+      return;
+    }
+    $('etqListaMsg').textContent = lista.length + ' produto(s)' + (grupo ? '' : ' em aberto');
+    $('etqLista').innerHTML = '<table class="etq-tab"><thead><tr>' +
+      '<th>Fornecedor</th><th>Emissão</th><th>Produto</th><th>Qtd</th><th>Situação</th><th>Recebimento</th><th>Ações</th>' +
+      '</tr></thead><tbody>' +
+      lista.map(l => '<tr class="linha-' + l.situacao + '">' +
+        '<td data-r="Fornecedor">' + escapeHtml(l.fornecedor) + '</td>' +
+        '<td data-r="Emissão"><span class="mono">' + escapeHtml(App.fmtData(l.dataEmissao)) + (l.numero ? ' · NF ' + escapeHtml(l.numero) : '') + '</span></td>' +
+        '<td data-r="Produto" class="prod">' + (l.codigo ? '<span class="mono">' + escapeHtml(l.codigo) + '</span> ' : '') + escapeHtml(l.descricao) + '</td>' +
+        '<td data-r="Qtd">' + escapeHtml(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
+        '<td data-r="Situação"><span class="si ' + N.SITUACOES[l.situacao].classe + '">' + escapeHtml(N.SITUACOES[l.situacao].rotulo) + '</span></td>' +
+        '<td data-r="Recebimento">' + htmlRecebimento(l) + '</td>' +
+        '<td class="acoes sem-rotulo">' + htmlAcoes(l) + '</td>' +
+      '</tr>').join('') +
+      '</tbody></table>';
+  }
+  App.delegar($('etqResumo'), 'click', '.etq-kpi', (b) => irParaGrupo(grupo === b.dataset.g ? '' : b.dataset.g));
+
+  // ─── Gravacao das etiquetas (uma por linha; id = chave_n) ───
+  const CAMPOS_POR_ACAO = {
+    'etiquetar':         () => ({ etiquetada: true, dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
+    'dispensar':         () => ({ etiquetada: false, dispensada: true }),
+    'desfazer':          () => ({ etiquetada: false, dispensada: false }),
+    'retirar':           () => ({ retirada: true, retiradaEm: App.hojeISO() }),
+    'desfazer-retirada': () => ({ retirada: false, retiradaEm: null })
+  };
+  App.delegar($('etqLista'), 'click', '[data-acao]', (b) => {
+    const monta = CAMPOS_POR_ACAO[b.dataset.acao];
+    const l = linhasAtuais().find(x => x.id === b.dataset.id);
+    if(!monta || !l) return;
+    b.disabled = true;
+    const campos = Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, monta());
+    App.comAuth(() => db.collection('etiquetas').doc(l.id).set(campos, { merge: true }))
+      .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
+    // A escuta de `etiquetas` redesenha a lista sozinha.
+  });
+
+  // ─── Etiquetas vermelhas ───
+  function renderVermelhas(linhas){
+    const lista = N.vermelhasPendentes(vermelhas);
+    if(!lista.length){
+      $('vmLista').innerHTML = '';
+      $('vmMsg').textContent = 'Nenhuma etiqueta vermelha pendente.';
+      return;
+    }
+    $('vmMsg').textContent = lista.length + ' pendente(s)';
+    $('vmLista').innerHTML = '<table class="etq-tab"><thead><tr><th>Desde</th><th>Código</th><th>Produto</th><th>Obs.</th><th>Ações</th></tr></thead><tbody>' +
+      lista.map(v => {
+        const dica = N.dicaDeFaturamento(v, linhas);
+        return '<tr>' +
+          '<td data-r="Desde"><span class="mono">' + escapeHtml(App.fmtData(v.criadaEm)) + '</span></td>' +
+          '<td data-r="Código"><span class="mono">' + escapeHtml(v.codigo || '') + '</span></td>' +
+          '<td data-r="Produto" class="prod">' + escapeHtml(v.produto || '') +
+            (dica.length ? '<div class="dica">⚠ Parece ter sido faturado: ' + escapeHtml(dica.slice(0, 2).map(d => d.fornecedor + ' NF ' + d.numero + ' · ' + d.descricao).join(' | ')) + (dica.length > 2 ? ' (+' + (dica.length - 2) + ')' : '') + ' — troque a vermelha pela azul.</div>' : '') + '</td>' +
+          '<td data-r="Obs.">' + escapeHtml(v.obs || '') + '</td>' +
+          '<td class="acoes sem-rotulo">' +
+            '<button type="button" class="btn secondary mini" data-vm="resolver" data-id="' + escapeHtml(v.id) + '">✔ Faturou / trocada</button>' +
+            '<button type="button" class="btn secondary mini perigo" data-vm="apagar" data-id="' + escapeHtml(v.id) + '">✕</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+  $('etqVermelhaBtn').addEventListener('click', () => { irParaGrupo('vermelhas'); $('vmProduto').focus(); });
+  $('vmSalvarBtn').addEventListener('click', () => {
+    const produto = $('vmProduto').value.trim();
+    if(!produto){ App.toast('Informe o produto.', 'info'); $('vmProduto').focus(); return; }
+    const btn = $('vmSalvarBtn');
+    btn.disabled = true;
+    App.comAuth(() => db.collection('etiquetas').add({
+      tipo: 'vermelha', produto, codigo: $('vmCodigo').value.trim() || null, obs: $('vmObs').value.trim() || null,
+      criadaEm: App.hojeISO(), resolvidaEm: null, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    })).then(() => {
+      $('vmProduto').value = ''; $('vmCodigo').value = ''; $('vmObs').value = '';
+      App.toast('Etiqueta vermelha registrada.', 'ok');
+    }).catch(e => App.toastErro('Erro ao gravar', e)).then(() => { btn.disabled = false; });
+  });
+  App.delegar($('vmLista'), 'click', '[data-vm]', async (b) => {
+    const id = b.dataset.id;
+    if(b.dataset.vm === 'apagar'){
+      const ok = await App.confirmar({ titulo: 'Apagar etiqueta vermelha', mensagem: 'Apagar este registro? Use "Faturou / trocada" se o produto chegou a ser faturado.', confirmar: 'Apagar', perigo: true });
+      if(!ok) return;
+      App.comAuth(() => db.collection('etiquetas').doc(id).delete()).catch(e => App.toastErro('Erro ao apagar', e));
+      return;
+    }
+    b.disabled = true;
+    App.comAuth(() => db.collection('etiquetas').doc(id).set({ resolvidaEm: App.hojeISO(), atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }))
+      .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
+  });
+
+  // ─── Relatorio ───
+  $('etqImprimirBtn').addEventListener('click', () => {
+    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora() });
+    document.body.classList.add('imprimindo');
+    const limpar = () => { document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+  });
+
+  // ─── Carga ───
+  function escutarEstadoNotas(sinc){
+    if(pararNotas){ pararNotas(); pararNotas = null; }
+    if(!sinc) App.esquecerLeitura(LEITURA_NOTAS);
+    return new Promise((resolve, reject) => {
+      let primeiro = true;
+      const mapa = {};
+      const chegou = () => {
+        notasPorChave = mapa;
+        carregouNotas = true;
+        if(primeiro){ primeiro = false; resolve(); return; }
+        aoMudarEstado();
+      };
+      const falhou = (e) => {
+        if(primeiro){ primeiro = false; reject(e); return; }
+        console.error('Escuta das notas caiu:', e);
+        setStatus('A atualização ao vivo parou (' + App.erroDe(e) + ') — toque em Recarregar.');
+      };
+      const col = db.collection('notas');
+      const consulta = col.where('dataEmissao', '>=', corteISO);
+      if(sinc){
+        pararNotas = App.escutarComDelta({
+          consultas: [consulta], delta: col, campo: 'alteradoEm', chave: LEITURA_NOTAS, hoje: App.hojeISO(), versao: sinc.exclusoes,
+          aceita: n => typeof n.dataEmissao === 'string' && n.dataEmissao >= corteISO,
+          aoReceber: (mud) => { mud.forEach(m => { if(m.dados === null) delete mapa[m.id]; else mapa[m.id] = m.dados; }); chegou(); },
+          aoFalhar: falhou
+        }).parar;
+      } else {
+        pararNotas = consulta.onSnapshot(snap => {
+          snap.docChanges().forEach(ch => { if(ch.type === 'removed') delete mapa[ch.doc.id]; else mapa[ch.doc.id] = ch.doc.data(); });
+          chegou();
+        }, falhou);
+      }
+    });
+  }
+
+  function escutarEtiquetas(){
+    if(pararEtiquetas){ pararEtiquetas(); pararEtiquetas = null; }
+    return new Promise((resolve, reject) => {
+      let primeiro = true;
+      pararEtiquetas = db.collection('etiquetas').onSnapshot(snap => {
+        const porId = {}, verm = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          if(d.tipo === 'vermelha') verm.push({ id: doc.id, ...d });
+          else porId[doc.id] = d;
+        });
+        etiquetasPorId = porId; vermelhas = verm;
+        carregouEtiquetas = true;
+        if(primeiro){ primeiro = false; resolve(); return; }
+        render();
+      }, e => {
+        if(primeiro){ primeiro = false; reject(e); return; }
+        console.error('Escuta das etiquetas caiu:', e);
+        setStatus('A atualização ao vivo parou (' + App.erroDe(e) + ') — toque em Recarregar.');
+      });
+    });
+  }
+
+  // Nota que esta' na escuta sem os itens carregados (XML que acabou de
+  // chegar): busca os itens um a um — App.itensQueFaltam decide quais.
+  async function buscarItensQueFaltam(){
+    const tenho = new Set(Object.keys(itensPorChave));
+    itensEmBusca.forEach(ch => tenho.add(ch));
+    const faltam = App.itensQueFaltam(notasPorChave, tenho, tentativasItens, { agora: Date.now(), corte: corteISO, limite: MAX_ITENS_AVULSOS });
+    if(!faltam.length) return 0;
+    faltam.forEach(ch => itensEmBusca.add(ch));
+    const docs = await Promise.all(faltam.map(ch => db.collection('itensNotas').doc(ch).get().catch(e => { console.error(e); return null; })));
+    let novos = 0, semItens = 0;
+    docs.forEach((doc, i) => {
+      const ch = faltam[i];
+      itensEmBusca.delete(ch);
+      const t = tentativasItens[ch] || { n: 0, em: 0 };
+      tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
+      if(doc && doc.exists){ itensPorChave[ch] = { chave: ch, ...doc.data() }; novos++; }
+      else semItens++;
+    });
+    if(semItens && !novaBuscaItens) novaBuscaItens = setTimeout(() => { novaBuscaItens = null; aoMudarEstado(); }, 90000);
+    return novos;
+  }
+  function aoMudarEstado(){
+    buscarItensQueFaltam().catch(e => console.error(e)).then(render);
+  }
+
+  let cargaEmAndamento = null;
+  function carregar(forcar){
+    if(cargaEmAndamento) return cargaEmAndamento;
+    cargaEmAndamento = baixar(!!forcar).then(() => { cargaEmAndamento = null; });
+    return cargaEmAndamento;
+  }
+  async function baixar(forcar){
+    setStatus('Carregando notas dos últimos ' + DIAS_TRANSITO + ' dias...');
+    try{
+      const hoje = App.hojeISO();
+      corteISO = App.somarDias(hoje, -DIAS_TRANSITO);
+      const sinc = await App.lerSincNotas(db);
+      const [leitura] = await Promise.all([
+        App.comAuth(() => App.lerFaixaComCache({
+          col: db.collection('itensNotas'), campo: 'dataEmissao',
+          ini: corteISO.slice(0, 8) + '01', corte: App.somarDias(hoje, -DIAS_ITENS_SERVIDOR),
+          chave: LEITURA_ITENS, hoje, forcar
+        })),
+        App.comAuth(() => escutarEstadoNotas(sinc)),
+        App.comAuth(() => escutarEtiquetas())
+      ]);
+      const mapa = {};
+      leitura.docs.forEach(doc => { const d = doc.data(); if((d.dataEmissao || '') >= corteISO) mapa[doc.id] = { chave: doc.id, ...d }; });
+      // O que ja' foi buscado um a um nesta sessao continua valendo.
+      Object.keys(itensPorChave).forEach(ch => { if(tentativasItens[ch] && !mapa[ch]) mapa[ch] = itensPorChave[ch]; });
+      itensPorChave = mapa;
+      carregouItens = true;
+      await buscarItensQueFaltam();
+      setStatus(Object.keys(itensPorChave).length + ' nota(s) nos últimos ' + DIAS_TRANSITO + ' dias · ao vivo' +
+        (sinc ? ' · lendo só o que mudou' : ''));
+      render();
+    }catch(e){
+      console.error(e);
+      carregouItens = false;
+      setStatus(App.ehPermissaoNegada(e)
+        ? 'Acesso negado — a coleção "etiquetas" já está nas regras publicadas no Console?'
+        : 'Erro ao carregar: ' + App.erroDe(e));
+      render();
+    }
+  }
+  $('etqRecarregarBtn').addEventListener('click', () => carregar(true));
+  App.aoRecusarCarimbo(() => { if(db) carregar(false); });
+
+  // ─── Boot: Firebase + login + carga ───
+  let iniciando = false;
+  function iniciar(){
+    if(iniciando) return;
+    iniciando = true;
+    setStatus('Conectando ao Firebase...');
+    App.iniciarFirebase('etiquetas').then((r) => {
+      db = r.db;
+      App.montarBarraConta($('etqContaBarra'));
+      setStatus('Verificando acesso...');
+      return App.exigirLogin();
+    }).then(() => carregar(false)).catch((e) => {
+      setStatus('Erro ao iniciar: ' + App.erroDe(e));
+      App.toastErro('Erro ao iniciar', e);
+    }).then(() => { iniciando = false; });
+  }
+  window.__aoEntrar = () => { if(!db && !iniciando) iniciar(); else if(db) carregar(false); };
+
+  render();
+  iniciar();
+})();
+</script>
+</body>
+</html>
