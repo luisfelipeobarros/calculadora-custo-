@@ -57,7 +57,7 @@
   .etq-tab .acoes{ white-space:nowrap; }
   .etq-tab .acoes button{ font-size:12px; padding:5px 9px; margin:2px 4px 2px 0; }
   .btn.mini{ font-size:12px; padding:5px 9px; }
-  .btn.perigo{ color:var(--loss); border-color:var(--loss); }
+  .btn.mini.apagar{ background:#fff; color:var(--loss); border-color:var(--loss); }
 
   /* No celular a tabela vira cartoes: cada celula com o seu rotulo. */
   @media (max-width:720px){
@@ -339,7 +339,7 @@
           '<td data-r="Obs.">' + escapeHtml(v.obs || '') + '</td>' +
           '<td class="acoes sem-rotulo">' +
             '<button type="button" class="btn secondary mini" data-vm="resolver" data-id="' + escapeHtml(v.id) + '">✔ Faturou / trocada</button>' +
-            '<button type="button" class="btn secondary mini perigo" data-vm="apagar" data-id="' + escapeHtml(v.id) + '">✕</button></td>' +
+            '<button type="button" class="btn secondary mini apagar" data-vm="apagar" data-id="' + escapeHtml(v.id) + '">✕</button></td>' +
         '</tr>';
       }).join('') + '</tbody></table>';
   }
