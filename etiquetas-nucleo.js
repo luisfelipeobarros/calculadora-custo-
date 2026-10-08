@@ -34,7 +34,7 @@
     retirar:    { rotulo: 'Retirar etiqueta',        curto: 'Retirar',     ordem: 0, classe: 'si-retirar' },
     etiquetar:  { rotulo: 'Etiquetar',               curto: 'Etiquetar',   ordem: 1, classe: 'si-etiquetar' },
     transito:   { rotulo: 'Etiquetada · em trânsito', curto: 'Em trânsito', ordem: 2, classe: 'si-transito' },
-    dispensada: { rotulo: 'Sem etiqueta (estoque ok)', curto: 'Sem etiqueta', ordem: 3, classe: 'si-dispensada' },
+    dispensada: { rotulo: 'Com estoque (sem etiqueta)', curto: 'Com estoque', ordem: 3, classe: 'si-dispensada' },
     recebida:   { rotulo: 'Recebida sem etiqueta',   curto: 'Recebida',    ordem: 4, classe: 'si-recebida' },
     concluida:  { rotulo: 'Etiqueta retirada',       curto: 'Concluída',   ordem: 5, classe: 'si-concluida' }
   };

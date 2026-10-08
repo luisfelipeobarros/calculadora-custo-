@@ -220,7 +220,7 @@
 
   // ─── Chips ───
   const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
-    ['dispensada', 'Sem etiqueta'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
+    ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
   $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
     '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');
   function irParaGrupo(g){
@@ -240,7 +240,7 @@
   function htmlAcoes(l){
     const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
     switch(l.situacao){
-      case 'etiquetar':  return b('etiquetar', '🏷 Etiquetei') + b('dispensar', 'Sem etiqueta');
+      case 'etiquetar':  return b('etiquetar', '🏷 Etiquetei') + b('dispensar', '📦 Com estoque');
       case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩');
       case 'transito':   return b('desfazer', '↩ Desfazer');
       case 'retirar':    return b('retirar', '✔ Retirei a etiqueta');
