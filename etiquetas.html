@@ -137,6 +137,8 @@
     <div class="etq-filtros">
       <label class="sr-only" for="etqBusca">Buscar por fornecedor, produto, código ou nota</label>
       <input type="search" id="etqBusca" placeholder="Buscar por fornecedor, produto, código ou nota... (Enter para mais de um)">
+      <label class="chip-filtro" style="display:inline-flex; align-items:center; gap:6px;" title="Pisos, revestimentos e porcelanatos (NCM 6907). Desligue para ver todos os produtos das notas.">
+        <input type="checkbox" id="etqSoPisos" checked> só pisos/revestimentos (NCM 6907)</label>
     </div>
 
     <!-- Etiquetas vermelhas: so' aparece no chip "Vermelhas". -->
@@ -206,6 +208,15 @@
 
   App.buscaComChips($('etqBusca'));
 
+  // So' pisos, revestimentos e porcelanatos (NCM 6907), que e' o que
+  // leva etiqueta. A escolha fica no navegador.
+  try{ $('etqSoPisos').checked = localStorage.getItem('etqSoPisos') !== '0'; }catch(e){}
+  $('etqSoPisos').addEventListener('change', () => {
+    try{ localStorage.setItem('etqSoPisos', $('etqSoPisos').checked ? '1' : '0'); }catch(e){}
+    render();
+  });
+  const ncmAtual = () => $('etqSoPisos').checked ? N.NCM_PISOS : null;
+
   // ─── Chips ───
   const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
     ['dispensada', 'Sem etiqueta'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
@@ -221,7 +232,7 @@
 
   // ─── Lista ───
   function linhasAtuais(){
-    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId);
+    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId, { ncm: ncmAtual() });
   }
   const fmtQtd = (q) => q == null ? '' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
@@ -280,7 +291,9 @@
     const lista = N.ordenar(N.filtrar(linhas, { grupo, termos: App.termosDaBusca($('etqBusca')) }));
     if(!lista.length){
       $('etqLista').innerHTML = '';
-      $('etqListaMsg').textContent = linhas.length ? 'Nada com esse filtro.' : 'Nenhuma nota nos últimos ' + DIAS_TRANSITO + ' dias.';
+      $('etqListaMsg').textContent = linhas.length ? 'Nada com esse filtro.'
+        : (ncmAtual() ? 'Nenhum piso/revestimento (NCM 6907) nas notas dos últimos ' + DIAS_TRANSITO + ' dias — desligue o filtro para ver os outros produtos.'
+                      : 'Nenhuma nota nos últimos ' + DIAS_TRANSITO + ' dias.');
       return;
     }
     $('etqListaMsg').textContent = lista.length + ' produto(s)' + (grupo ? '' : ' em aberto');

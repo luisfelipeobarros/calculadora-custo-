@@ -64,6 +64,17 @@ eq('fornecedor passa pela regra comum (nome cru fica guardado)', [linhas[0].forn
 eq('nota que nao esta carregada conta como nao recebida',
   N.linhasDeTransito([{ chave: 'Z', itens: [{ descricao: 'y' }] }], {}, {})[0].situacao, 'etiquetar');
 
+// ── NCM: so' pisos, revestimentos e porcelanatos ─────────────
+
+eq('NCM_PISOS e o 6907', N.NCM_PISOS, ['6907']);
+eq('ncmCasa: prefixo, com ou sem pontos; sem prefixos aceita tudo',
+  [N.ncmCasa('69072100', ['6907']), N.ncmCasa('6907.21.00', ['6907']), N.ncmCasa('69101000', ['6907']), N.ncmCasa(null, ['6907']), N.ncmCasa(null, []), N.ncmCasa('x', null)],
+  [true, true, false, false, true, true]);
+const comNcm = N.linhasDeTransito([{ chave: 'A', itens: [
+  { n: 1, descricao: 'piso', ncm: '69072200' }, { n: 2, descricao: 'rejunte', ncm: '38245000' }, { n: 3, descricao: 'sem ncm' }] }], {}, {}, { ncm: N.NCM_PISOS });
+eq('com o filtro de NCM so o piso vira linha', comNcm.map(l => l.id), ['A_1']);
+eq('sem o filtro, todos', N.linhasDeTransito([{ chave: 'A', itens: [{ ncm: '1' }, { ncm: '2' }] }], {}, {}).length, 2);
+
 // ── Contagem, ordem, filtro ──────────────────────────────────
 
 const c = N.contar(linhas);

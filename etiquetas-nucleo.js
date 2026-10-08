@@ -56,11 +56,23 @@
     return 'etiquetar';
   }
 
-  // itensDocs: [{ chave, numero, dataEmissao, nomeEmitente, itens: [{ n, codigo, descricao, qtd, un }] }]
+  // Pisos, revestimentos e porcelanatos: NCM 6907 (ladrilhos e placas
+  // ceramicas; o 6908 antigo foi fundido nele em 2017). O controle de
+  // etiquetas e' so' para eles — o resto da nota nem vira linha.
+  var NCM_PISOS = ['6907'];
+  function ncmCasa(ncm, prefixos) {
+    if (!prefixos || !prefixos.length) return true;
+    var n = String(ncm == null ? '' : ncm).replace(/D/g, '');
+    return prefixos.some(function (p) { return n.indexOf(String(p)) === 0; });
+  }
+
+  // itensDocs: [{ chave, numero, dataEmissao, nomeEmitente, itens: [{ n, codigo, descricao, ncm, qtd, un }] }]
   // notasPorChave: { chave: { noSistema, status, previsaoEntrega } }
   // etiquetasPorId: { id: { etiquetada, dispensada, retirada } }
+  // opcoes.ncm: prefixos de NCM aceitos (ex.: NCM_PISOS); vazio = todos.
   // Nota cancelada some; nota que nao esta' carregada conta como nao recebida.
-  function linhasDeTransito(itensDocs, notasPorChave, etiquetasPorId) {
+  function linhasDeTransito(itensDocs, notasPorChave, etiquetasPorId, opcoes) {
+    var prefixos = (opcoes || {}).ncm || null;
     var linhas = [];
     (itensDocs || []).forEach(function (doc) {
       if (!doc || !doc.chave) return;
@@ -72,6 +84,7 @@
       var recebida = !!(nota && nota.noSistema === true);
       itens.forEach(function (it, i) {
         it = it || {};
+        if (!ncmCasa(it.ncm, prefixos)) return;
         var n = it.n != null && it.n !== '' ? it.n : i + 1;
         var id = idDaLinha(doc.chave, n);
         var e = (etiquetasPorId || {})[id] || {};
@@ -226,6 +239,8 @@
   var EtiquetasNucleo = {
     SITUACOES: SITUACOES,
     ENCERRADAS: ENCERRADAS,
+    NCM_PISOS: NCM_PISOS,
+    ncmCasa: ncmCasa,
     idDaLinha: idDaLinha,
     situacaoDe: situacaoDe,
     linhasDeTransito: linhasDeTransito,

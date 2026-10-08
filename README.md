@@ -424,7 +424,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-15b. **Etiquetas de produto em trânsito** — 33 verificações em
+15b. **Etiquetas de produto em trânsito** — 37 verificações em
     `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
     ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
     dispensada / retirada), uma linha por item de NF-e com o fornecedor
