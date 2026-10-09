@@ -78,6 +78,15 @@
   @media (max-width:720px){ .verm-form{ grid-template-columns:1fr; } }
   .dica{ font-family:var(--font-mono); font-size:11px; color:#335C8E; margin-top:3px; }
 
+  /* Importacao do estoque: sugestoes de vermelha */
+  .est-controles{ display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin:8px 0 10px; }
+  .est-controles label{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+  .est-controles input[type="number"]{ width:90px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  .est-resumo{ font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); margin-bottom:8px; }
+  .est-sub{ font-family:var(--font-mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); margin:14px 0 6px; }
+  .etq-tab td.marca{ width:30px; }
+  .etq-tab td.marca input{ width:18px; height:18px; }
+
   /* Relatorio: invisivel na tela, sozinho no papel. */
   #relatorioImpressao{ display:none; }
   @media print{
@@ -128,6 +137,8 @@
     <div class="etq-acoes">
       <button type="button" class="btn" id="etqImprimirBtn">🖨 Imprimir relatório</button>
       <button type="button" class="btn secondary" id="etqVermelhaBtn">🔴 Etiqueta vermelha</button>
+      <button type="button" class="btn secondary" id="etqEstoqueBtn" title="Relatório Estoque - Grade do sistema: sugere as etiquetas vermelhas">📥 Importar estoque</button>
+      <input type="file" id="etqEstoqueArquivo" accept=".xlsx,.xls,.csv" style="display:none;">
       <button type="button" class="btn secondary" id="etqRecarregarBtn" title="Relê tudo do servidor">⟳ Recarregar</button>
     </div>
 
@@ -139,6 +150,25 @@
       <input type="search" id="etqBusca" placeholder="Buscar por fornecedor, produto, código ou nota... (Enter para mais de um)">
       <label class="chip-filtro" style="display:inline-flex; align-items:center; gap:6px;" title="Pisos, revestimentos e porcelanatos (NCM 6907). Desligue para ver todos os produtos das notas.">
         <input type="checkbox" id="etqSoPisos" checked> só pisos/revestimentos (NCM 6907)</label>
+    </div>
+
+    <!-- Importacao do estoque: aparece depois de ler a planilha. -->
+    <div class="card" id="etqEstoque" style="display:none; margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Estoque importado — sugestões de etiqueta vermelha</h2>
+        <button type="button" class="btn secondary mini" id="estFecharBtn">✕ Fechar</button>
+      </div>
+      <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras, lojinha, parado há muito tempo ou já faturado ficam de fora.</p>
+      <div class="est-controles">
+        <div><label for="estMinimo">Sugerir com estoque até</label><input type="number" id="estMinimo" value="0" min="0" step="1"></div>
+        <div><label for="estDias">Movimentação nos últimos (dias)</label><input type="number" id="estDias" value="180" min="0" step="30"></div>
+        <div><button type="button" class="btn" id="estRegistrarBtn">🔴 Registrar as selecionadas</button></div>
+      </div>
+      <div class="est-resumo" id="estResumo"></div>
+      <div id="estComEstoque"></div>
+      <div id="estSugestoes"></div>
+      <div id="estFaturados"></div>
+      <p class="empty-note" id="estMsg" style="display:block;"></p>
     </div>
 
     <!-- Etiquetas vermelhas: so' aparece no chip "Vermelhas". -->
@@ -168,8 +198,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=30"></script>
-<script src="etiquetas-nucleo.js?v=2"></script>
+<script src="etiquetas-nucleo.js?v=3"></script>
 <script>
 (() => {
   'use strict';
@@ -384,6 +415,152 @@
       .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
   });
 
+  // ─── Importacao do estoque ───
+  // Le o relatorio "Estoque - Grade" no navegador e mostra sugestoes;
+  // as decisoes ("nao trabalhamos mais", minimo e prazo) moram em
+  // config/etiquetasEstoque, para a proxima importacao lembrar.
+  let estoque = null;             // itens da planilha lida nesta sessao
+  let estoqueConfig = { ignorados: {}, minimo: 0, dias: 180 };
+  const CONFIG_ESTOQUE = 'etiquetasEstoque';
+
+  function lerConfigEstoque(){
+    return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).get()).then(doc => {
+      const d = doc.exists ? doc.data() : {};
+      estoqueConfig = { ignorados: d.ignorados || {}, minimo: d.minimo != null ? d.minimo : 0, dias: d.dias != null ? d.dias : 180 };
+      $('estMinimo').value = estoqueConfig.minimo;
+      $('estDias').value = estoqueConfig.dias;
+    }).catch(e => { console.error('config do estoque:', e); });
+  }
+  function gravarConfigEstoque(campos){
+    Object.assign(estoqueConfig, campos);
+    return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).set(campos, { merge: true }))
+      .catch(e => App.toastErro('Erro ao guardar a configuração', e));
+  }
+
+  $('etqEstoqueBtn').addEventListener('click', () => {
+    if(typeof XLSX === 'undefined'){
+      App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou. Verifique a internet e recarregue (F5).');
+      return;
+    }
+    $('etqEstoqueArquivo').value = '';
+    $('etqEstoqueArquivo').click();
+  });
+  $('etqEstoqueArquivo').addEventListener('change', async () => {
+    const arq = $('etqEstoqueArquivo').files[0];
+    if(!arq) return;
+    $('estMsg').textContent = 'Lendo ' + arq.name + '...';
+    $('etqEstoque').style.display = '';
+    try{
+      const wb = XLSX.read(new Uint8Array(await arq.arrayBuffer()), { type: 'array', cellDates: true });
+      const matriz = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null });
+      const lido = N.lerPlanilhaEstoque(matriz);
+      if(!lido.itens.length){
+        estoque = null;
+        $('estMsg').textContent = lido.problemas.join(' · ') || 'A planilha está vazia.';
+        renderEstoque();
+        return;
+      }
+      estoque = lido.itens;
+      await lerConfigEstoque();
+      $('estMsg').textContent = lido.itens.length + ' produto(s) lidos de ' + arq.name +
+        (lido.problemas.length ? ' · ' + lido.problemas.length + ' linha(s) com problema: ' + lido.problemas.slice(0, 3).join('; ') : '');
+      renderEstoque();
+      $('etqEstoque').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }catch(e){
+      console.error(e);
+      estoque = null;
+      $('estMsg').textContent = 'Não consegui ler o arquivo: ' + App.erroDe(e);
+    }
+  });
+  $('estFecharBtn').addEventListener('click', () => { estoque = null; $('etqEstoque').style.display = 'none'; });
+  ['estMinimo', 'estDias'].forEach(id => $(id).addEventListener('change', () => {
+    gravarConfigEstoque({ minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0 });
+    renderEstoque();
+  }));
+
+  const htmlItemEstoque = (it) => '<span class="prod">' + escapeHtml(it.nome) + '</span>' +
+    '<div class="mono">' + escapeHtml(it.codigo) + (it.ean ? ' · ' + it.ean : '') + (it.fabricante ? ' · ' + escapeHtml(it.fabricante) : '') +
+    ' · estoque ' + escapeHtml(String(it.quantidade == null ? '?' : it.quantidade)) + (it.un ? ' ' + escapeHtml(it.un) : '') +
+    (it.ultData ? ' · últ. mov. ' + escapeHtml(App.fmtData(it.ultData)) : '') + '</div>';
+
+  function renderEstoque(){
+    if(!estoque){ $('estResumo').textContent = ''; $('estComEstoque').innerHTML = ''; $('estSugestoes').innerHTML = ''; $('estFaturados').innerHTML = ''; return; }
+    const linhas = linhasAtuais();
+    const o = { hoje: App.hojeISO(), minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0, ignorados: estoqueConfig.ignorados };
+    const r = N.sugestoesVermelhas(estoque, linhas, vermelhas, o);
+    const comEstoque = N.vermelhasComEstoque(vermelhas, estoque, o.minimo);
+
+    $('estResumo').textContent = estoque.length + ' produtos · fora do controle (amostras/lojinha): ' + r.foraDoControle +
+      ' · com estoque: ' + r.comEstoque + ' · não vamos repor (*): ' + r.naoRepor + ' · parados há mais de ' + o.dias + ' dias: ' + r.parados +
+      ' · "não trabalhamos mais": ' + r.ignorados + ' · já com vermelha: ' + r.jaVermelhas;
+
+    $('estComEstoque').innerHTML = !comEstoque.length ? '' :
+      '<div class="est-sub">⚠ Vermelhas pendentes que já têm estoque (' + comEstoque.length + ') — retirar a etiqueta</div>' +
+      '<table class="etq-tab"><tbody>' + comEstoque.map(x =>
+        '<tr><td data-r="Produto">' + htmlItemEstoque(x.item) + '</td>' +
+        '<td class="acoes sem-rotulo"><button type="button" class="btn secondary mini" data-vm="resolver" data-id="' + escapeHtml(x.vermelha.id) + '">✔ Retirei a vermelha</button></td></tr>').join('') +
+      '</tbody></table>';
+
+    $('estSugestoes').innerHTML = '<div class="est-sub">Sugestões de etiqueta vermelha (' + r.sugerir.length + ')</div>' +
+      (!r.sugerir.length ? '<p class="empty-note" style="display:block;">Nada a sugerir com esses critérios.</p>' :
+      '<table class="etq-tab"><thead><tr><th></th><th>Produto</th><th>Ações</th></tr></thead><tbody>' + r.sugerir.map(it =>
+        '<tr><td class="marca sem-rotulo"><input type="checkbox" data-sug="' + escapeHtml(it.codigo) + '" checked aria-label="Registrar ' + escapeHtml(it.nome) + '"></td>' +
+        '<td data-r="Produto">' + htmlItemEstoque(it) + '</td>' +
+        '<td class="acoes sem-rotulo"><button type="button" class="btn secondary mini" data-ignorar="' + escapeHtml(it.codigo) + '" title="Sai das sugestões, agora e nas próximas importações">Não trabalhamos mais</button></td></tr>').join('') +
+      '</tbody></table>');
+
+    $('estFaturados').innerHTML = !r.jaFaturados.length ? '' :
+      '<div class="est-sub">Já faturado — vai de etiqueta azul (' + r.jaFaturados.length + ')</div>' +
+      '<table class="etq-tab"><tbody>' + r.jaFaturados.map(x =>
+        '<tr><td data-r="Produto">' + htmlItemEstoque(x.item) +
+          '<div class="dica">' + escapeHtml(x.linhas.slice(0, 2).map(l => l.fornecedor + ' NF ' + l.numero + ' · ' + l.descricao + ' · ' + N.SITUACOES[l.situacao].curto).join(' | ')) +
+          (x.linhas.length > 2 ? ' (+' + (x.linhas.length - 2) + ')' : '') + '</div></td></tr>').join('') +
+      '</tbody></table>';
+  }
+
+  App.delegar($('estSugestoes'), 'click', '[data-ignorar]', (b) => {
+    const codigo = b.dataset.ignorar;
+    const ignorados = Object.assign({}, estoqueConfig.ignorados);
+    ignorados[codigo] = App.hojeISO();
+    b.disabled = true;
+    gravarConfigEstoque({ ignorados }).then(renderEstoque);
+  });
+  App.delegar($('estComEstoque'), 'click', '[data-vm="resolver"]', (b) => {
+    b.disabled = true;
+    App.comAuth(() => db.collection('etiquetas').doc(b.dataset.id).set({ resolvidaEm: App.hojeISO(), atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }))
+      .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
+  });
+  $('estRegistrarBtn').addEventListener('click', async () => {
+    if(!estoque) return;
+    const marcados = new Set([...$('estSugestoes').querySelectorAll('[data-sug]:checked')].map(c => c.dataset.sug));
+    const itens = estoque.filter(it => marcados.has(it.codigo));
+    if(!itens.length){ App.toast('Nenhuma sugestão selecionada.', 'info'); return; }
+    const ok = await App.confirmar({ titulo: 'Registrar etiquetas vermelhas', mensagem: 'Registrar ' + itens.length + ' etiqueta(s) vermelha(s)? Elas entram na lista "Vermelhas" e no relatório.', confirmar: 'Registrar' });
+    if(!ok) return;
+    const btn = $('estRegistrarBtn');
+    btn.disabled = true;
+    try{
+      const hoje = App.hojeISO();
+      for(let i = 0; i < itens.length; i += 300){
+        const pedaco = itens.slice(i, i + 300);
+        await App.comAuth(() => {
+          const batch = db.batch();
+          pedaco.forEach(it => batch.set(db.collection('etiquetas').doc(), {
+            tipo: 'vermelha', produto: it.nome, codigo: it.codigo, ean: it.ean || null,
+            obs: [it.fabricante, it.quantidade != null ? 'estoque ' + it.quantidade + (it.un ? ' ' + it.un : '') : ''].filter(Boolean).join(' · ') || null,
+            origem: 'estoque', criadaEm: hoje, resolvidaEm: null, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+          }));
+          return batch.commit();
+        });
+      }
+      App.toast(itens.length + ' etiqueta(s) vermelha(s) registrada(s).', 'ok');
+    }catch(e){
+      App.toastErro('Erro ao registrar', e);
+    }finally{
+      btn.disabled = false;
+    }
+  });
+
   // ─── Relatorio ───
   $('etqImprimirBtn').addEventListener('click', () => {
     $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora() });
@@ -444,6 +621,7 @@
         carregouEtiquetas = true;
         if(primeiro){ primeiro = false; resolve(); return; }
         render();
+        if(estoque) renderEstoque();
       }, e => {
         if(primeiro){ primeiro = false; reject(e); return; }
         console.error('Escuta das etiquetas caiu:', e);

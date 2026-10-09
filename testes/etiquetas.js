@@ -110,6 +110,59 @@ eq('dica: nome com menos de 4 letras e sem codigo nao casa com nada', N.dicaDeFa
 eq('dica ignora linhas encerradas', N.dicaDeFaturamento({ produto: 'rejunte' }, linhas), []);
 eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASSA' }, linhas).map(l => l.id), ['B_1']);
 
+// ── Importacao do estoque ────────────────────────────────────
+
+{
+  const cab = ['Código', 'Nome', 'Unid. Venda', 'Quantidade', 'Código Adicional 1', 'Código Barras', 'Nome Classe', 'Nome Subclasse', 'Nome Fabricante', 'Últ. Data'];
+  const matriz = [
+    ['Relatório de estoque', null, null, null, null, null, null, null, null, null],
+    cab,
+    ['100', 'PISO REF 75004 75X75 A POL (CX2,23MT) KARINA', 'CX', 0, null, '7899588825272', 'Porcelanato', 'Porcelanatos', 'Karina', '15/09/2026'],
+    ['101', '*PISO GANTE MR 50 A FORMIGRES', 'CX', 0, null, '7891', 'Piso cerâmico', 'Pisos', 'Formigres', '01/09/2026'],
+    ['102', 'PISO HD 32X57 AMOSTRA', 'PÇ', 0, null, '', 'Amostras', 'Lojinha', '', '01/01/2018'],
+    ['103', 'REVEST ANTIGO 25X40', 'CX', 0, null, '7892', 'Revest. cerâmico', 'Revestimento', '', '10/01/2025'],
+    ['104', 'PISO COM ESTOQUE 60X60', 'CX', 12, null, '7893', 'Piso cerâmico', 'Pisos', '', '01/10/2026'],
+    ['105', 'PISO BAIXO 60X60', 'CX', 3, null, '7894', 'Piso cerâmico', 'Pisos', '', '01/10/2026'],
+    ['106', 'PORC EM TRANSITO 80X80', 'CX', 0, null, '7895', 'Porcelanato', 'Porcelanatos', '', '05/10/2026'],
+    ['107', 'PISO JA VERMELHO 45X45', 'CX', 0, null, '7896', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
+    ['108', 'PISO IGNORADO 45X45', 'CX', 0, null, '7897', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
+    ['109', 'PISO 58004 58X58 A VIVA PISOS', 'CX', 0, null, '', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
+    ['110', 'PISO QTD RUIM', 'CX', 'abc', null, '', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
+    [null, null, null, null, null, null, null, null, null, null]
+  ];
+  const lido = N.lerPlanilhaEstoque(matriz);
+  eq('planilha: acha o cabecalho fora da primeira linha e le todos os itens', lido.itens.length, 11);
+  eq('planilha: campos do item (asterisco = nao repor, barras so digitos, data ISO)',
+    [lido.itens[0].codigo, lido.itens[0].ean, lido.itens[0].ultData, lido.itens[0].naoRepor, lido.itens[1].naoRepor, lido.itens[0].classe],
+    ['100', '7899588825272', '2026-09-15', false, true, 'Porcelanato']);
+  eq('planilha: quantidade ilegivel vira problema, nao quebra', [lido.problemas.length, lido.itens[10].quantidade], [1, null]);
+  eq('planilha sem cabecalho: problema explicado', N.lerPlanilhaEstoque([['a', 'b'], [1, 2]]).problemas.length, 1);
+
+  const transito = N.linhasDeTransito([
+    { chave: 'T', numero: '5', dataEmissao: '2026-10-05', nomeEmitente: 'F', itens: [
+      { n: 1, descricao: 'PORCELANATO 80X80 POLIDO', ean: '7895', qtd: 10 },
+      { n: 2, descricao: 'PISO 58004 58X58 ESMALTADO', qtd: 10 },
+      { n: 3, descricao: 'PISO REF 75004 75X75 POL', ean: '0000', qtd: 10 }] }
+  ], {}, {});
+  eq('semelhanca por palavras: codigo de referencia e tamanho casam; nomes diferentes nao',
+    [N.semelhanca('PISO 58004 58X58 A VIVA PISOS', 'PISO 58004 58X58 ESMALTADO') >= 0.6, N.semelhanca('PISO AZUL 60X60', 'REVEST BRANCO 30X60') >= 0.6], [true, false]);
+  eq('faturados: com codigo de barras dos dois lados so vale o codigo de barras (nome parecido nao engana)',
+    N.faturadosDoItem(lido.itens[0], transito).length, 0);
+  const verm = [{ id: 'v1', produto: 'PISO JA VERMELHO 45X45', codigo: '107', criadaEm: '2026-10-01' }, { id: 'v2', produto: 'antiga', codigo: '104', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }];
+  const r = N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 0, dias: 180, ignorados: { '108': '2026-10-01' } });
+  eq('sugestoes: so o que esta zerado, vendavel, com movimento recente, sem vermelha, nao ignorado e nao faturado',
+    r.sugerir.map(i => i.codigo), ['100']);
+  eq('sugestoes: ja faturado vai para a lista azul (por barras e por nome)', r.jaFaturados.map(x => x.item.codigo + ':' + x.linhas.map(l => l.id).join('+')), ['109:T_2', '106:T_1']);
+  eq('sugestoes: contagens do que ficou de fora',
+    [r.foraDoControle, r.naoRepor, r.parados, r.ignorados, r.jaVermelhas, r.comEstoque], [1, 1, 1, 1, 1, 3]);
+  eq('sugestoes: minimo 5 inclui o estoque baixo; dias 0 = sem corte de data',
+    N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 5, dias: 0 }).sugerir.map(i => i.codigo), ['105', '108', '100', '103']);
+  eq('vermelha que ganhou estoque: pelo codigo interno ou barras, so pendente',
+    N.vermelhasComEstoque([{ id: 'a', codigo: '104', criadaEm: '2026-10-01' }, { id: 'b', ean: '7894', criadaEm: '2026-10-01' }, { id: 'c', codigo: '100', criadaEm: '2026-10-01' }, { id: 'd', codigo: '104', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }], lido.itens, 0)
+      .map(x => x.vermelha.id + ':' + x.item.quantidade), ['a:12', 'b:3']);
+  eq('dica de faturamento tambem casa pelo codigo de barras', N.dicaDeFaturamento({ produto: 'x', ean: '7895' }, transito).map(l => l.id), ['T_1']);
+}
+
 // ── Relatorio ────────────────────────────────────────────────
 
 const rel = N.htmlRelatorio(mistura.concat(linhas), verm, { hoje: '2026-10-08', hora: '09:00:00' });

@@ -28,6 +28,7 @@
     throw new Error('etiquetas-nucleo.js precisa de app-shared.js carregado antes.');
   }
   var norm = App.normalizarTexto;
+  function soDigitos(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
 
   // Na ordem em que a lista mostra: primeiro o que exige acao.
   var SITUACOES = {
@@ -97,6 +98,7 @@
           descricao: it.descricao == null ? '' : String(it.descricao),
           qtd: (it.qtd == null || it.qtd === '') ? null : Number(it.qtd),
           un: it.un == null ? '' : String(it.un),
+          ean: soDigitos(it.ean),
           recebida: recebida,
           previsaoEntrega: (nota && nota.previsaoEntrega) || null,
           etiquetada: e.etiquetada === true,
@@ -161,15 +163,164 @@
   // Produto da vermelha que aparece faturado (em transito ou recebido):
   // pelo codigo igual, ou pelo nome contido na descricao (com pelo menos
   // 4 letras, para "piso" sozinho nao casar com a loja inteira).
+  // O codigo de barras (GTIN) e' a unica ligacao EXATA entre o estoque
+  // interno e a nota do fornecedor (o codigo interno nao aparece na
+  // NF-e). Sem ele, vale o codigo do item e o nome.
   function dicaDeFaturamento(vermelha, linhas) {
+    var ean = soDigitos(vermelha && vermelha.ean);
     var cod = norm(vermelha && vermelha.codigo);
     var nome = norm(vermelha && vermelha.produto);
-    if (!cod && nome.length < 4) return [];
+    if (!ean && !cod && nome.length < 4) return [];
     return (linhas || []).filter(function (l) {
       if (ENCERRADAS.indexOf(l.situacao) !== -1) return false;
+      if (ean && l.ean && l.ean === ean) return true;
       if (cod && norm(l.codigo) === cod) return true;
       return nome.length >= 4 && norm(l.descricao).indexOf(nome) !== -1;
     });
+  }
+
+  /* ------------------------------------------------------------
+     Importacao do estoque (relatorio "Estoque - Grade" do sistema)
+
+     A planilha nao e' gravada em lugar nenhum: ela gera SUGESTOES de
+     etiqueta vermelha, e so' o que a pessoa confirma vira documento.
+     Regras (pedido de 09/10/2026):
+     - asterisco no inicio do nome = nao vamos repor -> nunca sugere;
+     - classes Amostras e Lojinha ficam de fora;
+     - zerado (ou ate' o minimo escolhido), com ultima movimentacao
+       (compra ou venda) dentro do prazo — produto parado ha' muito
+       tempo nao ganha etiqueta;
+     - ja' faturado (nota em transito com o mesmo codigo de barras, ou
+       nome muito parecido) vai de AZUL, nao de vermelha;
+     - o que ja' tem vermelha pendente, ou foi marcado como "nao
+       trabalhamos mais", nao volta.
+     ------------------------------------------------------------ */
+
+  var COLUNAS_ESTOQUE = {
+    codigo: /^codigo$/, nome: /^nome$/, un: /^unid/, quantidade: /^quantidade$/,
+    ean: /^codigo barras/, classe: /^nome classe$/, subclasse: /^nome subclasse$/,
+    fabricante: /^nome fabricante$/, familia: /^nome familia$/, ultData: /^ult\.? ?data/
+  };
+  var CLASSES_FORA = ['amostras', 'lojinha'];
+
+  // matriz: linhas da planilha (a primeira que tiver Codigo + Nome +
+  // Quantidade e' o cabecalho). Devolve { itens, problemas }.
+  function lerPlanilhaEstoque(matriz) {
+    var linhas = Array.isArray(matriz) ? matriz : [];
+    var cab = -1, pos = {};
+    for (var i = 0; i < Math.min(linhas.length, 30) && cab === -1; i++) {
+      var p = {};
+      (linhas[i] || []).forEach(function (celula, j) {
+        var rot = norm(celula);
+        Object.keys(COLUNAS_ESTOQUE).forEach(function (k) {
+          if (p[k] == null && COLUNAS_ESTOQUE[k].test(rot)) p[k] = j;
+        });
+      });
+      if (p.codigo != null && p.nome != null && p.quantidade != null) { cab = i; pos = p; }
+    }
+    if (cab === -1) return { itens: [], problemas: ['Não achei o cabeçalho (Código, Nome, Quantidade) — é o relatório "Estoque - Grade"?'] };
+    var itens = [], problemas = [];
+    var celula = function (linha, k) { return pos[k] == null ? null : linha[pos[k]]; };
+    linhas.slice(cab + 1).forEach(function (linha, idx) {
+      if (!linha || celula(linha, 'codigo') == null || celula(linha, 'codigo') === '') return;
+      var nome = String(celula(linha, 'nome') == null ? '' : celula(linha, 'nome')).trim();
+      var q = celula(linha, 'quantidade');
+      var qtd = (typeof q === 'number') ? q : App.parseNumeroBR(String(q == null ? '' : q));
+      if (qtd == null || isNaN(qtd)) { problemas.push('linha ' + (cab + idx + 2) + ': quantidade ilegível (' + nome + ')'); qtd = null; }
+      itens.push({
+        codigo: String(celula(linha, 'codigo')).trim(),
+        nome: nome,
+        naoRepor: /^\*/.test(nome),
+        un: String(celula(linha, 'un') == null ? '' : celula(linha, 'un')).trim(),
+        quantidade: qtd,
+        ean: soDigitos(celula(linha, 'ean')),
+        classe: String(celula(linha, 'classe') == null ? '' : celula(linha, 'classe')).trim(),
+        subclasse: String(celula(linha, 'subclasse') == null ? '' : celula(linha, 'subclasse')).trim(),
+        fabricante: String(celula(linha, 'fabricante') == null ? '' : celula(linha, 'fabricante')).trim(),
+        familia: String(celula(linha, 'familia') == null ? '' : celula(linha, 'familia')).trim(),
+        ultData: App.dataDeCelula(celula(linha, 'ultData')) || null
+      });
+    });
+    return { itens: itens, problemas: problemas };
+  }
+
+  function foraDoControle(item) {
+    return CLASSES_FORA.indexOf(norm(item.classe)) !== -1 || CLASSES_FORA.indexOf(norm(item.subclasse)) !== -1;
+  }
+
+  // Nome do estoque x descricao da nota, sem o codigo de barras: as
+  // palavras com 3+ letras/numeros, e a fracao delas que aparece do
+  // outro lado. "PISO REF 75004 75X75 A POL (CX2,23MT) KARINA" e
+  // "PISO 75004 75X75 POLIDO" dividem 75004 e 75X75 — e' isso que casa.
+  function palavras(s) {
+    var t = norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
+    return t ? t.split(' ').filter(function (w) { return w.length >= 3; }) : [];
+  }
+  function semelhanca(a, b) {
+    var pa = palavras(a), pb = palavras(b);
+    if (!pa.length || !pb.length) return 0;
+    var set = new Set(pb), comum = 0;
+    pa.forEach(function (w) { if (set.has(w)) comum++; });
+    return comum / Math.min(pa.length, pb.length);
+  }
+  var SEMELHANCA_MINIMA = 0.6;
+
+  // Linhas em transito (nao encerradas) que parecem ser este item.
+  function faturadosDoItem(item, linhas) {
+    return (linhas || []).filter(function (l) {
+      if (ENCERRADAS.indexOf(l.situacao) !== -1) return false;
+      if (item.ean && l.ean) return l.ean === item.ean;
+      return semelhanca(item.nome, l.descricao) >= SEMELHANCA_MINIMA;
+    });
+  }
+
+  // o: { hoje, minimo (qtd ate' a qual sugere, padrao 0), dias (ultima
+  //      movimentacao dentro de N dias, padrao 180), ignorados {codigo: ...} }
+  // Devolve { sugerir, jaFaturados, naoRepor, parados, foraDoControle,
+  //           ignorados, jaVermelhas, comEstoque } — listas e contagens
+  //           para a tela explicar o que ficou de fora.
+  function sugestoesVermelhas(estoque, linhas, vermelhas, o) {
+    o = o || {};
+    var minimo = o.minimo == null ? 0 : Number(o.minimo);
+    var dias = o.dias == null ? 180 : Number(o.dias);
+    var corte = o.hoje && dias > 0 ? App.somarDias(o.hoje, -dias) : null;
+    var ignorados = o.ignorados || {};
+    var pendentes = vermelhasPendentes(vermelhas);
+    var r = { sugerir: [], jaFaturados: [], naoRepor: 0, parados: 0, foraDoControle: 0, ignorados: 0, jaVermelhas: 0, comEstoque: 0 };
+    (estoque || []).forEach(function (item) {
+      if (foraDoControle(item)) { r.foraDoControle++; return; }
+      if (item.quantidade == null || item.quantidade > minimo) { r.comEstoque++; return; }
+      if (item.naoRepor) { r.naoRepor++; return; }
+      if (ignorados[item.codigo]) { r.ignorados++; return; }
+      if (corte && (!item.ultData || item.ultData < corte)) { r.parados++; return; }
+      if (pendentes.some(function (v) {
+        return (item.ean && soDigitos(v.ean) === item.ean) || (v.codigo && String(v.codigo) === item.codigo);
+      })) { r.jaVermelhas++; return; }
+      var fat = faturadosDoItem(item, linhas);
+      if (fat.length) r.jaFaturados.push({ item: item, linhas: fat });
+      else r.sugerir.push(item);
+    });
+    var porNome = function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); };
+    r.sugerir.sort(porNome);
+    r.jaFaturados.sort(function (a, b) { return porNome(a.item, b.item); });
+    return r;
+  }
+
+  // Vermelha pendente cujo produto aparece COM estoque na planilha: a
+  // mercadoria chegou por fora do que o app viu — hora de tirar a etiqueta.
+  function vermelhasComEstoque(vermelhas, estoque, minimo) {
+    var min = minimo == null ? 0 : Number(minimo);
+    var porEan = {}, porCodigo = {};
+    (estoque || []).forEach(function (it) {
+      if (it.ean) porEan[it.ean] = it;
+      if (it.codigo) porCodigo[it.codigo] = it;
+    });
+    var lista = [];
+    vermelhasPendentes(vermelhas).forEach(function (v) {
+      var it = (soDigitos(v.ean) && porEan[soDigitos(v.ean)]) || (v.codigo && porCodigo[String(v.codigo)]) || null;
+      if (it && it.quantidade != null && it.quantidade > min) lista.push({ vermelha: v, item: it });
+    });
+    return lista;
   }
 
   /* ------------------------------------------------------------
@@ -249,6 +400,11 @@
     filtrar: filtrar,
     vermelhasPendentes: vermelhasPendentes,
     dicaDeFaturamento: dicaDeFaturamento,
+    lerPlanilhaEstoque: lerPlanilhaEstoque,
+    semelhanca: semelhanca,
+    faturadosDoItem: faturadosDoItem,
+    sugestoesVermelhas: sugestoesVermelhas,
+    vermelhasComEstoque: vermelhasComEstoque,
     htmlRelatorio: htmlRelatorio
   };
 

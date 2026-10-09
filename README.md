@@ -7,7 +7,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 | `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador, custos da loja (importa as planilhas do contador) |
 | `assistencias.html` | Assistências/reclamações e avarias (gerentes de vendas, no celular) |
-| `etiquetas.html` | Etiquetas de gôndola: azul (comprado, em trânsito) e vermelha (sem estoque, não faturado) — instalável (`manifest-etiquetas.json`) |
+| `etiquetas.html` | Etiquetas de gôndola: azul (comprado, em trânsito) e vermelha (sem estoque, não faturado), com importação do relatório de estoque do sistema — instalável (`manifest-etiquetas.json`) |
 | `lancamentos.html` | Redireciona para o Controle de Notas (as telas Lançamentos e Cadastros moram lá desde 04/09/2026) |
 | `dashboard.html` | Dashboard de vendas (Google Sheets) — relatório atrás de login, instalável como app (`manifest-dashboard.json`) |
 | `calculo-nucleo.js` | **A fórmula**: alíquotas, custo, margem, preço-alvo, metas |
@@ -424,7 +424,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-15b. **Etiquetas de produto em trânsito** — 37 verificações em
+15b. **Etiquetas de produto em trânsito** — 49 verificações em
     `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
     ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
     dispensada / retirada), uma linha por item de NF-e com o fornecedor
