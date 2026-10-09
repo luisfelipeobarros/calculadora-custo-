@@ -304,7 +304,7 @@
       lista.map(l => '<tr class="linha-' + l.situacao + '">' +
         '<td data-r="Fornecedor">' + escapeHtml(l.fornecedor) + '</td>' +
         '<td data-r="Emissão"><span class="mono">' + escapeHtml(App.fmtData(l.dataEmissao)) + (l.numero ? ' · NF ' + escapeHtml(l.numero) : '') + '</span></td>' +
-        '<td data-r="Produto" class="prod">' + (l.codigo ? '<span class="mono">' + escapeHtml(l.codigo) + '</span> ' : '') + escapeHtml(l.descricao) + '</td>' +
+        '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) + '</td>' +
         '<td data-r="Qtd">' + escapeHtml(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
         '<td data-r="Situação"><span class="si ' + N.SITUACOES[l.situacao].classe + '">' + escapeHtml(N.SITUACOES[l.situacao].rotulo) + '</span></td>' +
         '<td data-r="Recebimento">' + htmlRecebimento(l) + '</td>' +

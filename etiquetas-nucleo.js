@@ -200,10 +200,10 @@
       ordem.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
       ordem.forEach(function (forn) {
         h += '<div class="rl-forn">' + e(forn) + '</div>' +
-          '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th class="rl-cod">CÓD</th><th>PRODUTO</th>' +
+          '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th>PRODUTO</th>' +
           '<th class="rl-q">QTD</th><th class="rl-nf">NF · EMISSÃO</th></tr></thead><tbody>';
         porForn[forn].forEach(function (l) {
-          h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.codigo) + '</td><td>' + e(l.descricao) + '</td>' +
+          h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.descricao) + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
             '<td class="rl-nf">' + e((l.numero ? l.numero + ' · ' : '') + (l.dataEmissao ? App.fmtData(l.dataEmissao) : '')) + '</td></tr>';
         });
