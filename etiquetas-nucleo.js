@@ -274,14 +274,14 @@
     });
   }
 
-  // o: { hoje, minimo (qtd ate' a qual sugere, padrao 0), dias (ultima
+  // o: { hoje, minimo (qtd ate' a qual sugere, padrao 40), dias (ultima
   //      movimentacao dentro de N dias, padrao 180), ignorados {codigo: ...} }
   // Devolve { sugerir, jaFaturados, naoRepor, parados, foraDoControle,
   //           ignorados, jaVermelhas, comEstoque } — listas e contagens
   //           para a tela explicar o que ficou de fora.
   function sugestoesVermelhas(estoque, linhas, vermelhas, o) {
     o = o || {};
-    var minimo = o.minimo == null ? 0 : Number(o.minimo);
+    var minimo = o.minimo == null ? 40 : Number(o.minimo);
     var dias = o.dias == null ? 180 : Number(o.dias);
     var corte = o.hoje && dias > 0 ? App.somarDias(o.hoje, -dias) : null;
     var ignorados = o.ignorados || {};
@@ -309,7 +309,7 @@
   // Vermelha pendente cujo produto aparece COM estoque na planilha: a
   // mercadoria chegou por fora do que o app viu — hora de tirar a etiqueta.
   function vermelhasComEstoque(vermelhas, estoque, minimo) {
-    var min = minimo == null ? 0 : Number(minimo);
+    var min = minimo == null ? 40 : Number(minimo);
     var porEan = {}, porCodigo = {};
     (estoque || []).forEach(function (it) {
       if (it.ean) porEan[it.ean] = it;

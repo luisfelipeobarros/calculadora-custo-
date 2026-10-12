@@ -160,7 +160,7 @@
       </div>
       <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras, lojinha, parado há muito tempo ou já faturado ficam de fora.</p>
       <div class="est-controles">
-        <div><label for="estMinimo">Sugerir com estoque até</label><input type="number" id="estMinimo" value="0" min="0" step="1"></div>
+        <div><label for="estMinimo">Sugerir com estoque até</label><input type="number" id="estMinimo" value="40" min="0" step="1"></div>
         <div><label for="estDias">Movimentação nos últimos (dias)</label><input type="number" id="estDias" value="180" min="0" step="30"></div>
         <div><button type="button" class="btn" id="estRegistrarBtn">🔴 Registrar as selecionadas</button></div>
       </div>
@@ -200,7 +200,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=30"></script>
-<script src="etiquetas-nucleo.js?v=3"></script>
+<script src="etiquetas-nucleo.js?v=4"></script>
 <script>
 (() => {
   'use strict';
@@ -420,13 +420,13 @@
   // as decisoes ("nao trabalhamos mais", minimo e prazo) moram em
   // config/etiquetasEstoque, para a proxima importacao lembrar.
   let estoque = null;             // itens da planilha lida nesta sessao
-  let estoqueConfig = { ignorados: {}, minimo: 0, dias: 180 };
+  let estoqueConfig = { ignorados: {}, minimo: 40, dias: 180 };
   const CONFIG_ESTOQUE = 'etiquetasEstoque';
 
   function lerConfigEstoque(){
     return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).get()).then(doc => {
       const d = doc.exists ? doc.data() : {};
-      estoqueConfig = { ignorados: d.ignorados || {}, minimo: d.minimo != null ? d.minimo : 0, dias: d.dias != null ? d.dias : 180 };
+      estoqueConfig = { ignorados: d.ignorados || {}, minimo: d.minimo != null ? d.minimo : 40, dias: d.dias != null ? d.dias : 180 };
       $('estMinimo').value = estoqueConfig.minimo;
       $('estDias').value = estoqueConfig.dias;
     }).catch(e => { console.error('config do estoque:', e); });
