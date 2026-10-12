@@ -128,10 +128,13 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
     ['108', 'PISO IGNORADO 45X45', 'CX', 0, null, '7897', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
     ['109', 'PISO 58004 58X58 A VIVA PISOS', 'CX', 0, null, '', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
     ['110', 'PISO QTD RUIM', 'CX', 'abc', null, '', 'Piso cerâmico', 'Pisos', '', '05/10/2026'],
+    ['112', 'PISO PARADO POUCO 60X60', 'CX', 5, null, '7812', 'Piso cerâmico', 'Pisos', '', '01/01/2026'],
+    ['113', 'PISO PARADO MUITO 60X60', 'CX', 80, null, '7813', 'Piso cerâmico', 'Pisos', '', '01/01/2026'],
+    ['114', 'PISO PARADO MARCADO 60X60', 'CX', 90, null, '7814', 'Piso cerâmico', 'Pisos', '', '01/01/2026'],
     [null, null, null, null, null, null, null, null, null, null]
   ];
   const lido = N.lerPlanilhaEstoque(matriz);
-  eq('planilha: acha o cabecalho fora da primeira linha e le todos os itens', lido.itens.length, 11);
+  eq('planilha: acha o cabecalho fora da primeira linha e le todos os itens', lido.itens.length, 14);
   eq('planilha: campos do item (asterisco = nao repor, barras so digitos, data ISO)',
     [lido.itens[0].codigo, lido.itens[0].ean, lido.itens[0].ultData, lido.itens[0].naoRepor, lido.itens[1].naoRepor, lido.itens[0].classe],
     ['100', '7899588825272', '2026-09-15', false, true, 'Porcelanato']);
@@ -149,14 +152,23 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
   eq('faturados: com codigo de barras dos dois lados so vale o codigo de barras (nome parecido nao engana)',
     N.faturadosDoItem(lido.itens[0], transito).length, 0);
   const verm = [{ id: 'v1', produto: 'PISO JA VERMELHO 45X45', codigo: '107', criadaEm: '2026-10-01' }, { id: 'v2', produto: 'antiga', codigo: '104', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }];
-  const r = N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 0, dias: 180, ignorados: { '108': '2026-10-01' } });
+  const r = N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 0, dias: 180, ignorados: { '108': '2026-10-01' }, marcados: { '114': { tipo: 'promocao', em: '2026-10-01' } } });
   eq('sugestoes: so o que esta zerado, vendavel, com movimento recente, sem vermelha, nao ignorado e nao faturado',
     r.sugerir.map(i => i.codigo), ['100']);
   eq('sugestoes: ja faturado vai para a lista azul (por barras e por nome)', r.jaFaturados.map(x => x.item.codigo + ':' + x.linhas.map(l => l.id).join('+')), ['109:T_2', '106:T_1']);
   eq('sugestoes: contagens do que ficou de fora',
-    [r.foraDoControle, r.naoRepor, r.parados, r.ignorados, r.jaVermelhas, r.comEstoque], [1, 1, 1, 1, 1, 3]);
+    [r.foraDoControle, r.naoRepor, r.paradosSemEstoque, r.ignorados, r.jaVermelhas, r.normais], [1, 1, 1, 1, 1, 3]);
+  eq('parado com estoque: ate o minimo e saldao, acima e promocao; marcado fica fora',
+    [r.saldao.map(i => i.codigo), r.promocao.map(i => i.codigo), r.jaMarcados.map(x => x.item.codigo + ':' + x.tipo)], [[], ['113', '112'], ['114:promocao']]);
+  eq('com minimo 40, o parado com 5 vira saldao e o com 80 promocao',
+    (x => [x.saldao.map(i => i.codigo), x.promocao.map(i => i.codigo)])(N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 40, dias: 90 })), [['112'], ['114', '113']]);
+  eq('padroes: minimo 40 e 90 dias',
+    (x => [x.saldao.length, x.promocao.length, x.sugerir.length])(N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09' })), [1, 2, 4]);
+  const relEst = N.htmlRelatorio([], [], { hoje: '2026-10-09', estoque: N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 40, dias: 90 }) });
+  eq('relatorio: saldao e promocao entram quando ha estoque importado',
+    [/SALDÃO[^(]*\(1\)/.test(relEst), /PROMOÇÃO[^(]*\(2\)/.test(relEst), relEst.indexOf('PISO PARADO POUCO 60X60') !== -1, N.htmlRelatorio([], [], { hoje: '2026-10-09' }).indexOf('SALDÃO') === -1], [true, true, true, true]);
   eq('sugestoes: minimo 5 inclui o estoque baixo; dias 0 = sem corte de data',
-    N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 5, dias: 0 }).sugerir.map(i => i.codigo), ['105', '108', '100', '103']);
+    N.sugestoesVermelhas(lido.itens, transito, verm, { hoje: '2026-10-09', minimo: 5, dias: 0 }).sugerir.map(i => i.codigo), ['105', '108', '112', '100', '103']);
   eq('vermelha que ganhou estoque: pelo codigo interno ou barras, so pendente',
     N.vermelhasComEstoque([{ id: 'a', codigo: '104', criadaEm: '2026-10-01' }, { id: 'b', ean: '7894', criadaEm: '2026-10-01' }, { id: 'c', codigo: '100', criadaEm: '2026-10-01' }, { id: 'd', codigo: '104', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }], lido.itens, 0)
       .map(x => x.vermelha.id + ':' + x.item.quantidade), ['a:12', 'b:3']);

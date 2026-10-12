@@ -274,25 +274,44 @@
     });
   }
 
-  // o: { hoje, minimo (qtd ate' a qual sugere, padrao 40), dias (ultima
-  //      movimentacao dentro de N dias, padrao 180), ignorados {codigo: ...} }
-  // Devolve { sugerir, jaFaturados, naoRepor, parados, foraDoControle,
-  //           ignorados, jaVermelhas, comEstoque } — listas e contagens
-  //           para a tela explicar o que ficou de fora.
+  // Classificacao de cada produto vendavel (pedido de 12/10/2026):
+  //
+  //   movimentou nos ultimos N dias | estoque ate' o minimo, sem nota  -> VERMELHA (sugestao)
+  //   movimentou                    | estoque ate' o minimo, com nota  -> AZUL (ja' faturado)
+  //   movimentou                    | acima do minimo                  -> normal
+  //   parado                        | zero                             -> nada (nem vender nem repor)
+  //   parado                        | de 1 ate' o minimo               -> SALDAO
+  //   parado                        | acima do minimo                  -> PROMOCAO
+  //
+  // o: { hoje, minimo (padrao 40), dias (padrao 90), ignorados {codigo: ...},
+  //      marcados {codigo: { tipo: 'saldao'|'promocao' }} — ja' esta' la' }
+  // Devolve { sugerir, jaFaturados, saldao, promocao, jaMarcados } (listas)
+  // e as contagens do que ficou de fora: naoRepor, paradosSemEstoque,
+  // foraDoControle, ignorados, jaVermelhas, normais.
   function sugestoesVermelhas(estoque, linhas, vermelhas, o) {
     o = o || {};
     var minimo = o.minimo == null ? 40 : Number(o.minimo);
-    var dias = o.dias == null ? 180 : Number(o.dias);
+    var dias = o.dias == null ? 90 : Number(o.dias);
     var corte = o.hoje && dias > 0 ? App.somarDias(o.hoje, -dias) : null;
     var ignorados = o.ignorados || {};
+    var marcados = o.marcados || {};
     var pendentes = vermelhasPendentes(vermelhas);
-    var r = { sugerir: [], jaFaturados: [], naoRepor: 0, parados: 0, foraDoControle: 0, ignorados: 0, jaVermelhas: 0, comEstoque: 0 };
+    var r = { sugerir: [], jaFaturados: [], saldao: [], promocao: [], jaMarcados: [],
+      naoRepor: 0, paradosSemEstoque: 0, foraDoControle: 0, ignorados: 0, jaVermelhas: 0, normais: 0 };
     (estoque || []).forEach(function (item) {
       if (foraDoControle(item)) { r.foraDoControle++; return; }
-      if (item.quantidade == null || item.quantidade > minimo) { r.comEstoque++; return; }
       if (item.naoRepor) { r.naoRepor++; return; }
+      if (item.quantidade == null) { r.normais++; return; }
+      var parado = !!(corte && (!item.ultData || item.ultData < corte));
+      if (parado) {
+        if (item.quantidade <= 0) { r.paradosSemEstoque++; return; }
+        var marca = marcados[item.codigo];
+        if (marca && marca.tipo) { r.jaMarcados.push({ item: item, tipo: marca.tipo, em: marca.em || null }); return; }
+        (item.quantidade <= minimo ? r.saldao : r.promocao).push(item);
+        return;
+      }
+      if (item.quantidade > minimo) { r.normais++; return; }
       if (ignorados[item.codigo]) { r.ignorados++; return; }
-      if (corte && (!item.ultData || item.ultData < corte)) { r.parados++; return; }
       if (pendentes.some(function (v) {
         return (item.ean && soDigitos(v.ean) === item.ean) || (v.codigo && String(v.codigo) === item.codigo);
       })) { r.jaVermelhas++; return; }
@@ -302,7 +321,10 @@
     });
     var porNome = function (a, b) { return a.nome.localeCompare(b.nome, 'pt-BR'); };
     r.sugerir.sort(porNome);
+    r.saldao.sort(porNome);
+    r.promocao.sort(porNome);
     r.jaFaturados.sort(function (a, b) { return porNome(a.item, b.item); });
+    r.jaMarcados.sort(function (a, b) { return porNome(a.item, b.item); });
     return r;
   }
 
@@ -363,6 +385,23 @@
       return h;
     }
 
+    // Saldao e promocao (vem da planilha de estoque importada; opcional).
+    function secaoEstoque(titulo, lista) {
+      var h = '<div class="rl-secao">' + e(titulo) + ' <span class="rl-qtd">(' + lista.length + ')</span></div>';
+      if (!lista.length) return h + '<div class="rl-vazio">Nenhum produto.</div>';
+      h += '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th>PRODUTO</th><th class="rl-q">ESTOQUE</th><th class="rl-nf">ÚLT. MOV.</th></tr></thead><tbody>';
+      lista.forEach(function (it) {
+        h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(it.nome) + (it.fabricante ? ' <span class="rl-qtd">· ' + e(it.fabricante) + '</span>' : '') + '</td>' +
+          '<td class="rl-q">' + e(fmtQtd(it.quantidade) + (it.un ? ' ' + it.un : '')) + '</td>' +
+          '<td class="rl-nf">' + e(it.ultData ? App.fmtData(it.ultData) : '') + '</td></tr>';
+      });
+      return h + '</tbody></table>';
+    }
+    var est = o.estoque || null;
+    var hEstoque = !est ? '' :
+      secaoEstoque('SALDÃO — PARADO, ESTOQUE ATÉ O MÍNIMO', est.saldao || []) +
+      secaoEstoque('PROMOÇÃO — PARADO, ESTOQUE ACIMA DO MÍNIMO', est.promocao || []);
+
     var retirar = (linhas || []).filter(function (l) { return l.situacao === 'retirar'; });
     var etiquetar = (linhas || []).filter(function (l) { return l.situacao === 'etiquetar'; });
     var verm = vermelhasPendentes(vermelhas);
@@ -384,6 +423,7 @@
       secao('RETIRAR ETIQUETA — MERCADORIA RECEBIDA', retirar, 'Nada para retirar.') +
       secao('COLOCAR ETIQUETA AZUL — FATURADO, A CAMINHO', etiquetar, 'Nada para etiquetar.') +
       hv +
+      hEstoque +
       '</div>';
   }
 

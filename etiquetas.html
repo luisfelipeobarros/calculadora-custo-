@@ -158,16 +158,20 @@
         <h2 style="margin:0;">Estoque importado — sugestões de etiqueta vermelha</h2>
         <button type="button" class="btn secondary mini" id="estFecharBtn">✕ Fechar</button>
       </div>
-      <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras, lojinha, parado há muito tempo ou já faturado ficam de fora.</p>
+      <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras e lojinha ficam de fora. Parado no prazo e com estoque vira saldão (até o mínimo) ou promoção (acima).</p>
       <div class="est-controles">
         <div><label for="estMinimo">Sugerir com estoque até</label><input type="number" id="estMinimo" value="40" min="0" step="1"></div>
-        <div><label for="estDias">Movimentação nos últimos (dias)</label><input type="number" id="estDias" value="180" min="0" step="30"></div>
+        <div><label for="estDias">Movimentação nos últimos (dias)</label><input type="number" id="estDias" value="90" min="0" step="30"></div>
         <div><button type="button" class="btn" id="estRegistrarBtn">🔴 Registrar as selecionadas</button></div>
       </div>
+      <div class="etq-resumo" id="estPainel"></div>
       <div class="est-resumo" id="estResumo"></div>
       <div id="estComEstoque"></div>
       <div id="estSugestoes"></div>
       <div id="estFaturados"></div>
+      <div id="estSaldao"></div>
+      <div id="estPromocao"></div>
+      <div id="estMarcados"></div>
       <p class="empty-note" id="estMsg" style="display:block;"></p>
     </div>
 
@@ -200,7 +204,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=30"></script>
-<script src="etiquetas-nucleo.js?v=4"></script>
+<script src="etiquetas-nucleo.js?v=5"></script>
 <script>
 (() => {
   'use strict';
@@ -420,13 +424,14 @@
   // as decisoes ("nao trabalhamos mais", minimo e prazo) moram em
   // config/etiquetasEstoque, para a proxima importacao lembrar.
   let estoque = null;             // itens da planilha lida nesta sessao
-  let estoqueConfig = { ignorados: {}, minimo: 40, dias: 180 };
+  let estoqueConfig = { ignorados: {}, marcados: {}, minimo: 40, dias: 90 };
+  let classificacao = null;     // ultimo resultado de N.sugestoesVermelhas (vai para o relatorio)
   const CONFIG_ESTOQUE = 'etiquetasEstoque';
 
   function lerConfigEstoque(){
     return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).get()).then(doc => {
       const d = doc.exists ? doc.data() : {};
-      estoqueConfig = { ignorados: d.ignorados || {}, minimo: d.minimo != null ? d.minimo : 40, dias: d.dias != null ? d.dias : 180 };
+      estoqueConfig = { ignorados: d.ignorados || {}, marcados: d.marcados || {}, minimo: d.minimo != null ? d.minimo : 40, dias: d.dias != null ? d.dias : 90 };
       $('estMinimo').value = estoqueConfig.minimo;
       $('estDias').value = estoqueConfig.dias;
     }).catch(e => { console.error('config do estoque:', e); });
@@ -484,14 +489,27 @@
     (it.ultData ? ' · últ. mov. ' + escapeHtml(App.fmtData(it.ultData)) : '') + '</div>';
 
   function renderEstoque(){
-    if(!estoque){ $('estResumo').textContent = ''; $('estComEstoque').innerHTML = ''; $('estSugestoes').innerHTML = ''; $('estFaturados').innerHTML = ''; return; }
+    if(!estoque){
+      classificacao = null;
+      ['estPainel', 'estResumo', 'estComEstoque', 'estSugestoes', 'estFaturados', 'estSaldao', 'estPromocao', 'estMarcados'].forEach(id => { $(id).innerHTML = ''; });
+      return;
+    }
     const linhas = linhasAtuais();
-    const o = { hoje: App.hojeISO(), minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0, ignorados: estoqueConfig.ignorados };
+    const o = { hoje: App.hojeISO(), minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0,
+      ignorados: estoqueConfig.ignorados, marcados: estoqueConfig.marcados };
     const r = N.sugestoesVermelhas(estoque, linhas, vermelhas, o);
+    classificacao = r;
     const comEstoque = N.vermelhasComEstoque(vermelhas, estoque, o.minimo);
 
+    // Mini resumo: o que fazer, em numeros — muda na hora com os controles.
+    $('estPainel').innerHTML = [
+      ['Saldão', r.saldao.length, 'alerta'], ['Promoção', r.promocao.length, 'alerta'],
+      ['Etiqueta vermelha', r.sugerir.length, 'alerta'], ['Etiqueta azul (já faturado)', r.jaFaturados.length, 'azul']
+    ].map(([rot, val, cls]) => '<div class="etq-kpi" style="cursor:default;"><span class="k-rot">' + rot + '</span><span class="k-val ' + (val ? cls : '') + '">' + val + '</span></div>').join('');
+
     $('estResumo').textContent = estoque.length + ' produtos · fora do controle (amostras/lojinha): ' + r.foraDoControle +
-      ' · com estoque: ' + r.comEstoque + ' · não vamos repor (*): ' + r.naoRepor + ' · parados há mais de ' + o.dias + ' dias: ' + r.parados +
+      ' · não vamos repor (*): ' + r.naoRepor + ' · normais (movimentou e tem estoque): ' + r.normais +
+      ' · parados sem estoque: ' + r.paradosSemEstoque + ' · já em saldão/promoção: ' + r.jaMarcados.length +
       ' · "não trabalhamos mais": ' + r.ignorados + ' · já com vermelha: ' + r.jaVermelhas;
 
     $('estComEstoque').innerHTML = !comEstoque.length ? '' :
@@ -509,6 +527,23 @@
         '<td class="acoes sem-rotulo"><button type="button" class="btn secondary mini" data-ignorar="' + escapeHtml(it.codigo) + '" title="Sai das sugestões, agora e nas próximas importações">Não trabalhamos mais</button></td></tr>').join('') +
       '</tbody></table>');
 
+    const tabelaEstoque = (lista, tipo, rotulo) => !lista.length ? '<p class="empty-note" style="display:block;">Nenhum produto.</p>' :
+      '<table class="etq-tab"><tbody>' + lista.map(it =>
+        '<tr><td data-r="Produto">' + htmlItemEstoque(it) + '</td>' +
+        '<td class="acoes sem-rotulo"><button type="button" class="btn secondary mini" data-marcar="' + tipo + '" data-codigo="' + escapeHtml(it.codigo) + '" title="Sai desta lista nas próximas importações">' + rotulo + '</button></td></tr>').join('') +
+      '</tbody></table>';
+    $('estSaldao').innerHTML = '<div class="est-sub">Saldão — parado há mais de ' + o.dias + ' dias, estoque até ' + o.minimo + ' (' + r.saldao.length + ')</div>' +
+      tabelaEstoque(r.saldao, 'saldao', '✔ Já está em saldão');
+    $('estPromocao').innerHTML = '<div class="est-sub">Promoção — parado há mais de ' + o.dias + ' dias, estoque acima de ' + o.minimo + ' (' + r.promocao.length + ')</div>' +
+      tabelaEstoque(r.promocao, 'promocao', '✔ Já está em promoção');
+    $('estMarcados').innerHTML = !r.jaMarcados.length ? '' :
+      '<div class="est-sub">Já em saldão / promoção (' + r.jaMarcados.length + ')</div>' +
+      '<table class="etq-tab"><tbody>' + r.jaMarcados.map(x =>
+        '<tr><td data-r="Produto">' + htmlItemEstoque(x.item) + '</td>' +
+        '<td data-r="Marca"><span class="si si-dispensada">' + (x.tipo === 'saldao' ? 'Saldão' : 'Promoção') + (x.em ? ' · ' + escapeHtml(App.fmtData(x.em)) : '') + '</span></td>' +
+        '<td class="acoes sem-rotulo"><button type="button" class="btn secondary mini" data-desmarcar="' + escapeHtml(x.item.codigo) + '">↩ Tirar a marca</button></td></tr>').join('') +
+      '</tbody></table>';
+
     $('estFaturados').innerHTML = !r.jaFaturados.length ? '' :
       '<div class="est-sub">Já faturado — vai de etiqueta azul (' + r.jaFaturados.length + ')</div>' +
       '<table class="etq-tab"><tbody>' + r.jaFaturados.map(x =>
@@ -524,6 +559,20 @@
     ignorados[codigo] = App.hojeISO();
     b.disabled = true;
     gravarConfigEstoque({ ignorados }).then(renderEstoque);
+  });
+  // "Ja' esta' em saldao/promocao": a marca fica em config/etiquetasEstoque
+  // e o produto sai da lista ate' alguem tirar a marca.
+  ['estSaldao', 'estPromocao'].forEach(id => App.delegar($(id), 'click', '[data-marcar]', (b) => {
+    const marcados = Object.assign({}, estoqueConfig.marcados);
+    marcados[b.dataset.codigo] = { tipo: b.dataset.marcar, em: App.hojeISO() };
+    b.disabled = true;
+    gravarConfigEstoque({ marcados }).then(renderEstoque);
+  }));
+  App.delegar($('estMarcados'), 'click', '[data-desmarcar]', (b) => {
+    const marcados = Object.assign({}, estoqueConfig.marcados);
+    delete marcados[b.dataset.desmarcar];
+    b.disabled = true;
+    gravarConfigEstoque({ marcados }).then(renderEstoque);
   });
   App.delegar($('estComEstoque'), 'click', '[data-vm="resolver"]', (b) => {
     b.disabled = true;
@@ -563,7 +612,7 @@
 
   // ─── Relatorio ───
   $('etqImprimirBtn').addEventListener('click', () => {
-    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora() });
+    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao });
     document.body.classList.add('imprimindo');
     const limpar = () => { document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
     window.addEventListener('afterprint', limpar);
