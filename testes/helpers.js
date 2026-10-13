@@ -49,6 +49,10 @@ conferir('pct nulo', App.pct(null), '--');
 // --- centavos: o arredondamento que faz os totais fecharem ---
 conferir('centavos 0.1+0.2', App.centavos(0.1 + 0.2), 0.3);
 conferir('centavos meio centavo pra cima', App.centavos(1.005), 1.01);
+conferir('centavos: meio centavo pra cima tambem acima de 2 (8,325 e 2,675 nao podem cair)',
+  [App.centavos(8.325), App.centavos(2.675), App.centavos(0.015), App.centavos(1234.565), App.centavos(-8.325)],
+  [8.33, 2.68, 0.02, 1234.57, -8.33]);
+conferir('emCentavos com o mesmo criterio', [App.emCentavos(8.325), App.emCentavos(1.005), App.emCentavos(2.675)], [833, 101, 268]);
 conferir('centavos negativo', App.centavos(-2.345), -2.35);
 conferir('centavos preserva nulo', App.centavos(null), null);
 
@@ -103,6 +107,7 @@ conferir('fmtData com lixo volta ESCAPADO (fecha o furo de XSS)',
 // de fornecedor); parseDinheiroBR le "1.234" como milhar — e' ele que
 // os campos de DINHEIRO usam (o bug corrompia >= 1000 nas assistencias).
 conferir('parseDinheiroBR 25.000 = vinte e cinco mil', App.parseDinheiroBR('25.000'), 25000);
+conferir('parseDinheiroBR negativo com milhar', App.parseDinheiroBR('-25.000'), -25000);
 conferir('parseDinheiroBR com R$', App.parseDinheiroBR('R$ 2.500.000'), 2500000);
 conferir('parseDinheiroBR com centavos nao muda', App.parseDinheiroBR('1.234,56'), 1234.56);
 conferir('parseDinheiroBR decimal simples nao muda', App.parseDinheiroBR('64.9'), 64.9);
@@ -310,14 +315,15 @@ assincrono('pedirTexto confirmado em branco devolve "" (limpar), nao null', () =
 // leitura do servidor ALIMENTA o cache (como o SDK faz) e fica
 // registrada em `log`, que e' o que os testes conferem: quantos
 // documentos cada caminho pagou.
-function firestoreFalso(servidor, cache, log) {
-  const doc = (x) => ({ id: x.id, data: () => x.dados });
+function firestoreFalso(servidor, cache, log, opcoes) {
+  const offline = !!(opcoes && opcoes.offline);
+  const doc = (x) => ({ id: x.id, data: () => x.dados, get: (c) => x.dados[c] });
   const valor = (v) => (v && v.toMillis ? v.toMillis() : v);
   function consulta(filtros) {
     return {
       where(campo, op, v) { return consulta(filtros.concat([[campo, op, v]])); },
       get(opts) {
-        const deCache = !!(opts && opts.source === 'cache');
+        const deCache = !!(opts && opts.source === 'cache') || offline;
         if (deCache && cache === null) return Promise.reject(new Error('sem cache'));
         const lista = (deCache ? cache : servidor).filter(x => filtros.every(([c, op, v]) => {
           const a = valor(x.dados[c]), b = valor(v);
@@ -329,7 +335,7 @@ function firestoreFalso(servidor, cache, log) {
           const i = cache.findIndex(y => y.id === x.id);
           if (i === -1) cache.push(x); else cache[i] = x;
         });
-        return Promise.resolve({ size: lista.length, forEach: (fn) => lista.map(doc).forEach(fn) });
+        return Promise.resolve({ size: lista.length, metadata: { fromCache: deCache }, forEach: (fn) => lista.map(doc).forEach(fn) });
       }
     };
   }
@@ -395,6 +401,33 @@ assincrono('lerComDelta: completa na primeira vez, delta depois, e completa de n
   conferir('delta: controle apagado = completa', r8.modo, 'completa');
 });
 
+assincrono('lerComDelta: sem rede, a "completa" vem do cache e NAO vale como controle', async () => {
+  const servidor = [{ id: 'a', dados: { atualizadoEm: carimbo(HORA) } }, { id: 'b', dados: { atualizadoEm: carimbo(2 * HORA) } }];
+  const cache = [{ id: 'a', dados: { atualizadoEm: carimbo(HORA) } }], log = [], arm = armazenamentoFalso();
+  const o = { campo: 'atualizadoEm', chave: 'k', hoje: '2026-10-05', armazenamento: arm, deMillis: carimbo };
+  const off = await App.lerComDelta(Object.assign({ consulta: firestoreFalso(servidor, cache, log, { offline: true }) }, o));
+  conferir('offline: devolve o que tem no cache, sem guardar controle', [off.modo, ids(off), arm.m.k], ['completa', 'a', undefined]);
+  const on = await App.lerComDelta(Object.assign({ consulta: firestoreFalso(servidor, cache, log) }, o));
+  conferir('de volta com rede: leitura completa de verdade, com os dois', [on.modo, ids(on)], ['completa', 'a,b']);
+});
+
+assincrono('lerFaixaComCache: documento que mudou de data para tras nao fica na tela com a data velha', async () => {
+  const servidor = [
+    { id: 'a', dados: { vencimento: '2026-03-01' } },
+    { id: 'b', dados: { vencimento: '2026-09-20' } }
+  ];
+  const cache = [], log = [], arm = armazenamentoFalso();
+  const o = { campo: 'vencimento', ini: '2026-01-01', corte: '2026-08-06', chave: 'kf', hoje: '2026-10-05', armazenamento: arm };
+  await App.lerFaixaComCache(Object.assign({ col: firestoreFalso(servidor, cache, log) }, o));
+  // Em outra maquina: b corrigida para 2026-02-10 (faixa antiga) e c nova.
+  servidor[1] = { id: 'b', dados: { vencimento: '2026-02-10' } };
+  servidor.push({ id: 'c', dados: { vencimento: '2026-09-25' } });
+  const r = await App.lerFaixaComCache(Object.assign({ col: firestoreFalso(servidor, cache, log), hoje: '2026-10-06' }, o));
+  conferir('b nao aparece com a data velha; c chega do servidor', [r.modo, ids(r)], ['parcial', 'a,c']);
+  const semRede = await App.lerFaixaComCache(Object.assign({ col: firestoreFalso(servidor, cache, log, { offline: true }), hoje: '2026-10-06' }, o));
+  conferir('sem rede: le o que tem, sem fingir que foi ao servidor', [semRede.modo, semRede.motivo], ['completa', 'sem conexão com o servidor']);
+});
+
 assincrono('lerComDelta: navegador sem cache cai na leitura completa', async () => {
   const servidor = [{ id: 'a', dados: { atualizadoEm: carimbo(HORA) } }];
   const arm = armazenamentoFalso(), log = [];
@@ -443,7 +476,7 @@ assincrono('lerFaixaComCache: passado do cache, recente do servidor, completa a 
   log.length = 0;
   const r2 = await ler({ hoje: '2026-10-06' });
   conferir('faixa: no dia seguinte, so os recentes pagam leitura; servidor ANTES do cache',
-    [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 2, 'jan,jun,out,set', ['servidor:2', 'cache:2']]);
+    [r2.modo, r2.lidasNoServidor, ids(r2), log], ['parcial', 2, 'jan,jun,out,set', ['servidor:2', 'cache:4']]);
 
   // "jun" foi prorrogado para outubro em outra maquina: chega pelo
   // servidor e NAO pode aparecer duas vezes nem com a data velha.
@@ -534,6 +567,14 @@ function firestoreVivo(servidor, cache, log) {
         ouvintes.push(o);
         Promise.resolve().then(() => entregar(o));
         return () => { o.ativo = false; };
+      },
+      doc(id) {
+        return { get() {
+          if (cache === null) return Promise.reject(new Error('sem cache'));
+          const x = cache.find(y => y.id === id);
+          log.push('cache-doc:' + id);
+          return Promise.resolve({ id, exists: !!x, data: () => (x ? Object.assign({}, x.dados) : undefined) });
+        } };
       }
     };
   }
@@ -545,7 +586,22 @@ function firestoreVivo(servidor, cache, log) {
       if (i === -1) servidor.push({ id, dados }); else servidor[i] = { id, dados };
       avisar();
     },
-    apagar(id) { servidor.splice(servidor.findIndex(x => x.id === id), 1); avisar(); },
+    apagar(id) {
+      servidor.splice(servidor.findIndex(x => x.id === id), 1);
+      if (cache) { const i = cache.findIndex(x => x.id === id); if (i !== -1) cache.splice(i, 1); }
+      avisar();
+    },
+    // Escrita local com serverTimestamp: o cache ganha a versao nova (carimbo
+    // ainda sem hora) e, como o SDK, a consulta por carimbo emite "removed".
+    pendente(id, dados) {
+      const i = cache.findIndex(x => x.id === id);
+      if (i === -1) cache.push({ id, dados }); else cache[i] = { id, dados };
+      ouvintes.forEach(o => {
+        if (!o.ativo || !o.vistos.has(id)) return;
+        o.vistos.delete(id);
+        o.ok({ metadata: { fromCache: false }, docChanges: () => [{ type: 'removed', doc: { id, data: () => ({}), get: () => undefined } }], forEach() {} });
+      });
+    },
     ativos: () => ouvintes.filter(o => o.ativo).length
   };
 }
@@ -629,6 +685,12 @@ assincrono('escutarComDelta: completa na primeira vez, depois so o que mudou —
   fs2.apagar('n3');
   await respiro();
   conferir('carimbo: documento apagado sai da tela', chaves(t2), 'n0,n1,n2');
+  // A propria tela regrava n1 (carimbo pendente): sai da consulta, mas
+  // NAO da tela — e ja' aparece com o que foi gravado.
+  fs2.pendente('n1', { dataEmissao: '2026-03-01', noSistema: true, alteradoEm: null });
+  await respiro();
+  conferir('carimbo: escrita pendente da propria tela nao apaga a linha, e mostra o novo valor',
+    [chaves(t2), t2.mapa.n1.noSistema], ['n0,n1,n2', true]);
   t2.escuta.parar();
 
   // ...e a virada do dia relê tudo: a gravacao sem carimbo aparece.

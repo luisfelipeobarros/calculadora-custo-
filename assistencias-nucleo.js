@@ -163,7 +163,7 @@
     return (lista || []).filter(function (a) {
       if (ehAvaria(a) !== soAvarias) return false;
       if (!soAvarias && o.status && a.status !== o.status) return false;
-      if (o.causa && a.causa !== o.causa) return false;
+      if (!soAvarias && o.causa && a.causa !== o.causa) return false; // avaria nao tem causa
       if (o.de && (a.dataAbertura || '') < o.de) return false;
       if (o.ate && (a.dataAbertura || '') > o.ate) return false;
       if (termo &&

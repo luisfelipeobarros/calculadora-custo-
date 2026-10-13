@@ -291,8 +291,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=30"></script>
-<script src="assistencias-nucleo.js?v=6"></script>
+<script src="app-shared.js?v=31"></script>
+<script src="assistencias-nucleo.js?v=7"></script>
 <script>
 (() => {
   'use strict';
@@ -428,7 +428,7 @@
   // Duas listas iguais: a dos produtos reclamados e, na troca por
   // produto novo, a do que o cliente leva. Linha em branco e' ignorada.
   const fmtQtd = (v) => v == null ? '' : Number.isInteger(v) ? String(v)
-    : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }); // 3 casas: 2,345 m² nao pode virar 2,35 ao abrir e salvar
   function htmlItem(it){
     it = it || {};
     const campo = (nome, rotulo, extra, valor) =>
@@ -530,7 +530,7 @@
     montarItens('afItensNovos', a && Array.isArray(a.itensNovos) ? a.itensNovos : []);
     $('afDataAbertura').value = (a && a.dataAbertura) || App.hojeISO();
     $('afDataResolucao').value = (a && a.dataResolucao) || '';
-    $('afCausa').value = (a && a.causa) || '';
+    selecionarComForaDaLista('afCausa', N.CAUSAS, (a && a.causa) || '', true);
     selecionarComForaDaLista('afStatus', N.STATUS, (a && a.status) || 'Aberta', false);
     selecionarComForaDaLista('afTipoSolucao', N.TIPOS_SOLUCAO, (a && a.tipoSolucao) || '', true);
     mostrarItensNovos();
@@ -620,7 +620,9 @@
   // Fotos e termo dividem o mesmo documento, então o teto é dos dois
   // somados.
   const LIMITE_FOTOS_CHARS = 700000;
-  const tamanhoFotos = () => fotosAtuais.concat(termoAtuais).reduce((s, f) => s + f.length, 0);
+  // Os anexos em formato desconhecido tambem sao regravados: contam no teto.
+  const tamanhoFotos = () => fotosAtuais.concat(termoAtuais).reduce((s, f) => s + f.length, 0) +
+    (outrosAnexos.length ? JSON.stringify(outrosAnexos).length : 0);
 
   function comprimirFoto(file){
     return new Promise((resolve, reject) => {
@@ -746,6 +748,12 @@
     // ficava clicável e dois toques criavam dois documentos.
     const btn = $('afSalvarBtn');
     if(btn.disabled) return;
+    // Fotos ainda sendo comprimidas: salvar agora gravaria a ficha sem
+    // elas, e elas cairiam num array de ficha ja' fechada — sumiam.
+    if(recebendoImagens){
+      App.toast('Aguarde as fotos terminarem de processar antes de salvar.', 'info');
+      return;
+    }
     btn.disabled = true;
     try{
       const seq = $('afSequencia').value.trim();
@@ -801,7 +809,9 @@
       // status limpa a data — assistência aberta com data de resolução
       // estragaria qualquer relatório de tempo de atendimento.
       if(dados.status === 'Resolvida' && !dados.dataResolucao) dados.dataResolucao = App.hojeISO();
-      if(dados.status !== 'Resolvida') dados.dataResolucao = null;
+      // Status fora da lista (documento antigo) nao e' "nao resolvida": a
+      // data de resolucao dele fica como esta'.
+      if(dados.status !== 'Resolvida' && N.STATUS.indexOf(dados.status) !== -1) dados.dataResolucao = null;
 
       $('afMsg').textContent = 'Salvando...';
       if(editandoId){

@@ -50,6 +50,7 @@ eq('troca por produto novo e reconhecida sem acento e sem caixa', N.ehTrocaPorNo
     [N.filtrarAssistencias(lista, {}).length, N.filtrarAssistencias(lista, { status: 'Aberta' }).length,
      N.filtrarAssistencias(lista, { tipo: 'avaria', status: 'Aberta' }).length], [1, 1, 2]);
   eq('filtro: a busca acha a avaria pelo motivo', N.filtrarAssistencias(lista, { tipo: 'avaria', termo: 'entrega' }).length, 1);
+  eq('filtro: a causa escolhida nao esvazia as avarias (elas nao tem causa)', N.filtrarAssistencias(lista, { tipo: 'avaria', causa: 'Entrega errada' }).length, 2);
   const linhas = N.linhasExcel(lista);
   eq('planilha: coluna de tipo e motivo', [linhas[0]['Tipo'], linhas[1]['Tipo'], linhas[1]['Motivo da avaria']], ['Assistência', 'Avaria', 'Carregamento']);
   eq('ehAvaria', [N.ehAvaria(lista[1]), N.ehAvaria(lista[0]), N.ehAvaria(null)], [true, false, false]);

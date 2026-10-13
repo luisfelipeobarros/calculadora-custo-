@@ -446,7 +446,7 @@
       if(!(atual > 0) && !(anterior > 0)) return null;
       return { nome, atual, anterior,
         novo: !(anterior > 0),
-        cresc: anterior > 0 ? atual / anterior - 1 : null };
+        cresc: (atual != null && anterior > 0) ? atual / anterior - 1 : null };
     }).filter(Boolean).sort((a, b) => {
       const ca = a.novo ? Infinity : a.cresc;
       const cb = b.novo ? Infinity : b.cresc;
@@ -492,7 +492,7 @@
     fa.forEach((v, i) => { if(v > 0) meses.push(i); });
     if(!meses.length) return null;
     const soma = (arr) => meses.reduce((s, i) => s + arr[i], 0);
-    const par = (atual, anterior) => ({ atual, anterior, cresc: anterior > 0 ? atual / anterior - 1 : null });
+    const par = (atual, anterior) => ({ atual, anterior, cresc: (atual != null && anterior > 0) ? atual / anterior - 1 : null });
     const fatA = soma(fa), fatN = soma(fn), qtdA = soma(qa), qtdN = soma(qn);
     return {
       de: meses[0] + 1, ate: meses[meses.length - 1] + 1, meses: meses.length,
@@ -1161,7 +1161,9 @@
     const lista = dados.lista.slice().sort((a, b) => {
       const va = a[o.campo], vb = b[o.campo];
       if(typeof va === 'string') return (o.desc ? -1 : 1) * va.localeCompare(vb, 'pt-BR');
-      return (o.desc ? -1 : 1) * (((va == null ? -Infinity : va)) - ((vb == null ? -Infinity : vb)));
+      // Dois nulos (-Infinity - -Infinity = NaN) bagunçavam a ordem.
+      if(va == null || vb == null) return (va == null ? 1 : 0) - (vb == null ? 1 : 0);
+      return (o.desc ? -1 : 1) * (va - vb);
     });
     const seta = (campo) => o.campo === campo ? (o.desc ? ' ▼' : ' ▲') : '';
     let html = '<table><thead><tr>' +
@@ -1238,7 +1240,9 @@
     const maxFat = Math.max(1, ...s.faturamento.map(v => v || 0));
     const margens = s.margem.filter(v => v != null);
     const maxMarg = margens.length ? Math.max(...margens) : 0.01;
-    const minMarg = margens.length ? Math.min(0, ...margens) : 0;
+    // Escala JUSTA de verdade: ancorar no zero esmagava a variacao
+    // (16,96% -> 13,68% ocupava 8% da altura, nao os ~40% prometidos).
+    const minMarg = margens.length ? Math.min(...margens) : 0;
     novoChart('gComboMes', {
       data: {
         labels: MESES,
@@ -1300,11 +1304,11 @@
     const fornecedores = [...new Set(linhasTodas.map(l => l.fornecedor).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     $('filtroForn').innerHTML = '<option value="">Todos os fornecedores</option>' +
-      fornecedores.map(f => '<option' + (fornSel === f ? ' selected' : '') + '>' + escapeHtml(f) + '</option>').join('');
+      fornecedores.map(f => '<option value="' + escapeHtml(f) + '"' + (fornSel === f ? ' selected' : '') + '>' + escapeHtml(f) + '</option>').join('');
     const categorias = [...new Set(linhasTodas.map(l => l.categoria).filter(Boolean))]
       .sort((a, b) => a.localeCompare(b, 'pt-BR'));
     $('filtroCat').innerHTML = '<option value="">Todas as categorias</option>' +
-      categorias.map(c => '<option' + (catSel === c ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
+      categorias.map(c => '<option value="' + escapeHtml(c) + '"' + (catSel === c ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('');
   }
 
   // ═══ CARGA ════════════════════════════════════════════════════
@@ -1348,7 +1352,7 @@
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
     'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
-    'app-shared.js?v=30'
+    'app-shared.js?v=31'
   ];
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };

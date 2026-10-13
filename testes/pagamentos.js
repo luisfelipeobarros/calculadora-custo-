@@ -223,7 +223,12 @@ eq('controle-notas.html nao chama parseNumeroBR em lugar nenhum (dinheiro digita
 // O proximo recorrente nasce com o id da PRIMEIRA parcela + a data:
 // sem isso o id crescia 11 letras por mes.
 eq('id do proximo recorrente tira as datas ja penduradas',
-  html.indexOf("var base = String(pgto.id).replace(") !== -1 && html.indexOf(".doc(base + '_' + proxVenc)") !== -1, true);
+  html.indexOf("var base = String(pgto.id).replace(") !== -1 && html.indexOf("var idProximo = base + '_' + proxVenc;") !== -1 &&
+  html.indexOf(".doc(idProximo).set(novo)") !== -1, true);
+// O proximo mes so' e' criado se o documento com esse ID nao existe —
+// comparar pelo vencimento deixava sobrescrever um proximo prorrogado (e pago).
+eq('o proximo recorrente e checado pelo ID, antes de gravar',
+  /if\(pagamentosInternos\.some\(function\(p\)\{ return p\.id === idProximo; \}\)\) return Promise\.resolve\(null\);/.test(html), true);
 eq('  ...e a regra da certo nos dois casos',
   ['abc123_2026-03-15_2026-04-15', 'abc123'].map(id => id.replace(/(_\d{4}-\d{2}-\d{2})+$/, '')).join(' | '), 'abc123 | abc123');
 // A expressao que esta' na pagina e' a MESMA do teste acima (com as
@@ -307,7 +312,7 @@ eq('  ...com a regex escrita com as barras na pagina',
   eq('notas e duplicatas usam a escuta por carimbo quando ligada',
     (html.match(/App\.escutarComDelta\(\{/g) || []).length, 2);
   eq('desligado, o controle guardado nao sobrevive',
-    /if\(!sinc && !carregarTudo\)\{[\s\S]{0,260}App\.esquecerLeitura\(LEITURA_NOTAS\);\s*App\.esquecerLeitura\(LEITURA_DUPLICATAS\);/.test(html), true);
+    /if\(sinc === null && !carregarTudo\)\{[\s\S]{0,300}App\.esquecerLeitura\(LEITURA_NOTAS\);\s*App\.esquecerLeitura\(LEITURA_DUPLICATAS\);/.test(html), true);
   eq('historico completo nunca le por carimbo',
     /var espera = carregarTudo \? Promise\.resolve\(null\) : App\.lerSincNotas\(db\);/.test(html), true);
   eq('regras que recusam o carimbo fazem a tela voltar para a leitura inteira',

@@ -919,15 +919,15 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=30"></script>
+<script src="app-shared.js?v=31"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
-<script src="calculo-nucleo.js?v=7"></script>
+<script src="calculo-nucleo.js?v=8"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
 <script src="painel-nucleo.js?v=5"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
-<script src="concorrentes-nucleo.js?v=4"></script>
+<script src="concorrentes-nucleo.js?v=5"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1460,6 +1460,14 @@ Tupan</textarea>
     }
   }
 
+  // Erro do Firestore com o banco CONFIGURADO (rede, cota, sessao) e'
+  // erro — vai para quem chamou (que avisa). So' sem banco e' que o app
+  // desce para o navegador. Antes, qualquer falha trocava o backend em
+  // silencio e "salvo com sucesso" gravava no lugar errado.
+  function falhaFirebase(e){
+    if(!firestoreDb){ rebaixarBackend(); return; }
+    throw e;
+  }
   function rebaixarBackend(){
     if(storageBackend === 'firebase' || storageBackend === 'claude'){
       storageBackend = localStorageFunciona() ? 'local' : 'memoria';
@@ -1475,7 +1483,7 @@ Tupan</textarea>
         const nome = nomeDaChave(key);
         await firebaseSalvar(nome, JSON.parse(value));
         return { key, value, shared:false };
-      }catch(e){ console.error('Erro Firebase (salvar):', e); rebaixarBackend(); }
+      }catch(e){ console.error('Erro Firebase (salvar):', e); falhaFirebase(e); }
     }
     if(storageBackend === 'claude'){
       try{
@@ -1503,7 +1511,7 @@ Tupan</textarea>
         const dados = await firebaseObter(nome);
         if(dados) return { key, value: JSON.stringify(dados), shared:false };
         return null;
-      }catch(e){ console.error('Erro Firebase (get):', e); rebaixarBackend(); }
+      }catch(e){ console.error('Erro Firebase (get):', e); falhaFirebase(e); }
     }
     if(storageBackend === 'claude'){
       try{
@@ -1529,7 +1537,7 @@ Tupan</textarea>
         const nome = nomeDaChave(key);
         await firebaseExcluir(nome);
         return { key, deleted:true, shared:false };
-      }catch(e){ console.error('Erro Firebase (excluir):', e); rebaixarBackend(); }
+      }catch(e){ console.error('Erro Firebase (excluir):', e); falhaFirebase(e); }
     }
     if(storageBackend === 'claude'){
       try{
@@ -1560,7 +1568,7 @@ Tupan</textarea>
         return Object.keys(produtos)
           .map(nome => ({ key: chaveDoProduto(nome), value: JSON.stringify(produtos[nome]) }))
           .filter(p => p.key.startsWith(prefix));
-      }catch(e){ console.error('Erro Firebase (listar):', e); rebaixarBackend(); }
+      }catch(e){ console.error('Erro Firebase (listar):', e); falhaFirebase(e); }
     }
     if(storageBackend === 'claude'){
       // window.storage nao tem leitura em lote; aqui o N+1 e' inevitavel.
@@ -3725,7 +3733,7 @@ Tupan</textarea>
   async function escutarEstadoNotas(corteISO){
     if(pararEscutaNotas){ pararEscutaNotas(); pararEscutaNotas = null; }
     const sinc = await App.lerSincNotas(firestoreDb);
-    if(!sinc) App.esquecerLeitura(LEITURA_ESTADO_NOTAS);
+    if(sinc === null) App.esquecerLeitura(LEITURA_ESTADO_NOTAS); // undefined = "nao deu para saber": nao apaga
     modoEscutaNotas = '';
     return new Promise((resolve, reject) => {
       let primeiro = true;
@@ -3795,12 +3803,14 @@ Tupan</textarea>
     docs.forEach((doc, i) => {
       const ch = faltam[i];
       itensEmBusca.delete(ch);
-      const t = tentativasItens[ch] || { n: 0, em: 0 };
-      tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
       if(doc && doc.exists && notasEmitidasCache){
         if(!notasEmitidasCache.some(n => n.chave === ch)) notasEmitidasCache.push({ chave: ch, ...doc.data() });
         novos++;
       } else {
+        // So' as que FALHARAM contam no limite: senao as notas antigas sem
+        // itens gastavam as vagas e a nota nova da sessao ficava sem busca.
+        const t = tentativasItens[ch] || { n: 0, em: 0 };
+        tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
         semItens++;
       }
     });
@@ -3843,9 +3853,13 @@ Tupan</textarea>
     }
     // Com a escuta viva o estado ja' esta' em dia: e' so' desenhar.
     if(notasEmitidasCache && pararEscutaNotas && !forcar){ renderNotasEmitidas(); return Promise.resolve(); }
-    if(!cargaNotasEmAndamento){
-      cargaNotasEmAndamento = baixarNotasEmitidas(!!forcar).then(() => { cargaNotasEmAndamento = null; });
+    if(cargaNotasEmAndamento){
+      // Recarregar pedido com uma carga em voo: roda depois dela, em vez
+      // de ser perdido em silencio.
+      if(forcar) cargaNotasEmAndamento = cargaNotasEmAndamento.then(() => baixarNotasEmitidas(true)).then(() => { cargaNotasEmAndamento = null; });
+      return cargaNotasEmAndamento;
     }
+    cargaNotasEmAndamento = baixarNotasEmitidas(!!forcar).then(() => { cargaNotasEmAndamento = null; });
     return cargaNotasEmAndamento;
   }
 
@@ -3877,7 +3891,7 @@ Tupan</textarea>
       // essas chaves nao sao pedidas de novo.
       const lidas = new Set(notasEmitidasCache.map(n => n.chave));
       anteriores.forEach(n => {
-        if(tentativasItens[n.chave] && !lidas.has(n.chave) && (n.dataEmissao || '') >= corteISO) notasEmitidasCache.push(n);
+        if(!lidas.has(n.chave) && (n.dataEmissao || '') >= corteISO && !leitura.docs.some(d => d.id === n.chave)) notasEmitidasCache.push(n);
       });
       ordenarNotasEmitidas();
       await buscarItensQueFaltam();
@@ -3923,6 +3937,7 @@ Tupan</textarea>
   }
 
   function renderListaNotas(suf){
+    redesenhoNotasAdiado = false; // qualquer redesenho invalida o adiamento (o blur pode nunca vir)
     if(!notasEmitidasCache) return;
     if(!$('listaNotasEmitidas'+suf)) return;
     // Sem acento, como nas buscas de Produtos salvos: "ceramica" acha "CERÂMICA".
@@ -4083,11 +4098,12 @@ Tupan</textarea>
     App.delegar(container, 'change', 'input[data-disp]', (chk)=>{
       const chave = chk.dataset.disp;
       const marcado = chk.checked;
+      const antes = notasInfoPorChave[chave] || {};
       chk.disabled = true;
       App.comAuth(()=> App.gravarCarimbado(carimbar =>
         exigirDb().collection('notas').doc(chave).set(carimbar({ disponivelRetirada: marcado }), { merge: true })))
         .then(()=>{
-          notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { disponivelRetirada: marcado });
+          notasInfoPorChave[chave] = Object.assign({}, antes, notasInfoPorChave[chave], { disponivelRetirada: marcado });
           renderListaNotas(suf);
         })
         .catch(e=>{ App.toastErro('Erro ao gravar', e); chk.checked = !marcado; chk.disabled = false; });
@@ -4095,11 +4111,12 @@ Tupan</textarea>
     App.delegar(container, 'change', 'input[data-prev]', (inp)=>{
       const chave = inp.dataset.prev;
       const valor = inp.value || null;
+      const antes = notasInfoPorChave[chave] || {};
       inp.disabled = true;
       App.comAuth(()=> App.gravarCarimbado(carimbar =>
         exigirDb().collection('notas').doc(chave).set(carimbar({ previsaoEntrega: valor }), { merge: true })))
         .then(()=>{
-          notasInfoPorChave[chave] = Object.assign({}, notasInfoPorChave[chave], { previsaoEntrega: valor });
+          notasInfoPorChave[chave] = Object.assign({}, antes, notasInfoPorChave[chave], { previsaoEntrega: valor });
           renderListaNotas(suf);
         })
         .catch(e=>{
@@ -4524,7 +4541,7 @@ Tupan</textarea>
     if(ultimosConcorrentes.length) renderResultadoConcorrentes();
   }, DEBOUNCE_BUSCA));
 
-  $('salvarConcorrentesBtn').addEventListener('click', async ()=>{
+  $('salvarConcorrentesBtn').addEventListener('click', App.umPorVez(async ()=>{
     if(!firestoreDb){
       $('salvarConcorrentesMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar.';
       return;
@@ -4547,7 +4564,7 @@ Tupan</textarea>
       console.error(e);
       $('salvarConcorrentesMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
     }
-  });
+  }, $('salvarConcorrentesBtn')));
 
   // ==================== HISTÓRICO DE COMPARAÇÕES COM CONCORRENTES ====================
   let concorrentesHistAbertos = new Set();
@@ -5826,6 +5843,7 @@ Tupan</textarea>
       if(ultimosEsperados[idx] !== undefined) ultimosEsperados.splice(idx, 1);
       renderResultadoCotacao();
       renderSugestoesCotacao();
+      sincronizarIndividual();
     });
 
     App.delegar(el, 'change', '.match-select', (sel)=>{
@@ -5838,6 +5856,7 @@ Tupan</textarea>
       ultimosResultados[idx].status = statusAnterior || 'negociacao';
       renderResultadoCotacao();
       renderSugestoesCotacao();
+      sincronizarIndividual();
     });
 
     App.delegar(el, 'change', '.status-select', (sel)=>{
@@ -5854,6 +5873,7 @@ Tupan</textarea>
       recalcularFlags(r);
       renderResultadoCotacao();
       renderSugestoesCotacao();
+      sincronizarIndividual();
     });
   }
 
@@ -6070,7 +6090,7 @@ Tupan</textarea>
     return ' ' + n + (n === 1 ? ' preço de venda gravado' : ' preços de venda gravados') + ' em Produtos salvos.';
   }
 
-  $('salvarCotacaoBtn').addEventListener('click', async ()=>{
+  $('salvarCotacaoBtn').addEventListener('click', App.umPorVez(async ()=>{
     if(!firestoreDb){
       $('cotacaoMsg').textContent = 'Conecte o Firebase primeiro (aba Sincronização) para salvar o histórico.';
       return;
@@ -6114,7 +6134,7 @@ Tupan</textarea>
       console.error(e);
       $('cotacaoMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
     }
-  });
+  }, $('salvarCotacaoBtn')));
 
   // ---- Modo em lote / individual: alternância visual ----
   $('modoLoteBtn').addEventListener('click', ()=>{
@@ -6347,6 +6367,13 @@ Tupan</textarea>
   });
 
   // ---- Modo individual ----
+  // Item removido ou preco alterado na tabela: a lista do modo
+  // individual e' por POSICAO entre os itens validos — sem refazer,
+  // "Salvar este produto" gravava a ficha de outro item.
+  function sincronizarIndividual(){
+    popularSelectIndividual();
+    $('individualForm').style.display = 'none';
+  }
   function popularSelectIndividual(){
     const sel = $('individualSelect');
     const itens = itensValidosParaSalvar();
@@ -6570,7 +6597,7 @@ Tupan</textarea>
           col: firestoreDb.collection('duplicatas'), campo: 'vencimento',
           ini: ano + '-01-01', fim: (ano + 1) + '-06-30',
           corte: App.somarDias(App.hojeISO(), -60),
-          chave: 'leituraPainelDup_' + ano, hoje: App.hojeISO()
+          chave: 'leituraPainelDup_' + ano, hoje: App.hojeISO(), forcar: !!forcar
         }).then(r => r.docs)),
         // So' as canceladas, para excluir as duplicatas delas do "a
         // pagar" — baixar todas as notas do ano custaria muito mais
@@ -6598,7 +6625,7 @@ Tupan</textarea>
     }catch(e){
       painelDados = { ano: ano, erro: App.erroDe(e) };
     }finally{
-      painelCarregandoAno = null;
+      if(painelCarregandoAno === ano) painelCarregandoAno = null;
       // O usuario pode ter trocado de ano enquanto esta carga rodava:
       // recarrega para o ano EXIBIDO em vez de deixar a tela presa.
       if(ano !== painelAno) carregarPainel();

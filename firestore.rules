@@ -77,8 +77,10 @@ service cloud.firestore {
     // Colecoes alimentadas pelo Apps Script (importacao de XML).
     // O navegador so' precisa LER e marcar alguns campos de controle;
     // nunca criar nem apagar uma nota.
-    // O Apps Script usa uma conta de servico (Admin SDK), que ignora
-    // estas regras — entao restringir aqui nao atrapalha a importacao.
+    // O Apps Script grava pela REST API com o token OAuth de quem roda o
+    // gatilho (ScriptApp.getOAuthToken) — credencial IAM, que ignora
+    // estas regras; essa conta precisa ter papel no projeto. Restringir
+    // aqui nao atrapalha a importacao.
     // ------------------------------------------------------------
 
     match /notas/{chaveAcesso} {
@@ -171,6 +173,13 @@ service cloud.firestore {
     }
     match /lancamentos/{id} {
       allow read, write: if autenticado();
+    }
+    // config/notasSync e' o interruptor da leitura por carimbo e o
+    // contador de exclusoes — so' o Apps Script escreve (ligar/desligar
+    // e a limpeza de gemeas). Do navegador, so' leitura.
+    match /config/notasSync {
+      allow read: if autenticado();
+      allow write: if false;
     }
     match /config/{id} {
       allow read, write: if autenticado();

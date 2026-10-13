@@ -820,7 +820,7 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=30"></script>
+<script src="app-shared.js?v=31"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
 <script src="dda-nucleo.js?v=6"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
@@ -1009,7 +1009,7 @@
 
   // sinc: { exclusoes } com o carimbo ligado; null = leitura de sempre.
   function abrirEscutas(sinc){
-    if(!sinc && !carregarTudo){
+    if(sinc === null && !carregarTudo){ // undefined = "nao deu para saber": nao apaga
       // Desligado: o controle guardado nao vale para quando religarem
       // (o que mudou sem carimbo nesse intervalo ficaria de fora).
       App.esquecerLeitura(LEITURA_NOTAS);
@@ -1233,6 +1233,8 @@
   // escutarColecoes(), logo no comeco dela — senao o app ficaria com
   // duas assinaturas para a mesma colecao.
   App.delegar($('avisoJanela'), 'click', '#btnHistoricoCompleto', function(){
+    if(!db || !prontoParaEscutar) return;
+    escutasAbertas = true; // um login refeito reabre tambem estas
     carregarTudo = true;
     notas = []; duplicatas = []; pagamentosInternos = [];
     notasPorChave = Object.create(null);
@@ -1300,7 +1302,15 @@
       App.toastErro('Erro ao iniciar', e);
     }).then(function(){ iniciando = false; });
   }
-  window.__aoEntrar = function(){ if(db) renderAtual(); };
+  // Entrar pela barra de cima: reabre o que a sessao expirada derrubou —
+  // bancos/categorias/lancamentos (iniciarLancamentos cancela as
+  // anteriores) e, se ja' estavam abertas, as escutas de notas.
+  window.__aoEntrar = function(){
+    if(!db) return;
+    iniciarLancamentos();
+    if(escutasAbertas) escutarColecoes();
+    renderAtual();
+  };
 
   // As regras no ar recusaram o carimbo (ainda sao as antigas): quem
   // estava lendo so' o que mudou nao veria nem a propria gravacao.
@@ -2340,6 +2350,8 @@
   // importando dispara dezenas): coalescer num unico render por frame
   // corta o retrabalho e as trocas de DOM no meio de um clique.
   var renderAgendado = false;
+  var renderAdiadoPorFoco = false;
+  document.addEventListener('focusout', function(){ if(renderAdiadoPorFoco) agendarRender(); });
   function agendarRender(){
     if(renderAgendado) return;
     renderAgendado = true;
@@ -2354,12 +2366,16 @@
     // por uma carga que, nelas, pode nem ter sido pedida.
     if(!TELAS_SEM_NOTAS[router.atual()] && !carregouNotas && !carregouDuplicatas) return;
     var ativo = document.activeElement;
-    var chaveFoco = (ativo && ativo.dataset) ? ativo.dataset.previsao : null;
-    // O numero da nota devolvida e' digitado direto na tabela de
-    // Canceladas: um snapshot no meio da digitacao reconstruia o input
-    // vazio e comia o texto. Valor E foco voltam apos o render.
-    var devFoco = (ativo && ativo.dataset) ? ativo.dataset.devolucaoDe : null;
-    var devValor = devFoco != null ? ativo.value : null;
+    // Previsao de entrega (date, digitada por partes) ou numero da nota
+    // devolvida sendo digitados: redesenhar agora trocaria o campo
+    // debaixo do dedo. O render fica para quando o foco sair.
+    if(ativo && ativo.dataset && (ativo.dataset.previsao || ativo.dataset.devolucaoDe != null) &&
+       document.contains(ativo)){
+      renderAdiadoPorFoco = true;
+      return;
+    }
+    renderAdiadoPorFoco = false;
+    var chaveFoco = null, devFoco = null, devValor = null;
 
     var fn = { Painel:renderPainel, Importar:renderImportar,
                Pagamentos:renderPagamentos, Fornecedores:renderFornecedores,
@@ -3289,6 +3305,14 @@
     var total = Number(pgto.parcelasTotal) || 0;
     if(total && atual >= total) return Promise.resolve(null);
     var proxVenc = calcularProximoVencimento(pgto);
+    // A base e' o id da PRIMEIRA parcela: sem tirar as datas ja'
+    // penduradas, o id crescia 11 letras por mes (id_2026-03-15_2026-04-15_...).
+    var base = String(pgto.id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '');
+    var idProximo = base + '_' + proxVenc;
+    // Ja' existe o documento do proximo mes? Pelo ID — comparar pelo
+    // vencimento deixava passar o caso em que o proximo foi prorrogado
+    // (e talvez ja' pago): o set() sem merge o sobrescrevia como nao pago.
+    if(pagamentosInternos.some(function(p){ return p.id === idProximo; })) return Promise.resolve(null);
     // Verifica se ja' existe lancamento para o proximo mes com mesma origem
     var jaExiste = pagamentosInternos.some(function(p){
       return p.origemId === pgto.id && p.vencimento === proxVenc;
@@ -3315,10 +3339,7 @@
       // marcarem o mesmo pagamento como pago quase juntas, as duas
       // gravam o MESMO documento, em vez de cada uma criar um
       // lancamento duplicado do proximo mes.
-      // A base e' o id da PRIMEIRA parcela: sem tirar as datas ja'
-      // penduradas, o id crescia 11 letras por mes (id_2026-03-15_2026-04-15_...).
-      var base = String(pgto.id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '');
-      return db.collection('pagamentosInternos').doc(base + '_' + proxVenc).set(novo);
+      return db.collection('pagamentosInternos').doc(idProximo).set(novo);
     }).then(function(){
       return proxVenc;
     });
@@ -4487,21 +4508,25 @@
       .catch(function(e){ console.error('fornecedores ocultos:', e); });
   }
 
-  function gravarFornOcultos(){
+  // Um nome por vez (arrayUnion/arrayRemove): gravar a lista inteira
+  // fazia duas maquinas apagarem a escolha uma da outra.
+  function gravarFornOcultos(nome, ocultar){
+    var FV = firebase.firestore.FieldValue;
     return App.comAuth(function(){
-      return db.collection('config').doc('fornecedoresOcultos').set({ nomes: Object.keys(fornOcultos) });
+      return db.collection('config').doc('fornecedoresOcultos')
+        .set({ nomes: ocultar ? FV.arrayUnion(nome) : FV.arrayRemove(nome) }, { merge: true });
     }).catch(function(e){ App.toastErro('Erro ao gravar a lista de ocultos', e); });
   }
 
   App.delegar($('tabelaForn'), 'click', '[data-ocultar]', function(b){
     fornOcultos[b.dataset.ocultar] = true;
     renderFornecedores();
-    gravarFornOcultos();
+    gravarFornOcultos(b.dataset.ocultar, true);
   });
   App.delegar($('tabelaForn'), 'click', '[data-reexibir]', function(b){
     delete fornOcultos[b.dataset.reexibir];
     renderFornecedores();
-    gravarFornOcultos();
+    gravarFornOcultos(b.dataset.reexibir, false);
   });
   $('chipOcultosForn').addEventListener('click', function(){
     mostrarOcultosForn = !mostrarOcultosForn;
@@ -4655,7 +4680,7 @@
   function renderCanceladas(){
     var termos = App.termosDaBusca($('buscaCanc'));
     var lista = notas.filter(function(n){ return !notaAtiva(n); });
-    if(termo) lista = lista.filter(function(n){
+    if(termos.length) lista = lista.filter(function(n){
       // O numero da nota DEVOLVIDA tambem acha a cancelada: e' assim
       // que se responde "cadê a devolução da 375912?".
       return termos.some(function(termo){
@@ -5361,8 +5386,12 @@
       cu.ano[cu.mes] = novo;
     }
     var ano = cu.mes.substring(0, 4);
+    // So' o mes aberto: gravar o ano inteiro apagava o resumo que outra
+    // maquina acabou de gravar para outro mes.
+    var meses = {};
+    meses[cu.mes] = cu.ano[cu.mes] || firebase.firestore.FieldValue.delete();
     return App.comAuth(function(){
-      return db.collection('config').doc('custosResumo_' + ano).set({ meses: cu.ano });
+      return db.collection('config').doc('custosResumo_' + ano).set({ meses: meses }, { merge: true });
     }).then(renderCustosAno).catch(function(e){ console.error('resumo do ano', e); });
   }
 
@@ -5378,8 +5407,18 @@
     }).join('');
   }
 
+  var cuRenderAdiado = false;
   function renderCustos(){
     var alvo = $('cuResumo');
+    // Um <select> de grupo aberto nao pode ser reconstruido por um
+    // snapshot; o redesenho espera o foco sair (ver focusout abaixo).
+    var ativo = document.activeElement;
+    if(ativo && ativo.matches && ativo.matches('select[data-cu-mover]') &&
+       (alvo.contains(ativo) || $('cuPendentes').contains(ativo))){
+      cuRenderAdiado = true;
+      return;
+    }
+    cuRenderAdiado = false;
     renderCustosPrevia();
     if(cu.carregando){ alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Carregando...</p>'; return; }
     var lista = cuLancamentosDoMes();
@@ -5539,6 +5578,9 @@
       .catch(function(e){ sel.disabled = false; App.toastErro('Erro ao classificar', e); });
   }
   App.delegar($('cuResumo'), 'change', 'select[data-cu-mover]', cuMover);
+  ['cuResumo', 'cuPendentes'].forEach(function(id){
+    $(id).addEventListener('focusout', function(){ if(cuRenderAdiado) setTimeout(renderCustos, 0); });
+  });
   App.delegar($('cuPendentes'), 'change', 'select[data-cu-mover]', cuMover);
 
   function cuSalvarConfig(){
@@ -6058,7 +6100,9 @@
       $('resultadoSim').innerHTML = '';
       return;
     }
-    renderLinhasSim();
+    // Snapshot no meio da digitacao (o Apps Script importa em rajada):
+    // o formulario so' e' reconstruido quando o foco nao esta' nele.
+    if(!$('linhasSim').contains(document.activeElement)) renderLinhasSim();
     renderResultadoSim();
   }
 
@@ -6237,7 +6281,14 @@
   $('imprimirDanfeBtn').addEventListener('click', function(){ window.print(); });
 
   // ─── Inicio ─────────────────────────────────────────────────
-  atualizarAvisoJanela();
+  atualizarAvisoJanela();  // So' para o teste de carga (testes/carregar-em-dom.js): desenha cada
+  // tela com as colecoes vazias, para erro de referencia nao passar.
+  window.__testeRender = function(){
+    carregouNotas = carregouDuplicatas = carregouPgtosInternos = true;
+    [renderPainel, renderImportar, renderCanceladas, renderPagamentos, renderFornecedores,
+     renderDda, renderSimulador, renderVendas].forEach(function(fn){ fn(); });
+  };
+
   router.iniciar();
   iniciar();
 })();

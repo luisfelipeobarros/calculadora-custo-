@@ -124,6 +124,7 @@ function instalar(ids) {
     Promise, JSON, Math, Date, Number, String, Object, Array, Set, Map, RegExp, Error, isNaN, parseFloat, parseInt,
     console, URL,
     navigator: { onLine: true },
+    fetch: () => new Promise(() => {}), // nunca responde: as telas que buscam planilha ficam em "carregando"
     CSS: { escape: s => String(s) },
     firebase: criarFirebaseFalso()
   };
@@ -163,7 +164,10 @@ function criarFirebaseFalso() {
   const fb = function () { return app; };
   fb.apps = [];
   fb.initializeApp = () => app;
-  fb.firestore = { FieldValue: { serverTimestamp: () => 'ts' } };
+  fb.firestore = {
+    FieldValue: { serverTimestamp: () => 'ts', increment: (n) => n, delete: () => null },
+    FieldPath: function () { this.segmentos = Array.from(arguments); }
+  };
   // app-shared usa firebase.auth.Auth.Persistence.LOCAL e setPersistence:
   // sem isto, qualquer caminho que passe por ai' morre em silencio.
   fb.auth = () => auth;

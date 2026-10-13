@@ -319,7 +319,8 @@ if(/App\.lerFaixaComCache\(\{ col: firestoreDb\.collection\('itensNotas'\)/.test
 } else {
   erro('os itens das notas voltaram a ser lidos inteiros do servidor a cada abertura');
 }
-if(/if\(notasEmitidasCache && pararEscutaNotas && !forcar\)/.test(ix) && /if\(!cargaNotasEmAndamento\)\{/.test(ix)){
+if(/if\(notasEmitidasCache && pararEscutaNotas && !forcar\)/.test(ix) &&
+   /if\(cargaNotasEmAndamento\)\{[^}]*if\(forcar\) cargaNotasEmAndamento = cargaNotasEmAndamento\.then\(\(\) => baixarNotasEmitidas\(true\)\)/.test(ix)){
   ok('reabrir a aba so reaproveita a memoria com a escuta viva; cargas simultaneas viram uma');
 } else {
   erro('carregarNotasEmitidas sem as guardas de escuta viva / carga unica');

@@ -4,13 +4,13 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e seis etapas,
-  em dezenove frentes (a lista canonica, com o que cada uma cobre,
+  Nao precisa instalar nada — so' o Node. Sao vinte e nove etapas,
+  em vinte frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
-  - validar-html.js    — estrutura dos cinco HTML: sintaxe dos <script>,
+  - validar-html.js    — estrutura dos seis HTML: sintaxe dos <script>,
                          tags, ids, labels, arquivos referenciados, ?v=.
   - carregar-em-dom.js — executa os scripts de cada pagina num DOM
                          simulado, pegando erro em tempo de carga.

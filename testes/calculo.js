@@ -60,9 +60,11 @@ function computeCoeficientesAntigo(v){
 }
 function precoParaMargemAntigo(v, t){
   const { C0, m } = computeCoeficientesAntigo(v);
-  const denom = 0.66*m - t;
+  // Prejuizo contabil = sem IRPJ/CSLL no preco-alvo (correcao de 13/10/2026).
+  const f = v.prejuizoContabil ? 1 : 0.66;
+  const denom = f*m - t;
   if(denom <= 0) return null;
-  const p = (0.66*C0) / denom;
+  const p = (f*C0) / denom;
   return (!isFinite(p) || p <= 0) ? null : p;
 }
 

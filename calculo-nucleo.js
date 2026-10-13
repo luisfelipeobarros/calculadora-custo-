@@ -175,9 +175,12 @@
   // (ex: 0.08 = 8%). Sai da mesma decomposicao acima:
   //   margem = fatorLucro * (m*venda - C0) / venda = alvo
   //   =>  venda = fatorLucro*C0 / (fatorLucro*m - alvo)
+  // Com "prejuizo contabil" nao ha' IRPJ/CSLL (computeCalc tambem nao
+  // desconta): o preco para a margem-alvo sai sem o fator do lucro —
+  // senao a tela mostrava, para o preco rotulado "8%", uma margem de ~12%.
   function precoParaMargem(v, targetMargem){
     const { C0, m } = computeCoeficientes(v);
-    const f = TRIBUTOS.fatorLucro;
+    const f = v.prejuizoContabil ? 1 : TRIBUTOS.fatorLucro;
     const denom = f*m - targetMargem;
     if(denom <= 0) return null; // custo alto demais para essa margem ser atingivel
     const preco = (f*C0) / denom;

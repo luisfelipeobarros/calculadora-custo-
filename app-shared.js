@@ -88,10 +88,14 @@
   // dois sinais, o que trataria prejuizo e lucro com criterios
   // diferentes — e aqui ha' valores negativos de verdade (lucro
   // negativo, diferenca de preco para menos).
+  //
+  // A folga entra DEPOIS de multiplicar por 100: somada antes, o EPSILON
+  // so' tinha efeito abaixo de ~2 (8,325 virava 8,32; 1,005 virava 1,01).
+  var FOLGA_CENTAVOS = 1e-7;
   function centavos(v) {
     if (v == null || !isFinite(v)) return v;
     var sinal = v < 0 ? -1 : 1;
-    return sinal * Math.round((Math.abs(v) + Number.EPSILON) * 100) / 100;
+    return sinal * Math.round(Math.abs(v) * 100 + FOLGA_CENTAVOS) / 100;
   }
 
   // Reais -> centavos INTEIROS, com o mesmo criterio do centavos():
@@ -102,7 +106,7 @@
     var n = Number(v);
     if (!isFinite(n)) return 0;
     var sinal = n < 0 ? -1 : 1;
-    return sinal * Math.round((Math.abs(n) + Number.EPSILON) * 100);
+    return sinal * Math.round(Math.abs(n) * 100 + FOLGA_CENTAVOS);
   }
 
   function brl(v) {
@@ -164,7 +168,7 @@
   // assistencia), "25.000" sem virgula e' vinte e cinco mil — use
   // ESTE nos campos assim.
   function parseDinheiroBR(v) {
-    if (typeof v === 'string' && /^\s*(R\$\s*)?\d{1,3}(\.\d{3})+\s*$/.test(v)) {
+    if (typeof v === 'string' && /^\s*(R\$\s*)?-?\d{1,3}(\.\d{3})+\s*$/.test(v)) {
       return parseNumeroBR(v.replace(/\./g, ''));
     }
     return parseNumeroBR(v);
@@ -1135,9 +1139,14 @@
       var dias = null;
       if (emissao && d.vencimento) {
         dias = diasEntre(emissao, d.vencimento);
-        prazos.push(dias);
-        somaPonderada += dias * valor;
-        comPrazo += valor;
+        // Data mal formada ("2026-02-31") da' NaN: fica como "sem prazo"
+        // em vez de contaminar a media inteira.
+        if (!isFinite(dias)) dias = null;
+        else {
+          prazos.push(dias);
+          somaPonderada += dias * valor;
+          comPrazo += valor;
+        }
       }
 
       var sit, classe;
@@ -1652,6 +1661,9 @@
     snap.forEach(function (d) { l.push(d); });
     return l;
   }
+  function veioDoCache(snap) {
+    return !!(snap && snap.metadata && snap.metadata.fromCache);
+  }
   function carimboMaximo(docs, campo) {
     var max = 0;
     docs.forEach(function (d) {
@@ -1678,7 +1690,12 @@
     function completa(motivo) {
       return o.consulta.get().then(function (snap) {
         var docs = listaDeDocs(snap);
-        gravarMetaLeitura(o.chave, { dia: o.hoje, versao: versao, ultima: carimboMaximo(docs, o.campo), qtd: docs.length }, arm);
+        // Sem rede o get() cai no cache (fromCache): o que veio nao e' a
+        // colecao inteira, e guardar o controle assim esconderia para o
+        // resto do dia tudo que nao estava no cache.
+        if (!veioDoCache(snap)) {
+          gravarMetaLeitura(o.chave, { dia: o.hoje, versao: versao, ultima: carimboMaximo(docs, o.campo), qtd: docs.length }, arm);
+        }
         return { docs: docs, modo: 'completa', motivo: motivo, lidasNoServidor: docs.length };
       });
     }
@@ -1724,7 +1741,9 @@
     function completa(motivo) {
       return faixa(o.ini, fim).get().then(function (snap) {
         var docs = listaDeDocs(snap);
-        gravarMetaLeitura(o.chave, { dia: o.hoje, ini: o.ini, fim: fim, qtd: docs.length }, arm);
+        if (!veioDoCache(snap)) {
+          gravarMetaLeitura(o.chave, { dia: o.hoje, ini: o.ini, fim: fim, qtd: docs.length }, arm);
+        }
         return { docs: docs, modo: 'completa', motivo: motivo, lidasNoServidor: docs.length };
       });
     }
@@ -1736,17 +1755,25 @@
     if (!(idade >= 0) || idade >= dias) return completa('renovação a cada ' + dias + ' dias');
     if (!(o.corte > o.ini)) return completa('período curto demais para dividir');
 
-    // Servidor PRIMEIRO, cache depois: um documento que mudou de data
-    // (vencimento prorrogado) chega atualizado e sai da faixa antiga
-    // antes de ela ser lida do cache.
+    // Servidor PRIMEIRO, cache depois. O cache e' lido na faixa INTEIRA
+    // e o servidor manda na parte recente: documento que o cache tem
+    // com data recente mas o servidor nao devolveu mudou de faixa (data
+    // prorrogada OU corrigida para tras) ou foi apagado — a versao do
+    // cache e' velha e fica de fora; se ele ainda existir com data
+    // antiga, e' a leitura completa (a cada 7 dias) que o traz de volta.
     var temRecente = fim == null || o.corte <= fim;
     var recentes = temRecente ? faixa(o.corte, fim).get() : Promise.resolve(null);
     return recentes.then(function (rec) {
-      var antiga = temRecente ? faixa(o.ini, o.corte, true) : faixa(o.ini, fim);
-      return antiga.get({ source: 'cache' }).then(function (ant) {
+      if (rec && veioDoCache(rec)) return completa('sem conexão com o servidor');
+      return faixa(o.ini, fim).get({ source: 'cache' }).then(function (ant) {
         var porId = new Map();
-        listaDeDocs(ant).forEach(function (d) { porId.set(d.id, d); });
         var doServidor = rec ? listaDeDocs(rec) : [];
+        var idsServidor = new Set(doServidor.map(function (d) { return d.id; }));
+        listaDeDocs(ant).forEach(function (d) {
+          var valor = d.get ? d.get(o.campo) : d.data()[o.campo];
+          var recente = temRecente && valor != null && valor >= o.corte;
+          if (!recente || idsServidor.has(d.id)) porId.set(d.id, d);
+        });
         doServidor.forEach(function (d) { porId.set(d.id, d); });
         if (porId.size < meta.qtd) return completa('cache do navegador incompleto');
         return { docs: Array.from(porId.values()), modo: 'parcial', motivo: null, lidasNoServidor: doServidor.length };
@@ -1866,8 +1893,11 @@
       var x = d && d.exists ? d.data() : null;
       return (x && x.carimbo === true) ? { exclusoes: Number(x.exclusoes) || 0 } : null;
     }).catch(function (e) {
+      // "Nao deu para saber" e' diferente de "desligado": quem chama abre
+      // a escuta inteira, mas NAO apaga o controle guardado — uma
+      // oscilacao de rede nao pode custar uma leitura completa a mais.
       console.error('Nao foi possivel ler config/notasSync:', e);
-      return null;
+      return undefined;
     });
   }
 
@@ -1981,29 +2011,50 @@
         var ultima = meta.ultima || 0;
         var avisou = false;
         var desde = deMillis(Math.max(0, ultima - FOLGA_DELTA_MS));
+        function aplicar(id, dados, mudancas) {
+          if (dados && o.aceita(dados)) { uniao.set(id, dados); mudancas.push({ id: id, dados: dados }); }
+          else if (uniao.has(id)) { uniao.delete(id); mudancas.push({ id: id, dados: null }); }
+        }
         cancelar.push(o.delta.where(o.campo, '>', desde).onSnapshot(VIVO, function (snap) {
           if (parado) return;
           var mudancas = [];
+          var sumidos = [];
           snap.docChanges().forEach(function (ch) {
-            var id = ch.doc.id;
-            var dados = ch.type === 'removed' ? null : ch.doc.data(); // removido daqui = apagado
-            if (dados && o.aceita(dados)) { uniao.set(id, dados); mudancas.push({ id: id, dados: dados }); }
-            else if (uniao.has(id)) { uniao.delete(id); mudancas.push({ id: id, dados: null }); }
+            if (ch.type === 'removed') sumidos.push(ch.doc.id);
+            else aplicar(ch.doc.id, ch.doc.data(), mudancas);
           });
           // So' a escuta em dia com o servidor garante que NADA mais novo
           // ficou de fora: e' a unica que pode avancar o controle.
-          if (!snap.metadata.fromCache) {
+          if (!veioDoCache(snap)) {
             ultima = maiorCarimbo(listaDeDocs(snap), ultima);
             gravarMetaLeitura(o.chave, { dia: meta.dia, versao: versao, ultima: ultima, qtd: uniao.size }, arm);
           }
-          if (!avisou) {
-            avisou = true;
-            mudancas = [];
-            uniao.forEach(function (dados, id) { mudancas.push({ id: id, dados: dados }); });
-          } else if (!mudancas.length) {
-            return;
-          }
-          o.aoReceber(mudancas, { modo: 'delta', motivo: null });
+          // "Removido" desta consulta NAO quer dizer apagado. A propria
+          // tela, ao regravar um documento com alteradoEm =
+          // serverTimestamp(), deixa o campo PENDENTE (sem hora) ate' o
+          // servidor confirmar — e nesse meio tempo o documento sai do
+          // "carimbo > desde". O cache diz o que houve: se o documento
+          // ainda esta' la' (com a escrita pendente), e' isso que a tela
+          // mostra; se sumiu do cache, foi apagado de verdade.
+          var conferidos = sumidos.length
+            ? Promise.all(sumidos.map(function (id) {
+                return o.delta.doc(id).get({ source: 'cache' })
+                  .then(function (d) { return { id: id, dados: d && d.exists ? d.data() : null }; },
+                        function () { return { id: id, dados: null }; });
+              }))
+            : Promise.resolve([]);
+          conferidos.then(function (lista) {
+            if (parado) return;
+            lista.forEach(function (x) { aplicar(x.id, x.dados, mudancas); });
+            if (!avisou) {
+              avisou = true;
+              mudancas = [];
+              uniao.forEach(function (dados, id) { mudancas.push({ id: id, dados: dados }); });
+            } else if (!mudancas.length) {
+              return;
+            }
+            o.aoReceber(mudancas, { modo: 'delta', motivo: null });
+          });
         }, falha));
       }, function () { if (!parado) completa('cache do navegador indisponível'); });
     }
@@ -2133,6 +2184,22 @@
      ============================================================ */
 
   // Sem isto, um erro inesperado deixava a tela em branco em silencio.
+  // Um clique por vez: enquanto a execucao anterior nao termina, os
+  // cliques seguintes sao ignorados (duplo clique em "salvar" criava dois
+  // documentos). Com `botao`, ele fica desabilitado nesse meio tempo.
+  function umPorVez(fn, botao) {
+    var pendente = null;
+    return function () {
+      if (pendente) return pendente;
+      if (botao) botao.disabled = true;
+      var r;
+      try { r = Promise.resolve(fn.apply(this, arguments)); } catch (e) { r = Promise.reject(e); }
+      pendente = r.then(function (x) { pendente = null; if (botao) botao.disabled = false; return x; },
+                        function (e) { pendente = null; if (botao) botao.disabled = false; throw e; });
+      return pendente;
+    };
+  }
+
   function instalarErroGlobal() {
     global.addEventListener('error', function (ev) {
       console.error('Erro nao tratado:', ev.error || ev.message);
@@ -2289,7 +2356,8 @@
     buscaComChips: buscaComChips,
     mostrarBusca: mostrarBusca,
 
-    instalarErroGlobal: instalarErroGlobal
+    instalarErroGlobal: instalarErroGlobal,
+    umPorVez: umPorVez
   };
 
   // No Node (testes, calculo-nucleo.js) nao existe window: cai no

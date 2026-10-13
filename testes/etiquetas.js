@@ -55,6 +55,9 @@ const linhas = N.linhasDeTransito(itens, notas, etiquetas);
 
 eq('uma linha por item; nota cancelada some; nota sem itens nao gera linha',
   linhas.map(l => l.id), ['A_1', 'A_2', 'B_1']);
+eq('nota cancelada com etiqueta pendente fica como "retirar" (a etiqueta esta na gondola)',
+  (l => [l.map(x => x.id), l[0].situacao, l[0].cancelada])(N.linhasDeTransito([itens[2]], notas, { C_1: { etiquetada: true } })),
+  [['C_1'], 'retirar', true]);
 eq('item sem "n" usa a posicao', linhas[2].n, 1);
 eq('situacoes: retirar, concluida, dispensada', linhas.map(l => l.situacao), ['retirar', 'concluida', 'dispensada']);
 eq('quantidade em texto vira numero; unidade e codigo vem junto',
@@ -68,8 +71,8 @@ eq('nota que nao esta carregada conta como nao recebida',
 
 eq('NCM_PISOS e o 6907', N.NCM_PISOS, ['6907']);
 eq('ncmCasa: prefixo, com ou sem pontos; sem prefixos aceita tudo',
-  [N.ncmCasa('69072100', ['6907']), N.ncmCasa('6907.21.00', ['6907']), N.ncmCasa('69101000', ['6907']), N.ncmCasa(null, ['6907']), N.ncmCasa(null, []), N.ncmCasa('x', null)],
-  [true, true, false, false, true, true]);
+  [N.ncmCasa('69072100', ['6907']), N.ncmCasa('6907.21.00', ['6907']), N.ncmCasa('69.07.21.00', ['6907']), N.ncmCasa('69101000', ['6907']), N.ncmCasa(null, ['6907']), N.ncmCasa(null, []), N.ncmCasa('x', null)],
+  [true, true, true, false, false, true, true]);
 const comNcm = N.linhasDeTransito([{ chave: 'A', itens: [
   { n: 1, descricao: 'piso', ncm: '69072200' }, { n: 2, descricao: 'rejunte', ncm: '38245000' }, { n: 3, descricao: 'sem ncm' }] }], {}, {}, { ncm: N.NCM_PISOS });
 eq('com o filtro de NCM so o piso vira linha', comNcm.map(l => l.id), ['A_1']);
@@ -147,8 +150,17 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
       { n: 2, descricao: 'PISO 58004 58X58 ESMALTADO', qtd: 10 },
       { n: 3, descricao: 'PISO REF 75004 75X75 POL', ean: '0000', qtd: 10 }] }
   ], {}, {});
-  eq('semelhanca por palavras: codigo de referencia e tamanho casam; nomes diferentes nao',
-    [N.semelhanca('PISO 58004 58X58 A VIVA PISOS', 'PISO 58004 58X58 ESMALTADO') >= 0.6, N.semelhanca('PISO AZUL 60X60', 'REVEST BRANCO 30X60') >= 0.6], [true, false]);
+  eq('semelhanca por palavras: codigo de referencia e tamanho casam; nomes diferentes nao; cor diferente no mesmo tamanho nao',
+    [N.semelhanca('PISO 58004 58X58 A VIVA PISOS', 'PISO 58004 58X58 ESMALTADO') >= 0.75, N.semelhanca('PISO AZUL 60X60', 'REVEST BRANCO 30X60') >= 0.75,
+     N.semelhanca('PISO 57X57 CINZA', 'PISO 57X57 BEGE') >= 0.75, N.semelhanca('PISO REF 75004 75X75 A POL (CX2,23MT) KARINA', 'PISO 75004 75X75 POLIDO') >= 0.75,
+     N.semelhanca('PORCELANATO 80X80 POLIDO', 'PORCELANATO 80X80 ACETINADO') >= 0.75],
+    [true, false, false, true, false]);
+  eq('dica de vermelha vinda do estoque ignora o codigo interno (nao e o da nota)',
+    N.dicaDeFaturamento({ produto: 'x', codigo: 'P1', origem: 'estoque' }, transito).length, 0);
+  const comHora = N.lerPlanilhaEstoque([cab, ['200', 'PISO COM HORA', 'CX', 0, null, '', 'Piso cerâmico', 'Pisos', '', '15/09/2026 14:33']]);
+  eq('data com hora vira so a data', comHora.itens[0].ultData, '2026-09-15');
+  eq('sem a coluna de data: avisa, e ninguem vira parado',
+    (x => [x.problemas.length, N.sugestoesVermelhas(x.itens, [], [], { hoje: '2026-10-09' }).semData])(N.lerPlanilhaEstoque([cab.slice(0, 9), ['1', 'PISO SEM DATA', 'CX', 5, null, '', 'Piso cerâmico', 'Pisos', '']])), [1, 1]);
   eq('faturados: com codigo de barras dos dois lados so vale o codigo de barras (nome parecido nao engana)',
     N.faturadosDoItem(lido.itens[0], transito).length, 0);
   const verm = [{ id: 'v1', produto: 'PISO JA VERMELHO 45X45', codigo: '107', criadaEm: '2026-10-01' }, { id: 'v2', produto: 'antiga', codigo: '104', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }];

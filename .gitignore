@@ -30,3 +30,13 @@ amostras/
 *.xls
 *.csv
 *.ofx
+# Em Linux/CI os padroes diferenciam maiusculas: os mesmos, em caixa alta.
+*.PDF
+*.XML
+*.XLSX
+*.XLS
+*.CSV
+*.OFX
+# O Apps Script do usuario (ids de pastas do Drive, prefixo do CNPJ) fica
+# em amostras/; se um dia for salvo fora dela, continua fora do git.
+*.gs

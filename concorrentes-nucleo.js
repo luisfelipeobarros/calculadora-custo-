@@ -63,8 +63,10 @@
         // Sinonimo guloso pegava a coluna errada: "Código de Barras"
         // virava a chave do catalogo e "Preço de Custo" virava o preco
         // de venda. As duas exclusoes fecham os casos reais.
-        if (campo === 'codigo' && texto.indexOf('barra') !== -1) continue;
+        if (campo === 'codigo' && (texto.indexOf('barra') !== -1 || texto.indexOf('ncm') !== -1)) continue;
         if (campo === 'preco' && texto.indexOf('custo') !== -1) continue;
+        // "Preco Un." e' preco, nao unidade.
+        if (campo === 'unidade' && /preco|valor|vlr/.test(texto)) continue;
         var bate = CAMPOS_CATALOGO[i][1].some(function (p) { return texto.indexOf(p) !== -1; });
         if (bate) { map[campo] = idx; break; }
       }

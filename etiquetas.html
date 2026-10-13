@@ -203,8 +203,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=30"></script>
-<script src="etiquetas-nucleo.js?v=5"></script>
+<script src="app-shared.js?v=31"></script>
+<script src="etiquetas-nucleo.js?v=6"></script>
 <script>
 (() => {
   'use strict';
@@ -235,7 +235,7 @@
   let pararNotas = null, pararEtiquetas = null;
   let corteISO = '';
   let grupo = '';              // chip ativo: '', situacao, 'encerradas' ou 'vermelhas'
-  let retirarAntes = null;     // para avisar quando chega mercadoria etiquetada
+  let retirarAntes = null;     // ids em "retirar" no render anterior (null = carga ainda nao fechou)
   const tentativasItens = {};
   const itensEmBusca = new Set();
   let novaBuscaItens = null;
@@ -276,7 +276,7 @@
     const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
     switch(l.situacao){
       case 'etiquetar':  return b('etiquetar', '🏷 Etiquetei') + b('dispensar', '📦 Com estoque');
-      case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩');
+      case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩ Desfazer');
       case 'transito':   return b('desfazer', '↩ Desfazer');
       case 'retirar':    return b('retirar', '✔ Retirei a etiqueta');
       case 'concluida':  return b('desfazer-retirada', '↩ Desfazer');
@@ -284,6 +284,7 @@
     }
   }
   function htmlRecebimento(l){
+    if(l.cancelada) return '<span class="si si-retirar" title="A NF-e foi cancelada: a mercadoria não vem">NF cancelada</span>';
     if(l.recebida) return '<span class="si si-concluida">Recebida</span>';
     return '<span class="mono">em trânsito' + (l.previsaoEntrega ? ' · prev. ' + escapeHtml(App.fmtData(l.previsaoEntrega)) : '') + '</span>';
   }
@@ -303,12 +304,17 @@
       '<button type="button" class="etq-kpi" data-g="' + g + '" aria-pressed="' + (grupo === g ? 'true' : 'false') + '">' +
       '<span class="k-rot">' + rot + '</span><span class="k-val ' + cls + '">' + (pronto ? val : '…') + '</span></button>').join('');
 
-    // Mercadoria etiquetada chegou: avisa uma vez por mudanca, nao a cada render.
+    // Mercadoria etiquetada chegou: avisa quando um produto ENTRA em
+    // "retirar" (por id, com todos os NCM — trocar o filtro ou desfazer
+    // uma retirada nao e' chegada). So' depois de a carga fechar.
     if(pronto){
-      if(retirarAntes != null && c.retirar > retirarAntes){
-        App.toast('Chegou mercadoria com etiqueta: ' + c.retirar + ' produto(s) para retirar a etiqueta.', 'info');
+      const agora = new Set(N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId)
+        .filter(l => l.situacao === 'retirar' && !l.retirada).map(l => l.id));
+      if(retirarAntes){
+        const novos = [...agora].filter(id => !retirarAntes.has(id) && !(etiquetasPorId[id] && etiquetasPorId[id].retiradaEm));
+        if(novos.length) App.toast('Chegou mercadoria com etiqueta: ' + novos.length + ' produto(s) para retirar a etiqueta.', 'info');
       }
-      retirarAntes = c.retirar;
+      retirarAntes = agora;
     }
 
     $('etqVermelhas').style.display = grupo === 'vermelhas' ? '' : 'none';
@@ -388,7 +394,7 @@
           '<td data-r="Obs.">' + escapeHtml(v.obs || '') + '</td>' +
           '<td class="acoes sem-rotulo">' +
             '<button type="button" class="btn secondary mini" data-vm="resolver" data-id="' + escapeHtml(v.id) + '">✔ Faturou / trocada</button>' +
-            '<button type="button" class="btn secondary mini apagar" data-vm="apagar" data-id="' + escapeHtml(v.id) + '">✕</button></td>' +
+            '<button type="button" class="btn secondary mini apagar" data-vm="apagar" data-id="' + escapeHtml(v.id) + '" title="Apagar esta etiqueta vermelha" aria-label="Apagar esta etiqueta vermelha">✕</button></td>' +
         '</tr>';
       }).join('') + '</tbody></table>';
   }
@@ -437,8 +443,21 @@
     }).catch(e => { console.error('config do estoque:', e); });
   }
   function gravarConfigEstoque(campos){
-    Object.assign(estoqueConfig, campos);
     return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).set(campos, { merge: true }))
+      .then(() => { Object.assign(estoqueConfig, campos); })
+      .catch(e => App.toastErro('Erro ao guardar a configuração', e));
+  }
+  // Uma chave de um mapa (ignorados / marcados). O merge do Firestore
+  // junta mapas em vez de substituir: para tirar uma chave e' preciso
+  // FieldValue.delete() nela — regravar o mapa sem ela nao apaga nada.
+  function gravarChaveConfig(mapa, codigo, valor){
+    const campos = {}; campos[mapa] = {}; campos[mapa][codigo] = valor == null ? firebase.firestore.FieldValue.delete() : valor;
+    return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).set(campos, { merge: true }))
+      .then(() => {
+        const copia = Object.assign({}, estoqueConfig[mapa]);
+        if(valor == null) delete copia[codigo]; else copia[codigo] = valor;
+        estoqueConfig[mapa] = copia;
+      })
       .catch(e => App.toastErro('Erro ao guardar a configuração', e));
   }
 
@@ -474,10 +493,11 @@
     }catch(e){
       console.error(e);
       estoque = null;
+      renderEstoque();
       $('estMsg').textContent = 'Não consegui ler o arquivo: ' + App.erroDe(e);
     }
   });
-  $('estFecharBtn').addEventListener('click', () => { estoque = null; $('etqEstoque').style.display = 'none'; });
+  $('estFecharBtn').addEventListener('click', () => { estoque = null; renderEstoque(); $('etqEstoque').style.display = 'none'; });
   ['estMinimo', 'estDias'].forEach(id => $(id).addEventListener('change', () => {
     gravarConfigEstoque({ minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0 });
     renderEstoque();
@@ -509,6 +529,7 @@
 
     $('estResumo').textContent = estoque.length + ' produtos · fora do controle (amostras/lojinha): ' + r.foraDoControle +
       ' · não vamos repor (*): ' + r.naoRepor + ' · normais (movimentou e tem estoque): ' + r.normais +
+      (r.semData ? ' · sem data de movimentação: ' + r.semData : '') +
       ' · parados sem estoque: ' + r.paradosSemEstoque + ' · já em saldão/promoção: ' + r.jaMarcados.length +
       ' · "não trabalhamos mais": ' + r.ignorados + ' · já com vermelha: ' + r.jaVermelhas;
 
@@ -554,25 +575,18 @@
   }
 
   App.delegar($('estSugestoes'), 'click', '[data-ignorar]', (b) => {
-    const codigo = b.dataset.ignorar;
-    const ignorados = Object.assign({}, estoqueConfig.ignorados);
-    ignorados[codigo] = App.hojeISO();
     b.disabled = true;
-    gravarConfigEstoque({ ignorados }).then(renderEstoque);
+    gravarChaveConfig('ignorados', b.dataset.ignorar, App.hojeISO()).then(renderEstoque);
   });
   // "Ja' esta' em saldao/promocao": a marca fica em config/etiquetasEstoque
   // e o produto sai da lista ate' alguem tirar a marca.
   ['estSaldao', 'estPromocao'].forEach(id => App.delegar($(id), 'click', '[data-marcar]', (b) => {
-    const marcados = Object.assign({}, estoqueConfig.marcados);
-    marcados[b.dataset.codigo] = { tipo: b.dataset.marcar, em: App.hojeISO() };
     b.disabled = true;
-    gravarConfigEstoque({ marcados }).then(renderEstoque);
+    gravarChaveConfig('marcados', b.dataset.codigo, { tipo: b.dataset.marcar, em: App.hojeISO() }).then(renderEstoque);
   }));
   App.delegar($('estMarcados'), 'click', '[data-desmarcar]', (b) => {
-    const marcados = Object.assign({}, estoqueConfig.marcados);
-    delete marcados[b.dataset.desmarcar];
     b.disabled = true;
-    gravarConfigEstoque({ marcados }).then(renderEstoque);
+    gravarChaveConfig('marcados', b.dataset.desmarcar, null).then(renderEstoque);
   });
   App.delegar($('estComEstoque'), 'click', '[data-vm="resolver"]', (b) => {
     b.disabled = true;
@@ -612,6 +626,7 @@
 
   // ─── Relatorio ───
   $('etqImprimirBtn').addEventListener('click', () => {
+    if(estoque) renderEstoque(); // a classificacao vai com o filtro de agora
     $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao });
     document.body.classList.add('imprimindo');
     const limpar = () => { document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
@@ -622,7 +637,7 @@
   // ─── Carga ───
   function escutarEstadoNotas(sinc){
     if(pararNotas){ pararNotas(); pararNotas = null; }
-    if(!sinc) App.esquecerLeitura(LEITURA_NOTAS);
+    if(sinc === null) App.esquecerLeitura(LEITURA_NOTAS); // undefined = "nao deu para saber": nao apaga
     return new Promise((resolve, reject) => {
       let primeiro = true;
       const mapa = {};
@@ -671,6 +686,7 @@
         if(primeiro){ primeiro = false; resolve(); return; }
         render();
         if(estoque) renderEstoque();
+        if(carregouItens) pendenciasForaDaJanela().then(n => { if(n) render(); });
       }, e => {
         if(primeiro){ primeiro = false; reject(e); return; }
         console.error('Escuta das etiquetas caiu:', e);
@@ -692,10 +708,12 @@
     docs.forEach((doc, i) => {
       const ch = faltam[i];
       itensEmBusca.delete(ch);
-      const t = tentativasItens[ch] || { n: 0, em: 0 };
-      tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
       if(doc && doc.exists){ itensPorChave[ch] = { chave: ch, ...doc.data() }; novos++; }
-      else semItens++;
+      else {
+        const t = tentativasItens[ch] || { n: 0, em: 0 };
+        tentativasItens[ch] = { n: t.n + 1, em: Date.now() };
+        semItens++;
+      }
     });
     if(semItens && !novaBuscaItens) novaBuscaItens = setTimeout(() => { novaBuscaItens = null; aoMudarEstado(); }, 90000);
     return novos;
@@ -704,19 +722,30 @@
   // janela: sem isto ela sumiria da tela com a etiqueta na gondola.
   // Busca a nota e os itens uma vez (sao poucas; nao ficam ao vivo).
   const foraDaJanela = new Set();
+  const pendente = (e) => e && e.etiquetada === true && e.retirada !== true;
   async function pendenciasForaDaJanela(){
     const chaves = [...new Set(Object.values(etiquetasPorId)
-      .filter(e => e.etiquetada === true && e.retirada !== true && e.chaveAcesso && !itensPorChave[e.chaveAcesso] && !foraDaJanela.has(e.chaveAcesso))
+      .filter(e => pendente(e) && e.chaveAcesso && !itensPorChave[e.chaveAcesso] && !foraDaJanela.has(e.chaveAcesso))
       .map(e => e.chaveAcesso))].slice(0, 40);
-    if(!chaves.length) return;
+    if(!chaves.length) return 0;
     chaves.forEach(ch => foraDaJanela.add(ch));
+    let novos = 0;
     await Promise.all(chaves.map(async ch => {
       try{
         const [it, nt] = await Promise.all([db.collection('itensNotas').doc(ch).get(), db.collection('notas').doc(ch).get()]);
-        if(it.exists) itensPorChave[ch] = { chave: ch, ...it.data() };
+        if(it.exists){
+          // So' os itens com etiqueta pendente: os outros itens de uma
+          // nota velha nao sao "para etiquetar" — ja' passaram.
+          const d = it.data();
+          const itens = (Array.isArray(d.itens) ? d.itens : []).map((item, i) => Object.assign({}, item, { n: item && item.n != null && item.n !== '' ? item.n : i + 1 }))
+            .filter(item => pendente(etiquetasPorId[N.idDaLinha(ch, item.n)]));
+          itensPorChave[ch] = { chave: ch, ...d, itens };
+          novos++;
+        }
         if(nt.exists && !notasPorChave[ch]) notasPorChave[ch] = nt.data();
       }catch(e){ console.error('Pendência fora da janela:', ch, e); }
     }));
+    return novos;
   }
 
   function aoMudarEstado(){
@@ -746,12 +775,15 @@
       ]);
       const mapa = {};
       leitura.docs.forEach(doc => { const d = doc.data(); if((d.dataEmissao || '') >= corteISO) mapa[doc.id] = { chave: doc.id, ...d }; });
-      // O que ja' foi buscado um a um nesta sessao continua valendo.
-      Object.keys(itensPorChave).forEach(ch => { if(tentativasItens[ch] && !mapa[ch]) mapa[ch] = itensPorChave[ch]; });
+      // O que ja' foi buscado um a um nesta sessao continua valendo
+      // (itens de nota nova e pendencias fora da janela).
+      Object.keys(itensPorChave).forEach(ch => { if(!mapa[ch] && !leitura.docs.some(d => d.id === ch)) mapa[ch] = itensPorChave[ch]; });
       itensPorChave = mapa;
-      carregouItens = true;
+      foraDaJanela.clear();
+      retirarAntes = null;
       await buscarItensQueFaltam();
       await pendenciasForaDaJanela();
+      carregouItens = true;
       setStatus(Object.keys(itensPorChave).length + ' nota(s) nos últimos ' + DIAS_TRANSITO + ' dias · ao vivo' +
         (sinc ? ' · lendo só o que mudou' : ''));
       render();

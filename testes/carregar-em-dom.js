@@ -43,7 +43,16 @@ blocos.forEach((codigo, i) => {
   }
 });
 
+// 3) se a pagina expoe window.__testeRender, desenha as telas com as
+//    colecoes vazias: ReferenceError dentro de um render so' aparece aqui.
+let renders = 'nenhum';
+if (typeof window.__testeRender === 'function') {
+  try { window.__testeRender(); renders = 'ok'; }
+  catch (e) { erros.push('render das telas: ' + e.message); renders = 'ERRO'; }
+}
+
 console.log('== ' + arquivo + ' (execucao em DOM simulado) ==');
+console.log('  renders de teste: ' + renders);
 console.log('  arquivos locais: ' + (locais.join(', ') || '(nenhum)'));
 console.log('  ids no markup: ' + ids.length + ' | blocos executados: ' + blocos.length);
 if (window.App) {

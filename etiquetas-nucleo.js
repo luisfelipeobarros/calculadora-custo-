@@ -63,7 +63,7 @@
   var NCM_PISOS = ['6907'];
   function ncmCasa(ncm, prefixos) {
     if (!prefixos || !prefixos.length) return true;
-    var n = String(ncm == null ? '' : ncm).replace(/D/g, '');
+    var n = String(ncm == null ? '' : ncm).replace(/[^0-9]/g, '');
     return prefixos.some(function (p) { return n.indexOf(String(p)) === 0; });
   }
 
@@ -78,17 +78,20 @@
     (itensDocs || []).forEach(function (doc) {
       if (!doc || !doc.chave) return;
       var nota = (notasPorChave || {})[doc.chave] || null;
-      if (nota && (nota.status || 'ativa') === 'cancelada') return;
+      // Nota cancelada some — menos o item que ainda tem etiqueta na
+      // gondola: esse fica como "retirar", senao a etiqueta ficava la'.
+      var cancelada = !!(nota && (nota.status || 'ativa') === 'cancelada');
       var itens = Array.isArray(doc.itens) ? doc.itens : [];
       var descricoes = itens.map(function (it) { return it && it.descricao; });
       var fornecedor = App.rotularFornecedor(doc.nomeEmitente, descricoes);
-      var recebida = !!(nota && nota.noSistema === true);
+      var recebida = cancelada || !!(nota && nota.noSistema === true);
       itens.forEach(function (it, i) {
         it = it || {};
         if (!ncmCasa(it.ncm, prefixos)) return;
         var n = it.n != null && it.n !== '' ? it.n : i + 1;
         var id = idDaLinha(doc.chave, n);
         var e = (etiquetasPorId || {})[id] || {};
+        if (cancelada && !(e.etiquetada === true && e.retirada !== true)) return;
         linhas.push({
           id: id, chave: doc.chave, n: n,
           numero: doc.numero == null ? '' : String(doc.numero),
@@ -100,6 +103,7 @@
           un: it.un == null ? '' : String(it.un),
           ean: soDigitos(it.ean),
           recebida: recebida,
+          cancelada: cancelada,
           previsaoEntrega: (nota && nota.previsaoEntrega) || null,
           etiquetada: e.etiquetada === true,
           dispensada: e.dispensada === true,
@@ -168,7 +172,9 @@
   // NF-e). Sem ele, vale o codigo do item e o nome.
   function dicaDeFaturamento(vermelha, linhas) {
     var ean = soDigitos(vermelha && vermelha.ean);
-    var cod = norm(vermelha && vermelha.codigo);
+    // Vermelha vinda da planilha tem o codigo INTERNO, que nao aparece na
+    // NF-e (o da nota e' o do fornecedor): comparar os dois so' confunde.
+    var cod = (vermelha && vermelha.origem === 'estoque') ? '' : norm(vermelha && vermelha.codigo);
     var nome = norm(vermelha && vermelha.produto);
     if (!ean && !cod && nome.length < 4) return [];
     return (linhas || []).filter(function (l) {
@@ -211,7 +217,7 @@
     for (var i = 0; i < Math.min(linhas.length, 30) && cab === -1; i++) {
       var p = {};
       (linhas[i] || []).forEach(function (celula, j) {
-        var rot = norm(celula);
+        var rot = norm(celula).trim();
         Object.keys(COLUNAS_ESTOQUE).forEach(function (k) {
           if (p[k] == null && COLUNAS_ESTOQUE[k].test(rot)) p[k] = j;
         });
@@ -220,6 +226,12 @@
     }
     if (cab === -1) return { itens: [], problemas: ['Não achei o cabeçalho (Código, Nome, Quantidade) — é o relatório "Estoque - Grade"?'] };
     var itens = [], problemas = [];
+    if (pos.ultData == null) problemas.push('coluna "Últ. Data" não encontrada: sem ela ninguém é classificado como parado (saldão/promoção)');
+    // "15/09/2026 14:33" (data com hora) vira so' a data.
+    var lerData = function (v) {
+      if (typeof v === 'string') v = v.trim().replace(/[ T]\d{1,2}:\d{2}.*$/, '');
+      return App.dataDeCelula(v) || null;
+    };
     var celula = function (linha, k) { return pos[k] == null ? null : linha[pos[k]]; };
     linhas.slice(cab + 1).forEach(function (linha, idx) {
       if (!linha || celula(linha, 'codigo') == null || celula(linha, 'codigo') === '') return;
@@ -238,7 +250,7 @@
         subclasse: String(celula(linha, 'subclasse') == null ? '' : celula(linha, 'subclasse')).trim(),
         fabricante: String(celula(linha, 'fabricante') == null ? '' : celula(linha, 'fabricante')).trim(),
         familia: String(celula(linha, 'familia') == null ? '' : celula(linha, 'familia')).trim(),
-        ultData: App.dataDeCelula(celula(linha, 'ultData')) || null
+        ultData: lerData(celula(linha, 'ultData'))
       });
     });
     return { itens: itens, problemas: problemas };
@@ -256,14 +268,22 @@
     var t = norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
     return t ? t.split(' ').filter(function (w) { return w.length >= 3; }) : [];
   }
+  // As palavras com digito (referencia, tamanho) do nome do estoque tem
+  // que existir todas na descricao da nota — "57X57 CINZA" x "57X57
+  // BEGE" dividem o tamanho, mas nao a cor, e com o corte em 0,75 a cor
+  // decide.
   function semelhanca(a, b) {
     var pa = palavras(a), pb = palavras(b);
     if (!pa.length || !pb.length) return 0;
     var set = new Set(pb), comum = 0;
+    // So' referencia (4+ digitos) e tamanho (NNxNN) sao chave; embalagem
+    // ("CX2", "23MT") nao conta.
+    var comDigito = pa.filter(function (w) { return /^[0-9]{4,}$/.test(w) || /^[0-9]+x[0-9]+/.test(w); });
+    if (comDigito.length && !comDigito.every(function (w) { return set.has(w); })) return 0;
     pa.forEach(function (w) { if (set.has(w)) comum++; });
     return comum / Math.min(pa.length, pb.length);
   }
-  var SEMELHANCA_MINIMA = 0.6;
+  var SEMELHANCA_MINIMA = 0.75;
 
   // Linhas em transito (nao encerradas) que parecem ser este item.
   function faturadosDoItem(item, linhas) {
@@ -297,12 +317,15 @@
     var marcados = o.marcados || {};
     var pendentes = vermelhasPendentes(vermelhas);
     var r = { sugerir: [], jaFaturados: [], saldao: [], promocao: [], jaMarcados: [],
-      naoRepor: 0, paradosSemEstoque: 0, foraDoControle: 0, ignorados: 0, jaVermelhas: 0, normais: 0 };
+      naoRepor: 0, paradosSemEstoque: 0, foraDoControle: 0, ignorados: 0, jaVermelhas: 0, normais: 0, semData: 0 };
     (estoque || []).forEach(function (item) {
       if (foraDoControle(item)) { r.foraDoControle++; return; }
       if (item.naoRepor) { r.naoRepor++; return; }
       if (item.quantidade == null) { r.normais++; return; }
-      var parado = !!(corte && (!item.ultData || item.ultData < corte));
+      // Sem data de movimentacao nao da' para dizer "parado": fica de
+      // fora e contado, em vez de virar saldao/promocao por engano.
+      if (corte && !item.ultData) { r.semData++; return; }
+      var parado = !!(corte && item.ultData < corte);
       if (parado) {
         if (item.quantidade <= 0) { r.paradosSemEstoque++; return; }
         var marca = marcados[item.codigo];

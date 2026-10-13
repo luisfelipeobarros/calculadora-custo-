@@ -1,6 +1,6 @@
 # Calculadora de Custo + Controle de Notas
 
-Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o redirecionamento do antigo Lançamentos) que compartilham o mesmo projeto Firebase.
+Seis páginas (Calculadora, Controle de Notas, Assistências, Dashboard, Etiquetas e o redirecionamento do antigo Lançamentos) que compartilham o mesmo projeto Firebase.
 
 | Arquivo | O que é |
 |---|---|
@@ -18,7 +18,7 @@ Cinco páginas (Calculadora, Controle de Notas, Assistências, Dashboard e o red
 
 Tudo precisa ficar **na mesma pasta**. Se você publica os aplicativos em
 algum lugar, suba também os `*-nucleo.js`, `app-shared.css`,
-`app-shared.js`, os ícones (`icon-*.png`) e os quatro `manifest*.json`.
+`app-shared.js`, os ícones (`icon-*.png`) e os cinco `manifest*.json`.
 
 ### ⚠ Sempre que alterar `app-shared.css`, `app-shared.js` ou qualquer `*-nucleo.js`
 
@@ -31,8 +31,8 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=17">
-<script src="app-shared.js?v=30"></script>
-<script src="calculo-nucleo.js?v=7"></script>
+<script src="app-shared.js?v=31"></script>
+<script src="calculo-nucleo.js?v=8"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número em todos os
@@ -104,12 +104,13 @@ sozinho a operação que falhou.
 
 ### O que as regras permitem
 
-- `notas`, `duplicatas`, `itensNotas` — o navegador **lê**, mas só pode
+- `notas` e `duplicatas` — o navegador **lê**, mas só pode
   alterar os campos de controle (`pago`, `status`, `previsaoEntrega`,
   `noSistema`, `vencimento`…), e toda alteração tem de vir com o carimbo
   `alteradoEm` (ver "Carimbo de alteração"). Criar e apagar nota fica proibido pelo
-  navegador. O Apps Script usa conta de serviço e ignora estas regras,
-  então a importação de XML continua igual.
+  navegador. `itensNotas` é só leitura. O Apps Script grava pela REST API
+  com o token OAuth de quem roda o gatilho (credencial IAM, que ignora as
+  regras), então a importação de XML continua igual.
 
   **A prorrogação de vencimento não é desfeita pelo Apps Script.** Ele
   grava duplicata com a precondição `currentDocument: { exists: false }`
@@ -278,7 +279,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
+Não precisa instalar nada. São vinte e nove etapas, em vinte frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -288,13 +289,13 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
    a cotação sugere o mesmo número da calculadora, e que o `index.html`
    continua ligado no núcleo em vez de ter voltado a ter sua própria
    cópia da conta.
-2. **Estrutura dos cinco HTML** — sintaxe dos scripts, tags balanceadas,
+2. **Estrutura dos seis HTML** — sintaxe dos scripts, tags balanceadas,
    ids duplicados, `$()` apontando para id inexistente, `label for=`
    órfão, arquivo referenciado que sumiu.
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 169 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 177 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -313,7 +314,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 82 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 83 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de
@@ -405,7 +406,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 78 verificações em
+15. **Assistências e reclamações** — 80 verificações em
     `assistencias-nucleo.js`: as **avarias** (perda sem cliente, na mesma
     coleção com `tipo: 'avaria'`: motivos, somadas à parte no mês, nunca
     "em aberto", chip e coluna próprios), as listas de status/causa/solução (a troca
@@ -424,7 +425,7 @@ Não precisa instalar nada. São vinte e seis etapas, em dezenove frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-15b. **Etiquetas de produto em trânsito** — 53 verificações em
+15b. **Etiquetas de produto em trânsito** — 57 verificações em
     `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
     ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
     dispensada / retirada), uma linha por item de NF-e com o fornecedor
