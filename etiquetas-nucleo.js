@@ -72,8 +72,46 @@
   // etiquetasPorId: { id: { etiquetada, dispensada, retirada } }
   // opcoes.ncm: prefixos de NCM aceitos (ex.: NCM_PISOS); vazio = todos.
   // Nota cancelada some; nota que nao esta' carregada conta como nao recebida.
+  /* ------------------------------------------------------------
+     Catalogo interno (config/etiquetasProdutos)
+
+     O elo entre a nota do fornecedor e o cadastro da loja e' o codigo
+     de barras. Na importacao do estoque o app guarda um dicionario
+     pequeno — codigo interno -> { n: nome, e: barras } — num documento
+     so'. Com ele, a linha em transito mostra o codigo e o nome DA
+     LOJA, a busca acha por eles, e a vermelha digitada pelo codigo
+     interno ja' sai com o codigo de barras (e casa exato com a nota
+     quando ela chega).
+     ------------------------------------------------------------ */
+
+  // itens da planilha -> documento compacto (so' o que e' vendavel).
+  function montarCatalogo(estoque, hoje) {
+    var porCodigo = {};
+    (estoque || []).forEach(function (it) {
+      if (!it || !it.codigo || foraDoControle(it)) return;
+      porCodigo[it.codigo] = { n: it.nome || '', e: it.ean || '' };
+    });
+    return { porCodigo: porCodigo, geradoEm: hoje || null, qtd: Object.keys(porCodigo).length };
+  }
+  // documento -> indices de consulta.
+  function expandirCatalogo(doc) {
+    var porCodigo = (doc && doc.porCodigo) || {};
+    var porEan = {};
+    Object.keys(porCodigo).forEach(function (c) {
+      var p = porCodigo[c] || {};
+      var ean = soDigitos(p.e);
+      if (ean) porEan[ean] = { codigo: c, nome: p.n || '' };
+    });
+    return { porCodigo: porCodigo, porEan: porEan, geradoEm: (doc && doc.geradoEm) || null, qtd: Object.keys(porCodigo).length };
+  }
+  function produtoDoCatalogo(catalogo, codigo) {
+    var p = catalogo && catalogo.porCodigo && catalogo.porCodigo[String(codigo == null ? '' : codigo).trim()];
+    return p ? { codigo: String(codigo).trim(), nome: p.n || '', ean: soDigitos(p.e) } : null;
+  }
+
   function linhasDeTransito(itensDocs, notasPorChave, etiquetasPorId, opcoes) {
     var prefixos = (opcoes || {}).ncm || null;
+    var porEan = ((opcoes || {}).catalogo || {}).porEan || null;
     var linhas = [];
     (itensDocs || []).forEach(function (doc) {
       if (!doc || !doc.chave) return;
@@ -102,6 +140,9 @@
           qtd: (it.qtd == null || it.qtd === '') ? null : Number(it.qtd),
           un: it.un == null ? '' : String(it.un),
           ean: soDigitos(it.ean),
+          // So' pelo codigo de barras: errar o codigo interno e' pior do que nao mostrar.
+          codigoInterno: (porEan && soDigitos(it.ean) && porEan[soDigitos(it.ean)]) ? porEan[soDigitos(it.ean)].codigo : '',
+          nomeInterno: (porEan && soDigitos(it.ean) && porEan[soDigitos(it.ean)]) ? porEan[soDigitos(it.ean)].nome : '',
           recebida: recebida,
           cancelada: cancelada,
           previsaoEntrega: (nota && nota.previsaoEntrega) || null,
@@ -136,7 +177,7 @@
   function casaTermo(l, termo) {
     var t = norm(termo);
     if (!t) return true;
-    return norm([l.fornecedor, l.nomeEmitente, l.codigo, l.descricao, l.numero].join(' ')).indexOf(t) !== -1;
+    return norm([l.fornecedor, l.nomeEmitente, l.codigo, l.descricao, l.numero, l.codigoInterno, l.nomeInterno].join(' ')).indexOf(t) !== -1;
   }
 
   // f: { grupo, termos }. grupo: '' = tudo que ainda pede acao ou esta'
@@ -159,6 +200,25 @@
      v: { id, produto, codigo, obs, criadaEm, resolvidaEm }
      ------------------------------------------------------------ */
 
+  // Vermelha pendente que casa EXATO com uma linha em transito (barras, ou
+  // codigo interno vindo do catalogo). { idDaLinha: vermelha }
+  function vermelhasPorLinha(linhas, vermelhas) {
+    var mapa = {};
+    var pendentes = vermelhasPendentes(vermelhas);
+    (linhas || []).forEach(function (l) {
+      if (ENCERRADAS.indexOf(l.situacao) !== -1) return;
+      var v = null;
+      for (var i = 0; i < pendentes.length && !v; i++) {
+        var p = pendentes[i];
+        var ean = soDigitos(p.ean);
+        if ((ean && l.ean && ean === l.ean) ||
+            (l.codigoInterno && p.codigo && String(p.codigo).trim() === l.codigoInterno)) v = p;
+      }
+      if (v) mapa[l.id] = v;
+    });
+    return mapa;
+  }
+
   function vermelhasPendentes(lista) {
     return (lista || []).filter(function (v) { return v && !v.resolvidaEm; })
       .sort(function (a, b) { return String(a.criadaEm || '').localeCompare(String(b.criadaEm || '')); });
@@ -172,6 +232,7 @@
   // NF-e). Sem ele, vale o codigo do item e o nome.
   function dicaDeFaturamento(vermelha, linhas) {
     var ean = soDigitos(vermelha && vermelha.ean);
+    var codInterno = String((vermelha && vermelha.codigo) || '').trim();
     // Vermelha vinda da planilha tem o codigo INTERNO, que nao aparece na
     // NF-e (o da nota e' o do fornecedor): comparar os dois so' confunde.
     var cod = (vermelha && vermelha.origem === 'estoque') ? '' : norm(vermelha && vermelha.codigo);
@@ -180,6 +241,7 @@
     return (linhas || []).filter(function (l) {
       if (ENCERRADAS.indexOf(l.situacao) !== -1) return false;
       if (ean && l.ean && l.ean === ean) return true;
+      if (codInterno && l.codigoInterno && l.codigoInterno === codInterno) return true;
       if (cod && norm(l.codigo) === cod) return true;
       return nome.length >= 4 && norm(l.descricao).indexOf(nome) !== -1;
     });
@@ -396,10 +458,11 @@
       ordem.sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); });
       ordem.forEach(function (forn) {
         h += '<div class="rl-forn">' + e(forn) + '</div>' +
-          '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th>PRODUTO</th>' +
+          '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th class="rl-cod">CÓD</th><th>PRODUTO</th>' +
           '<th class="rl-q">QTD</th><th class="rl-nf">NF · EMISSÃO</th></tr></thead><tbody>';
         porForn[forn].forEach(function (l) {
-          h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.descricao) + '</td>' +
+          h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.codigoInterno || '') + '</td>' +
+            '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
             '<td class="rl-nf">' + e((l.numero ? l.numero + ' · ' : '') + (l.dataEmissao ? App.fmtData(l.dataEmissao) : '')) + '</td></tr>';
         });
@@ -426,7 +489,9 @@
       secaoEstoque('PROMOÇÃO — PARADO, ESTOQUE ACIMA DO MÍNIMO', est.promocao || []);
 
     var retirar = (linhas || []).filter(function (l) { return l.situacao === 'retirar'; });
-    var etiquetar = (linhas || []).filter(function (l) { return l.situacao === 'etiquetar'; });
+    var comVermelha = vermelhasPorLinha(linhas, vermelhas);
+    var trocar = (linhas || []).filter(function (l) { return l.situacao === 'etiquetar' && comVermelha[l.id]; });
+    var etiquetar = (linhas || []).filter(function (l) { return l.situacao === 'etiquetar' && !comVermelha[l.id]; });
     var verm = vermelhasPendentes(vermelhas);
     var hv = '<div class="rl-secao">ETIQUETAS VERMELHAS — SEM ESTOQUE, NÃO FATURADO <span class="rl-qtd">(' + verm.length + ')</span></div>';
     if (!verm.length) hv += '<div class="rl-vazio">Nenhuma etiqueta vermelha pendente.</div>';
@@ -444,6 +509,7 @@
       '<div class="rl-titulo">ETIQUETAS DE PRODUTO EM TRÂNSITO</div>' +
       '<div class="rl-ref">' + e(App.fmtData(hoje)) + (o.hora ? ' ' + e(o.hora) : '') + '</div>' +
       secao('RETIRAR ETIQUETA — MERCADORIA RECEBIDA', retirar, 'Nada para retirar.') +
+      (trocar.length ? secao('TROCAR VERMELHA POR AZUL — FATURADO, TINHA VERMELHA NA GÔNDOLA', trocar, '') : '') +
       secao('COLOCAR ETIQUETA AZUL — FATURADO, A CAMINHO', etiquetar, 'Nada para etiquetar.') +
       hv +
       hEstoque +
@@ -462,6 +528,10 @@
     ordenar: ordenar,
     filtrar: filtrar,
     vermelhasPendentes: vermelhasPendentes,
+    vermelhasPorLinha: vermelhasPorLinha,
+    montarCatalogo: montarCatalogo,
+    expandirCatalogo: expandirCatalogo,
+    produtoDoCatalogo: produtoDoCatalogo,
     dicaDeFaturamento: dicaDeFaturamento,
     lerPlanilhaEstoque: lerPlanilhaEstoque,
     semelhanca: semelhanca,

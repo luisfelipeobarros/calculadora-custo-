@@ -187,6 +187,35 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
   eq('dica de faturamento tambem casa pelo codigo de barras', N.dicaDeFaturamento({ produto: 'x', ean: '7895' }, transito).map(l => l.id), ['T_1']);
 }
 
+// ── Catalogo interno e troca vermelha -> azul ────────────────
+
+{
+  const estoque = [
+    { codigo: '100', nome: 'PISO INTERNO 60X60', ean: '7899000000011', classe: 'Piso cerâmico' },
+    { codigo: '101', nome: 'SEM BARRAS', ean: '', classe: 'Piso cerâmico' },
+    { codigo: '102', nome: 'AMOSTRA', ean: '7899000000028', classe: 'Amostras' }
+  ];
+  const doc = N.montarCatalogo(estoque, '2026-10-15');
+  eq('catalogo: so vendaveis, compacto, com data', [doc.qtd, doc.porCodigo['100'], doc.porCodigo['102'], doc.geradoEm], [2, { n: 'PISO INTERNO 60X60', e: '7899000000011' }, undefined, '2026-10-15']);
+  const cat = N.expandirCatalogo(doc);
+  eq('catalogo expandido: indice por barras so de quem tem', [Object.keys(cat.porEan), cat.porEan['7899000000011'].codigo], [['7899000000011'], '100']);
+  eq('produtoDoCatalogo: acha pelo codigo (com espaco), nao acha o que nao existe',
+    [N.produtoDoCatalogo(cat, ' 100 '), N.produtoDoCatalogo(cat, '999'), N.produtoDoCatalogo(null, '100')],
+    [{ codigo: '100', nome: 'PISO INTERNO 60X60', ean: '7899000000011' }, null, null]);
+  const linhasCat = N.linhasDeTransito([{ chave: 'K', numero: '9', dataEmissao: '2026-10-10', nomeEmitente: 'F', itens: [
+    { n: 1, descricao: 'PISO DO FORNECEDOR', ean: '7899000000011' }, { n: 2, descricao: 'OUTRO', ean: '1' }, { n: 3, descricao: 'SEM EAN' }] }], {}, {}, { catalogo: cat });
+  eq('linha ganha codigo e nome internos so pelo codigo de barras', linhasCat.map(l => l.codigoInterno + '|' + l.nomeInterno), ['100|PISO INTERNO 60X60', '|', '|']);
+  eq('busca acha pelo codigo interno e pelo nome da loja', [N.filtrar(linhasCat, { termos: ['100'] }).length, N.filtrar(linhasCat, { termos: ['interno 60x60'] }).length], [1, 1]);
+  const verm = [{ id: 'v1', codigo: '100', ean: '7899000000011', criadaEm: '2026-10-01' }, { id: 'v2', codigo: '7', ean: '', criadaEm: '2026-10-01' }, { id: 'v3', ean: '7899000000011', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }];
+  eq('vermelha casa com a linha pelas barras (resolvida nao conta)', Object.keys(N.vermelhasPorLinha(linhasCat, verm)).join(','), 'K_1');
+  eq('vermelha casa pelo codigo interno quando a nota tem barras mas a vermelha nao',
+    Object.keys(N.vermelhasPorLinha(linhasCat, [{ id: 'v4', codigo: '100', criadaEm: '2026-10-01' }])).join(','), 'K_1');
+  eq('dica da vermelha tambem pelo codigo interno', N.dicaDeFaturamento({ codigo: '100', produto: 'x' }, linhasCat).map(l => l.id), ['K_1']);
+  const relCat = N.htmlRelatorio(linhasCat, verm, { hoje: '2026-10-15' });
+  eq('relatorio: "trocar vermelha por azul" separado de "colocar azul", com o codigo interno',
+    [/TROCAR VERMELHA POR AZUL[^(]*\(1\)/.test(relCat), /COLOCAR ETIQUETA AZUL[^(]*\(2\)/.test(relCat), relCat.indexOf('<td>100</td>') !== -1], [true, true, true]);
+}
+
 // ── Relatorio ────────────────────────────────────────────────
 
 const rel = N.htmlRelatorio(mistura.concat(linhas), verm, { hoje: '2026-10-08', hora: '09:00:00' });

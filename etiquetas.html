@@ -180,8 +180,9 @@
       <h2 style="margin:0 0 8px;">Etiquetas vermelhas — sem estoque, ainda não faturado</h2>
       <p class="empty-note" style="display:block; margin:0 0 10px;">Registro manual: o produto não tem nota para puxar. Quando um produto parecido aparecer faturado, a linha avisa para trocar a vermelha pela azul.</p>
       <div class="verm-form">
-        <div><label for="vmCodigo">Código</label><input id="vmCodigo" autocomplete="off"></div>
-        <div><label for="vmProduto">Produto *</label><input id="vmProduto" autocomplete="off"></div>
+        <div><label for="vmCodigo">Código interno</label><input id="vmCodigo" autocomplete="off" inputmode="numeric" placeholder="do cadastro"></div>
+        <div><label for="vmProduto">Produto *</label><input id="vmProduto" autocomplete="off">
+          <div class="dica" id="vmDica"></div></div>
         <div><label for="vmObs">Observação (fornecedor, previsão...)</label><input id="vmObs" autocomplete="off"></div>
         <div><button type="button" class="btn" id="vmSalvarBtn">＋ Registrar</button></div>
       </div>
@@ -204,7 +205,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=6"></script>
+<script src="etiquetas-nucleo.js?v=7"></script>
 <script>
 (() => {
   'use strict';
@@ -231,6 +232,8 @@
   let notasPorChave = {};      // estado das notas (noSistema, status, previsaoEntrega)
   let etiquetasPorId = {};     // documentos de `etiquetas` das linhas (chave_n)
   let vermelhas = [];          // documentos de `etiquetas` com tipo 'vermelha'
+  let catalogo = N.expandirCatalogo(null); // codigo interno <-> barras (config/etiquetasProdutos)
+  const CATALOGO_DOC = 'etiquetasProdutos';
   let carregouItens = false, carregouNotas = false, carregouEtiquetas = false;
   let pararNotas = null, pararEtiquetas = null;
   let corteISO = '';
@@ -268,14 +271,14 @@
 
   // ─── Lista ───
   function linhasAtuais(){
-    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId, { ncm: ncmAtual() });
+    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId, { ncm: ncmAtual(), catalogo });
   }
   const fmtQtd = (q) => q == null ? '' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
-  function htmlAcoes(l){
+  function htmlAcoes(l, vermelha){
     const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
     switch(l.situacao){
-      case 'etiquetar':  return b('etiquetar', '🏷 Etiquetei') + b('dispensar', '📦 Com estoque');
+      case 'etiquetar':  return (vermelha ? b('trocar', '🔴→🔵 Troquei pela azul') : b('etiquetar', '🏷 Etiquetei')) + b('dispensar', '📦 Com estoque');
       case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩ Desfazer');
       case 'transito':   return b('desfazer', '↩ Desfazer');
       case 'retirar':    return b('retirar', '✔ Retirei a etiqueta');
@@ -331,6 +334,7 @@
       return;
     }
     const lista = N.ordenar(N.filtrar(linhas, { grupo, termos: App.termosDaBusca($('etqBusca')) }));
+    const comVermelha = N.vermelhasPorLinha(linhas, vermelhas);
     if(!lista.length){
       $('etqLista').innerHTML = '';
       $('etqListaMsg').textContent = linhas.length ? 'Nada com esse filtro.'
@@ -345,11 +349,14 @@
       lista.map(l => '<tr class="linha-' + l.situacao + '">' +
         '<td data-r="Fornecedor">' + escapeHtml(l.fornecedor) + '</td>' +
         '<td data-r="Emissão"><span class="mono">' + escapeHtml(App.fmtData(l.dataEmissao)) + (l.numero ? ' · NF ' + escapeHtml(l.numero) : '') + '</span></td>' +
-        '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) + '</td>' +
+        '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) +
+          (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') + '</div>' : '') +
+          (comVermelha[l.id] ? '<div class="dica" style="color:var(--loss);">🔴 Tem etiqueta vermelha na gôndola' + (comVermelha[l.id].criadaEm ? ' desde ' + escapeHtml(App.fmtData(comVermelha[l.id].criadaEm)) : '') + ' — trocar pela azul.</div>' : '') +
+        '</td>' +
         '<td data-r="Qtd">' + escapeHtml(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
         '<td data-r="Situação"><span class="si ' + N.SITUACOES[l.situacao].classe + '">' + escapeHtml(N.SITUACOES[l.situacao].rotulo) + '</span></td>' +
         '<td data-r="Recebimento">' + htmlRecebimento(l) + '</td>' +
-        '<td class="acoes sem-rotulo">' + htmlAcoes(l) + '</td>' +
+        '<td class="acoes sem-rotulo">' + htmlAcoes(l, comVermelha[l.id]) + '</td>' +
       '</tr>').join('') +
       '</tbody></table>';
   }
@@ -364,13 +371,22 @@
     'desfazer-retirada': () => ({ retirada: false, retiradaEm: null })
   };
   App.delegar($('etqLista'), 'click', '[data-acao]', (b) => {
-    const monta = CAMPOS_POR_ACAO[b.dataset.acao];
-    const l = linhasAtuais().find(x => x.id === b.dataset.id);
+    const acao = b.dataset.acao;
+    const monta = CAMPOS_POR_ACAO[acao === 'trocar' ? 'etiquetar' : acao];
+    const linhas = linhasAtuais();
+    const l = linhas.find(x => x.id === b.dataset.id);
     if(!monta || !l) return;
     b.disabled = true;
-    const campos = Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, monta());
-    App.comAuth(() => db.collection('etiquetas').doc(l.id).set(campos, { merge: true }))
-      .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
+    const agora = firebase.firestore.FieldValue.serverTimestamp();
+    const campos = Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: agora }, monta());
+    // "Troquei pela azul": marca a azul E encerra a vermelha, de uma vez.
+    const vermelha = acao === 'trocar' ? N.vermelhasPorLinha([l], vermelhas)[l.id] : null;
+    App.comAuth(() => {
+      const batch = db.batch();
+      batch.set(db.collection('etiquetas').doc(l.id), campos, { merge: true });
+      if(vermelha) batch.set(db.collection('etiquetas').doc(vermelha.id), { resolvidaEm: App.hojeISO(), atualizadoEm: agora }, { merge: true });
+      return batch.commit();
+    }).catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
     // A escuta de `etiquetas` redesenha a lista sozinha.
   });
 
@@ -399,16 +415,30 @@
       }).join('') + '</tbody></table>';
   }
   $('etqVermelhaBtn').addEventListener('click', () => { irParaGrupo('vermelhas'); $('vmProduto').focus(); });
+  // Codigo interno digitado: o catalogo preenche nome e codigo de barras.
+  let vmEan = '';
+  function completarPeloCodigo(){
+    const p = N.produtoDoCatalogo(catalogo, $('vmCodigo').value);
+    vmEan = p ? p.ean : '';
+    if(p){
+      if(p.nome) $('vmProduto').value = p.nome;
+      $('vmDica').textContent = p.ean ? 'Código de barras ' + p.ean + ': quando a nota chegar, o app avisa para trocar pela azul.' : 'Produto sem código de barras no cadastro: o aviso de faturamento vai depender do nome.';
+    } else {
+      $('vmDica').textContent = $('vmCodigo').value.trim() && catalogo.qtd ? 'Código não está no catálogo importado (importe o estoque para atualizar).' : '';
+    }
+  }
+  $('vmCodigo').addEventListener('change', completarPeloCodigo);
+  $('vmCodigo').addEventListener('input', App.debounce(completarPeloCodigo, 300));
   $('vmSalvarBtn').addEventListener('click', () => {
     const produto = $('vmProduto').value.trim();
     if(!produto){ App.toast('Informe o produto.', 'info'); $('vmProduto').focus(); return; }
     const btn = $('vmSalvarBtn');
     btn.disabled = true;
     App.comAuth(() => db.collection('etiquetas').add({
-      tipo: 'vermelha', produto, codigo: $('vmCodigo').value.trim() || null, obs: $('vmObs').value.trim() || null,
+      tipo: 'vermelha', produto, codigo: $('vmCodigo').value.trim() || null, ean: vmEan || null, obs: $('vmObs').value.trim() || null,
       criadaEm: App.hojeISO(), resolvidaEm: null, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
     })).then(() => {
-      $('vmProduto').value = ''; $('vmCodigo').value = ''; $('vmObs').value = '';
+      $('vmProduto').value = ''; $('vmCodigo').value = ''; $('vmObs').value = ''; $('vmDica').textContent = ''; vmEan = '';
       App.toast('Etiqueta vermelha registrada.', 'ok');
     }).catch(e => App.toastErro('Erro ao gravar', e)).then(() => { btn.disabled = false; });
   });
@@ -434,6 +464,19 @@
   let classificacao = null;     // ultimo resultado de N.sugestoesVermelhas (vai para o relatorio)
   const CONFIG_ESTOQUE = 'etiquetasEstoque';
 
+  // Catalogo interno: um documento so', regravado a cada importacao.
+  function gravarCatalogo(itens){
+    const doc = N.montarCatalogo(itens, App.hojeISO());
+    if(!doc.qtd) return Promise.resolve();
+    return App.comAuth(() => db.collection('config').doc(CATALOGO_DOC).set(doc))
+      .then(() => { catalogo = N.expandirCatalogo(doc); render(); })
+      .catch(e => App.toastErro('Erro ao guardar o catálogo de produtos', e));
+  }
+  function lerCatalogo(){
+    return App.comAuth(() => db.collection('config').doc(CATALOGO_DOC).get())
+      .then(d => { catalogo = N.expandirCatalogo(d.exists ? d.data() : null); })
+      .catch(e => { console.error('catálogo:', e); });
+  }
   function lerConfigEstoque(){
     return App.comAuth(() => db.collection('config').doc(CONFIG_ESTOQUE).get()).then(doc => {
       const d = doc.exists ? doc.data() : {};
@@ -485,6 +528,7 @@
         return;
       }
       estoque = lido.itens;
+      gravarCatalogo(lido.itens);
       await lerConfigEstoque();
       $('estMsg').textContent = lido.itens.length + ' produto(s) lidos de ' + arq.name +
         (lido.problemas.length ? ' · ' + lido.problemas.length + ' linha(s) com problema: ' + lido.problemas.slice(0, 3).join('; ') : '');
@@ -771,7 +815,8 @@
           chave: LEITURA_ITENS, hoje, forcar
         })),
         App.comAuth(() => escutarEstadoNotas(sinc)),
-        App.comAuth(() => escutarEtiquetas())
+        App.comAuth(() => escutarEtiquetas()),
+        lerCatalogo()
       ]);
       const mapa = {};
       leitura.docs.forEach(doc => { const d = doc.data(); if((d.dataEmissao || '') >= corteISO) mapa[doc.id] = { chave: doc.id, ...d }; });
@@ -785,7 +830,8 @@
       await pendenciasForaDaJanela();
       carregouItens = true;
       setStatus(Object.keys(itensPorChave).length + ' nota(s) nos últimos ' + DIAS_TRANSITO + ' dias · ao vivo' +
-        (sinc ? ' · lendo só o que mudou' : ''));
+        (sinc ? ' · lendo só o que mudou' : '') +
+        (catalogo.qtd ? ' · catálogo: ' + catalogo.qtd + ' produtos' + (catalogo.geradoEm ? ' (' + App.fmtData(catalogo.geradoEm) + ')' : '') : ' · sem catálogo: importe o estoque uma vez'));
       render();
     }catch(e){
       console.error(e);
