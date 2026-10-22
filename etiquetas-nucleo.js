@@ -196,6 +196,61 @@
     });
   }
 
+  /* ------------------------------------------------------------
+     Agrupamento: um produto por linha (pedido de 22/10/2026)
+
+     A etiqueta e' por produto, nao por nota: seis NF-e do mesmo piso,
+     do mesmo fornecedor, na mesma situacao, viram UMA linha com a
+     quantidade somada e "6 NF (47904–47909)". Situacoes diferentes
+     (tres notas ja' recebidas, tres a caminho) ficam em linhas
+     separadas — e' o que o relatorio precisa dizer. A acao vale para o
+     grupo inteiro: por baixo continua um registro por item de nota.
+     ------------------------------------------------------------ */
+  function chaveDoGrupo(l) {
+    return [l.situacao, l.tipoEtiqueta || '', l.fornecedor, norm(l.descricao), norm(l.un), l.codigoInterno || '', l.cancelada ? 1 : 0].join('|');
+  }
+  function agrupar(linhas) {
+    var grupos = [], por = {};
+    (linhas || []).forEach(function (l) {
+      var k = chaveDoGrupo(l);
+      var g = por[k];
+      if (!g) {
+        g = Object.assign({}, l, { ids: [l.id], linhas: [l], notas: 1,
+          numeros: l.numero ? [l.numero] : [], dataEmissaoFim: l.dataEmissao });
+        por[k] = g;
+        grupos.push(g);
+        return;
+      }
+      g.ids.push(l.id); g.linhas.push(l); g.notas++;
+      if (l.qtd != null) g.qtd = (g.qtd || 0) + l.qtd;
+      if (l.numero && g.numeros.indexOf(l.numero) === -1) g.numeros.push(l.numero);
+      if (l.dataEmissao && (!g.dataEmissao || l.dataEmissao < g.dataEmissao)) g.dataEmissao = l.dataEmissao;
+      if (l.dataEmissao && (!g.dataEmissaoFim || l.dataEmissao > g.dataEmissaoFim)) g.dataEmissaoFim = l.dataEmissao;
+      if (l.previsaoEntrega && (!g.previsaoEntrega || l.previsaoEntrega > g.previsaoEntrega)) g.previsaoEntrega = l.previsaoEntrega;
+      g.possivelNovo = g.possivelNovo || l.possivelNovo;
+    });
+    grupos.forEach(function (g) {
+      g.numeros.sort(function (a, b) { return String(a).localeCompare(String(b), 'pt-BR', { numeric: true }); });
+      g.id = g.ids.join('|');
+    });
+    return grupos;
+  }
+  // "6 NF (47904–47909)" / "NF 1753825"
+  function textoNotas(g) {
+    var nums = g.numeros || (g.numero ? [g.numero] : []);
+    if (!nums.length) return '';
+    if (nums.length === 1) return 'NF ' + nums[0];
+    return nums.length + ' NF (' + nums[0] + '–' + nums[nums.length - 1] + ')';
+  }
+  // "05/10/2026" / "05/10 a 09/10/2026"
+  function textoEmissao(g) {
+    if (!g.dataEmissao) return '';
+    var fim = g.dataEmissaoFim || g.dataEmissao;
+    if (fim === g.dataEmissao) return App.fmtData(g.dataEmissao);
+    var a = App.fmtData(g.dataEmissao), b = App.fmtData(fim);
+    return (a.slice(-4) === b.slice(-4) ? a.slice(0, 5) : a) + ' a ' + b;
+  }
+
   function casaTermo(l, termo) {
     var t = norm(termo);
     if (!t) return true;
@@ -473,7 +528,7 @@
       if (!lista.length) return h + '<div class="rl-vazio">' + e(vazio) + '</div>';
       var porForn = {};
       var ordem = [];
-      ordenar(lista).forEach(function (l) {
+      ordenar(agrupar(lista)).forEach(function (l) {
         if (!porForn[l.fornecedor]) { porForn[l.fornecedor] = []; ordem.push(l.fornecedor); }
         porForn[l.fornecedor].push(l);
       });
@@ -488,7 +543,7 @@
             (l.possivelNovo ? ' <b>· NOVO? (não está no cadastro)</b>' : '') +
             (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
-            '<td class="rl-nf">' + e((l.numero ? l.numero + ' · ' : '') + (l.dataEmissao ? App.fmtData(l.dataEmissao) : '')) + '</td></tr>';
+            '<td class="rl-nf">' + e([textoNotas(l), textoEmissao(l)].filter(Boolean).join(' · ')) + '</td></tr>';
         });
         h += '</tbody></table>';
       });
@@ -554,6 +609,9 @@
     filtrar: filtrar,
     vermelhasPendentes: vermelhasPendentes,
     vermelhasPorLinha: vermelhasPorLinha,
+    agrupar: agrupar,
+    textoNotas: textoNotas,
+    textoEmissao: textoEmissao,
     montarCatalogo: montarCatalogo,
     expandirCatalogo: expandirCatalogo,
     produtoDoCatalogo: produtoDoCatalogo,

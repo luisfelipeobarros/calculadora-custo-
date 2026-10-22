@@ -104,6 +104,24 @@ eq('busca com chips: basta um termo casar, sem acento, em fornecedor/produto/cod
    N.filtrar(linhas, { termos: ['argamassa', 'piso'] }).map(l => l.id),
    N.filtrar(linhas, { termos: ['nada'] }).length], [['A_2'], ['A_1', 'B_1'], 0]);
 
+// ── Agrupamento: um produto por linha ────────────────────────
+
+{
+  const seis = N.linhasDeTransito([
+    { chave: 'N1', numero: '47904', dataEmissao: '2026-10-05', nomeEmitente: 'CERAMICA X', itens: [{ n: 1, descricao: 'NATURALLE BIANCO 45X45', qtd: 1284.48, un: 'M2' }] },
+    { chave: 'N2', numero: '47905', dataEmissao: '2026-10-05', nomeEmitente: 'CERAMICA X', itens: [{ n: 1, descricao: 'NATURALLE BIANCO 45X45', qtd: 428.16, un: 'M2' }] },
+    { chave: 'N3', numero: '47909', dataEmissao: '2026-10-09', nomeEmitente: 'CERAMICA X', itens: [{ n: 1, descricao: 'Naturalle Bianco 45x45', qtd: 428.16, un: 'm2' }, { n: 2, descricao: 'OUTRO 60X60', qtd: 10, un: 'M2' }] },
+    { chave: 'N4', numero: '47910', dataEmissao: '2026-10-09', nomeEmitente: 'CERAMICA X', itens: [{ n: 1, descricao: 'NATURALLE BIANCO 45X45', qtd: 100, un: 'M2' }] }
+  ], { N4: { noSistema: true } }, { N4_1: { etiquetada: true } });
+  const g = N.agrupar(seis);
+  eq('mesmo produto, mesmo fornecedor, mesma situacao: uma linha; situacao diferente: outra', g.map(x => x.ids.join('+')), ['N1_1+N2_1+N3_1', 'N3_2', 'N4_1']);
+  eq('quantidade somada, notas e periodo', [g[0].qtd, g[0].notas, N.textoNotas(g[0]), N.textoEmissao(g[0])], [2140.8, 3, '3 NF (47904–47909)', '05/10 a 09/10/2026']);
+  eq('linha de uma nota so: texto simples', [N.textoNotas(g[1]), N.textoEmissao(g[1]), g[1].id], ['NF 47909', '09/10/2026', 'N3_2']);
+  eq('o id do grupo junta os ids (a acao grava um registro por item)', g[0].id, 'N1_1|N2_1|N3_1');
+  eq('contagem e ordem funcionam sobre grupos', [N.contar(g).etiquetar, N.contar(g).retirar, N.ordenar(g)[0].id], [2, 1, 'N4_1']);
+  eq('relatorio agrupa: a caminho vira uma linha com 3 NF; a recebida fica na secao de retirar', (r => [(r.match(/NATURALLE BIANCO 45X45/g) || []).length, r.indexOf('3 NF (47904–47909)') !== -1])(N.htmlRelatorio(seis, [], { hoje: '2026-10-22' })), [2, true]);
+}
+
 // ── Vermelhas ────────────────────────────────────────────────
 
 const verm = [

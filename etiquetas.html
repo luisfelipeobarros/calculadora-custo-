@@ -205,7 +205,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=9"></script>
+<script src="etiquetas-nucleo.js?v=10"></script>
 <script>
 (() => {
   'use strict';
@@ -297,7 +297,7 @@
 
   function render(){
     const linhas = linhasAtuais();
-    const c = N.contar(linhas);
+    const c = N.contar(N.agrupar(linhas)); // os cartoes contam produtos, como a lista
     const verm = N.vermelhasPendentes(vermelhas);
     const pronto = carregouItens && carregouNotas && carregouEtiquetas;
 
@@ -336,8 +336,8 @@
       $('etqListaMsg').textContent = 'Carregando...';
       return;
     }
-    const lista = N.ordenar(N.filtrar(linhas, { grupo, termos: App.termosDaBusca($('etqBusca')) }));
-    const comVermelha = N.vermelhasPorLinha(linhas, vermelhas);
+    const lista = N.ordenar(N.agrupar(N.filtrar(linhas, { grupo, termos: App.termosDaBusca($('etqBusca')) })));
+    const comVermelha = N.vermelhasPorLinha(lista, vermelhas);
     if(!lista.length){
       $('etqLista').innerHTML = '';
       $('etqListaMsg').textContent = linhas.length ? 'Nada com esse filtro.'
@@ -351,7 +351,7 @@
       '</tr></thead><tbody>' +
       lista.map(l => '<tr class="linha-' + l.situacao + '">' +
         '<td data-r="Fornecedor">' + escapeHtml(l.fornecedor) + '</td>' +
-        '<td data-r="Emissão"><span class="mono">' + escapeHtml(App.fmtData(l.dataEmissao)) + (l.numero ? ' · NF ' + escapeHtml(l.numero) : '') + '</span></td>' +
+        '<td data-r="Emissão"><span class="mono">' + escapeHtml([N.textoEmissao(l), N.textoNotas(l)].filter(Boolean).join(' · ')) + '</span></td>' +
         '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) +
           (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') +
             (l.estoqueCadastro != null ? ' · estoque ' + escapeHtml(String(l.estoqueCadastro)) + (catalogo.geradoEm ? ' em ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') : '') + '</div>' : '') +
@@ -377,20 +377,22 @@
     'retirar':           () => ({ retirada: true, retiradaEm: App.hojeISO() }),
     'desfazer-retirada': () => ({ retirada: false, retiradaEm: null })
   };
+  // A linha da tela e' um GRUPO (um produto, uma ou varias notas): a
+  // acao grava um registro por item de nota, num lote so'.
   App.delegar($('etqLista'), 'click', '[data-acao]', (b) => {
     const acao = b.dataset.acao;
     const monta = CAMPOS_POR_ACAO[acao === 'trocar' ? 'etiquetar' : acao];
-    const linhas = linhasAtuais();
-    const l = linhas.find(x => x.id === b.dataset.id);
-    if(!monta || !l) return;
+    const porId = {};
+    linhasAtuais().forEach(x => { porId[x.id] = x; });
+    const itens = b.dataset.id.split('|').map(id => porId[id]).filter(Boolean);
+    if(!monta || !itens.length) return;
     b.disabled = true;
     const agora = firebase.firestore.FieldValue.serverTimestamp();
-    const campos = Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: agora }, monta());
     // "Troquei pela azul": marca a azul E encerra a vermelha, de uma vez.
-    const vermelha = acao === 'trocar' ? N.vermelhasPorLinha([l], vermelhas)[l.id] : null;
+    const vermelha = acao === 'trocar' ? N.vermelhasPorLinha([itens[0]], vermelhas)[itens[0].id] : null;
     App.comAuth(() => {
       const batch = db.batch();
-      batch.set(db.collection('etiquetas').doc(l.id), campos, { merge: true });
+      itens.forEach(l => batch.set(db.collection('etiquetas').doc(l.id), Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: agora }, monta()), { merge: true }));
       if(vermelha) batch.set(db.collection('etiquetas').doc(vermelha.id), { resolvidaEm: App.hojeISO(), atualizadoEm: agora }, { merge: true });
       return batch.commit();
     }).catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
