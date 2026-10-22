@@ -29,6 +29,12 @@
   }
   var norm = App.normalizarTexto;
   function soDigitos(v) { return String(v == null ? '' : v).replace(/[^0-9]/g, ''); }
+  // Timestamp do Firestore (ou Date) -> 'aaaa-mm-dd' local; nulo se nao houver.
+  function dataDoCarimbo(v) {
+    if (!v) return null;
+    var d = typeof v.toDate === 'function' ? v.toDate() : (v instanceof Date ? v : null);
+    return d && !isNaN(d.getTime()) ? App.iso(d) : null;
+  }
 
   // Na ordem em que a lista mostra: primeiro o que exige acao.
   var SITUACOES = {
@@ -137,6 +143,10 @@
       var descricoes = itens.map(function (it) { return it && it.descricao; });
       var fornecedor = App.rotularFornecedor(doc.nomeEmitente, descricoes);
       var recebida = cancelada || !!(nota && nota.noSistema === true);
+      // Data do recebimento: noSistemaEm (gravada pelo Apps Script ao dar
+      // entrada) ou, na falta, o dia do carimbo da nota — que e' o da
+      // entrada, tanto pelo script quanto pela marcacao manual no app.
+      var recebidaEm = !recebida || cancelada ? null : (nota.noSistemaEm || dataDoCarimbo(nota.alteradoEm));
       itens.forEach(function (it, i) {
         it = it || {};
         if (!ncmCasa(it.ncm, prefixos)) return;
@@ -158,6 +168,7 @@
           codigoInterno: (porEan && soDigitos(it.ean) && porEan[soDigitos(it.ean)]) ? porEan[soDigitos(it.ean)].codigo : '',
           nomeInterno: (porEan && soDigitos(it.ean) && porEan[soDigitos(it.ean)]) ? porEan[soDigitos(it.ean)].nome : '',
           recebida: recebida,
+          recebidaEm: recebidaEm,
           cancelada: cancelada,
           previsaoEntrega: (nota && nota.previsaoEntrega) || null,
           // Produto novo? Tem codigo de barras na nota e NAO esta' no cadastro
@@ -227,6 +238,7 @@
       if (l.dataEmissao && (!g.dataEmissao || l.dataEmissao < g.dataEmissao)) g.dataEmissao = l.dataEmissao;
       if (l.dataEmissao && (!g.dataEmissaoFim || l.dataEmissao > g.dataEmissaoFim)) g.dataEmissaoFim = l.dataEmissao;
       if (l.previsaoEntrega && (!g.previsaoEntrega || l.previsaoEntrega > g.previsaoEntrega)) g.previsaoEntrega = l.previsaoEntrega;
+      if (l.recebidaEm && (!g.recebidaEm || l.recebidaEm > g.recebidaEm)) g.recebidaEm = l.recebidaEm; // a ultima entrada
       g.possivelNovo = g.possivelNovo || l.possivelNovo;
     });
     grupos.forEach(function (g) {
@@ -541,7 +553,8 @@
           h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.codigoInterno || '') + '</td>' +
             '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') +
             (l.possivelNovo ? ' <b>· NOVO? (não está no cadastro)</b>' : '') +
-            (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') + '</td>' +
+            (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') +
+            (l.recebidaEm ? ' <span class="rl-qtd">· recebida em ' + e(App.fmtData(l.recebidaEm)) + '</span>' : '') + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
             '<td class="rl-nf">' + e([textoNotas(l), textoEmissao(l)].filter(Boolean).join(' · ')) + '</td></tr>';
         });

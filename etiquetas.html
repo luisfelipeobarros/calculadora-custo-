@@ -205,7 +205,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=10"></script>
+<script src="etiquetas-nucleo.js?v=11"></script>
 <script>
 (() => {
   'use strict';
@@ -291,7 +291,7 @@
   }
   function htmlRecebimento(l){
     if(l.cancelada) return '<span class="si si-retirar" title="A NF-e foi cancelada: a mercadoria não vem">NF cancelada</span>';
-    if(l.recebida) return '<span class="si si-concluida">Recebida</span>';
+    if(l.recebida) return '<span class="si si-concluida">Recebida' + (l.recebidaEm ? ' ' + escapeHtml(App.fmtData(l.recebidaEm)) : '') + '</span>';
     return '<span class="mono">em trânsito' + (l.previsaoEntrega ? ' · prev. ' + escapeHtml(App.fmtData(l.previsaoEntrega)) : '') + '</span>';
   }
 

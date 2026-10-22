@@ -65,6 +65,18 @@ eq('situacoes: retirar, concluida, dispensada', linhas.map(l => l.situacao), ['r
 eq('quantidade em texto vira numero; unidade e codigo vem junto',
   [linhas[1].qtd, linhas[1].un, linhas[1].codigo], [5, 'UN', 'P2']);
 eq('recebimento e previsao vem da nota', [linhas[0].recebida, linhas[2].recebida, linhas[2].previsaoEntrega], [true, false, '2026-10-10']);
+{
+  const ts = { toDate: () => new Date(2026, 9, 20, 15, 30) }; // Timestamp do Firestore, 20/10/2026 local
+  const docs = [{ chave: 'R', itens: [{ n: 1, descricao: 'x' }] }];
+  eq('data do recebimento: noSistemaEm do script vence; senao o dia do carimbo; nao recebida nao tem',
+    [N.linhasDeTransito(docs, { R: { noSistema: true, noSistemaEm: '2026-10-19', alteradoEm: ts } }, {})[0].recebidaEm,
+     N.linhasDeTransito(docs, { R: { noSistema: true, alteradoEm: ts } }, {})[0].recebidaEm,
+     N.linhasDeTransito(docs, { R: { noSistema: true } }, {})[0].recebidaEm,
+     N.linhasDeTransito(docs, { R: { alteradoEm: ts } }, {})[0].recebidaEm],
+    ['2026-10-19', '2026-10-20', null, null]);
+  eq('relatorio mostra a data do recebimento no retirar',
+    N.htmlRelatorio(N.linhasDeTransito(docs, { R: { noSistema: true, noSistemaEm: '2026-10-19' } }, { R_1: { etiquetada: true } }), [], { hoje: '2026-10-22' }).indexOf('recebida em 19/10/2026') !== -1, true);
+}
 eq('fornecedor passa pela regra comum (nome cru fica guardado)', [linhas[0].fornecedor, linhas[0].nomeEmitente], ['Fornecedor <X>', 'Fornecedor <X>']);
 eq('nota que nao esta carregada conta como nao recebida',
   N.linhasDeTransito([{ chave: 'Z', itens: [{ descricao: 'y' }] }], {}, {})[0].situacao, 'etiquetar');
