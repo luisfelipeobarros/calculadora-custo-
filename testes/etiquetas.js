@@ -266,6 +266,28 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
     [/TROCAR VERMELHA POR AZUL[^(]*\(1\)/.test(relCat), /COLOCAR ETIQUETA AZUL[^(]*\(2\)/.test(relCat), relCat.indexOf('<td>100</td>') !== -1], [true, true, true]);
 }
 
+// ── Saldao registrado ────────────────────────────────────────
+
+{
+  const cat = N.expandirCatalogo({ porCodigo: { '10': { n: 'A', e: '1', q: 0 }, '11': { n: 'B', e: '2', q: 7 } } });
+  const sald = [
+    { id: 's1', codigo: '11', produto: 'B', local: 'externo', estoqueInicial: 20, criadaEm: '2026-10-01' },
+    { id: 's2', codigo: '10', produto: 'A', local: 'interno', estoqueInicial: 5, criadaEm: '2026-10-02' },
+    { id: 's3', codigo: '12', produto: 'C', criadaEm: '2026-09-01', encerradaEm: '2026-09-20' },
+    { id: 's4', codigo: '13', produto: 'D', criadaEm: '2026-10-03' }
+  ];
+  eq('saldoes ativos: sem os encerrados, interno antes de externo, por nome', N.saldoesAtivos(sald).map(s => s.id), ['s2', 's4', 's1']);
+  eq('estoque do saldao pelo catalogo: atual, saiu, zerou, sem dado',
+    [N.estoqueDoSaldao(sald[0], cat), N.estoqueDoSaldao(sald[1], cat), N.estoqueDoSaldao(sald[3], cat)],
+    [{ inicial: 20, atual: 7, saiu: 13, zerado: false, semDado: false }, { inicial: 5, atual: 0, saiu: 5, zerado: true, semDado: false }, { inicial: null, atual: null, saiu: null, zerado: false, semDado: true }]);
+  eq('quem esta no saldao registrado conta como marcado na classificacao (a marca antiga vence)',
+    N.marcadosComSaldao({ '10': { tipo: 'promocao' } }, sald), { '10': { tipo: 'promocao' }, '11': { tipo: 'saldao', em: '2026-10-01', registro: true }, '13': { tipo: 'saldao', em: '2026-10-03', registro: true } });
+  const rel = N.htmlRelatorio([], [], { hoje: '2026-10-22', saldoes: sald, catalogo: cat });
+  eq('relatorio: saldao em andamento por local, com estoque e ZEROU',
+    [/SALDÃO EM ANDAMENTO[^(]*\(3\)/.test(rel), rel.indexOf('Interno (2)') !== -1, rel.indexOf('Externo (1)') !== -1, rel.indexOf('7 de 20') !== -1, rel.indexOf('ZEROU') !== -1, rel.indexOf('>C<') === -1],
+    [true, true, true, true, true, true]);
+}
+
 // ── Relatorio ────────────────────────────────────────────────
 
 const rel = N.htmlRelatorio(mistura.concat(linhas), verm, { hoje: '2026-10-08', hora: '09:00:00' });

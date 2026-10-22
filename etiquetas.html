@@ -24,7 +24,8 @@
      tabela aparece inteira no computador. */
   .wrap{ padding:16px 12px 60px; max-width:1100px; margin:0 auto; }
 
-  .etq-resumo{ display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:12px; }
+  .etq-resumo{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:12px; }
+  .si-saldao{ background:#F5EAD2; color:#8A6414; border-color:#8A6414; }
   .etq-kpi{ background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-align:left; font:inherit; color:inherit; cursor:pointer; }
   .etq-kpi[aria-pressed="true"]{ outline:2px solid var(--brick); }
   .etq-kpi .k-rot{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:block; }
@@ -137,6 +138,7 @@
     <div class="etq-acoes">
       <button type="button" class="btn" id="etqImprimirBtn">🖨 Imprimir relatório</button>
       <button type="button" class="btn secondary" id="etqVermelhaBtn">🔴 Etiqueta vermelha</button>
+      <button type="button" class="btn secondary" id="etqSaldaoBtn" title="Produto que foi para o saldão (interno ou externo), com o estoque acompanhado pelo catálogo">🏷 Saldão</button>
       <button type="button" class="btn secondary" id="etqEstoqueBtn" title="Relatório Estoque - Grade do sistema: sugere as etiquetas vermelhas">📥 Importar estoque</button>
       <input type="file" id="etqEstoqueArquivo" accept=".xlsx,.xls,.csv" style="display:none;">
       <button type="button" class="btn secondary" id="etqRecarregarBtn" title="Relê tudo do servidor">⟳ Recarregar</button>
@@ -190,6 +192,29 @@
       <p class="empty-note" id="vmMsg" style="display:block;"></p>
     </div>
 
+    <!-- Saldao: registro proprio, so' aparece no chip "Saldao". -->
+    <div class="card" id="etqSaldao" style="display:none; margin-bottom:12px;">
+      <h2 style="margin:0 0 8px;">Saldão — interno e externo</h2>
+      <p class="empty-note" style="display:block; margin:0 0 10px;">Registre pelo código interno: nome, código de barras e estoque vêm do catálogo. A cada importação do estoque a lista mostra quanto saiu e avisa quando zerou.</p>
+      <div class="verm-form">
+        <div><label for="sdCodigo">Código interno</label><input id="sdCodigo" autocomplete="off" inputmode="numeric" placeholder="do cadastro"></div>
+        <div><label for="sdProduto">Produto *</label><input id="sdProduto" autocomplete="off"><div class="dica" id="sdDica"></div></div>
+        <div><label for="sdLocal">Local</label><select id="sdLocal"><option value="interno">Interno</option><option value="externo">Externo</option></select></div>
+        <div><button type="button" class="btn" id="sdSalvarBtn">＋ Registrar</button></div>
+      </div>
+      <div class="verm-form" style="margin-top:8px; grid-template-columns:1fr;">
+        <div><label for="sdObs">Observação</label><input id="sdObs" autocomplete="off" placeholder="preço, motivo, fornecedor..."></div>
+      </div>
+      <div class="etq-filtros" id="sdChips" style="margin-top:10px;">
+        <button type="button" class="chip-filtro" data-local="" aria-pressed="true">Todos</button>
+        <button type="button" class="chip-filtro" data-local="interno" aria-pressed="false">Interno</button>
+        <button type="button" class="chip-filtro" data-local="externo" aria-pressed="false">Externo</button>
+        <button type="button" class="chip-filtro" data-local="encerrados" aria-pressed="false">Encerrados</button>
+      </div>
+      <div id="sdLista" style="margin-top:8px;"></div>
+      <p class="empty-note" id="sdMsg" style="display:block;"></p>
+    </div>
+
     <div id="etqLista"></div>
     <p class="empty-note" id="etqListaMsg" style="display:block;"></p>
 
@@ -205,7 +230,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=11"></script>
+<script src="etiquetas-nucleo.js?v=12"></script>
 <script>
 (() => {
   'use strict';
@@ -232,6 +257,8 @@
   let notasPorChave = {};      // estado das notas (noSistema, status, previsaoEntrega)
   let etiquetasPorId = {};     // documentos de `etiquetas` das linhas (chave_n)
   let vermelhas = [];          // documentos de `etiquetas` com tipo 'vermelha'
+  let saldoes = [];            // documentos de `etiquetas` com tipo 'saldao'
+  let sdLocal = '';            // chip do saldao: '', 'interno', 'externo', 'encerrados'
   let catalogo = N.expandirCatalogo(null); // codigo interno <-> barras (config/etiquetasProdutos)
   const CATALOGO_DOC = 'etiquetasProdutos';
   let carregouItens = false, carregouNotas = false, carregouEtiquetas = false;
@@ -259,7 +286,7 @@
   // ─── Chips ───
   const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
     ['azul', '🔵 Só azul'], ['naoExposto', '🆕 Só não exposto'],
-    ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
+    ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas'], ['saldao', '🏷 Saldão']];
   $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
     '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');
   function irParaGrupo(g){
@@ -305,7 +332,8 @@
       ['retirar', 'Retirar etiqueta', c.retirar, c.retirar ? 'alerta' : ''],
       ['etiquetar', 'Para etiquetar', c.etiquetar, 'azul'],
       ['transito', 'Etiquetadas em trânsito', c.transito + c.naoExposto, ''],
-      ['vermelhas', 'Vermelhas pendentes', verm.length, verm.length ? 'alerta' : '']
+      ['vermelhas', 'Vermelhas pendentes', verm.length, verm.length ? 'alerta' : ''],
+      ['saldao', 'Em saldão', N.saldoesAtivos(saldoes).length, '']
     ].map(([g, rot, val, cls]) =>
       '<button type="button" class="etq-kpi" data-g="' + g + '" aria-pressed="' + (grupo === g ? 'true' : 'false') + '">' +
       '<span class="k-rot">' + rot + '</span><span class="k-val ' + cls + '">' + (pronto ? val : '…') + '</span></button>').join('');
@@ -324,6 +352,13 @@
     }
 
     $('etqVermelhas').style.display = grupo === 'vermelhas' ? '' : 'none';
+    $('etqSaldao').style.display = grupo === 'saldao' ? '' : 'none';
+    if(grupo === 'saldao'){
+      renderSaldao();
+      $('etqLista').innerHTML = '';
+      $('etqListaMsg').textContent = '';
+      return;
+    }
     if(grupo === 'vermelhas'){
       renderVermelhas(linhas);
       $('etqLista').innerHTML = '';
@@ -424,6 +459,94 @@
       }).join('') + '</tbody></table>';
   }
   $('etqVermelhaBtn').addEventListener('click', () => { irParaGrupo('vermelhas'); $('vmProduto').focus(); });
+
+  // ─── Saldao: registro proprio ───
+  let sdEan = '', sdEstoque = null;
+  function completarSaldao(){
+    const p = N.produtoDoCatalogo(catalogo, $('sdCodigo').value);
+    sdEan = p ? p.ean : ''; sdEstoque = p ? p.qtd : null;
+    if(p){
+      if(p.nome) $('sdProduto').value = p.nome;
+      $('sdDica').textContent = p.qtd != null ? 'Estoque no cadastro: ' + p.qtd + (catalogo.geradoEm ? ' (' + App.fmtData(catalogo.geradoEm) + ')' : '') : 'Sem estoque no catálogo — reimporte a planilha para acompanhar.';
+    } else {
+      $('sdDica').textContent = $('sdCodigo').value.trim() && catalogo.qtd ? 'Código não está no catálogo importado.' : '';
+    }
+  }
+  $('sdCodigo').addEventListener('change', completarSaldao);
+  $('sdCodigo').addEventListener('input', App.debounce(completarSaldao, 300));
+  function registrarSaldao(dados){
+    return App.comAuth(() => db.collection('etiquetas').add(Object.assign({
+      tipo: 'saldao', local: 'interno', obs: null, estoqueInicial: null, ean: null, codigo: null,
+      criadaEm: App.hojeISO(), encerradaEm: null, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    }, dados)));
+  }
+  $('sdSalvarBtn').addEventListener('click', () => {
+    const produto = $('sdProduto').value.trim();
+    if(!produto){ App.toast('Informe o produto.', 'info'); $('sdProduto').focus(); return; }
+    const btn = $('sdSalvarBtn');
+    btn.disabled = true;
+    registrarSaldao({ produto, codigo: $('sdCodigo').value.trim() || null, ean: sdEan || null, local: $('sdLocal').value,
+      estoqueInicial: sdEstoque, obs: $('sdObs').value.trim() || null })
+      .then(() => {
+        $('sdProduto').value = ''; $('sdCodigo').value = ''; $('sdObs').value = ''; $('sdDica').textContent = ''; sdEan = ''; sdEstoque = null;
+        App.toast('Saldão registrado.', 'ok');
+      }).catch(e => App.toastErro('Erro ao gravar', e)).then(() => { btn.disabled = false; });
+  });
+  $('etqSaldaoBtn').addEventListener('click', () => { irParaGrupo('saldao'); $('sdCodigo').focus(); });
+  App.delegar($('sdChips'), 'click', '.chip-filtro', (b) => {
+    sdLocal = b.dataset.local;
+    $('sdChips').querySelectorAll('.chip-filtro').forEach(c => c.setAttribute('aria-pressed', c === b ? 'true' : 'false'));
+    renderSaldao();
+  });
+  function renderSaldao(){
+    const ativos = N.saldoesAtivos(saldoes);
+    const lista = sdLocal === 'encerrados'
+      ? saldoes.filter(s => s.encerradaEm).sort((a, b) => String(b.encerradaEm).localeCompare(String(a.encerradaEm)))
+      : ativos.filter(s => !sdLocal || (s.local || 'interno') === sdLocal);
+    if(!lista.length){
+      $('sdLista').innerHTML = '';
+      $('sdMsg').textContent = sdLocal === 'encerrados' ? 'Nenhum saldão encerrado.' : 'Nenhum produto em saldão' + (sdLocal ? ' ' + sdLocal : '') + '.';
+      return;
+    }
+    const zerados = ativos.filter(s => N.estoqueDoSaldao(s, catalogo).zerado).length;
+    $('sdMsg').textContent = lista.length + ' produto(s)' + (sdLocal !== 'encerrados' ? ' · interno ' + ativos.filter(s => (s.local || 'interno') === 'interno').length +
+      ' · externo ' + ativos.filter(s => s.local === 'externo').length + (zerados ? ' · ⚠ zeraram: ' + zerados : '') : '');
+    $('sdLista').innerHTML = '<table class="etq-tab"><thead><tr><th>Desde</th><th>Produto</th><th>Local</th><th>Estoque</th><th>Ações</th></tr></thead><tbody>' +
+      lista.map(s => {
+        const est = N.estoqueDoSaldao(s, catalogo);
+        const estoqueTxt = est.semDado ? '<span class="mono">sem dado no catálogo</span>'
+          : '<span class="prod">' + escapeHtml(String(est.atual)) + '</span>' + (est.inicial != null ? '<div class="mono">entrou com ' + escapeHtml(String(est.inicial)) + (est.saiu != null ? ' · saiu ' + escapeHtml(String(est.saiu)) : '') + '</div>' : '') +
+            (est.zerado ? '<div class="dica" style="color:var(--loss);">⚠ Zerou — encerrar o saldão.</div>' : '');
+        return '<tr>' +
+          '<td data-r="Desde"><span class="mono">' + escapeHtml(App.fmtData(s.criadaEm)) + (s.encerradaEm ? ' → ' + escapeHtml(App.fmtData(s.encerradaEm)) : '') + '</span></td>' +
+          '<td data-r="Produto" class="prod">' + escapeHtml(s.produto || '') + '<div class="mono">' + escapeHtml(s.codigo || '') + (s.obs ? ' · ' + escapeHtml(s.obs) : '') + '</div></td>' +
+          '<td data-r="Local"><span class="si si-saldao">' + escapeHtml(N.LOCAIS_SALDAO[s.local] || 'Interno') + '</span></td>' +
+          '<td data-r="Estoque">' + estoqueTxt + '</td>' +
+          '<td class="acoes sem-rotulo">' + (s.encerradaEm
+            ? '<button type="button" class="btn secondary mini" data-sd="reabrir" data-id="' + escapeHtml(s.id) + '">↩ Reabrir</button>'
+            : '<button type="button" class="btn secondary mini" data-sd="local" data-id="' + escapeHtml(s.id) + '" title="Trocar interno/externo">⇄ ' + (s.local === 'externo' ? 'Para interno' : 'Para externo') + '</button>' +
+              '<button type="button" class="btn secondary mini" data-sd="encerrar" data-id="' + escapeHtml(s.id) + '">✔ Encerrado</button>') +
+            '<button type="button" class="btn secondary mini apagar" data-sd="apagar" data-id="' + escapeHtml(s.id) + '" title="Apagar este registro" aria-label="Apagar este registro">✕</button></td>' +
+        '</tr>';
+      }).join('') + '</tbody></table>';
+  }
+  App.delegar($('sdLista'), 'click', '[data-sd]', async (b) => {
+    const id = b.dataset.id;
+    const s = saldoes.find(x => x.id === id);
+    if(!s) return;
+    const agora = firebase.firestore.FieldValue.serverTimestamp();
+    if(b.dataset.sd === 'apagar'){
+      const ok = await App.confirmar({ titulo: 'Apagar registro de saldão', mensagem: 'Apagar "' + (s.produto || '') + '" do saldão? Use "Encerrado" se o produto acabou ou saiu do saldão.', confirmar: 'Apagar', perigo: true });
+      if(!ok) return;
+      App.comAuth(() => db.collection('etiquetas').doc(id).delete()).catch(e => App.toastErro('Erro ao apagar', e));
+      return;
+    }
+    const campos = b.dataset.sd === 'local' ? { local: s.local === 'externo' ? 'interno' : 'externo' }
+      : b.dataset.sd === 'encerrar' ? { encerradaEm: App.hojeISO() } : { encerradaEm: null };
+    b.disabled = true;
+    App.comAuth(() => db.collection('etiquetas').doc(id).set(Object.assign({ atualizadoEm: agora }, campos), { merge: true }))
+      .catch(e => { App.toastErro('Erro ao gravar', e); b.disabled = false; });
+  });
   // Codigo interno digitado: o catalogo preenche nome e codigo de barras.
   let vmEan = '';
   function completarPeloCodigo(){
@@ -569,7 +692,7 @@
     }
     const linhas = linhasAtuais();
     const o = { hoje: App.hojeISO(), minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0,
-      ignorados: estoqueConfig.ignorados, marcados: estoqueConfig.marcados };
+      ignorados: estoqueConfig.ignorados, marcados: N.marcadosComSaldao(estoqueConfig.marcados, saldoes) };
     const r = N.sugestoesVermelhas(estoque, linhas, vermelhas, o);
     classificacao = r;
     const comEstoque = N.vermelhasComEstoque(vermelhas, estoque, o.minimo);
@@ -635,6 +758,14 @@
   // e o produto sai da lista ate' alguem tirar a marca.
   ['estSaldao', 'estPromocao'].forEach(id => App.delegar($(id), 'click', '[data-marcar]', (b) => {
     b.disabled = true;
+    if(b.dataset.marcar === 'saldao'){
+      // Entra no registro de saldao (interno; troque na aba Saldao), com o estoque de agora.
+      const it = (estoque || []).find(x => x.codigo === b.dataset.codigo);
+      registrarSaldao({ produto: it ? it.nome : b.dataset.codigo, codigo: b.dataset.codigo, ean: it && it.ean ? it.ean : null,
+        estoqueInicial: it && it.quantidade != null ? it.quantidade : null, obs: it && it.fabricante ? it.fabricante : null })
+        .catch(e => { App.toastErro('Erro ao registrar o saldão', e); b.disabled = false; });
+      return;
+    }
     gravarChaveConfig('marcados', b.dataset.codigo, { tipo: b.dataset.marcar, em: App.hojeISO() }).then(renderEstoque);
   }));
   App.delegar($('estMarcados'), 'click', '[data-desmarcar]', (b) => {
@@ -680,7 +811,7 @@
   // ─── Relatorio ───
   $('etqImprimirBtn').addEventListener('click', () => {
     if(estoque) renderEstoque(); // a classificacao vai com o filtro de agora
-    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao });
+    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao, saldoes, catalogo });
     document.body.classList.add('imprimindo');
     const limpar = () => { document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
     window.addEventListener('afterprint', limpar);
@@ -728,13 +859,14 @@
     return new Promise((resolve, reject) => {
       let primeiro = true;
       pararEtiquetas = db.collection('etiquetas').onSnapshot(snap => {
-        const porId = {}, verm = [];
+        const porId = {}, verm = [], sald = [];
         snap.forEach(doc => {
           const d = doc.data();
           if(d.tipo === 'vermelha') verm.push({ id: doc.id, ...d });
+          else if(d.tipo === 'saldao') sald.push({ id: doc.id, ...d });
           else porId[doc.id] = d;
         });
-        etiquetasPorId = porId; vermelhas = verm;
+        etiquetasPorId = porId; vermelhas = verm; saldoes = sald;
         carregouEtiquetas = true;
         if(primeiro){ primeiro = false; resolve(); return; }
         render();

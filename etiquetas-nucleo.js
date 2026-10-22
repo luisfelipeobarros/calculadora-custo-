@@ -520,6 +520,48 @@
   }
 
   /* ------------------------------------------------------------
+     Saldao (registro proprio — pedido da equipe, 22/10/2026)
+
+     Produto que foi para o saldao, interno (dentro da loja) ou externo
+     (area externa). Documento na colecao `etiquetas` com tipo 'saldao':
+     { produto, codigo, ean, local, estoqueInicial, obs, criadaEm,
+       encerradaEm }. O estoque de agora vem do catalogo (ultima
+     importacao): a lista mostra inicial -> atual e o que saiu, e avisa
+     quando zerou.
+     ------------------------------------------------------------ */
+  var LOCAIS_SALDAO = { interno: 'Interno', externo: 'Externo' };
+
+  function saldoesAtivos(lista) {
+    return (lista || []).filter(function (s) { return s && !s.encerradaEm; })
+      .sort(function (a, b) {
+        return ((a.local === 'externo') - (b.local === 'externo')) || // interno primeiro
+          String(a.produto || '').localeCompare(String(b.produto || ''), 'pt-BR');
+      });
+  }
+  // Estoque do saldao pelo catalogo: { inicial, atual, saiu, zerado, semDado }
+  function estoqueDoSaldao(s, catalogo) {
+    var p = produtoDoCatalogo(catalogo, s && s.codigo);
+    var atual = p && p.qtd != null ? p.qtd : null;
+    var inicial = s && s.estoqueInicial != null ? Number(s.estoqueInicial) : null;
+    return {
+      inicial: inicial,
+      atual: atual,
+      saiu: (inicial != null && atual != null) ? Math.max(0, inicial - atual) : null,
+      zerado: atual != null && atual <= 0,
+      semDado: atual == null
+    };
+  }
+  // Para a classificacao do estoque importado: quem ja' esta' no saldao
+  // conta como marcado (nao volta como sugestao).
+  function marcadosComSaldao(marcados, saldoes) {
+    var m = Object.assign({}, marcados || {});
+    saldoesAtivos(saldoes).forEach(function (s) {
+      if (s.codigo && !m[s.codigo]) m[s.codigo] = { tipo: 'saldao', em: s.criadaEm || null, registro: true };
+    });
+    return m;
+  }
+
+  /* ------------------------------------------------------------
      Relatorio para imprimir: o que RETIRAR (recebido com etiqueta),
      o que ETIQUETAR (a caminho, sem etiqueta) e as VERMELHAS
      pendentes. Agrupado por fornecedor, com quadrinho para marcar
@@ -575,6 +617,25 @@
       });
       return h + '</tbody></table>';
     }
+    var registrados = saldoesAtivos(o.saldoes);
+    var hSaldao = '';
+    if (registrados.length) {
+      hSaldao = '<div class="rl-secao">SALDÃO EM ANDAMENTO <span class="rl-qtd">(' + registrados.length + ')</span></div>';
+      ['interno', 'externo'].forEach(function (local) {
+        var lista = registrados.filter(function (s) { return (s.local || 'interno') === local; });
+        if (!lista.length) return;
+        hSaldao += '<div class="rl-forn">' + e(LOCAIS_SALDAO[local]) + ' (' + lista.length + ')</div>' +
+          '<table class="rl-tab"><thead><tr><th class="rl-ok"></th><th class="rl-cod">CÓD</th><th>PRODUTO</th><th class="rl-q">ESTOQUE</th><th class="rl-nf">DESDE</th></tr></thead><tbody>';
+        lista.forEach(function (s) {
+          var est = estoqueDoSaldao(s, o.catalogo);
+          hSaldao += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(s.codigo || '') + '</td>' +
+            '<td>' + e(s.produto || '') + (s.obs ? ' <span class="rl-qtd">· ' + e(s.obs) + '</span>' : '') + (est.zerado ? ' <b>· ZEROU</b>' : '') + '</td>' +
+            '<td class="rl-q">' + e(est.atual != null ? fmtQtd(est.atual) + (est.inicial != null ? ' de ' + fmtQtd(est.inicial) : '') : '') + '</td>' +
+            '<td class="rl-nf">' + e(s.criadaEm ? App.fmtData(s.criadaEm) : '') + '</td></tr>';
+        });
+        hSaldao += '</tbody></table>';
+      });
+    }
     var est = o.estoque || null;
     var hEstoque = !est ? '' :
       secaoEstoque('SALDÃO — PARADO, ESTOQUE ATÉ O MÍNIMO', est.saldao || []) +
@@ -604,6 +665,7 @@
       (trocar.length ? secao('TROCAR VERMELHA POR AZUL — FATURADO, TINHA VERMELHA NA GÔNDOLA', trocar, '') : '') +
       secao('COLOCAR ETIQUETA AZUL — FATURADO, A CAMINHO', etiquetar, 'Nada para etiquetar.') +
       hv +
+      hSaldao +
       hEstoque +
       '</div>';
   }
@@ -621,6 +683,10 @@
     ordenar: ordenar,
     filtrar: filtrar,
     vermelhasPendentes: vermelhasPendentes,
+    LOCAIS_SALDAO: LOCAIS_SALDAO,
+    saldoesAtivos: saldoesAtivos,
+    estoqueDoSaldao: estoqueDoSaldao,
+    marcadosComSaldao: marcadosComSaldao,
     vermelhasPorLinha: vermelhasPorLinha,
     agrupar: agrupar,
     textoNotas: textoNotas,
