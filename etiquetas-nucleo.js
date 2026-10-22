@@ -35,9 +35,18 @@
     retirar:    { rotulo: 'Retirar etiqueta',        curto: 'Retirar',     ordem: 0, classe: 'si-retirar' },
     etiquetar:  { rotulo: 'Etiquetar',               curto: 'Etiquetar',   ordem: 1, classe: 'si-etiquetar' },
     transito:   { rotulo: 'Etiquetada · em trânsito', curto: 'Em trânsito', ordem: 2, classe: 'si-transito' },
+    naoExposto: { rotulo: 'Não exposto · em trânsito', curto: 'Não exposto', ordem: 2, classe: 'si-transito' },
     dispensada: { rotulo: 'Com estoque (sem etiqueta)', curto: 'Com estoque', ordem: 3, classe: 'si-dispensada' },
+    // Decidida pelo app: o cadastro (ultima importacao) diz que tem
+    // estoque acima do minimo — faturado, mas nao precisa de etiqueta.
+    comEstoque: { rotulo: 'Com estoque no cadastro', curto: 'Com estoque', ordem: 3, classe: 'si-dispensada' },
     recebida:   { rotulo: 'Recebida sem etiqueta',   curto: 'Recebida',    ordem: 4, classe: 'si-recebida' },
     concluida:  { rotulo: 'Etiqueta retirada',       curto: 'Concluída',   ordem: 5, classe: 'si-concluida' }
+  };
+  // Chips da tela: cada grupo junta as situacoes que a pessoa ve como uma coisa so'.
+  var GRUPOS = {
+    transito: ['transito', 'naoExposto'],
+    dispensada: ['dispensada', 'comEstoque']
   };
   var ENCERRADAS = ['recebida', 'concluida'];
 
@@ -52,7 +61,7 @@
       if (e.etiquetada === true) return 'concluida';
       return 'recebida';
     }
-    if (e.etiquetada === true) return 'transito';
+    if (e.etiquetada === true) return e.tipo === 'naoExposto' ? 'naoExposto' : 'transito';
     if (e.dispensada === true) return 'dispensada';
     return 'etiquetar';
   }
@@ -89,7 +98,7 @@
     var porCodigo = {};
     (estoque || []).forEach(function (it) {
       if (!it || !it.codigo || foraDoControle(it)) return;
-      porCodigo[it.codigo] = { n: it.nome || '', e: it.ean || '' };
+      porCodigo[it.codigo] = { n: it.nome || '', e: it.ean || '', q: it.quantidade == null ? null : Number(it.quantidade) };
     });
     return { porCodigo: porCodigo, geradoEm: hoje || null, qtd: Object.keys(porCodigo).length };
   }
@@ -100,18 +109,22 @@
     Object.keys(porCodigo).forEach(function (c) {
       var p = porCodigo[c] || {};
       var ean = soDigitos(p.e);
-      if (ean) porEan[ean] = { codigo: c, nome: p.n || '' };
+      if (ean) porEan[ean] = { codigo: c, nome: p.n || '', qtd: p.q == null ? null : Number(p.q) };
     });
     return { porCodigo: porCodigo, porEan: porEan, geradoEm: (doc && doc.geradoEm) || null, qtd: Object.keys(porCodigo).length };
   }
   function produtoDoCatalogo(catalogo, codigo) {
     var p = catalogo && catalogo.porCodigo && catalogo.porCodigo[String(codigo == null ? '' : codigo).trim()];
-    return p ? { codigo: String(codigo).trim(), nome: p.n || '', ean: soDigitos(p.e) } : null;
+    return p ? { codigo: String(codigo).trim(), nome: p.n || '', ean: soDigitos(p.e), qtd: p.q == null ? null : Number(p.q) } : null;
   }
 
   function linhasDeTransito(itensDocs, notasPorChave, etiquetasPorId, opcoes) {
     var prefixos = (opcoes || {}).ncm || null;
-    var porEan = ((opcoes || {}).catalogo || {}).porEan || null;
+    var catalogo = (opcoes || {}).catalogo || null;
+    var porEan = (catalogo && catalogo.porEan) || null;
+    var temCatalogo = !!(catalogo && catalogo.qtd);
+    // Estoque acima deste minimo no cadastro = faturado, mas nao precisa de etiqueta.
+    var minimo = (opcoes || {}).minimo == null ? null : Number((opcoes || {}).minimo);
     var linhas = [];
     (itensDocs || []).forEach(function (doc) {
       if (!doc || !doc.chave) return;
@@ -146,11 +159,19 @@
           recebida: recebida,
           cancelada: cancelada,
           previsaoEntrega: (nota && nota.previsaoEntrega) || null,
+          // Produto novo? Tem codigo de barras na nota e NAO esta' no cadastro
+          // (so' vale com catalogo importado): provavelmente primeira compra.
+          possivelNovo: temCatalogo && !!soDigitos(it.ean) && !porEan[soDigitos(it.ean)],
+          estoqueCadastro: (porEan && soDigitos(it.ean) && porEan[soDigitos(it.ean)]) ? porEan[soDigitos(it.ean)].qtd : null,
+          tipoEtiqueta: e.etiquetada === true ? (e.tipo === 'naoExposto' ? 'naoExposto' : 'azul') : null,
           etiquetada: e.etiquetada === true,
           dispensada: e.dispensada === true,
           retirada: e.retirada === true,
           situacao: situacaoDe(recebida, e)
         });
+        var l = linhas[linhas.length - 1];
+        // Ninguem decidiu nada e o cadastro diz que tem estoque: nao precisa de etiqueta.
+        if (l.situacao === 'etiquetar' && minimo != null && l.estoqueCadastro != null && l.estoqueCadastro > minimo) l.situacao = 'comEstoque';
       });
     });
     return linhas;
@@ -188,7 +209,7 @@
     var termos = (o.termos || []).filter(Boolean);
     return (linhas || []).filter(function (l) {
       if (o.grupo === 'encerradas') { if (ENCERRADAS.indexOf(l.situacao) === -1) return false; }
-      else if (o.grupo) { if (l.situacao !== o.grupo) return false; }
+      else if (o.grupo) { if ((GRUPOS[o.grupo] || [o.grupo]).indexOf(l.situacao) === -1) return false; }
       else if (ENCERRADAS.indexOf(l.situacao) !== -1) return false;
       if (termos.length && !termos.some(function (t) { return casaTermo(l, t); })) return false;
       return true;
@@ -462,7 +483,9 @@
           '<th class="rl-q">QTD</th><th class="rl-nf">NF · EMISSÃO</th></tr></thead><tbody>';
         porForn[forn].forEach(function (l) {
           h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.codigoInterno || '') + '</td>' +
-            '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') + '</td>' +
+            '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') +
+            (l.possivelNovo ? ' <b>· NOVO? (não está no cadastro)</b>' : '') +
+            (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
             '<td class="rl-nf">' + e((l.numero ? l.numero + ' · ' : '') + (l.dataEmissao ? App.fmtData(l.dataEmissao) : '')) + '</td></tr>';
         });
@@ -518,6 +541,7 @@
 
   var EtiquetasNucleo = {
     SITUACOES: SITUACOES,
+    GRUPOS: GRUPOS,
     ENCERRADAS: ENCERRADAS,
     NCM_PISOS: NCM_PISOS,
     ncmCasa: ncmCasa,

@@ -32,6 +32,8 @@ eq('recebida com etiqueta: RETIRAR', N.situacaoDe(true, { etiquetada: true }), '
 eq('recebida, etiqueta retirada: concluida', N.situacaoDe(true, { etiquetada: true, retirada: true }), 'concluida');
 eq('recebida sem etiqueta: nada a fazer', [N.situacaoDe(true, null), N.situacaoDe(true, { dispensada: true })], ['recebida', 'recebida']);
 eq('etiquetada vale mais que dispensada (os dois marcados por engano)', N.situacaoDe(false, { etiquetada: true, dispensada: true }), 'transito');
+eq('nao exposto: em transito com situacao propria; recebida vira retirar como as outras',
+  [N.situacaoDe(false, { etiquetada: true, tipo: 'naoExposto' }), N.situacaoDe(true, { etiquetada: true, tipo: 'naoExposto' })], ['naoExposto', 'retirar']);
 eq('id da linha = chave + item', N.idDaLinha('351', 2), '351_2');
 
 // ── Linhas ───────────────────────────────────────────────────
@@ -93,6 +95,8 @@ eq('ordem: retirar, etiquetar, em transito; mais recente primeiro dentro do grup
 eq('filtro sem grupo esconde as encerradas', N.filtrar(mistura, {}).map(l => l.id), ['A_1', 'B_1', 'C_1']);
 eq('filtro "encerradas" mostra so recebidas e concluidas', N.filtrar(mistura, { grupo: 'encerradas' }).map(l => l.id), ['A_2']);
 eq('filtro por situacao', N.filtrar(mistura, { grupo: 'transito' }).map(l => l.id), ['C_1']);
+eq('chips agrupam: "em transito" inclui nao exposto; "com estoque" inclui o decidido pelo cadastro',
+  [N.GRUPOS.transito, N.GRUPOS.dispensada], [['transito', 'naoExposto'], ['dispensada', 'comEstoque']]);
 eq('busca com chips: basta um termo casar, sem acento, em fornecedor/produto/codigo/nota',
   [N.filtrar(linhas, { grupo: 'encerradas', termos: ['REJUNTE'] }).map(l => l.id),
    N.filtrar(linhas, { termos: ['argamassa', 'piso'] }).map(l => l.id),
@@ -196,15 +200,29 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
     { codigo: '102', nome: 'AMOSTRA', ean: '7899000000028', classe: 'Amostras' }
   ];
   const doc = N.montarCatalogo(estoque, '2026-10-15');
-  eq('catalogo: so vendaveis, compacto, com data', [doc.qtd, doc.porCodigo['100'], doc.porCodigo['102'], doc.geradoEm], [2, { n: 'PISO INTERNO 60X60', e: '7899000000011' }, undefined, '2026-10-15']);
+  eq('catalogo: so vendaveis, compacto, com data e estoque', [doc.qtd, doc.porCodigo['100'], doc.porCodigo['102'], doc.geradoEm], [2, { n: 'PISO INTERNO 60X60', e: '7899000000011', q: null }, undefined, '2026-10-15']);
   const cat = N.expandirCatalogo(doc);
   eq('catalogo expandido: indice por barras so de quem tem', [Object.keys(cat.porEan), cat.porEan['7899000000011'].codigo], [['7899000000011'], '100']);
   eq('produtoDoCatalogo: acha pelo codigo (com espaco), nao acha o que nao existe',
     [N.produtoDoCatalogo(cat, ' 100 '), N.produtoDoCatalogo(cat, '999'), N.produtoDoCatalogo(null, '100')],
-    [{ codigo: '100', nome: 'PISO INTERNO 60X60', ean: '7899000000011' }, null, null]);
+    [{ codigo: '100', nome: 'PISO INTERNO 60X60', ean: '7899000000011', qtd: null }, null, null]);
   const linhasCat = N.linhasDeTransito([{ chave: 'K', numero: '9', dataEmissao: '2026-10-10', nomeEmitente: 'F', itens: [
     { n: 1, descricao: 'PISO DO FORNECEDOR', ean: '7899000000011' }, { n: 2, descricao: 'OUTRO', ean: '1' }, { n: 3, descricao: 'SEM EAN' }] }], {}, {}, { catalogo: cat });
   eq('linha ganha codigo e nome internos so pelo codigo de barras', linhasCat.map(l => l.codigoInterno + '|' + l.nomeInterno), ['100|PISO INTERNO 60X60', '|', '|']);
+  eq('possivel produto novo: barras na nota e fora do catalogo (sem barras nao da para dizer)', linhasCat.map(l => l.possivelNovo), [false, true, false]);
+  eq('sem catalogo importado ninguem e "novo"', N.linhasDeTransito([{ chave: 'K', itens: [{ ean: '1' }] }], {}, {}, {}).map(l => l.possivelNovo), [false]);
+  // Estoque do cadastro decide a azul: acima do minimo, faturado nao precisa de etiqueta.
+  const catQ = N.expandirCatalogo(N.montarCatalogo([{ codigo: '100', nome: 'A', ean: '7899000000011', quantidade: 120, classe: 'Piso cerâmico' }, { codigo: '101', nome: 'B', ean: '7899000000028', quantidade: 3, classe: 'Piso cerâmico' }]));
+  const docQ = [{ chave: 'Q', itens: [{ n: 1, descricao: 'A', ean: '7899000000011' }, { n: 2, descricao: 'B', ean: '7899000000028' }, { n: 3, descricao: 'C', ean: '9' }] }];
+  eq('com estoque acima do minimo no cadastro: "com estoque" (sem ninguem marcar); abaixo e desconhecido: etiquetar',
+    N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ, minimo: 40 }).map(l => l.situacao + ':' + l.estoqueCadastro), ['comEstoque:120', 'etiquetar:3', 'etiquetar:null']);
+  eq('quem ja marcou etiquetei ou recebeu nao e mexido pelo cadastro',
+    N.linhasDeTransito(docQ, { Q: { noSistema: true } }, { Q_1: { etiquetada: true } }, { catalogo: catQ, minimo: 40 }).map(l => l.situacao), ['retirar', 'recebida', 'recebida']);
+  eq('sem minimo informado o cadastro nao decide', N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ }).map(l => l.situacao), ['etiquetar', 'etiquetar', 'etiquetar']);
+  eq('relatorio marca o possivel novo e o nao exposto a expor',
+    (r => [r.indexOf('NOVO? (não está no cadastro)') !== -1, r.indexOf('NÃO EXPOSTO — expor o produto') !== -1])(
+      N.htmlRelatorio(N.linhasDeTransito(docQ, { Q: { noSistema: true } }, { Q_3: { etiquetada: true, tipo: 'naoExposto' } }, { catalogo: catQ, minimo: 40 })
+        .concat(N.linhasDeTransito([{ chave: 'Z', itens: [{ n: 1, descricao: 'NOVO', ean: '5' }] }], {}, {}, { catalogo: catQ })), [], { hoje: '2026-10-22' })), [true, true]);
   eq('busca acha pelo codigo interno e pelo nome da loja', [N.filtrar(linhasCat, { termos: ['100'] }).length, N.filtrar(linhasCat, { termos: ['interno 60x60'] }).length], [1, 1]);
   const verm = [{ id: 'v1', codigo: '100', ean: '7899000000011', criadaEm: '2026-10-01' }, { id: 'v2', codigo: '7', ean: '', criadaEm: '2026-10-01' }, { id: 'v3', ean: '7899000000011', criadaEm: '2026-09-01', resolvidaEm: '2026-09-02' }];
   eq('vermelha casa com a linha pelas barras (resolvida nao conta)', Object.keys(N.vermelhasPorLinha(linhasCat, verm)).join(','), 'K_1');

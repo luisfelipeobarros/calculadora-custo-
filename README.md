@@ -425,7 +425,7 @@ Não precisa instalar nada. São vinte e nove etapas, em vinte frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-15b. **Etiquetas de produto em trânsito** — 66 verificações em
+15b. **Etiquetas de produto em trânsito** — 74 verificações em
     `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
     ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
     dispensada / retirada), uma linha por item de NF-e com o fornecedor
@@ -435,7 +435,9 @@ Não precisa instalar nada. São vinte e nove etapas, em vinte frentes:
     vermelhas; por fornecedor; escapado), o **catálogo interno** (código
     interno ↔ código de barras, gravado na importação do estoque: a linha
     ganha código e nome da loja, a vermelha digitada pelo código sai com
-    as barras e casa exato com a nota) e a troca vermelha → azul.
+    as barras e casa exato com a nota), a troca vermelha → azul, o estoque
+    do cadastro decidindo quem não precisa de azul e a etiqueta "não exposto"
+    (produto novo: barras na nota e fora do cadastro).
 16. **Lançamentos contábeis** — 62 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;

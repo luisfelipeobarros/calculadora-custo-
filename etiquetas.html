@@ -158,7 +158,7 @@
         <h2 style="margin:0;">Estoque importado — sugestões de etiqueta vermelha</h2>
         <button type="button" class="btn secondary mini" id="estFecharBtn">✕ Fechar</button>
       </div>
-      <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras e lojinha ficam de fora. Parado no prazo e com estoque vira saldão (até o mínimo) ou promoção (acima).</p>
+      <p class="empty-note" style="display:block; margin:6px 0 0;">A planilha não é gravada: só o que você confirmar vira etiqueta vermelha. Produto com asterisco (não vamos repor), amostras e lojinha ficam de fora. Parado no prazo e com estoque vira saldão (até o mínimo) ou promoção (acima). O estoque de cada produto fica no catálogo: nota faturada de produto com estoque acima do mínimo não pede etiqueta.</p>
       <div class="est-controles">
         <div><label for="estMinimo">Sugerir com estoque até</label><input type="number" id="estMinimo" value="40" min="0" step="1"></div>
         <div><label for="estDias">Movimentação nos últimos (dias)</label><input type="number" id="estDias" value="90" min="0" step="30"></div>
@@ -205,7 +205,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=7"></script>
+<script src="etiquetas-nucleo.js?v=8"></script>
 <script>
 (() => {
   'use strict';
@@ -271,17 +271,19 @@
 
   // ─── Lista ───
   function linhasAtuais(){
-    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId, { ncm: ncmAtual(), catalogo });
+    return N.linhasDeTransito(Object.values(itensPorChave), notasPorChave, etiquetasPorId, { ncm: ncmAtual(), catalogo, minimo: estoqueConfig.minimo });
   }
   const fmtQtd = (q) => q == null ? '' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 3 });
 
   function htmlAcoes(l, vermelha){
     const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
     switch(l.situacao){
-      case 'etiquetar':  return (vermelha ? b('trocar', '🔴→🔵 Troquei pela azul') : b('etiquetar', '🏷 Etiquetei')) + b('dispensar', '📦 Com estoque');
+      case 'etiquetar':  return (vermelha ? b('trocar', '🔴→🔵 Troquei pela azul') : b('etiquetar', '🏷 Etiquetei')) + b('naoExposto', '🆕 Não exposto') + b('dispensar', '📦 Com estoque');
+      case 'comEstoque': return b('etiquetar', '🏷 Etiquetei mesmo assim') + b('naoExposto', '🆕 Não exposto');
       case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩ Desfazer');
-      case 'transito':   return b('desfazer', '↩ Desfazer');
-      case 'retirar':    return b('retirar', '✔ Retirei a etiqueta');
+      case 'transito':
+      case 'naoExposto': return b('desfazer', '↩ Desfazer');
+      case 'retirar':    return b('retirar', l.tipoEtiqueta === 'naoExposto' ? '✔ Retirei e expus' : '✔ Retirei a etiqueta');
       case 'concluida':  return b('desfazer-retirada', '↩ Desfazer');
       default: return '<span class="mono">—</span>';
     }
@@ -301,7 +303,7 @@
     $('etqResumo').innerHTML = [
       ['retirar', 'Retirar etiqueta', c.retirar, c.retirar ? 'alerta' : ''],
       ['etiquetar', 'Para etiquetar', c.etiquetar, 'azul'],
-      ['transito', 'Etiquetadas em trânsito', c.transito, ''],
+      ['transito', 'Etiquetadas em trânsito', c.transito + c.naoExposto, ''],
       ['vermelhas', 'Vermelhas pendentes', verm.length, verm.length ? 'alerta' : '']
     ].map(([g, rot, val, cls]) =>
       '<button type="button" class="etq-kpi" data-g="' + g + '" aria-pressed="' + (grupo === g ? 'true' : 'false') + '">' +
@@ -350,11 +352,14 @@
         '<td data-r="Fornecedor">' + escapeHtml(l.fornecedor) + '</td>' +
         '<td data-r="Emissão"><span class="mono">' + escapeHtml(App.fmtData(l.dataEmissao)) + (l.numero ? ' · NF ' + escapeHtml(l.numero) : '') + '</span></td>' +
         '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) +
-          (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') + '</div>' : '') +
+          (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') +
+            (l.estoqueCadastro != null ? ' · estoque ' + escapeHtml(String(l.estoqueCadastro)) + (catalogo.geradoEm ? ' em ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') : '') + '</div>' : '') +
+          (l.possivelNovo ? '<div class="dica">🆕 Possível produto novo: tem código de barras e não está no cadastro.</div>' : '') +
           (comVermelha[l.id] ? '<div class="dica" style="color:var(--loss);">🔴 Tem etiqueta vermelha na gôndola' + (comVermelha[l.id].criadaEm ? ' desde ' + escapeHtml(App.fmtData(comVermelha[l.id].criadaEm)) : '') + ' — trocar pela azul.</div>' : '') +
         '</td>' +
         '<td data-r="Qtd">' + escapeHtml(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
-        '<td data-r="Situação"><span class="si ' + N.SITUACOES[l.situacao].classe + '">' + escapeHtml(N.SITUACOES[l.situacao].rotulo) + '</span></td>' +
+        '<td data-r="Situação"><span class="si ' + N.SITUACOES[l.situacao].classe + '">' + escapeHtml(N.SITUACOES[l.situacao].rotulo) +
+          (l.situacao === 'retirar' && l.tipoEtiqueta === 'naoExposto' ? ' · expor' : '') + '</span></td>' +
         '<td data-r="Recebimento">' + htmlRecebimento(l) + '</td>' +
         '<td class="acoes sem-rotulo">' + htmlAcoes(l, comVermelha[l.id]) + '</td>' +
       '</tr>').join('') +
@@ -364,7 +369,8 @@
 
   // ─── Gravacao das etiquetas (uma por linha; id = chave_n) ───
   const CAMPOS_POR_ACAO = {
-    'etiquetar':         () => ({ etiquetada: true, dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
+    'etiquetar':         () => ({ etiquetada: true, tipo: 'azul', dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
+    'naoExposto':        () => ({ etiquetada: true, tipo: 'naoExposto', dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
     'dispensar':         () => ({ etiquetada: false, dispensada: true }),
     'desfazer':          () => ({ etiquetada: false, dispensada: false }),
     'retirar':           () => ({ retirada: true, retiradaEm: App.hojeISO() }),
@@ -543,8 +549,8 @@
   });
   $('estFecharBtn').addEventListener('click', () => { estoque = null; renderEstoque(); $('etqEstoque').style.display = 'none'; });
   ['estMinimo', 'estDias'].forEach(id => $(id).addEventListener('change', () => {
-    gravarConfigEstoque({ minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0 });
-    renderEstoque();
+    gravarConfigEstoque({ minimo: Number($('estMinimo').value) || 0, dias: Number($('estDias').value) || 0 })
+      .then(() => { renderEstoque(); render(); }); // o minimo tambem muda a lista em transito
   }));
 
   const htmlItemEstoque = (it) => '<span class="prod">' + escapeHtml(it.nome) + '</span>' +
@@ -816,7 +822,8 @@
         })),
         App.comAuth(() => escutarEstadoNotas(sinc)),
         App.comAuth(() => escutarEtiquetas()),
-        lerCatalogo()
+        lerCatalogo(),
+        lerConfigEstoque() // o minimo decide quem, mesmo faturado, nao precisa de etiqueta
       ]);
       const mapa = {};
       leitura.docs.forEach(doc => { const d = doc.data(); if((d.dataEmissao || '') >= corteISO) mapa[doc.id] = { chave: doc.id, ...d }; });
