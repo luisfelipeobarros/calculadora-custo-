@@ -205,7 +205,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=8"></script>
+<script src="etiquetas-nucleo.js?v=9"></script>
 <script>
 (() => {
   'use strict';
@@ -258,6 +258,7 @@
 
   // ─── Chips ───
   const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
+    ['azul', '🔵 Só azul'], ['naoExposto', '🆕 Só não exposto'],
     ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas']];
   $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
     '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');

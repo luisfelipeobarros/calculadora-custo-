@@ -96,7 +96,9 @@ eq('filtro sem grupo esconde as encerradas', N.filtrar(mistura, {}).map(l => l.i
 eq('filtro "encerradas" mostra so recebidas e concluidas', N.filtrar(mistura, { grupo: 'encerradas' }).map(l => l.id), ['A_2']);
 eq('filtro por situacao', N.filtrar(mistura, { grupo: 'transito' }).map(l => l.id), ['C_1']);
 eq('chips agrupam: "em transito" inclui nao exposto; "com estoque" inclui o decidido pelo cadastro',
-  [N.GRUPOS.transito, N.GRUPOS.dispensada], [['transito', 'naoExposto'], ['dispensada', 'comEstoque']]);
+  [N.GRUPOS.transito, N.GRUPOS.azul, N.GRUPOS.dispensada], [['transito', 'naoExposto'], ['transito'], ['dispensada', 'comEstoque']]);
+eq('chips "so azul" e "so nao exposto" separam as duas',
+  [N.filtrar(mistura, { grupo: 'azul' }).map(l => l.id), N.filtrar(mistura, { grupo: 'naoExposto' }).length], [['C_1'], 0]);
 eq('busca com chips: basta um termo casar, sem acento, em fornecedor/produto/codigo/nota',
   [N.filtrar(linhas, { grupo: 'encerradas', termos: ['REJUNTE'] }).map(l => l.id),
    N.filtrar(linhas, { termos: ['argamassa', 'piso'] }).map(l => l.id),

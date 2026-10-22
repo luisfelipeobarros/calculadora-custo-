@@ -46,6 +46,7 @@
   // Chips da tela: cada grupo junta as situacoes que a pessoa ve como uma coisa so'.
   var GRUPOS = {
     transito: ['transito', 'naoExposto'],
+    azul: ['transito'],              // so' as azuis em transito
     dispensada: ['dispensada', 'comEstoque']
   };
   var ENCERRADAS = ['recebida', 'concluida'];
