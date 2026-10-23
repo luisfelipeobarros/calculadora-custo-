@@ -138,6 +138,9 @@
   }
   .rd-tab tr.rd-forn-cab:first-child td{ border-top-width:0; }
   .rd-tab tr.rd-forn-cab td .mono{ color:var(--stripe); text-transform:none; font-size:12px; margin-left:6px; }
+  .rd-tab tr.rd-forn-cab{ cursor:pointer; }
+  .rd-tab tr.rd-forn-cab td .rd-seta{ display:inline-block; width:1em; margin-right:6px; transition:transform .15s; }
+  .rd-tab tr.rd-forn-cab.recolhido td .rd-seta{ transform:rotate(-90deg); }
   .rd-tab tr.rd-forn-cab td .btn.secondary{ color:var(--paper); border-color:var(--paper); margin-left:10px; }
   .rd-tab tr.rd-forn-cab td .btn.secondary:hover{ background:var(--paper); color:var(--ink); }
 </style>
@@ -768,6 +771,9 @@ Tupan</textarea>
         <label class="sr-only" for="buscaRadar">Buscar</label>
         <input type="search" id="buscaRadar" class="campo-busca" list="radarFornList" placeholder="Buscar por produto, código, barras ou fornecedor... (Enter para mais de um)">
         <datalist id="radarFornList"></datalist>
+      </div>
+      <div style="display:flex; justify-content:flex-end; margin-bottom:6px;">
+        <button type="button" class="btn secondary mini" id="radarRecolherTodos" title="Recolhe ou expande os produtos de todos os fornecedores">▸ Recolher todos</button>
       </div>
       <div id="radarLista"></div>
       <p class="nota-explicativa" id="radarListaMsg" style="display:block;"></p>
@@ -7171,6 +7177,10 @@ Tupan</textarea>
   let radarParametros = Object.assign({}, R.PARAMETROS_PADRAO, { pedidos: {} });
   let radarLinhas = [];
   let radarAba = 'comprar';
+  // Fornecedores recolhidos na lista (aba|fornecedor): clicar na faixa
+  // esconde os produtos dele; "Recolher todos" fecha a aba inteira.
+  const radarRecolhidos = new Set();
+  const chaveGrupo = (f) => radarAba + '|' + f;
   let radarCarregado = false;
   const RD_CHIPS = [['comprar', '🛒 Comprar'], ['conferir', '⚠ Conferir'], ['chegando', '🚚 Chegando'], ['carteira', '· só carteira'], ['faturado', '· só faturado'], ['baixoGiro', '🐢 Baixo giro'], ['pedidoAntigo', '⏳ Pedido antigo'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
   $('radarChips').innerHTML = RD_CHIPS.map(([a, rot]) => '<button type="button" class="chip-filtro" data-aba="' + a + '" aria-pressed="' + (a === radarAba ? 'true' : 'false') + '">' + rot + '</button>').join('');
@@ -7350,6 +7360,9 @@ Tupan</textarea>
       return;
     }
     $('radarListaMsg').textContent = lista.length + ' produto(s)';
+    const grupos = R.porFornecedor(lista);
+    const todosRecolhidos = grupos.length > 0 && grupos.every(g => radarRecolhidos.has(chaveGrupo(g.fornecedor)));
+    $('radarRecolherTodos').textContent = todosRecolhidos ? '▾ Expandir todos' : '▸ Recolher todos';
     $('radarLista').innerHTML = '<div class="tabela-rolavel"><table class="quote-table rd-tab"><thead><tr>' +
       '<th>Produto</th><th class="num">Vendas (' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
       '</tr></thead><tbody>' + blocosRadar(lista).map(bloco => (bloco.cabecalho || '') + bloco.linhas.map(l => {
@@ -7377,11 +7390,14 @@ Tupan</textarea>
   // sugestao de compra (Comprar e Conferir).
   function blocosRadar(lista){
     const comCotacao = radarAba === 'comprar' || radarAba === 'conferir';
-    return R.porFornecedor(lista).map(g => ({
-      cabecalho: '<tr class="rd-forn-cab"><td colspan="7"><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (comCotacao && g.valor ? ' · ' + brl(g.valor) : '') + '</span>' +
-        (comCotacao ? ' <button type="button" class="btn secondary mini" data-rd-cotacao="' + escapeHtml(g.fornecedor) + '" title="Abre a Cotação com estes produtos e quantidades já preenchidos">📝 Criar cotação</button>' : '') + '</td></tr>',
-      linhas: R.ordenar(g.linhas, radarAba)
-    }));
+    return R.porFornecedor(lista).map(g => {
+      const recolhido = radarRecolhidos.has(chaveGrupo(g.fornecedor));
+      return {
+        cabecalho: '<tr class="rd-forn-cab' + (recolhido ? ' recolhido' : '') + '" data-rd-grupo="' + escapeHtml(g.fornecedor) + '" title="Clique para ' + (recolhido ? 'expandir' : 'recolher') + ' os produtos"><td colspan="7"><span class="rd-seta">▾</span><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (comCotacao && g.valor ? ' · ' + brl(g.valor) : '') + '</span>' +
+          (comCotacao ? ' <button type="button" class="btn secondary mini" data-rd-cotacao="' + escapeHtml(g.fornecedor) + '" title="Abre a Cotação com estes produtos e quantidades já preenchidos">📝 Criar cotação</button>' : '') + '</td></tr>',
+        linhas: recolhido ? [] : R.ordenar(g.linhas, radarAba)
+      };
+    });
   }
   // O pedido nasce de uma cotacao: o Radar abre a Cotacao do fornecedor
   // com os produtos da fila, a sugestao como quantidade e o custo da
@@ -7411,6 +7427,18 @@ Tupan</textarea>
   });
   const irParaAbaRadar = (a) => { radarAba = a; renderRadar(); };
   App.delegar($('radarChips'), 'click', '.chip-filtro', (b) => irParaAbaRadar(b.dataset.aba));
+  App.delegar($('radarLista'), 'click', 'tr.rd-forn-cab', (tr, ev) => {
+    if(ev.target.closest('button')) return; // "Criar cotacao" nao recolhe
+    const k = chaveGrupo(tr.dataset.rdGrupo);
+    if(radarRecolhidos.has(k)) radarRecolhidos.delete(k); else radarRecolhidos.add(k);
+    renderRadar();
+  });
+  $('radarRecolherTodos').addEventListener('click', () => {
+    const grupos = R.porFornecedor(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')) }));
+    const todos = grupos.length > 0 && grupos.every(g => radarRecolhidos.has(chaveGrupo(g.fornecedor)));
+    grupos.forEach(g => { if(todos) radarRecolhidos.delete(chaveGrupo(g.fornecedor)); else radarRecolhidos.add(chaveGrupo(g.fornecedor)); });
+    renderRadar();
+  });
   App.delegar($('radarResumo'), 'click', '.rd-kpi', (b) => irParaAbaRadar(b.dataset.aba));
   $('buscaRadar').addEventListener('input', App.debounce(renderRadar, 250));
 
