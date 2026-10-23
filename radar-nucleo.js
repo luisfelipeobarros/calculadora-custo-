@@ -4,7 +4,8 @@
   Entrada diaria: o relatorio de vendas do sistema (codigo interno,
   nome, codigo de barras, vendas e estoque do periodo). O radar cruza
   cada produto com:
-  - a FICHA da Calculadora (fornecedor, custo, preco), pelo codigo interno;
+  - o cadastro de Produtos salvos da Calculadora (preco de venda; custo e
+    fornecedor so' quando o relatorio nao traz), pelo codigo interno;
   - a CARTEIRA: itens de cotacao com status "pedido", pelo codigo interno;
   - o FATURADO e o RECEBIDO: itens das NF-e emitidas, pelo codigo de
     barras (o mesmo elo do app de Etiquetas);
@@ -199,9 +200,10 @@
         if (!cod) return;
         if (!isFinite(qtd)) qtd = 0;
         var em = it.pedidoEm || dataCot || null;
-        var c = mapa[cod] || (mapa[cod] = { qtd: 0, em: null, fornecedor: '', cotacoes: 0 });
+        var c = mapa[cod] || (mapa[cod] = { qtd: 0, em: null, fornecedor: '', cotacoes: 0, ids: [] });
         c.qtd += qtd;
         c.cotacoes++;
+        if (d.id && c.ids.indexOf(d.id) < 0) c.ids.push(d.id);
         if (em && (!c.em || em > c.em)) { c.em = em; c.fornecedor = d.fornecedor || c.fornecedor; }
       });
     });
@@ -286,7 +288,8 @@
       if (c) {
         c = Object.assign({}, c);
         c.entregue = !!(m && m.recebido && m.recebido.em && c.em && m.recebido.em >= c.em);
-        c.velho = !c.entregue && !!(c.em && o.hoje && App.diasEntre(c.em, o.hoje) > par.pedidoVelhoDias);
+        c.dias = c.em && o.hoje ? App.diasEntre(c.em, o.hoje) : null;
+        c.velho = !c.entregue && c.dias != null && c.dias > par.pedidoVelhoDias;
       }
       var carteiraQtd = c && !c.entregue && !c.velho ? c.qtd : 0;
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
@@ -306,7 +309,9 @@
         carteira: carteiraQtd > 0,
         faturado: faturadoQtd > 0,
         baixoGiro: estoque > 0 && vendas <= par.baixoGiroMax,
-        semFicha: !ficha,
+        // Pedido sem nota ha' mais que pedidoVelhoDias: confere um a um
+        // no sistema e atualiza a cotacao (recebido ou cancelado).
+        pedidoAntigo: !!(c && c.velho),
         pedidoFeito: pedidoFeito
       };
       linhas.push({
@@ -315,7 +320,7 @@
         estoqueAnterior: anterior[codigo] != null ? Number(anterior[codigo]) : null,
         mediaDia: mediaDia, coberturaDias: cobertura == null ? null : Math.round(cobertura),
         fornecedor: p.f || (ficha && ficha.fornecedor) || (c && c.fornecedor) || (m && m.faturado && m.faturado.fornecedor) || '',
-        custo: custo, custoDe: p.c > 0 ? 'última compra' : (custo != null ? 'ficha' : null),
+        custo: custo, custoDe: p.c > 0 ? 'última compra' : (custo != null ? 'cadastro' : null),
         venda: ficha && ficha.venda > 0 ? ficha.venda : null,
         ultimaCompra: p.ud ? { em: p.ud, qtd: p.uq == null ? null : Number(p.uq), preco: p.c > 0 ? Number(p.c) : null } : null,
         carteira: c, faturado: m && m.faturado || null, recebido: m && m.recebido || null,
@@ -334,13 +339,13 @@
     carteira: { rotulo: 'Em carteira', flag: 'carteira' },
     faturado: { rotulo: 'Faturado', flag: 'faturado' },
     baixoGiro: { rotulo: 'Baixo giro', flag: 'baixoGiro' },
-    semFicha: { rotulo: 'Sem ficha', flag: 'semFicha' },
+    pedidoAntigo: { rotulo: 'Pedido antigo', flag: 'pedidoAntigo' },
     pedidoFeito: { rotulo: 'Pedido feito', flag: 'pedidoFeito' },
     todos: { rotulo: 'Todos', flag: null }
   };
 
   function contar(linhas) {
-    var c = { comprar: 0, valorComprar: 0, conferir: 0, chegando: 0, carteira: 0, faturado: 0, baixoGiro: 0, valorParado: 0, semFicha: 0, pedidoFeito: 0, todos: 0 };
+    var c = { comprar: 0, valorComprar: 0, conferir: 0, chegando: 0, carteira: 0, faturado: 0, baixoGiro: 0, valorParado: 0, pedidoAntigo: 0, pedidoFeito: 0, todos: 0 };
     (linhas || []).forEach(function (l) {
       c.todos++;
       Object.keys(l.flags).forEach(function (f) { if (l.flags[f] && c[f] != null) c[f]++; });
@@ -374,6 +379,7 @@
     return (linhas || []).slice().sort(function (a, b) {
       if (aba === 'comprar' || aba === 'conferir') return (b.valorSugestao || 0) - (a.valorSugestao || 0) || b.sugestao - a.sugestao;
       if (aba === 'baixoGiro') return (b.valorParado || 0) - (a.valorParado || 0) || b.estoque - a.estoque;
+      if (aba === 'pedidoAntigo') return ((a.carteira && a.carteira.em) || '') < ((b.carteira && b.carteira.em) || '') ? -1 : 1;
       var ca = a.coberturaDias == null ? 1e9 : a.coberturaDias, cb = b.coberturaDias == null ? 1e9 : b.coberturaDias;
       return ca - cb || b.vendas - a.vendas;
     });
@@ -382,7 +388,7 @@
   function porFornecedor(linhas) {
     var por = {};
     (linhas || []).forEach(function (l) {
-      var f = l.fornecedor || 'Sem fornecedor (sem ficha)';
+      var f = l.fornecedor || 'Sem fornecedor';
       var g = por[f] || (por[f] = { fornecedor: f, linhas: [], valor: 0, itens: 0 });
       g.linhas.push(l); g.itens++; g.valor += l.valorSugestao || 0;
     });
@@ -402,7 +408,7 @@
         'Faturado': l.faturado ? l.faturado.qtd : 0, 'Faturado em': l.faturado && l.faturado.em ? l.faturado.em : '',
         'Recebido em': l.recebido && l.recebido.em ? l.recebido.em : '', 'Qtd recebida': l.recebido ? l.recebido.qtd : '',
         'Sugestão': l.sugestao, 'Custo unit.': l.custo == null ? '' : l.custo, 'Valor sugerido': l.valorSugestao == null ? '' : l.valorSugestao,
-        'Situação': [l.flags.comprar ? 'comprar' : '', l.flags.conferir ? 'conferir (venda concentrada)' : '', l.flags.chegando ? 'chegando' : '', l.flags.baixoGiro ? 'baixo giro' : '', l.flags.semFicha ? 'sem ficha' : '', l.flags.pedidoFeito ? 'pedido feito' : '', l.eanRepetido ? 'barras repetido' : ''].filter(Boolean).join(', ')
+        'Situação': [l.flags.comprar ? 'comprar' : '', l.flags.conferir ? 'conferir (venda concentrada)' : '', l.flags.chegando ? 'chegando' : '', l.flags.baixoGiro ? 'baixo giro' : '', l.flags.pedidoAntigo ? 'pedido antigo (sem nota)' : '', l.flags.pedidoFeito ? 'pedido feito' : '', l.eanRepetido ? 'barras repetido' : ''].filter(Boolean).join(', ')
       };
     });
   }

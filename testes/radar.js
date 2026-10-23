@@ -73,7 +73,8 @@ const cotacoes = [
 ];
 const cart = N.carteira(cotacoes);
 eq('carteira: soma os pedidos do codigo; data = pedidoEm (ou a da cotacao); fornecedor do mais recente',
-  [cart['200'], cart['100'].em, cart['400']], [{ qtd: 120, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2 }, '2026-10-01', undefined]);
+  [cart['200'], cart['100'].em, cart['400']], [{ qtd: 120, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2, ids: [] }, '2026-10-01', undefined]);
+eq('carteira guarda os ids das cotacoes de origem', N.carteira([{ id: 'c1', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }, { id: 'c2', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }])['9'].ids, ['c1', 'c2']);
 
 const itensDocs = [
   { chave: 'A', numero: '10', dataEmissao: '2026-10-18', nomeEmitente: 'CERAMICA X', itens: [{ ean: '7899000000011', qtd: 40, ncm: '69072200' }, { ean: '7899000000035', qtd: 12, ncm: '69072100' }] },
@@ -96,11 +97,11 @@ eq('argamassa: 600 em 60 dias = 10/dia; alvo 300 - estoque 300 - carteira 10 = n
   [por['100'].mediaDia, por['100'].coberturaDias, por['100'].sugestao, por['100'].flags.comprar, por['100'].flags.chegando], [10, 30, 0, false, true]);
 eq('piso X: 2/dia, alvo 60 - estoque 8 - carteira 120 - faturado 100 < 0: nada a comprar, chegando, cobertura 4 dias, variacao do estoque',
   [por['200'].sugestao, por['200'].flags.chegando, por['200'].coberturaDias, por['200'].estoqueAnterior, por['200'].recebido.em], [0, true, 4, 20, '2026-10-14']);
-eq('piso novo: 0,5/dia, alvo 15 - estoque 0 - faturado 12 = 3 a comprar; sem ficha; fornecedor vem da nota',
-  [por['400'].sugestao, por['400'].flags.comprar, por['400'].flags.semFicha, por['400'].fornecedor, por['400'].valorSugestao], [3, true, true, 'CERAMICA X', null]);
+eq('piso novo: 0,5/dia, alvo 15 - estoque 0 - faturado 12 = 3 a comprar; sem cadastro; fornecedor vem da nota',
+  [por['400'].sugestao, por['400'].flags.comprar, por['400'].custoDe, por['400'].fornecedor, por['400'].valorSugestao], [3, true, null, 'CERAMICA X', null]);
 eq('asterisco: nunca sugere; baixo giro com valor parado (50 x 10)', [por['300'].sugestao, por['300'].flags.baixoGiro, por['300'].valorParado], [0, true, 500]);
 eq('sem vendas no periodo e com estoque: cobertura sem numero (null)', por['300'].coberturaDias, null);
-eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro, c.semFicha, c.valorParado, c.todos])(N.contar(linhas)), [1, 3, 2, 2, 1, 2, 500, 5]);
+eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro, c.pedidoAntigo, c.valorParado, c.todos])(N.contar(linhas)), [1, 3, 2, 2, 1, 0, 500, 5]);
 // Carteira viva x entregue x antiga
 {
   const movR = { '7899000000011': { faturado: null, recebido: { qtd: 100, em: '2026-10-20', fornecedor: 'X', numero: '1' } } };
@@ -111,6 +112,10 @@ eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro
     [q['200'].carteira.entregue, q['200'].flags.carteira, q['200'].flags.chegando], [true, false, false]);
   eq('pedido sem nota ha mais de 60 dias e antigo: fora de Chegando; argamassa volta a precisar de compra (alvo 300 - estoque 300 = 0, mas sem a carteira)',
     [q['100'].carteira.velho, q['100'].flags.chegando, q['100'].sugestao], [true, false, 0]);
+  eq('aba Pedido antigo: so o pedido velho, com os dias e as cotacoes de origem, do mais velho para o mais novo',
+    [N.filtrar(r, { aba: 'pedidoAntigo' }).map(l => l.codigo), q['100'].carteira.dias, N.contar(r).pedidoAntigo,
+     N.ordenar([{ carteira: { em: '2026-07-01' } }, { carteira: { em: '2026-05-01' } }], 'pedidoAntigo').map(l => l.carteira.em)],
+    [['100'], 144, 1, ['2026-05-01', '2026-07-01']]);
   eq('o prazo de pedido antigo e parametro', N.calcularRadar(Object.assign({}, base, { carteira: cartR, movimentos: movR, parametros: { coberturaDias: 30, pedidoVelhoDias: 400 } })).find(l => l.codigo === '100').carteira.velho, false);
   eq('abas: so carteira e so faturado', [N.filtrar(linhas, { aba: 'carteira' }).map(l => l.codigo), N.filtrar(linhas, { aba: 'faturado' }).map(l => l.codigo)], [['100', '200'], ['200', '400']]);
 }
@@ -126,10 +131,10 @@ eq('filtro por aba, fornecedor e busca',
   [['400'], 3, ['100']]);
 eq('ordem: comprar por valor sugerido; baixo giro por valor parado; resto por cobertura',
   [N.ordenar(N.filtrar(linhas, { aba: 'comprar' }), 'comprar')[0].codigo, N.ordenar(linhas, 'todos')[0].codigo, N.ordenar(N.filtrar(linhas, { aba: 'baixoGiro' }), 'baixoGiro')[0].codigo], ['400', '400', '300']);
-eq('por fornecedor: valor somado, sem ficha agrupado',
+eq('por fornecedor: valor somado, sem cadastro agrupado',
   N.porFornecedor(N.filtrar(linhas, { aba: 'comprar' })).map(g => g.fornecedor + ':' + g.itens + ':' + g.valor), ['CERAMICA X:1:0']);
-eq('por fornecedor: sem ficha e sem nota vai para o grupo proprio',
-  N.porFornecedor([{ fornecedor: '', valorSugestao: 10 }, { fornecedor: 'F', valorSugestao: 5 }]).map(g => g.fornecedor + ':' + g.valor), ['Sem fornecedor (sem ficha):10', 'F:5']);
+eq('por fornecedor: sem fornecedor no relatorio e sem nota vai para o grupo proprio',
+  N.porFornecedor([{ fornecedor: '', valorSugestao: 10 }, { fornecedor: 'F', valorSugestao: 5 }]).map(g => g.fornecedor + ':' + g.valor), ['Sem fornecedor:10', 'F:5']);
 eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido em'], r[1]['Recebido em']])(N.linhasExcel([por['100'], por['200']])), [2, '2026-10-01', '2026-10-14']);
 
 // ── Relatorio "Produtos a Comprar" (completo) ─────────────────

@@ -735,7 +735,7 @@ Tupan</textarea>
       <p class="nota-explicativa" style="margin-top:8px;">
         Importe todo dia o relatório <strong>Produtos a Comprar (NF-e)</strong> do sistema (fornecedor, classe, período, última compra, estoque,
         vendas e número de vendas feitas; o relatório de vendas simples também serve).
-        Para cada produto o radar junta a <strong>ficha</strong> (preço de venda; custo e fornecedor só quando o relatório não traz), a <strong>carteira</strong>
+        Para cada produto o radar junta a <strong>carteira</strong>
         (itens de cotação com status "pedido") e o <strong>faturado / recebido</strong> (NF-e emitidas, pelo código de barras),
         e sugere a compra: média diária × dias de cobertura − estoque − carteira − faturado. A mesma importação atualiza o
         estoque dos pisos no app de Etiquetas.
@@ -988,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=7"></script>
+<script src="radar-nucleo.js?v=8"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -5238,6 +5238,7 @@ Tupan</textarea>
 
       const item = document.createElement('div');
       item.className = 'historico-item';
+      item.dataset.id = d.id;
 
       const header = document.createElement('button');
       header.type = 'button';
@@ -7161,7 +7162,7 @@ Tupan</textarea>
   let radarLinhas = [];
   let radarAba = 'comprar';
   let radarCarregado = false;
-  const RD_CHIPS = [['comprar', '🛒 Comprar'], ['conferir', '⚠ Conferir'], ['chegando', '🚚 Chegando'], ['carteira', '· só carteira'], ['faturado', '· só faturado'], ['baixoGiro', '🐢 Baixo giro'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
+  const RD_CHIPS = [['comprar', '🛒 Comprar'], ['conferir', '⚠ Conferir'], ['chegando', '🚚 Chegando'], ['carteira', '· só carteira'], ['faturado', '· só faturado'], ['baixoGiro', '🐢 Baixo giro'], ['pedidoAntigo', '⏳ Pedido antigo'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
   $('radarChips').innerHTML = RD_CHIPS.map(([a, rot]) => '<button type="button" class="chip-filtro" data-aba="' + a + '" aria-pressed="' + (a === radarAba ? 'true' : 'false') + '">' + rot + '</button>').join('');
   App.buscaComChips($('buscaRadar'));
   const setRadarMsg = (t) => { $('radarMsg').textContent = t; };
@@ -7264,7 +7265,7 @@ Tupan</textarea>
     if(radarCarregado && !forcar){ calcularERenderRadar(); return Promise.resolve(); }
     if(radarCarregando) return radarCarregando;
     radarCarregando = (async () => {
-      setRadarMsg('Carregando vendas, cotações, notas e fichas...');
+      setRadarMsg('Carregando vendas, cotações e notas...');
       try{
         const [docVendas] = await Promise.all([
           lerResumoRadar(),
@@ -7314,7 +7315,7 @@ Tupan</textarea>
     const partes = [];
     if(l.ultimaCompra) partes.push('🛒 últ. compra ' + App.fmtData(l.ultimaCompra.em) + (l.ultimaCompra.qtd != null ? ' · ' + fmtQ(l.ultimaCompra.qtd) : '') + (l.ultimaCompra.preco != null ? ' · ' + brl(l.ultimaCompra.preco) : ''));
     if(l.carteira) partes.push('📝 pedido ' + (l.carteira.em ? App.fmtData(l.carteira.em) : '') + ' · ' + fmtQ(l.carteira.qtd) + (l.carteira.fornecedor ? ' · ' + escapeHtml(l.carteira.fornecedor) : '') +
-      (l.carteira.entregue ? ' <span style="color:var(--profit);">(entregue)</span>' : l.carteira.velho ? ' <span style="color:var(--loss);">(antigo — atualize a cotação)</span>' : ''));
+      (l.carteira.entregue ? ' <span style="color:var(--profit);">(entregue)</span>' : l.carteira.velho ? ' <span style="color:var(--loss);">(há ' + l.carteira.dias + ' dias sem nota — confira e atualize a cotação)</span>' : ''));
     if(l.faturado) partes.push('🧾 faturado ' + (l.faturado.em ? App.fmtData(l.faturado.em) : '') + ' · ' + fmtQ(l.faturado.qtd) + (l.faturado.numero ? ' · NF ' + escapeHtml(l.faturado.numero) : ''));
     if(l.recebido) partes.push('📦 recebido ' + (l.recebido.em ? App.fmtData(l.recebido.em) : '') + ' · ' + fmtQ(l.recebido.qtd));
     if(l.pedido && l.flags.pedidoFeito) partes.push('✔ pedido feito ' + App.fmtData(l.pedido.em) + ' · ' + fmtQ(l.pedido.qtd) + (l.pedido.ref ? ' · ' + escapeHtml(l.pedido.ref) : ''));
@@ -7327,6 +7328,7 @@ Tupan</textarea>
       ['conferir', 'Conferir (venda concentrada)', c.conferir, ''],
       ['chegando', 'Chegando', c.chegando + ' · carteira ' + c.carteira + ' · faturado ' + c.faturado, 'azul'],
       ['baixoGiro', 'Baixo giro', c.baixoGiro + (c.valorParado ? ' · ' + brl(c.valorParado) + ' parado' : ''), ''],
+      ['pedidoAntigo', 'Pedido antigo (sem nota há +' + radarParametros.pedidoVelhoDias + ' d)', c.pedidoAntigo, c.pedidoAntigo ? 'alerta' : ''],
       ['pedidoFeito', 'Pedido feito', c.pedidoFeito, '']
     ].map(([a, rot, val, cls]) => '<button type="button" class="etq-kpi rd-kpi" data-aba="' + a + '" aria-pressed="' + (radarAba === a ? 'true' : 'false') + '"><span class="k-rot">' + rot + '</span><span class="k-val ' + cls + '">' + val + '</span></button>').join('');
     $('radarChips').querySelectorAll('.chip-filtro').forEach(b => b.setAttribute('aria-pressed', b.dataset.aba === radarAba ? 'true' : 'false'));
@@ -7346,7 +7348,7 @@ Tupan</textarea>
           '<td><div class="prod">' + escapeHtml(l.nome) + '</div><div class="mono">' + escapeHtml(l.codigo) + (l.ean ? ' · ' + l.ean : '') + (l.naoRepor ? ' · não repor' : '') +
             (l.eanRepetido ? ' · <span style="color:var(--loss);">barras repetido no cadastro</span>' : '') + '</div></td>' +
           '<td>' + escapeHtml(l.fornecedor || '—') + (l.custo != null ? '<div class="mono">custo ' + brl(l.custo) + (l.custoDe ? ' (' + l.custoDe + ')' : '') + (l.venda != null ? ' · venda ' + brl(l.venda) : '') + '</div>' : '') +
-            (l.flags.semFicha ? '<div class="mono">sem ficha na Calculadora</div>' : '') + '</td>' +
+'</td>' +
           '<td class="num">' + fmtQ(l.vendas) + '<div class="mono">' + fmtQ(Math.round(l.mediaDia * 100) / 100) + '/dia' + (l.transacoes != null ? ' · ' + fmtQ(l.transacoes) + ' venda(s)' : '') + '</div>' +
             (l.concentrada ? '<div class="mono" style="color:var(--loss);">venda concentrada</div>' : '') + '</td>' +
           '<td class="num"><b>' + fmtQ(l.estoque) + '</b>' + (delta != null && delta !== 0 ? '<div class="mono">' + (delta > 0 ? '+' : '') + fmtQ(delta) + ' desde ' + App.fmtData(radarDoc.anteriorEm) + '</div>' : '') + '</td>' +
@@ -7355,7 +7357,8 @@ Tupan</textarea>
           '<td class="num">' + (l.sugestao > 0 ? '<b>' + fmtQ(l.sugestao) + '</b>' + (l.valorSugestao != null ? '<div class="mono">' + brl(l.valorSugestao) + '</div>' : '') : '—') + '</td>' +
           '<td style="white-space:nowrap;">' + (l.flags.pedidoFeito
             ? '<button type="button" class="btn secondary mini" data-rd="desfazer" data-codigo="' + escapeHtml(l.codigo) + '">↩ Desfazer</button>'
-            : (l.sugestao > 0 ? '<button type="button" class="btn secondary mini" data-rd="pedido" data-codigo="' + escapeHtml(l.codigo) + '">✔ Pedido feito</button>' : '')) + '</td>' +
+            : (l.sugestao > 0 ? '<button type="button" class="btn secondary mini" data-rd="pedido" data-codigo="' + escapeHtml(l.codigo) + '">✔ Pedido feito</button>' : '')) +
+            (l.carteira && l.carteira.ids && l.carteira.ids.length ? ' <button type="button" class="btn secondary mini" data-rd="cotacao" data-codigo="' + escapeHtml(l.codigo) + '" title="Abre a cotação no Histórico para marcar recebido ou cancelar o item">📂 Cotação</button>' : '') + '</td>' +
         '</tr>';
       }).join('')).join('') + '</tbody></table></div>';
   }
@@ -7377,7 +7380,7 @@ Tupan</textarea>
   App.delegar($('radarLista'), 'click', '[data-rd-cotacao]', (b) => {
     const forn = b.dataset.rdCotacao;
     const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')) }), radarAba)
-      .filter(l => (l.fornecedor || 'Sem fornecedor (sem ficha)') === forn && l.sugestao > 0);
+      .filter(l => (l.fornecedor || 'Sem fornecedor') === forn && l.sugestao > 0);
     if(!lista.length){ App.toast('Nada a cotar deste fornecedor.', 'info'); return; }
     resetCotacao();
     const nomeForn = /^Sem fornecedor/.test(forn) ? '' : forn;
@@ -7407,6 +7410,17 @@ Tupan</textarea>
     const codigo = b.dataset.codigo;
     const l = radarLinhas.find(x => x.codigo === codigo);
     if(!l) return;
+    if(b.dataset.rd === 'cotacao'){
+      // Abre o Historico com a(s) cotacao(oes) do pedido ja' expandida(s)
+      // e filtra pelo produto, para marcar recebido ou cancelar o item.
+      l.carteira.ids.forEach(id => historicoAbertos.add(id));
+      $('buscaProdutoHistorico').value = l.nome; $('buscaFornecedorHistorico').value = '';
+      mostrarViewHistorico();
+      await carregarHistorico();
+      const alvo = document.querySelector('.historico-item[data-id="' + CSS.escape(l.carteira.ids[0]) + '"]');
+      if(alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     const pedidos = Object.assign({}, radarParametros.pedidos);
     if(b.dataset.rd === 'desfazer'){
       delete pedidos[codigo];
