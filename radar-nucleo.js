@@ -282,16 +282,18 @@
       // grande) nao e' giro — a sugestao fica para conferir, fora da soma.
       var concentrada = transacoes != null && vendas > 0 && transacoes < par.minVendasFeitas;
       // Carteira so' conta enquanto e' pedido vivo: com recebimento DEPOIS
-      // da data do pedido ela foi entregue; sem nota por mais de
-      // pedidoVelhoDias e' cotacao que ficou como "pedido" e ninguem
-      // atualizou. Nos dois casos sai de Chegando e nao desconta da compra.
+      // da data do pedido ela foi entregue; com nota faturada depois dele
+      // o pedido virou a nota (ja' conta no faturado, nao soma duas vezes);
+      // sem nota por mais de pedidoVelhoDias e' cotacao que ficou como
+      // "pedido" e ninguem atualizou. Nos tres casos nao desconta da compra.
       if (c) {
         c = Object.assign({}, c);
         c.entregue = !!(m && m.recebido && m.recebido.em && c.em && m.recebido.em >= c.em);
+        c.faturada = !c.entregue && !!(m && m.faturado && m.faturado.em && c.em && m.faturado.em >= c.em);
         c.dias = c.em && o.hoje ? App.diasEntre(c.em, o.hoje) : null;
-        c.velho = !c.entregue && c.dias != null && c.dias > par.pedidoVelhoDias;
+        c.velho = !c.entregue && !c.faturada && c.dias != null && c.dias > par.pedidoVelhoDias;
       }
-      var carteiraQtd = c && !c.entregue && !c.velho ? c.qtd : 0;
+      var carteiraQtd = c && !c.entregue && !c.faturada && !c.velho ? c.qtd : 0;
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
       var naoRepor = /^\*/.test(nome);
       var alvo = mediaDia * par.coberturaDias;

@@ -101,7 +101,7 @@ eq('piso novo: 0,5/dia, alvo 15 - estoque 0 - faturado 12 = 3 a comprar; sem cad
   [por['400'].sugestao, por['400'].flags.comprar, por['400'].custoDe, por['400'].fornecedor, por['400'].valorSugestao], [3, true, null, 'CERAMICA X', null]);
 eq('asterisco: nunca sugere; baixo giro com valor parado (50 x 10)', [por['300'].sugestao, por['300'].flags.baixoGiro, por['300'].valorParado], [0, true, 500]);
 eq('sem vendas no periodo e com estoque: cobertura sem numero (null)', por['300'].coberturaDias, null);
-eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro, c.pedidoAntigo, c.valorParado, c.todos])(N.contar(linhas)), [1, 3, 2, 2, 1, 0, 500, 5]);
+eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro, c.pedidoAntigo, c.valorParado, c.todos])(N.contar(linhas)), [1, 3, 1, 2, 1, 0, 500, 5]);
 // Carteira viva x entregue x antiga
 {
   const movR = { '7899000000011': { faturado: null, recebido: { qtd: 100, em: '2026-10-20', fornecedor: 'X', numero: '1' } } };
@@ -116,8 +116,12 @@ eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro
     [N.filtrar(r, { aba: 'pedidoAntigo' }).map(l => l.codigo), q['100'].carteira.dias, N.contar(r).pedidoAntigo,
      N.ordenar([{ carteira: { em: '2026-07-01' } }, { carteira: { em: '2026-05-01' } }], 'pedidoAntigo').map(l => l.carteira.em)],
     [['100'], 144, 1, ['2026-05-01', '2026-07-01']]);
+  const movF = { '7899000000011': { faturado: { qtd: 100, em: '2026-10-20', fornecedor: 'X', numero: '1' }, recebido: null } };
+  const rf = N.calcularRadar(Object.assign({}, base, { carteira: { '200': { qtd: 50, em: '2026-06-01', fornecedor: 'F1', cotacoes: 1 } }, movimentos: movF })).find(l => l.codigo === '200');
+  eq('pedido com nota faturada depois dele: nao e antigo, sai da carteira (a nota ja conta no faturado), segue em Chegando',
+    [rf.carteira.faturada, rf.carteira.velho, rf.flags.pedidoAntigo, rf.flags.carteira, rf.flags.faturado, rf.flags.chegando], [true, false, false, false, true, true]);
   eq('o prazo de pedido antigo e parametro', N.calcularRadar(Object.assign({}, base, { carteira: cartR, movimentos: movR, parametros: { coberturaDias: 30, pedidoVelhoDias: 400 } })).find(l => l.codigo === '100').carteira.velho, false);
-  eq('abas: so carteira e so faturado', [N.filtrar(linhas, { aba: 'carteira' }).map(l => l.codigo), N.filtrar(linhas, { aba: 'faturado' }).map(l => l.codigo)], [['100', '200'], ['200', '400']]);
+  eq('abas: so carteira (o piso X tem nota faturada depois do pedido, saiu da carteira) e so faturado', [N.filtrar(linhas, { aba: 'carteira' }).map(l => l.codigo), N.filtrar(linhas, { aba: 'faturado' }).map(l => l.codigo)], [['100'], ['200', '400']]);
 }
 eq('compra minima corta a sugestao pequena', N.calcularRadar(Object.assign({}, base, { parametros: { coberturaDias: 30, baixoGiroMax: 0, compraMinima: 5 } })).find(l => l.codigo === '400').sugestao, 0);
 eq('cobertura maior sugere mais: 90 dias para a argamassa = 900 - 300 - 10 = 590', N.calcularRadar(Object.assign({}, base, { parametros: { coberturaDias: 90 } })).find(l => l.codigo === '100').sugestao, 590);

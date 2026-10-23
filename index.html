@@ -988,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=8"></script>
+<script src="radar-nucleo.js?v=9"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -7315,7 +7315,7 @@ Tupan</textarea>
     const partes = [];
     if(l.ultimaCompra) partes.push('🛒 últ. compra ' + App.fmtData(l.ultimaCompra.em) + (l.ultimaCompra.qtd != null ? ' · ' + fmtQ(l.ultimaCompra.qtd) : '') + (l.ultimaCompra.preco != null ? ' · ' + brl(l.ultimaCompra.preco) : ''));
     if(l.carteira) partes.push('📝 pedido ' + (l.carteira.em ? App.fmtData(l.carteira.em) : '') + ' · ' + fmtQ(l.carteira.qtd) + (l.carteira.fornecedor ? ' · ' + escapeHtml(l.carteira.fornecedor) : '') +
-      (l.carteira.entregue ? ' <span style="color:var(--profit);">(entregue)</span>' : l.carteira.velho ? ' <span style="color:var(--loss);">(há ' + l.carteira.dias + ' dias sem nota — confira e atualize a cotação)</span>' : ''));
+      (l.carteira.entregue ? ' <span style="color:var(--profit);">(entregue)</span>' : l.carteira.faturada ? ' <span style="color:var(--profit);">(faturado — atualize a cotação)</span>' : l.carteira.velho ? ' <span style="color:var(--loss);">(há ' + l.carteira.dias + ' dias sem nota — confira e atualize a cotação)</span>' : ''));
     if(l.faturado) partes.push('🧾 faturado ' + (l.faturado.em ? App.fmtData(l.faturado.em) : '') + ' · ' + fmtQ(l.faturado.qtd) + (l.faturado.numero ? ' · NF ' + escapeHtml(l.faturado.numero) : ''));
     if(l.recebido) partes.push('📦 recebido ' + (l.recebido.em ? App.fmtData(l.recebido.em) : '') + ' · ' + fmtQ(l.recebido.qtd));
     if(l.pedido && l.flags.pedidoFeito) partes.push('✔ pedido feito ' + App.fmtData(l.pedido.em) + ' · ' + fmtQ(l.pedido.qtd) + (l.pedido.ref ? ' · ' + escapeHtml(l.pedido.ref) : ''));
@@ -7341,14 +7341,13 @@ Tupan</textarea>
     }
     $('radarListaMsg').textContent = lista.length + ' produto(s)';
     $('radarLista').innerHTML = '<div class="tabela-rolavel"><table class="quote-table rd-tab"><thead><tr>' +
-      '<th>Produto</th><th>Fornecedor</th><th class="num">Vendas (' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
+      '<th>Produto</th><th class="num">Vendas (' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
       '</tr></thead><tbody>' + blocosRadar(lista).map(bloco => (bloco.cabecalho || '') + bloco.linhas.map(l => {
         const delta = l.estoqueAnterior != null ? l.estoque - l.estoqueAnterior : null;
         return '<tr>' +
           '<td><div class="prod">' + escapeHtml(l.nome) + '</div><div class="mono">' + escapeHtml(l.codigo) + (l.ean ? ' · ' + l.ean : '') + (l.naoRepor ? ' · não repor' : '') +
-            (l.eanRepetido ? ' · <span style="color:var(--loss);">barras repetido no cadastro</span>' : '') + '</div></td>' +
-          '<td>' + escapeHtml(l.fornecedor || '—') + (l.custo != null ? '<div class="mono">custo ' + brl(l.custo) + (l.custoDe ? ' (' + l.custoDe + ')' : '') + (l.venda != null ? ' · venda ' + brl(l.venda) : '') + '</div>' : '') +
-'</td>' +
+            (l.eanRepetido ? ' · <span style="color:var(--loss);">barras repetido no cadastro</span>' : '') +
+            (l.custo != null ? ' · custo ' + brl(l.custo) + (l.custoDe ? ' (' + l.custoDe + ')' : '') + (l.venda != null ? ' · venda ' + brl(l.venda) : '') : '') + '</div></td>' +
           '<td class="num">' + fmtQ(l.vendas) + '<div class="mono">' + fmtQ(Math.round(l.mediaDia * 100) / 100) + '/dia' + (l.transacoes != null ? ' · ' + fmtQ(l.transacoes) + ' venda(s)' : '') + '</div>' +
             (l.concentrada ? '<div class="mono" style="color:var(--loss);">venda concentrada</div>' : '') + '</td>' +
           '<td class="num"><b>' + fmtQ(l.estoque) + '</b>' + (delta != null && delta !== 0 ? '<div class="mono">' + (delta > 0 ? '+' : '') + fmtQ(delta) + ' desde ' + App.fmtData(radarDoc.anteriorEm) + '</div>' : '') + '</td>' +
@@ -7364,12 +7363,13 @@ Tupan</textarea>
   }
   // Comprar e Conferir saem por fornecedor, como o relatorio do Etiquetas:
   // uma linha de cabecalho com o fornecedor, quantos itens e o valor, e os
-  // produtos dele abaixo. As outras abas sao lista corrida.
+  // produtos dele abaixo, em todas as abas. "Criar cotacao" so' onde ha'
+  // sugestao de compra (Comprar e Conferir).
   function blocosRadar(lista){
-    if(radarAba !== 'comprar' && radarAba !== 'conferir') return [{ linhas: lista }];
+    const comCotacao = radarAba === 'comprar' || radarAba === 'conferir';
     return R.porFornecedor(lista).map(g => ({
-      cabecalho: '<tr class="rd-forn-cab"><td colspan="8"><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (g.valor ? ' · ' + brl(g.valor) : '') + '</span>' +
-        ' <button type="button" class="btn secondary mini" data-rd-cotacao="' + escapeHtml(g.fornecedor) + '" title="Abre a Cotação com estes produtos e quantidades já preenchidos">📝 Criar cotação</button></td></tr>',
+      cabecalho: '<tr class="rd-forn-cab"><td colspan="7"><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (comCotacao && g.valor ? ' · ' + brl(g.valor) : '') + '</span>' +
+        (comCotacao ? ' <button type="button" class="btn secondary mini" data-rd-cotacao="' + escapeHtml(g.fornecedor) + '" title="Abre a Cotação com estes produtos e quantidades já preenchidos">📝 Criar cotação</button>' : '') + '</td></tr>',
       linhas: R.ordenar(g.linhas, radarAba)
     }));
   }
