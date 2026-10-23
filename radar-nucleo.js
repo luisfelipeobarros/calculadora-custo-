@@ -188,10 +188,15 @@
     (cotacoes || []).forEach(function (d) {
       var dataCot = dataISO(d && d.data);
       (d && d.itens || []).forEach(function (it) {
-        if (!it || (it.status || 'negociacao') !== 'pedido') return;
+        if (!it) return;
+        var st = it.status || 'negociacao';
+        // Pedido inteiro, ou o que faltou faturar num pedido parcial.
+        var qtd;
+        if (st === 'pedido') qtd = it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
+        else if (st === 'transito' && it.parcial && it.parcial.pedido > it.parcial.faturado) qtd = it.parcial.pedido - it.parcial.faturado;
+        else return;
         var cod = String(it.codigo == null ? '' : it.codigo).trim();
         if (!cod) return;
-        var qtd = it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
         if (!isFinite(qtd)) qtd = 0;
         var em = it.pedidoEm || dataCot || null;
         var c = mapa[cod] || (mapa[cod] = { qtd: 0, em: null, fornecedor: '', cotacoes: 0 });
@@ -476,31 +481,48 @@
     });
 
     itens.forEach(function (it, idx) {
-      if ((it.status || 'negociacao') === 'recebido' && it.chaveNfe) return; // ja' fechado
+      if ((it.status || 'negociacao') === 'recebido' && it.chaveNfe && !it.parcial) return; // ja' fechado
       var codForn = codigoNorm(it.codigoRecebido);
       var ean = soDigitos(eanPorCodigo && eanPorCodigo[String(it.codigo == null ? '' : it.codigo).trim()]);
-      var achado = null;
-      for (var i = 0; i < candidatas.length && !achado; i++) {
-        var doc = candidatas[i];
+      // TODAS as notas que casam: o pedido pode vir em mais de uma
+      // (faturamento parcial), e so' fecha quando a soma cobre a quantidade.
+      var achados = [];
+      candidatas.forEach(function (doc) {
         var lista = doc.itens || [];
         var porCodigo = codForn ? lista.filter(function (x) { return codigoNorm(x && x.codigo) === codForn; }) : [];
         var porEan = (!porCodigo.length && ean) ? lista.filter(function (x) { return soDigitos(x && x.ean) === ean; }) : [];
         var porNome = (!porCodigo.length && !porEan.length) ? lista.filter(function (x) { return semelhancaNomes(it.produto, x && x.descricao) >= 0.75; }) : [];
         var item = porCodigo[0] || porEan[0] || (porNome.length === 1 ? porNome[0] : null);
-        if (item) achado = { doc: doc, item: item, por: porCodigo.length ? 'código do fornecedor' : porEan.length ? 'código de barras' : 'nome' };
-      }
-      if (!achado) return;
-      var nota = (notasPorChave || {})[achado.doc.chave] || null;
-      var recebida = !!(nota && nota.noSistema === true);
-      var novoStatus = recebida ? 'recebido' : 'transito';
+        if (!item) return;
+        var nota = (notasPorChave || {})[doc.chave] || null;
+        var recebida = !!(nota && nota.noSistema === true);
+        achados.push({
+          doc: doc, item: item, por: porCodigo.length ? 'código do fornecedor' : porEan.length ? 'código de barras' : 'nome',
+          recebida: recebida,
+          recebidaEm: recebida ? (nota.noSistemaEm || dataISO(nota.alteradoEm) || doc.dataEmissao || hoje || null) : null
+        });
+      });
+      if (!achados.length) return;
+      var ultimo = achados[0]; // candidatas ja' vem da mais recente para a mais antiga
+      var qtdNfe = achados.reduce(function (s, a) { return s + (Number(a.item.qtd) || 0); }, 0);
+      var qtdPedida = it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
+      var parcial = (qtdPedida > 0 && qtdNfe > 0 && qtdNfe < qtdPedida - 0.001) ? { faturado: qtdNfe, pedido: qtdPedida } : null;
+      var todasRecebidas = achados.every(function (a) { return a.recebida; });
+      var novoStatus = (todasRecebidas && !parcial) ? 'recebido' : 'transito';
       var atual = it.status || 'negociacao';
+      var recebidas = achados.filter(function (a) { return a.recebida; });
+      var ultimaRecebida = recebidas.reduce(function (m, a) { return (!m || (a.recebidaEm || '') > (m.recebidaEm || '')) ? a : m; }, null);
+      var precoNfe = ultimo.item.vUnit != null ? Number(ultimo.item.vUnit) : null;
       var campos = {
-        chaveNfe: achado.doc.chave,
-        numeroNfe: achado.doc.numero == null ? '' : String(achado.doc.numero),
-        qtdNfe: Number(achado.item.qtd) || null,
-        casadoPor: achado.por,
-        faturadoEm: achado.doc.dataEmissao || it.faturadoEm || null,
-        recebidoEm: recebida ? (nota.noSistemaEm || dataISO(nota.alteradoEm) || achado.doc.dataEmissao || hoje || null) : (it.recebidoEm || null)
+        chaveNfe: ultimo.doc.chave,
+        numeroNfe: ultimo.doc.numero == null ? '' : String(ultimo.doc.numero),
+        notasNfe: achados.map(function (a) { return { chave: a.doc.chave, numero: a.doc.numero == null ? '' : String(a.doc.numero), em: a.doc.dataEmissao || null, qtd: Number(a.item.qtd) || 0, recebida: a.recebida }; }),
+        qtdNfe: qtdNfe || null,
+        parcial: parcial,
+        precoNfe: precoNfe != null && isFinite(precoNfe) ? precoNfe : null,
+        casadoPor: ultimo.por,
+        faturadoEm: ultimo.doc.dataEmissao || it.faturadoEm || null,
+        recebidoEm: ultimaRecebida ? ultimaRecebida.recebidaEm : (it.recebidoEm || null)
       };
       if (ORDEM_STATUS[novoStatus] > (ORDEM_STATUS[atual] || 0)) campos.status = novoStatus;
       if (!it.pedidoEm && campos.status) campos.pedidoEm = it.pedidoEm || dataCot || null;
@@ -508,9 +530,41 @@
         if (campos[k] == null && it[k] == null) return;
         if (JSON.stringify(it[k] == null ? null : it[k]) !== JSON.stringify(campos[k] == null ? null : campos[k])) { it[k] = campos[k]; mudou = true; }
       });
-      if (!vinculadas.has(achado.doc.chave)) { vinculadas.add(achado.doc.chave); chaves.push(achado.doc.chave); mudou = true; }
+      achados.forEach(function (a) {
+        if (!vinculadas.has(a.doc.chave)) { vinculadas.add(a.doc.chave); chaves.push(a.doc.chave); mudou = true; }
+      });
     });
     return { itens: itens, chavesNfe: chaves, mudou: mudou };
+  }
+
+  // Diferenca do preco da nota contra o cotado (recebido na cotacao, ou o
+  // esperado): > 0 subiu. null quando falta um dos dois.
+  function diferencaPrecoNfe(it) {
+    var cotado = it && it.precoRecebido != null ? Number(it.precoRecebido) : (it && it.precoEsperado != null ? Number(it.precoEsperado) : null);
+    if (!it || it.precoNfe == null || !(cotado > 0)) return null;
+    return it.precoNfe / cotado - 1;
+  }
+  // Selos do cabecalho da cotacao no Historico.
+  // { semNota: { itens, dias } | null, parciais, precoAcima, precoAbaixo }
+  function alertasDaCotacao(cotacao, hoje, diasSemNota) {
+    var limite = diasSemNota || 60;
+    var r = { semNota: null, parciais: 0, precoAcima: 0, precoAbaixo: 0 };
+    var dataCot = dataISO(cotacao && cotacao.data);
+    var maisVelho = 0, semNota = 0;
+    ((cotacao && cotacao.itens) || []).forEach(function (it) {
+      if (!it) return;
+      if ((it.status || 'negociacao') === 'pedido' && !it.chaveNfe) {
+        var em = it.pedidoEm || dataCot;
+        var dias = em && hoje ? App.diasEntre(em, hoje) : 0;
+        if (dias > limite) { semNota++; if (dias > maisVelho) maisVelho = dias; }
+      }
+      if (it.parcial) r.parciais++;
+      var dif = diferencaPrecoNfe(it);
+      if (dif != null && dif > 0.005) r.precoAcima++;
+      if (dif != null && dif < -0.005) r.precoAbaixo++;
+    });
+    if (semNota) r.semNota = { itens: semNota, dias: maisVelho };
+    return r;
   }
 
   // Botao "Pedido feito" na cotacao: tudo que ainda esta' em negociacao
@@ -581,6 +635,8 @@
     pisosParaEtiquetas: pisosParaEtiquetas,
     nomesCompativeis: nomesCompativeis,
     casarCotacaoComNotas: casarCotacaoComNotas,
+    diferencaPrecoNfe: diferencaPrecoNfe,
+    alertasDaCotacao: alertasDaCotacao,
     pedidoFeitoNaCotacao: pedidoFeitoNaCotacao,
     eansComNcm: eansComNcm
   };

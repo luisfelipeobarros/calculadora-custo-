@@ -188,6 +188,26 @@ eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido
     [r2.itens[0].status, r2.itens[0].recebidoEm, r2.mudou, N.casarCotacaoComNotas(Object.assign({}, cot, { itens: r2.itens, chavesNfe: r2.chavesNfe }), notasDocs, { N1: { noSistema: true, noSistemaEm: '2026-10-22' } }, {}, '2026-10-23').mudou],
     ['recebido', '2026-10-22', true, false]);
   eq('status nunca anda para tras (recebido manual continua recebido)', N.casarCotacaoComNotas({ fornecedor: 'CERAMICA X', data: ts(2026, 10, 1), itens: [{ codigo: '1', codigoRecebido: 'FX-200', produto: 'x', status: 'recebido' }] }, notasDocs, estado, {}, '2026-10-23').itens[0].status, 'recebido');
+  // Faturamento parcial em duas notas, preco da nota e alertas
+  const cotP = { fornecedor: 'CERAMICA X', data: ts(2026, 10, 1), itens: [
+    { codigo: '300', codigoRecebido: 'FX-300', produto: 'PISO P', quantidadeEsperada: 100, precoRecebido: 10, status: 'pedido', pedidoEm: '2026-08-01' },
+    { codigo: '301', codigoRecebido: 'FX-301', produto: 'PISO Q', quantidadeEsperada: 10, precoEsperado: 20, status: 'pedido', pedidoEm: '2026-08-01' }] };
+  const notasP = [
+    { chave: 'P1', numero: '11', dataEmissao: '2026-10-10', nomeEmitente: 'CERAMICA X', itens: [{ codigo: 'FX-300', qtd: 40, vUnit: 11 }] },
+    { chave: 'P2', numero: '12', dataEmissao: '2026-10-15', nomeEmitente: 'CERAMICA X', itens: [{ codigo: 'FX-300', qtd: 30, vUnit: 11 }] }
+  ];
+  const rp = N.casarCotacaoComNotas(cotP, notasP, { P1: { noSistema: true, noSistemaEm: '2026-10-12' } }, {}, '2026-10-23');
+  eq('parcial: soma as notas (70 de 100), fica em transito mesmo com uma recebida, guarda as duas NF e o preco da nota',
+    [rp.itens[0].status, rp.itens[0].qtdNfe, rp.itens[0].parcial, rp.itens[0].notasNfe.map(x => x.numero), rp.itens[0].precoNfe, rp.chavesNfe.slice().sort()],
+    ['transito', 70, { faturado: 70, pedido: 100 }, ['12', '11'], 11, ['P1', 'P2']]);
+  eq('carteira: o que faltou faturar continua em carteira (30), e o pedido sem nota inteiro (10)',
+    (c => [c['300'].qtd, c['301'].qtd])(N.carteira([Object.assign({}, cotP, { itens: rp.itens })])), [30, 10]);
+  eq('preco da NF contra o cotado: +10%', Math.round(N.diferencaPrecoNfe(rp.itens[0]) * 1000) / 1000, 0.1);
+  eq('alertas: pedido sem nota ha mais de 60 dias, 1 parcial, 1 preco acima',
+    N.alertasDaCotacao(Object.assign({}, cotP, { itens: rp.itens }), '2026-10-23', 60), { semNota: { itens: 1, dias: 83 }, parciais: 1, precoAcima: 1, precoAbaixo: 0 });
+  const rp2 = N.casarCotacaoComNotas(Object.assign({}, cotP, { itens: rp.itens, chavesNfe: rp.chavesNfe }), notasP.concat([{ chave: 'P3', numero: '13', dataEmissao: '2026-10-20', nomeEmitente: 'CERAMICA X', itens: [{ codigo: 'FX-300', qtd: 30, vUnit: 11 }] }]), { P1: { noSistema: true }, P2: { noSistema: true }, P3: { noSistema: true, noSistemaEm: '2026-10-22' } }, {}, '2026-10-23');
+  eq('terceira nota completa o pedido e tudo recebido: fecha como recebido na ultima entrada', [rp2.itens[0].status, rp2.itens[0].parcial, rp2.itens[0].recebidoEm, rp2.itens[0].qtdNfe], ['recebido', null, '2026-10-22', 100]);
+
   const pf = N.pedidoFeitoNaCotacao({ itens: [{ status: 'negociacao' }, { status: 'pedido' }, { status: 'transito' }] }, '2026-10-23');
   eq('pedido feito: negociacao vira pedido com a data; pedido sem data ganha a data; o resto fica', pf.map(i => i.status + ':' + (i.pedidoEm || '-')), ['pedido:2026-10-23', 'pedido:2026-10-23', 'transito:-']);
   eq('pedido feito sem nada a mudar devolve null', N.pedidoFeitoNaCotacao({ itens: [{ status: 'transito' }] }, '2026-10-23'), null);

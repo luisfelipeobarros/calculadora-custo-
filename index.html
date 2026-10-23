@@ -988,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=6"></script>
+<script src="radar-nucleo.js?v=7"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -5251,12 +5251,18 @@ Tupan</textarea>
       const seloRec = !rec ? '' : (rec.completa
         ? '<span class="nf-badge ok" title="Todas as '+rec.total+' NF-e vinculadas deram entrada no ERP">✓ recebida</span>'
         : '<span class="nf-badge aguarda" title="NF-e vinculadas que já deram entrada no ERP">📦 '+rec.recebidas+'/'+rec.total+' recebida(s)</span>');
+      // Selos do casamento automatico com as notas: pedido sem nota ha'
+      // mais que o prazo do Radar, faturamento parcial, preco acima do cotado.
+      const al = R.alertasDaCotacao(d, App.hojeISO(), radarParametros.pedidoVelhoDias);
+      const seloAl = (al.semNota ? '<span class="nf-badge aguarda" title="Itens em carteira sem nenhuma nota casada">⏳ pedido há ' + al.semNota.dias + ' d sem nota (' + al.semNota.itens + ')</span>' : '') +
+        (al.parciais ? '<span class="nf-badge aguarda" title="A nota cobre só parte da quantidade pedida">◐ parcial ' + al.parciais + '</span>' : '') +
+        (al.precoAcima ? '<span class="status-badge up" title="Preço na NF-e acima do cotado">↑ preço na NF ' + al.precoAcima + '</span>' : '');
       header.innerHTML =
         '<span class="supplier-arrow'+(aberto?'':' collapsed')+'">▾</span>'+
         '<span class="h-fornecedor">'+escapeHtml(nomeExibicao)+'</span>'+
         '<span class="h-data">'+formatarDataFirestore(d.data)+'</span>'+
         '<span class="h-count">'+contagem+'</span>'+
-        seloRec+
+        seloRec+seloAl+
         '<span class="status-badge h-total '+(totalImpacto<0?'down':(totalImpacto>0?'up':'neutral'))+'">'+(totalImpacto===0?'sem diferença':(totalImpacto<0?'economia '+brl(Math.abs(totalImpacto)):'+ '+brl(totalImpacto)))+'</span>';
       header.dataset.cotacaoHeader = d.id;
       item.appendChild(header);
@@ -5429,6 +5435,7 @@ Tupan</textarea>
           pedidoEm: it.pedidoEm || null,
           faturadoEm: it.faturadoEm || null, recebidoEm: it.recebidoEm || null, chaveNfe: it.chaveNfe || null,
           numeroNfe: it.numeroNfe || null, qtdNfe: it.qtdNfe != null ? it.qtdNfe : null, casadoPor: it.casadoPor || null,
+          notasNfe: it.notasNfe || null, parcial: it.parcial || null, precoNfe: it.precoNfe != null ? it.precoNfe : null,
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
         recalcularFlags(r);
@@ -5701,7 +5708,15 @@ Tupan</textarea>
   function detalheStatusItem(it){
     const partes = [];
     if(it.pedidoEm) partes.push('pedido ' + App.fmtData(it.pedidoEm));
-    if(it.numeroNfe) partes.push('NF ' + escapeHtml(it.numeroNfe) + (it.qtdNfe != null ? ' (' + it.qtdNfe.toLocaleString('pt-BR') + ')' : ''));
+    if(it.numeroNfe){
+      const nfs = (it.notasNfe && it.notasNfe.length > 1) ? it.notasNfe.length + ' NF (' + it.notasNfe.map(x => escapeHtml(x.numero)).join(', ') + ')' : 'NF ' + escapeHtml(it.numeroNfe);
+      partes.push(nfs + (it.qtdNfe != null ? ' (' + it.qtdNfe.toLocaleString('pt-BR') + ')' : ''));
+    }
+    if(it.parcial) partes.push('<span style="color:var(--loss);">faturado parcial: ' + it.parcial.faturado.toLocaleString('pt-BR') + ' de ' + it.parcial.pedido.toLocaleString('pt-BR') + '</span>');
+    const dif = R.diferencaPrecoNfe(it);
+    if(it.precoNfe != null) partes.push('NF ' + brl(it.precoNfe) + (dif == null ? '' : dif > 0.005
+      ? ' <span style="color:var(--loss);">(+' + (dif * 100).toFixed(1).replace('.', ',') + '% sobre o cotado)</span>'
+      : dif < -0.005 ? ' <span style="color:var(--profit);">(' + (dif * 100).toFixed(1).replace('.', ',') + '% abaixo do cotado)</span>' : ' (= cotado)'));
     if(it.faturadoEm) partes.push('faturado ' + App.fmtData(it.faturadoEm));
     if(it.recebidoEm) partes.push('recebido ' + App.fmtData(it.recebidoEm));
     if(!partes.length) return '';
@@ -6224,7 +6239,8 @@ Tupan</textarea>
       // "pedido em" (cotacao antiga sem isto usa a data da cotacao).
       pedidoEm: (r.status === 'pedido') ? (r.pedidoEm || App.hojeISO()) : (r.pedidoEm || null),
       faturadoEm: r.faturadoEm || null, recebidoEm: r.recebidoEm || null, chaveNfe: r.chaveNfe || null,
-      numeroNfe: r.numeroNfe || null, qtdNfe: r.qtdNfe != null ? r.qtdNfe : null, casadoPor: r.casadoPor || null
+      numeroNfe: r.numeroNfe || null, qtdNfe: r.qtdNfe != null ? r.qtdNfe : null, casadoPor: r.casadoPor || null,
+      notasNfe: r.notasNfe || null, parcial: r.parcial || null, precoNfe: r.precoNfe != null ? r.precoNfe : null
     }));
     try{
       const precosGravados = await gravarPrecosVendaDaCotacao();
@@ -7349,10 +7365,37 @@ Tupan</textarea>
   function blocosRadar(lista){
     if(radarAba !== 'comprar' && radarAba !== 'conferir') return [{ linhas: lista }];
     return R.porFornecedor(lista).map(g => ({
-      cabecalho: '<tr class="rd-forn-cab"><td colspan="8"><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (g.valor ? ' · ' + brl(g.valor) : '') + '</span></td></tr>',
+      cabecalho: '<tr class="rd-forn-cab"><td colspan="8"><b>' + escapeHtml(g.fornecedor) + '</b> <span class="mono">· ' + g.itens + ' produto(s)' + (g.valor ? ' · ' + brl(g.valor) : '') + '</span>' +
+        ' <button type="button" class="btn secondary mini" data-rd-cotacao="' + escapeHtml(g.fornecedor) + '" title="Abre a Cotação com estes produtos e quantidades já preenchidos">📝 Criar cotação</button></td></tr>',
       linhas: R.ordenar(g.linhas, radarAba)
     }));
   }
+  // O pedido nasce de uma cotacao: o Radar abre a Cotacao do fornecedor
+  // com os produtos da fila, a sugestao como quantidade e o custo da
+  // ultima compra como preco esperado. Dali, salvar -> Pedido feito ->
+  // a nota chega e o status anda sozinho.
+  App.delegar($('radarLista'), 'click', '[data-rd-cotacao]', (b) => {
+    const forn = b.dataset.rdCotacao;
+    const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')) }), radarAba)
+      .filter(l => (l.fornecedor || 'Sem fornecedor (sem ficha)') === forn && l.sugestao > 0);
+    if(!lista.length){ App.toast('Nada a cotar deste fornecedor.', 'info'); return; }
+    resetCotacao();
+    const nomeForn = /^Sem fornecedor/.test(forn) ? '' : forn;
+    $('fornecedorCotacao').value = nomeForn;
+    $('fornecedorProdutos').value = nomeForn;
+    ultimosEsperados = lista.map(l => ({ codigo: l.codigo, produto: l.nome, quantidade: l.sugestao, precoEsperado: l.custo }));
+    ultimosRecebidos = [];
+    ultimosResultados = ultimosEsperados.map(exp => construirResultado(exp, null, -1));
+    produtosCotacaoSalvos = new Set();
+    $('resultadoCotacaoCard').style.display = 'block';
+    renderResultadoCotacao();
+    renderSugestoesCotacao();
+    $('addProdutosCard').style.display = 'block';
+    renderListaLote();
+    popularSelectIndividual();
+    $('cotacaoMsg').textContent = 'Cotação montada pelo Radar: ' + lista.length + ' produto(s) de ' + forn + ', quantidade = sugestão, preço = última compra. Ajuste e salve; depois marque "Pedido feito".';
+    mostrarViewCotacao();
+  });
   const irParaAbaRadar = (a) => { radarAba = a; renderRadar(); };
   App.delegar($('radarChips'), 'click', '.chip-filtro', (b) => irParaAbaRadar(b.dataset.aba));
   App.delegar($('radarResumo'), 'click', '.rd-kpi', (b) => irParaAbaRadar(b.dataset.aba));

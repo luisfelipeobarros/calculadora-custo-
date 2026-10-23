@@ -439,7 +439,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     do cadastro decidindo quem não precisa de azul e a etiqueta "não exposto"
     (produto novo: barras na nota e fora do cadastro), o registro de **saldão**
     (interno/externo, estoque acompanhado pelo catálogo, encerrado ao zerar).
-15c. **Radar de estoque e compras** — 48 verificações em
+15c. **Radar de estoque e compras** — 53 verificações em
     `radar-nucleo.js` (aba Radar da Calculadora): leitura do relatório de
     vendas do sistema, resumo compacto com o estoque anterior, carteira
     (itens "pedido" das cotações, com a data do pedido), faturado e
@@ -448,7 +448,10 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     feito" manual que expira, e o catálogo do Etiquetas atualizado de
     carona (pisos pelo catálogo ou por nota com NCM 6907), e a **cotação ×
     NF-e automática** (faturado e recebido pelos itens das notas: código do
-    fornecedor, barras ou nome único; status nunca volta; "Pedido feito").
+    fornecedor, barras ou nome único; status nunca volta; "Pedido feito"),
+    faturamento parcial em várias notas (o restante segue em carteira),
+    preço da NF-e contra o cotado e selos no Histórico (pedido sem nota,
+    parcial, preço acima), "Criar cotação" pelo Radar.
 16. **Lançamentos contábeis** — 62 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
