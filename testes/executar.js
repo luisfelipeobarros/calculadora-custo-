@@ -4,8 +4,8 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao vinte e nove etapas,
-  em vinte frentes (a lista canonica, com o que cada uma cobre,
+  Nao precisa instalar nada — so' o Node. Sao trinta etapas,
+  em vinte e uma frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
@@ -80,6 +80,7 @@ const etapas = [
   ['Simulador de compra', 'simulador.js', []],
   ['DANFE simplificado', 'danfe.js', []],
   ['Fiscal (NCM & ST)', 'fiscal.js', []],
+  ['Radar de estoque e compras', 'radar.js', []],
   ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
   ['Assistencias e reclamacoes', 'assistencias.js', []],
   ['Etiquetas de produto em transito', 'etiquetas.js', []],

@@ -114,6 +114,21 @@
   .feriado-chip{ display:inline-flex; align-items:center; gap:3px; font-family:var(--font-mono); font-size:10.5px; background:var(--stripe); border:1px solid var(--line); border-radius:10px; padding:1px 7px; margin-left:4px; }
   .feriado-chip button{ border:none; background:transparent; cursor:pointer; font-size:11px; padding:0; color:var(--loss); }
   .feriado-data{ padding:3px 4px; border:1.5px solid var(--line); border-radius:4px; font-family:var(--font-mono); font-size:11px; background:#fff; color:var(--ink); }
+  /* Radar de estoque e compras */
+  .rd-rot{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
+  .rd-num{ width:110px; padding:8px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  .etq-kpi{ background:var(--stripe2); border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-align:left; font:inherit; color:inherit; cursor:pointer; }
+  .etq-kpi[aria-pressed="true"]{ outline:2px solid var(--brick); }
+  .etq-kpi .k-rot{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); display:block; }
+  .etq-kpi .k-val{ font-family:var(--font-display); font-size:17px; font-weight:700; color:var(--ink); display:block; margin-top:2px; }
+  .etq-kpi .k-val.alerta{ color:var(--loss); }
+  .etq-kpi .k-val.azul{ color:#335C8E; }
+  .chip-filtro{ font-family:var(--font-mono); font-size:11.5px; padding:6px 12px; border:1.5px solid var(--line); border-radius:16px; background:var(--card); color:var(--ink-soft); cursor:pointer; }
+  .chip-filtro[aria-pressed="true"]{ background:var(--brick); border-color:var(--brick); color:#fff; }
+  .rd-forn{ display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .rd-tab td.num, .rd-tab th.num{ text-align:right; white-space:nowrap; }
+  .rd-tab .prod{ font-weight:600; }
+  .rd-tab .mono{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
 </style>
 </head>
 <body>
@@ -139,6 +154,7 @@
       <button type="button" class="btn secondary" id="verConcorrentesBtn">🏪 Concorrentes</button>
       <button type="button" class="btn secondary" id="verNotasBtn">📑 NF-e Emitidas</button>
       <button type="button" class="btn secondary" id="verFiscalBtn">📇 NCM &amp; ST</button>
+      <button type="button" class="btn secondary" id="verRadarBtn">📡 Radar</button>
       <button type="button" class="btn secondary" id="verSyncBtn">⚙ Sincronização</button>
       <!-- Sem link para o Controle de Notas: os dois rodam como apps
            instalados separados (cada um com seu manifest), e o link
@@ -704,6 +720,48 @@ Tupan</textarea>
   </div>
 
   <!-- ═══════════ FISCAL (NCM & ST) ═══════════ -->
+  <div id="viewRadar" style="display:none;">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Radar de estoque e compras</h2>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn" id="radarImportarBtn">📥 Importar vendas e estoque</button>
+          <input type="file" id="radarArquivo" accept=".xlsx,.xls,.csv" style="display:none;">
+          <button type="button" class="btn secondary" id="radarExcelBtn">⬇ Excel</button>
+          <button type="button" class="btn secondary" id="radarRecarregarBtn" title="Relê cotações, notas e fichas">⟳ Recarregar</button>
+        </div>
+      </div>
+      <p class="nota-explicativa" style="margin-top:8px;">
+        Importe todo dia o relatório de vendas do sistema (vendas e estoque do período, com "não mostrar inativos").
+        Para cada produto o radar junta a <strong>ficha</strong> (fornecedor e custo, pelo código interno), a <strong>carteira</strong>
+        (itens de cotação com status "pedido") e o <strong>faturado / recebido</strong> (NF-e emitidas, pelo código de barras),
+        e sugere a compra: média diária × dias de cobertura − estoque − carteira − faturado. A mesma importação atualiza o
+        estoque dos pisos no app de Etiquetas.
+      </p>
+      <div class="msg-mono" id="radarMsg"></div>
+
+      <div class="est-controles" id="radarParametros" style="display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin:10px 0;">
+        <div><label for="rdPeriodo" class="rd-rot">Período do relatório (dias)</label><input type="number" id="rdPeriodo" value="60" min="1" step="1" class="rd-num"></div>
+        <div><label for="rdCobertura" class="rd-rot">Cobertura desejada (dias)</label><input type="number" id="rdCobertura" value="30" min="1" step="1" class="rd-num"></div>
+        <div><label for="rdBaixoGiro" class="rd-rot">Baixo giro: vendas até</label><input type="number" id="rdBaixoGiro" value="0" min="0" step="1" class="rd-num"></div>
+        <div><label for="rdMinimo" class="rd-rot">Compra mínima (unid.)</label><input type="number" id="rdMinimo" value="1" min="0" step="1" class="rd-num"></div>
+      </div>
+
+      <div class="etq-resumo" id="radarResumo" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:12px;"></div>
+
+      <div class="filtros" id="radarChips" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;"></div>
+      <div class="filtros" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <label class="sr-only" for="buscaRadar">Buscar</label>
+        <input type="search" id="buscaRadar" class="campo-busca" placeholder="Buscar por produto, código, barras ou fornecedor... (Enter para mais de um)">
+        <label class="sr-only" for="radarFornecedor">Fornecedor</label>
+        <select id="radarFornecedor"><option value="">— fornecedor —</option></select>
+      </div>
+      <div id="radarFornecedores"></div>
+      <div id="radarLista"></div>
+      <p class="nota-explicativa" id="radarListaMsg" style="display:block;"></p>
+    </div>
+  </div>
+
   <div id="viewFiscal" style="display:none;">
     <div class="card">
       <h2>Fiscal — NCM, origem e ST</h2>
@@ -928,6 +986,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
+<script src="radar-nucleo.js?v=1"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2477,6 +2536,7 @@ Tupan</textarea>
       Concorrentes: 'viewConcorrentes',
       Notas:        'viewNotas',
       Fiscal:       'viewFiscal',
+      Radar:        'viewRadar',
       Sync:         'viewSync',
       Comparar:     'viewComparar',
       PesquisaLote: 'viewPesquisaLote'
@@ -2497,7 +2557,8 @@ Tupan</textarea>
       Historico:    () => promessaFirebase.then(() => carregarHistorico()),
       Concorrentes: () => promessaFirebase.then(() => { carregarHistoricoConcorrentes(); renderLotePlanilha(); }),
       Notas:        () => promessaFirebase.then(() => carregarNotasEmitidas(false)),
-      Fiscal:       () => promessaFirebase.then(() => carregarFiscal(false))
+      Fiscal:       () => promessaFirebase.then(() => carregarFiscal(false)),
+      Radar:        () => promessaFirebase.then(() => carregarRadar(false))
     },
     aoTrocar: (nome) => {
       const botoes = {
@@ -2540,6 +2601,7 @@ Tupan</textarea>
   $('verFreteBtn').addEventListener('click', mostrarViewFrete);
   $('verNotasBtn').addEventListener('click', mostrarViewNotas);
   $('verFiscalBtn').addEventListener('click', ()=> router.ir('Fiscal'));
+  $('verRadarBtn').addEventListener('click', ()=> router.ir('Radar'));
   $('recarregarFiscalBtn').addEventListener('click', ()=> carregarFiscal(true));
   $('buscaFiscal').addEventListener('input', debounce(()=> renderFiscal(), DEBOUNCE_BUSCA));
   $('recarregarNotasBtn').addEventListener('click', ()=>carregarNotasEmitidas(true));
@@ -2615,7 +2677,11 @@ Tupan</textarea>
     }
     $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel=>sel.addEventListener('change', ()=>{
       const idx = Number(sel.dataset.idx);
-      if(d.itens && d.itens[idx]){ d.itens[idx].status = sel.value; salvarStatusPedido(); }
+      if(d.itens && d.itens[idx]){
+        d.itens[idx].status = sel.value;
+        if(sel.value === 'pedido' && !d.itens[idx].pedidoEm) d.itens[idx].pedidoEm = App.hojeISO();
+        salvarStatusPedido();
+      }
     }));
     $('cmpTodosFaturadoBtn').addEventListener('click', ()=>{
       (d.itens||[]).forEach(it => it.status = 'transito');
@@ -5332,6 +5398,7 @@ Tupan</textarea>
           codigoRecebido: it.codigoRecebido || '',
           precoVenda: precoVendaItem(it), // vem de Produtos Salvos, não da cotação
           status: it.status || 'negociacao',
+          pedidoEm: it.pedidoEm || null,
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
         recalcularFlags(r);
@@ -6111,7 +6178,10 @@ Tupan</textarea>
       // Produtos Salvos, e o histórico o lê de lá. Guardar uma cópia
       // nesta linha é o que fazia os dois números divergirem.
       flags: r.flags,
-      status: r.status || 'negociacao'
+      status: r.status || 'negociacao',
+      // Data em que o item virou "pedido": e' o que o Radar mostra como
+      // "pedido em" (cotacao antiga sem isto usa a data da cotacao).
+      pedidoEm: (r.status === 'pedido') ? (r.pedidoEm || App.hojeISO()) : (r.pedidoEm || null)
     }));
     try{
       const precosGravados = await gravarPrecosVendaDaCotacao();
@@ -7023,6 +7093,244 @@ Tupan</textarea>
 
   router.iniciar(); // abre a tela indicada no endereço (#Historico, ...) ou o Painel
 
+  // ═══════════ RADAR DE ESTOQUE E COMPRAS ═══════════
+  // Ver radar-nucleo.js. Aqui so' leitura/gravacao e tela.
+  const R = RadarNucleo;
+  const RADAR_DOC = 'radarVendas', RADAR_PARAMETROS = 'radarParametros', CATALOGO_ETQ = 'etiquetasProdutos';
+  let radarDoc = null;                 // config/radarVendas
+  let radarParametros = Object.assign({}, R.PARAMETROS_PADRAO, { pedidos: {} });
+  let radarLinhas = [];
+  let radarAba = 'comprar';
+  let radarCarregado = false;
+  const RD_CHIPS = [['comprar', '🛒 Comprar'], ['chegando', '🚚 Chegando'], ['baixoGiro', '🐢 Baixo giro'], ['semFicha', '📋 Sem ficha'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
+  $('radarChips').innerHTML = RD_CHIPS.map(([a, rot]) => '<button type="button" class="chip-filtro" data-aba="' + a + '" aria-pressed="' + (a === radarAba ? 'true' : 'false') + '">' + rot + '</button>').join('');
+  App.buscaComChips($('buscaRadar'));
+  const setRadarMsg = (t) => { $('radarMsg').textContent = t; };
+
+  function fichasPorCodigo(){
+    const m = {};
+    (produtosCache || []).forEach(p => {
+      const cod = normalizarCodigo(p.codigo);
+      if(!cod || m[cod]) return;
+      m[cod] = { fornecedor: p.fornecedor && p.fornecedor !== 'Sem fornecedor' ? p.fornecedor : '', custo: p.r ? p.r.total : null, venda: p.r ? p.r.venda : null };
+    });
+    return m;
+  }
+
+  function lerParametrosRadar(){
+    return App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).get()).then(d => {
+      const x = d.exists ? d.data() : {};
+      radarParametros = Object.assign({}, R.PARAMETROS_PADRAO, x, { pedidos: x.pedidos || {} });
+      $('rdPeriodo').value = radarParametros.periodoDias;
+      $('rdCobertura').value = radarParametros.coberturaDias;
+      $('rdBaixoGiro').value = radarParametros.baixoGiroMax;
+      $('rdMinimo').value = radarParametros.compraMinima;
+    }).catch(e => console.error('parâmetros do radar:', e));
+  }
+  function gravarParametrosRadar(campos){
+    return App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).set(campos, { merge: true }))
+      .then(() => { Object.assign(radarParametros, campos); })
+      .catch(e => App.toastErro('Erro ao guardar os parâmetros', e));
+  }
+  ['rdPeriodo', 'rdCobertura', 'rdBaixoGiro', 'rdMinimo'].forEach(id => $(id).addEventListener('change', () => {
+    gravarParametrosRadar({
+      periodoDias: Math.max(1, Number($('rdPeriodo').value) || 60), coberturaDias: Math.max(1, Number($('rdCobertura').value) || 30),
+      baixoGiroMax: Math.max(0, Number($('rdBaixoGiro').value) || 0), compraMinima: Math.max(0, Number($('rdMinimo').value) || 0)
+    }).then(calcularERenderRadar);
+  }));
+
+  let radarCarregando = null;
+  function carregarRadar(forcar){
+    if(!firestoreDb){ setRadarMsg('Firebase não conectado — configure na tela de Sincronização.'); return Promise.resolve(); }
+    if(radarCarregado && !forcar){ calcularERenderRadar(); return Promise.resolve(); }
+    if(radarCarregando) return radarCarregando;
+    radarCarregando = (async () => {
+      setRadarMsg('Carregando vendas, cotações, notas e fichas...');
+      try{
+        const [docVendas] = await Promise.all([
+          App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC).get()),
+          lerParametrosRadar(),
+          (produtosCache && produtosCache.length && !forcar) ? Promise.resolve() : atualizarListaSalvos(),
+          (historicoDocsCache.length && !forcar) ? Promise.resolve() : carregarHistorico(),
+          carregarNotasEmitidas(!!forcar)
+        ]);
+        radarDoc = docVendas.exists ? docVendas.data() : null;
+        radarCarregado = true;
+        calcularERenderRadar();
+      }catch(e){
+        console.error(e);
+        setRadarMsg('Erro ao carregar o radar: ' + App.erroDe(e));
+      }finally{ radarCarregando = null; }
+    })();
+    return radarCarregando;
+  }
+  $('radarRecarregarBtn').addEventListener('click', () => carregarRadar(true));
+
+  function calcularERenderRadar(){
+    if(!radarDoc){
+      radarLinhas = [];
+      setRadarMsg('Nenhum relatório de vendas importado ainda — toque em "Importar vendas e estoque".');
+      renderRadar();
+      return;
+    }
+    radarLinhas = R.calcularRadar({
+      produtos: radarDoc.produtos, anterior: radarDoc.anterior, periodoDias: radarDoc.periodoDias || radarParametros.periodoDias,
+      fichas: fichasPorCodigo(), carteira: R.carteira(historicoDocsCache),
+      movimentos: R.movimentos(notasEmitidasCache || [], notasInfoPorChave),
+      parametros: radarParametros, pedidos: radarParametros.pedidos, hoje: App.hojeISO()
+    });
+    setRadarMsg(radarDoc.qtd + ' produtos · vendas de ' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' dias · importado em ' + App.fmtData(radarDoc.importadoEm) +
+      (radarDoc.anteriorEm ? ' (anterior: ' + App.fmtData(radarDoc.anteriorEm) + ')' : '') +
+      ' · ' + (historicoDocsCache.length) + ' cotações · ' + (notasEmitidasCache ? notasEmitidasCache.length : 0) + ' notas');
+    const forn = [...new Set(radarLinhas.map(l => l.fornecedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const sel = $('radarFornecedor'); const atual = sel.value;
+    sel.innerHTML = '<option value="">— fornecedor —</option>' + forn.map(f => '<option value="' + escapeHtml(f) + '"' + (f === atual ? ' selected' : '') + '>' + escapeHtml(f) + '</option>').join('');
+    renderRadar();
+  }
+
+  const fmtQ = (q) => q == null ? '—' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  function htmlChegando(l){
+    const partes = [];
+    if(l.carteira) partes.push('📝 pedido ' + (l.carteira.em ? App.fmtData(l.carteira.em) : '') + ' · ' + fmtQ(l.carteira.qtd) + (l.carteira.fornecedor ? ' · ' + escapeHtml(l.carteira.fornecedor) : ''));
+    if(l.faturado) partes.push('🧾 faturado ' + (l.faturado.em ? App.fmtData(l.faturado.em) : '') + ' · ' + fmtQ(l.faturado.qtd) + (l.faturado.numero ? ' · NF ' + escapeHtml(l.faturado.numero) : ''));
+    if(l.recebido) partes.push('📦 recebido ' + (l.recebido.em ? App.fmtData(l.recebido.em) : '') + ' · ' + fmtQ(l.recebido.qtd));
+    if(l.pedido && l.flags.pedidoFeito) partes.push('✔ pedido feito ' + App.fmtData(l.pedido.em) + ' · ' + fmtQ(l.pedido.qtd) + (l.pedido.ref ? ' · ' + escapeHtml(l.pedido.ref) : ''));
+    return partes.length ? '<div class="mono">' + partes.join('<br>') + '</div>' : '<span class="mono">—</span>';
+  }
+  function renderRadar(){
+    const c = R.contar(radarLinhas);
+    $('radarResumo').innerHTML = [
+      ['comprar', 'Comprar', c.comprar + (c.valorComprar ? ' · ' + brl(c.valorComprar) : ''), c.comprar ? 'alerta' : ''],
+      ['chegando', 'Chegando', c.chegando, 'azul'],
+      ['baixoGiro', 'Baixo giro', c.baixoGiro + (c.valorParado ? ' · ' + brl(c.valorParado) + ' parado' : ''), ''],
+      ['semFicha', 'Sem ficha', c.semFicha, ''],
+      ['pedidoFeito', 'Pedido feito', c.pedidoFeito, '']
+    ].map(([a, rot, val, cls]) => '<button type="button" class="etq-kpi rd-kpi" data-aba="' + a + '" aria-pressed="' + (radarAba === a ? 'true' : 'false') + '"><span class="k-rot">' + rot + '</span><span class="k-val ' + cls + '">' + val + '</span></button>').join('');
+    $('radarChips').querySelectorAll('.chip-filtro').forEach(b => b.setAttribute('aria-pressed', b.dataset.aba === radarAba ? 'true' : 'false'));
+
+    const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')), fornecedor: $('radarFornecedor').value }), radarAba);
+    $('radarFornecedores').innerHTML = radarAba !== 'comprar' || !lista.length ? '' :
+      '<div class="rd-forn">' + R.porFornecedor(lista).map(g =>
+        '<button type="button" class="chip-filtro" data-forn="' + escapeHtml(g.fornecedor) + '">' + escapeHtml(g.fornecedor) + ' · ' + g.itens + (g.valor ? ' · ' + brl(g.valor) : '') + '</button>').join('') + '</div>';
+    if(!lista.length){
+      $('radarLista').innerHTML = '';
+      $('radarListaMsg').textContent = radarLinhas.length ? 'Nada nesta aba com esses filtros.' : '';
+      return;
+    }
+    $('radarListaMsg').textContent = lista.length + ' produto(s)';
+    $('radarLista').innerHTML = '<div class="tabela-rolavel"><table class="quote-table rd-tab"><thead><tr>' +
+      '<th>Produto</th><th>Fornecedor</th><th class="num">Vendas (' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
+      '</tr></thead><tbody>' + lista.map(l => {
+        const delta = l.estoqueAnterior != null ? l.estoque - l.estoqueAnterior : null;
+        return '<tr>' +
+          '<td><div class="prod">' + escapeHtml(l.nome) + '</div><div class="mono">' + escapeHtml(l.codigo) + (l.ean ? ' · ' + l.ean : '') + (l.naoRepor ? ' · não repor' : '') + '</div></td>' +
+          '<td>' + escapeHtml(l.fornecedor || '—') + (l.custo != null ? '<div class="mono">custo ' + brl(l.custo) + (l.venda != null ? ' · venda ' + brl(l.venda) : '') + '</div>' : (l.flags.semFicha ? '<div class="mono">sem ficha</div>' : '')) + '</td>' +
+          '<td class="num">' + fmtQ(l.vendas) + '<div class="mono">' + fmtQ(Math.round(l.mediaDia * 100) / 100) + '/dia</div></td>' +
+          '<td class="num"><b>' + fmtQ(l.estoque) + '</b>' + (delta != null && delta !== 0 ? '<div class="mono">' + (delta > 0 ? '+' : '') + fmtQ(delta) + ' desde ' + App.fmtData(radarDoc.anteriorEm) + '</div>' : '') + '</td>' +
+          '<td class="num">' + (l.coberturaDias == null ? '<span class="mono">sem venda</span>' : l.coberturaDias + ' d') + '</td>' +
+          '<td>' + htmlChegando(l) + '</td>' +
+          '<td class="num">' + (l.sugestao > 0 ? '<b>' + fmtQ(l.sugestao) + '</b>' + (l.valorSugestao != null ? '<div class="mono">' + brl(l.valorSugestao) + '</div>' : '') : '—') + '</td>' +
+          '<td style="white-space:nowrap;">' + (l.flags.pedidoFeito
+            ? '<button type="button" class="btn secondary mini" data-rd="desfazer" data-codigo="' + escapeHtml(l.codigo) + '">↩ Desfazer</button>'
+            : (l.sugestao > 0 ? '<button type="button" class="btn secondary mini" data-rd="pedido" data-codigo="' + escapeHtml(l.codigo) + '">✔ Pedido feito</button>' : '')) + '</td>' +
+        '</tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+  const irParaAbaRadar = (a) => { radarAba = a; $('radarFornecedor').value = ''; renderRadar(); };
+  App.delegar($('radarChips'), 'click', '.chip-filtro', (b) => irParaAbaRadar(b.dataset.aba));
+  App.delegar($('radarResumo'), 'click', '.rd-kpi', (b) => irParaAbaRadar(b.dataset.aba));
+  App.delegar($('radarFornecedores'), 'click', '[data-forn]', (b) => { $('radarFornecedor').value = b.dataset.forn; renderRadar(); });
+  $('buscaRadar').addEventListener('input', App.debounce(renderRadar, 250));
+  $('radarFornecedor').addEventListener('change', renderRadar);
+
+  // "Pedido feito": marca manual que tira o produto da fila por 60 dias
+  // (ou ate' o pedido aparecer na carteira / nas notas).
+  App.delegar($('radarLista'), 'click', '[data-rd]', async (b) => {
+    const codigo = b.dataset.codigo;
+    const l = radarLinhas.find(x => x.codigo === codigo);
+    if(!l) return;
+    const pedidos = Object.assign({}, radarParametros.pedidos);
+    if(b.dataset.rd === 'desfazer'){
+      delete pedidos[codigo];
+      b.disabled = true;
+      const campos = {}; campos['pedidos.' + codigo] = firebase.firestore.FieldValue.delete();
+      await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).update(campos)).catch(e => App.toastErro('Erro ao gravar', e));
+      radarParametros.pedidos = pedidos;
+      calcularERenderRadar();
+      return;
+    }
+    const qtd = await App.pedirTexto({ titulo: 'Pedido feito', mensagem: l.nome + ' — quantidade pedida (sugestão: ' + fmtQ(l.sugestao) + ')', valor: String(l.sugestao) });
+    if(qtd === null) return;
+    const n = App.parseNumeroBR(qtd);
+    if(!(n > 0)){ App.toast('Quantidade inválida.', 'info'); return; }
+    const ref = await App.pedirTexto({ titulo: 'Referência do pedido', mensagem: 'Número ou observação (opcional)', valor: '' });
+    const marca = { qtd: n, em: App.hojeISO(), ref: ref || null };
+    b.disabled = true;
+    const campos = {}; campos['pedidos.' + codigo] = marca;
+    await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).set({ pedidos: { [codigo]: marca } }, { merge: true })).catch(e => App.toastErro('Erro ao gravar', e));
+    pedidos[codigo] = marca;
+    radarParametros.pedidos = pedidos;
+    calcularERenderRadar();
+  });
+
+  // Importacao do relatorio de vendas: grava o resumo em config/radarVendas
+  // e, de carona, o estoque dos pisos no catalogo do Etiquetas.
+  $('radarImportarBtn').addEventListener('click', () => {
+    if(typeof XLSX === 'undefined'){ App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou. Verifique a internet e recarregue (F5).'); return; }
+    if(!firestoreDb){ App.toast('Conecte o Firebase primeiro.', 'info'); return; }
+    $('radarArquivo').value = '';
+    $('radarArquivo').click();
+  });
+  $('radarArquivo').addEventListener('change', async () => {
+    const arq = $('radarArquivo').files[0];
+    if(!arq) return;
+    const btn = $('radarImportarBtn');
+    btn.disabled = true;
+    setRadarMsg('Lendo ' + arq.name + '...');
+    try{
+      const wb = XLSX.read(new Uint8Array(await arq.arrayBuffer()), { type: 'array', cellDates: true });
+      const matriz = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null });
+      const lido = R.lerPlanilhaVendas(matriz);
+      if(!lido.itens.length){ setRadarMsg(lido.problemas.join(' · ') || 'A planilha está vazia.'); return; }
+      const ok = await App.confirmar({ titulo: 'Importar vendas e estoque', mensagem: lido.itens.length + ' produto(s) em ' + arq.name +
+        (lido.problemas.length ? '\n' + lido.problemas.length + ' linha(s) com problema: ' + lido.problemas.slice(0, 3).join('; ') : '') +
+        '\n\nPeríodo das vendas: ' + radarParametros.periodoDias + ' dias (ajuste em "Período do relatório" se for outro).' +
+        '\nSubstitui a importação anterior e atualiza o estoque dos pisos no Etiquetas.', confirmar: 'Importar' });
+      if(!ok){ setRadarMsg(''); return; }
+      if(!radarCarregado) await carregarRadar(false);
+      const hoje = App.hojeISO();
+      const novoDoc = R.resumoVendas(lido.itens, hoje, radarParametros.periodoDias, radarDoc);
+      await App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC).set(novoDoc));
+      radarDoc = novoDoc;
+      // Etiquetas de carona: pisos pelo catalogo ja' existente ou por nota com NCM 6907.
+      let resumoEtq = '';
+      try{
+        const cat = await App.comAuth(() => exigirDb().collection('config').doc(CATALOGO_ETQ).get());
+        const r = R.pisosParaEtiquetas(lido.itens, cat.exists ? cat.data() : null, R.eansComNcm(notasEmitidasCache || [], ['6907']), hoje);
+        if(r.doc.qtd){
+          await App.comAuth(() => exigirDb().collection('config').doc(CATALOGO_ETQ).set(r.doc));
+          resumoEtq = ' · Etiquetas: ' + r.atualizados + ' piso(s) com estoque atualizado' + (r.novos ? ', ' + r.novos + ' novo(s) pela nota' : '');
+        }
+      }catch(e){ console.error('catálogo do Etiquetas:', e); resumoEtq = ' · não consegui atualizar o Etiquetas: ' + App.erroDe(e); }
+      App.toast('Vendas importadas: ' + lido.itens.length + ' produtos.' + resumoEtq, 'ok');
+      calcularERenderRadar();
+      setRadarMsg($('radarMsg').textContent + resumoEtq);
+    }catch(e){
+      console.error(e);
+      setRadarMsg('Não consegui importar: ' + App.erroDe(e));
+      App.toastErro('Erro na importação', e);
+    }finally{ btn.disabled = false; }
+  });
+
+  $('radarExcelBtn').addEventListener('click', () => {
+    if(typeof XLSX === 'undefined'){ App.toastErro('Planilhas indisponíveis', 'A biblioteca de Excel (CDN) não carregou.'); return; }
+    const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')), fornecedor: $('radarFornecedor').value }), radarAba);
+    if(!lista.length){ App.toast('Nada para exportar nesta aba.', 'info'); return; }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(R.linhasExcel(lista)), (R.ABAS[radarAba] || R.ABAS.todos).rotulo.slice(0, 30));
+    XLSX.writeFile(wb, 'radar ' + radarAba + ' ' + App.hojeISO() + '.xlsx');
+  });
+
   // Depois de entrar, recarrega o que a tela precisa.
   window.__aoEntrar = async ()=>{
     // Antes do histórico: é a lista de produtos que traz os preços de
@@ -7033,6 +7341,7 @@ Tupan</textarea>
     if(router.atual() === 'Concorrentes'){ carregarHistoricoConcorrentes(); renderLotePlanilha(); }
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
     if(router.atual() === 'Fiscal') carregarFiscal(true);
+    if(router.atual() === 'Radar') carregarRadar(true);
   };
 
   (async ()=>{

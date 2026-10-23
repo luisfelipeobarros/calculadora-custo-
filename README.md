@@ -4,7 +4,7 @@ Seis páginas (Calculadora, Controle de Notas, Assistências, Dashboard, Etiquet
 
 | Arquivo | O que é |
 |---|---|
-| `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas |
+| `index.html` | Custo, impostos, frete, margem, cotações, concorrentes, NF-e emitidas, Radar de estoque e compras |
 | `controle-notas.html` | NF-e a importar, duplicatas, pagamentos, canceladas, vendas × compras, lançamentos contábeis + exportação para o contador, custos da loja (importa as planilhas do contador) |
 | `assistencias.html` | Assistências/reclamações e avarias (gerentes de vendas, no celular) |
 | `etiquetas.html` | Etiquetas de gôndola: azul (comprado, em trânsito) e vermelha (sem estoque, não faturado), com importação do relatório de estoque do sistema — instalável (`manifest-etiquetas.json`) |
@@ -279,7 +279,7 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São vinte e nove etapas, em vinte frentes:
+Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -439,6 +439,14 @@ Não precisa instalar nada. São vinte e nove etapas, em vinte frentes:
     do cadastro decidindo quem não precisa de azul e a etiqueta "não exposto"
     (produto novo: barras na nota e fora do cadastro), o registro de **saldão**
     (interno/externo, estoque acompanhado pelo catálogo, encerrado ao zerar).
+15c. **Radar de estoque e compras** — 24 verificações em
+    `radar-nucleo.js` (aba Radar da Calculadora): leitura do relatório de
+    vendas do sistema, resumo compacto com o estoque anterior, carteira
+    (itens "pedido" das cotações, com a data do pedido), faturado e
+    recebido pelas NF-e (código de barras), a sugestão de compra
+    (média × cobertura − estoque − carteira − faturado), abas, "pedido
+    feito" manual que expira, e o catálogo do Etiquetas atualizado de
+    carona (pisos pelo catálogo ou por nota com NCM 6907).
 16. **Lançamentos contábeis** — 62 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
