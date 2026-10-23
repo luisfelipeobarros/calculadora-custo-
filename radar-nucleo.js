@@ -135,7 +135,10 @@
 
   // O Firestore limita cada documento a 1 MB e o relatorio inteiro
   // passa de 1,5 MB: o resumo vai em partes — config/radarVendas (meta +
-  // estoque anterior) e config/radarVendas_p1..pN (os produtos).
+  // estoque anterior) e config/radarVendas_p1..pN (os produtos). E cada
+  // parte vai como TEXTO JSON num campo so': um mapa com milhares de
+  // produtos estoura o limite de 40 mil entradas de indice por documento
+  // ("too many index entries"), e texto nao e' indexado por dentro.
   var BYTES_POR_PARTE = 700000;
   function dividirResumo(doc, maxBytes) {
     var limite = maxBytes || BYTES_POR_PARTE;
@@ -150,12 +153,21 @@
     var meta = Object.assign({}, doc);
     delete meta.produtos;
     meta.partes = partes.length;
-    return { meta: meta, partes: partes };
+    // O estoque anterior tambem vira texto (9 mil chaves indexadas e' quase o limite).
+    meta.anteriorJson = JSON.stringify(doc.anterior || {});
+    delete meta.anterior;
+    return { meta: meta, partes: partes.map(function (p) { return { json: JSON.stringify(p) }; }) };
   }
   function juntarResumo(meta, partes) {
     var produtos = {};
-    (partes || []).forEach(function (p) { Object.assign(produtos, (p && p.produtos) || p || {}); });
-    return Object.assign({}, meta || {}, { produtos: produtos });
+    (partes || []).forEach(function (p) {
+      if (!p) return;
+      if (typeof p.json === 'string') Object.assign(produtos, JSON.parse(p.json));
+      else Object.assign(produtos, p.produtos || p);
+    });
+    var m = Object.assign({}, meta || {}, { produtos: produtos });
+    if (typeof m.anteriorJson === 'string') { m.anterior = JSON.parse(m.anteriorJson); delete m.anteriorJson; }
+    return m;
   }
 
   /* ------------------------------------------------------------

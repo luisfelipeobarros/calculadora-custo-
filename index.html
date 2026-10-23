@@ -988,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=3"></script>
+<script src="radar-nucleo.js?v=4"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -7159,7 +7159,7 @@ Tupan</textarea>
     const db = exigirDb();
     // Partes primeiro, meta por ultimo: quem ler no meio ve a importacao anterior inteira.
     for(let i = 0; i < div.partes.length; i++){
-      await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + (i + 1)).set({ produtos: div.partes[i] }));
+      await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + (i + 1)).set(div.partes[i]));
     }
     await App.comAuth(() => db.collection('config').doc(RADAR_DOC).set(div.meta));
     // Partes que sobraram de uma importacao maior sao apagadas.
@@ -7168,7 +7168,7 @@ Tupan</textarea>
         await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + i).delete()).catch(() => {});
       }
     }
-    return Object.assign({}, div.meta, { produtos: doc.produtos });
+    return Object.assign({}, doc, { partes: div.partes.length });
   }
 
   let radarCarregando = null;

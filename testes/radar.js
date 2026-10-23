@@ -54,9 +54,11 @@ eq('resumo seguinte guarda o estoque anterior', [doc2.anterior['200'], doc2.ante
   const doc = { produtos: muitos, qtd: 300, importadoEm: '2026-10-23', periodoDias: 62, anterior: { c1: 2 }, anteriorEm: '2026-10-22' };
   const div = N.dividirResumo(doc, 4000);
   eq('divide os produtos em partes abaixo do limite, com a meta separada',
-    [div.partes.length > 1, div.partes.every(p => JSON.stringify(p).length <= 4200), div.meta.partes === div.partes.length, div.meta.produtos, div.meta.anterior],
-    [true, true, true, undefined, { c1: 2 }]);
-  eq('juntar devolve o documento inteiro', (j => [Object.keys(j.produtos).length, j.importadoEm, j.produtos.c299.v])(N.juntarResumo(div.meta, div.partes.map(p => ({ produtos: p })))), [300, '2026-10-23', 299]);
+    [div.partes.length > 1, div.partes.every(p => p.json.length <= 4200), div.meta.partes === div.partes.length, div.meta.produtos, div.meta.anterior],
+    [true, true, true, undefined, undefined]);
+  eq('partes e estoque anterior vao como texto JSON (nada indexado por dentro)', [typeof div.partes[0].json, Object.keys(div.partes[0]), div.meta.anteriorJson], ['string', ['json'], '{"c1":2}']);
+  eq('juntar devolve o documento inteiro', (j => [Object.keys(j.produtos).length, j.importadoEm, j.produtos.c299.v, j.anterior, j.anteriorJson])(N.juntarResumo(div.meta, div.partes)), [300, '2026-10-23', 299, { c1: 2 }, undefined]);
+  eq('formato antigo (mapa num documento so) continua lendo', N.juntarResumo({ importadoEm: 'x', anterior: { a: 1 } }, [{ produtos: { z: { v: 1 } } }]).produtos.z.v, 1);
   eq('o relatorio real (9 mil produtos) cabe em poucas partes de 700 KB', N.dividirResumo({ produtos: muitos }).partes.length, 1);
 }
 
