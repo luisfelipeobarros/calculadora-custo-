@@ -158,6 +158,41 @@ eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido
     (r => [r.novos, Object.keys(r.doc.porCodigo).sort()])(N.pisosParaEtiquetas(lC.itens, null, new Set(), '2026-10-23')), [2, ['200', '700']]);
 }
 
+// ── Cotacao x NF-e: status automatico ────────────────────────
+{
+  const cot = { id: 'c1', fornecedor: 'CERAMICA X LTDA', data: ts(2026, 10, 1), chavesNfe: [], itens: [
+    { codigo: '200', codigoRecebido: 'FX-200', produto: 'PISO X 60X60', quantidadeEsperada: 100, status: 'pedido', pedidoEm: '2026-10-05' },
+    { codigo: '201', codigoRecebido: '', produto: 'PISO Y 60X60', quantidadeEsperada: 50, status: 'pedido', pedidoEm: '2026-10-05' },
+    { codigo: '202', codigoRecebido: '', produto: 'REVEST 33X60 LISO', quantidadeEsperada: 20, status: 'negociacao' },
+    { codigo: '203', codigoRecebido: '', produto: 'OUTRA COISA', quantidadeEsperada: 5, status: 'pedido', pedidoEm: '2026-10-05' },
+    { codigo: '204', codigoRecebido: 'FX-204', produto: 'JA RECEBIDO', quantidadeEsperada: 5, status: 'recebido', chaveNfe: 'OLD' }
+  ] };
+  const notasDocs = [
+    { chave: 'N1', numero: '48157', dataEmissao: '2026-10-19', nomeEmitente: 'CERAMICA X LTDA.', itens: [
+      { codigo: 'FX-200', ean: '7899000000011', descricao: 'PISO X 60X60 A', qtd: 100 },
+      { codigo: 'Z', ean: '7899000000012', descricao: 'PISO Y 60X60 B', qtd: 50 },
+      { codigo: 'Q', ean: '', descricao: 'REVEST 33X60 LISO BRANCO', qtd: 20 }] },
+    { chave: 'N0', numero: '1', dataEmissao: '2026-09-01', nomeEmitente: 'CERAMICA X LTDA.', itens: [{ codigo: 'FX-200', ean: '7899000000011', descricao: 'PISO X 60X60 A', qtd: 999 }] },
+    { chave: 'N2', numero: '2', dataEmissao: '2026-10-20', nomeEmitente: 'CERAMICA CAPRI', itens: [{ codigo: 'FX-200', ean: '7899000000011', descricao: 'PISO X 60X60 A', qtd: 7 }] }
+  ];
+  const estado = { N1: { noSistema: false } };
+  const r = N.casarCotacaoComNotas(cot, notasDocs, estado, { '201': '7899000000012' }, '2026-10-23');
+  eq('nomes compativeis: mesmo fornecedor com sufixo, outro fornecedor nao', [N.nomesCompativeis('CERAMICA X LTDA', 'CERAMICA X LTDA.'), N.nomesCompativeis('CERAMICA X', 'CERAMICA CAPRI')], [true, false]);
+  eq('casa pelo codigo do fornecedor, pelas barras e pelo nome unico; outro fornecedor e nota anterior ao pedido ficam fora',
+    r.itens.map(i => (i.status || '') + ':' + (i.numeroNfe || '-') + ':' + (i.casadoPor || '-')),
+    ['transito:48157:código do fornecedor', 'transito:48157:código de barras', 'transito:48157:nome', 'pedido:-:-', 'recebido:-:-']);
+  eq('faturadoEm e a emissao; negociacao que ganhou nota recebe pedidoEm da cotacao; a nota fica vinculada',
+    [r.itens[0].faturadoEm, r.itens[0].qtdNfe, r.itens[2].pedidoEm, r.chavesNfe, r.mudou], ['2026-10-19', 100, '2026-10-01', ['N1'], true]);
+  const r2 = N.casarCotacaoComNotas(Object.assign({}, cot, { itens: r.itens, chavesNfe: r.chavesNfe }), notasDocs, { N1: { noSistema: true, noSistemaEm: '2026-10-22' } }, {}, '2026-10-23');
+  eq('a nota entrou no ERP: itens viram recebido com a data; nada e regravado sem mudanca depois',
+    [r2.itens[0].status, r2.itens[0].recebidoEm, r2.mudou, N.casarCotacaoComNotas(Object.assign({}, cot, { itens: r2.itens, chavesNfe: r2.chavesNfe }), notasDocs, { N1: { noSistema: true, noSistemaEm: '2026-10-22' } }, {}, '2026-10-23').mudou],
+    ['recebido', '2026-10-22', true, false]);
+  eq('status nunca anda para tras (recebido manual continua recebido)', N.casarCotacaoComNotas({ fornecedor: 'CERAMICA X', data: ts(2026, 10, 1), itens: [{ codigo: '1', codigoRecebido: 'FX-200', produto: 'x', status: 'recebido' }] }, notasDocs, estado, {}, '2026-10-23').itens[0].status, 'recebido');
+  const pf = N.pedidoFeitoNaCotacao({ itens: [{ status: 'negociacao' }, { status: 'pedido' }, { status: 'transito' }] }, '2026-10-23');
+  eq('pedido feito: negociacao vira pedido com a data; pedido sem data ganha a data; o resto fica', pf.map(i => i.status + ':' + (i.pedidoEm || '-')), ['pedido:2026-10-23', 'pedido:2026-10-23', 'transito:-']);
+  eq('pedido feito sem nada a mudar devolve null', N.pedidoFeitoNaCotacao({ itens: [{ status: 'transito' }] }, '2026-10-23'), null);
+}
+
 // ── Etiquetas de carona ──────────────────────────────────────
 const catalogo = { porCodigo: { '200': { n: 'PISO X 60X60', e: '7899000000011', q: 20 }, '999': { n: 'OUTRO', e: '', q: 3 } }, geradoEm: '2026-10-09', qtd: 2 };
 const eans = N.eansComNcm(itensDocs, ['6907']);

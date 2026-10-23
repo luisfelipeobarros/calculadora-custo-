@@ -988,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=5"></script>
+<script src="radar-nucleo.js?v=6"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -2660,6 +2660,7 @@ Tupan</textarea>
     html += '<div style="margin-top:10px; text-align:right; font-family:var(--font-mono); font-size:13px; font-weight:700;">Total do pedido: '+brl(totalPedido)+'</div>';
     html += '<div id="cmpStatusMsg" style="font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft); margin-top:6px; min-height:16px;"></div>';
     html += '<div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">' +
+      '<button class="btn secondary" id="cmpPedidoFeitoBtn">📝 Pedido feito (todos)</button>' +
       '<button class="btn secondary" id="cmpTodosFaturadoBtn">✓ Marcar todos como faturado</button>' +
       '<button class="btn secondary" id="cmpEditarPedidoBtn">✏️ Edição completa</button></div>';
     $('cmpPedido').innerHTML = html;
@@ -2685,6 +2686,13 @@ Tupan</textarea>
         salvarStatusPedido();
       }
     }));
+    $('cmpPedidoFeitoBtn').addEventListener('click', ()=>{
+      const itens = R.pedidoFeitoNaCotacao(d, App.hojeISO());
+      if(!itens){ App.toast('Nenhum item em negociação nesta cotação.', 'info'); return; }
+      d.itens = itens;
+      $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel => { const it = d.itens[Number(sel.dataset.idx)]; if(it) sel.value = it.status; });
+      salvarStatusPedido();
+    });
     $('cmpTodosFaturadoBtn').addEventListener('click', ()=>{
       (d.itens||[]).forEach(it => it.status = 'transito');
       $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel => sel.value = 'transito');
@@ -4831,9 +4839,22 @@ Tupan</textarea>
     renderHistorico();
   });
 
+  async function marcarPedidoFeito(id){
+    const d = historicoDocsCache.find(x => x.id === id);
+    if(!d) return;
+    const itens = R.pedidoFeitoNaCotacao(d, App.hojeISO());
+    if(!itens){ App.toast('Nenhum item em negociação nesta cotação.', 'info'); return; }
+    try{
+      await App.comAuth(() => exigirDb().collection('cotacoes').doc(id).update({ itens }));
+      d.itens = itens;
+      renderHistorico();
+      App.toast('Pedido feito: ' + itens.filter(i => i.status === 'pedido').length + ' item(ns) em carteira. Quando a nota chegar, o status avança sozinho.', 'ok');
+    }catch(e){ App.toastErro('Erro ao marcar o pedido', e); }
+  }
   App.delegar($('historicoLista'), 'click', '[data-acao]', (btn)=>{
     const id = btn.dataset.cotacao;
     const acao = btn.dataset.acao;
+    if(acao === 'pedido')    return marcarPedidoFeito(id);
     if(acao === 'editar')    return carregarCotacaoParaEdicao(id);
     if(acao === 'comparar')  return abrirComparacao(id);
     if(acao === 'pesquisar') return abrirPesquisaLote(id);
@@ -5098,6 +5119,8 @@ Tupan</textarea>
       atualizarFiltroMesHistorico();
       renderHistorico();
       carregarEstadoVinculos(); // assincrono: o selo de recebimento aparece quando chegar
+      // As notas emitidas avancam os status sozinhas (faturado / recebido).
+      carregarNotasEmitidas(false).then(sincronizarCotacoes).catch(e => console.error(e));
     }catch(e){
       console.error(e);
       lista.innerHTML = '';
@@ -5283,7 +5306,7 @@ Tupan</textarea>
             '</td><td>'+(it.precoRecebido!=null?brl(it.precoRecebido):'-')+
             '</td><td>'+(precoVenda!=null?('<strong>'+brl(precoVenda)+'</strong>'):'-')+
             '</td><td>'+margemHtml+
-            '</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+'</td></tr>';
+            '</td><td>'+renderBadges(flagsAtuais(it))+'</td><td>'+renderStatusBadge(it.status)+detalheStatusItem(it)+'</td></tr>';
         });
         tabela += '</tbody></table></div>';
         body.innerHTML = tabela;
@@ -5302,6 +5325,8 @@ Tupan</textarea>
           b.textContent = texto;
           return b;
         };
+        const pedidoBtn = botaoAcao('pedido', '📝 Pedido feito');
+        pedidoBtn.title = 'Marca todos os itens em negociação como "Em carteira (pedido)", com a data de hoje';
         const editarBtn = botaoAcao('editar', '✏️ Editar / continuar negociação');
         const compararBtn = botaoAcao('comparar', '⚖️ Comparar com NF-e');
         const pesquisarLoteBtn = botaoAcao('pesquisar', '🏪 Pesquisar concorrentes');
@@ -5315,6 +5340,7 @@ Tupan</textarea>
 
         const excluirBtn = botaoAcao('excluir', 'Excluir');
         excluirBtn.className = 'del';
+        acoes.appendChild(pedidoBtn);
         acoes.appendChild(editarBtn);
         acoes.appendChild(compararBtn);
         acoes.appendChild(pesquisarLoteBtn);
@@ -5401,6 +5427,8 @@ Tupan</textarea>
           precoVenda: precoVendaItem(it), // vem de Produtos Salvos, não da cotação
           status: it.status || 'negociacao',
           pedidoEm: it.pedidoEm || null,
+          faturadoEm: it.faturadoEm || null, recebidoEm: it.recebidoEm || null, chaveNfe: it.chaveNfe || null,
+          numeroNfe: it.numeroNfe || null, qtdNfe: it.qtdNfe != null ? it.qtdNfe : null, casadoPor: it.casadoPor || null,
           flags: [], diffPct: null, diffAbs: null, diffTotal: null
         };
         recalcularFlags(r);
@@ -5669,6 +5697,17 @@ Tupan</textarea>
     transito: 'Em trânsito (faturado)',
     recebido: 'Recebido'
   };
+  // "NF 48157 · faturado 19/10 · recebido 22/10 (código do fornecedor)"
+  function detalheStatusItem(it){
+    const partes = [];
+    if(it.pedidoEm) partes.push('pedido ' + App.fmtData(it.pedidoEm));
+    if(it.numeroNfe) partes.push('NF ' + escapeHtml(it.numeroNfe) + (it.qtdNfe != null ? ' (' + it.qtdNfe.toLocaleString('pt-BR') + ')' : ''));
+    if(it.faturadoEm) partes.push('faturado ' + App.fmtData(it.faturadoEm));
+    if(it.recebidoEm) partes.push('recebido ' + App.fmtData(it.recebidoEm));
+    if(!partes.length) return '';
+    return '<div style="font-family:var(--font-mono); font-size:10.5px; color:var(--ink-soft); margin-top:2px;">' + partes.join(' · ') +
+      (it.casadoPor ? ' <span title="Como a nota foi casada com o item">(' + escapeHtml(it.casadoPor) + ')</span>' : '') + '</div>';
+  }
   function renderStatusBadge(status){
     const s = status || 'negociacao';
     return '<span class="status-badge">'+escapeHtml(STATUS_LABELS[s]||s)+'</span>';
@@ -6183,7 +6222,9 @@ Tupan</textarea>
       status: r.status || 'negociacao',
       // Data em que o item virou "pedido": e' o que o Radar mostra como
       // "pedido em" (cotacao antiga sem isto usa a data da cotacao).
-      pedidoEm: (r.status === 'pedido') ? (r.pedidoEm || App.hojeISO()) : (r.pedidoEm || null)
+      pedidoEm: (r.status === 'pedido') ? (r.pedidoEm || App.hojeISO()) : (r.pedidoEm || null),
+      faturadoEm: r.faturadoEm || null, recebidoEm: r.recebidoEm || null, chaveNfe: r.chaveNfe || null,
+      numeroNfe: r.numeroNfe || null, qtdNfe: r.qtdNfe != null ? r.qtdNfe : null, casadoPor: r.casadoPor || null
     }));
     try{
       const precosGravados = await gravarPrecosVendaDaCotacao();
@@ -7172,6 +7213,35 @@ Tupan</textarea>
     return Object.assign({}, doc, { partes: div.partes.length });
   }
 
+  // Cotacao x NF-e, sem clique: faturado e recebido pelos itens das notas
+  // (R.casarCotacaoComNotas). Grava so' as cotacoes que mudaram.
+  let sincronizandoCotacoes = null;
+  function sincronizarCotacoes(){
+    if(sincronizandoCotacoes) return sincronizandoCotacoes;
+    sincronizandoCotacoes = (async () => {
+      if(!firestoreDb || !historicoDocsCache.length || !notasEmitidasCache) return 0;
+      if(!radarDoc){ try{ radarDoc = await lerResumoRadar(); }catch(e){ console.error('radar para a sincronização:', e); } }
+      const eanPorCodigo = {};
+      Object.keys((radarDoc && radarDoc.produtos) || {}).forEach(c => { if(radarDoc.produtos[c].e) eanPorCodigo[c] = radarDoc.produtos[c].e; });
+      let gravadas = 0;
+      for(const d of historicoDocsCache){
+        const r = R.casarCotacaoComNotas(d, notasEmitidasCache, notasInfoPorChave, eanPorCodigo, App.hojeISO());
+        if(!r.mudou) continue;
+        try{
+          await App.comAuth(() => exigirDb().collection('cotacoes').doc(d.id).update({ itens: r.itens, chavesNfe: r.chavesNfe }));
+          d.itens = r.itens; d.chavesNfe = r.chavesNfe;
+          gravadas++;
+        }catch(e){ console.error('sincronizar cotação', d.id, e); }
+      }
+      if(gravadas){
+        if(router.atual() === 'Historico') renderHistorico();
+        App.toast(gravadas + ' cotação(ões) atualizada(s) pelas notas emitidas (faturado / recebido).', 'info');
+      }
+      return gravadas;
+    })().finally(() => { sincronizandoCotacoes = null; });
+    return sincronizandoCotacoes;
+  }
+
   let radarCarregando = null;
   function carregarRadar(forcar){
     if(!firestoreDb){ setRadarMsg('Firebase não conectado — configure na tela de Sincronização.'); return Promise.resolve(); }
@@ -7189,6 +7259,7 @@ Tupan</textarea>
         ]);
         radarDoc = docVendas;
         radarCarregado = true;
+        await sincronizarCotacoes();
         calcularERenderRadar();
       }catch(e){
         console.error(e);

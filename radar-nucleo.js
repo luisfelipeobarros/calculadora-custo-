@@ -403,6 +403,130 @@
   }
 
   /* ------------------------------------------------------------
+     3b. Cotacao x NF-e: faturado e recebido sem ninguem clicar
+
+     Depois do pedido, a nota do fornecedor chega; o app casa cada item
+     da cotacao com o item da nota e avanca o status sozinho:
+       pedido -> transito (faturado, data da emissao)
+              -> recebido (a nota entrou no ERP, noSistemaEm)
+     Chaves, na ordem de confianca:
+       1. codigo do fornecedor da cotacao (o que veio no PDF dele) = cProd;
+       2. codigo de barras (codigo interno -> barras pelo relatorio do radar);
+       3. nome muito parecido, so' quando e' unico dentro da nota.
+     So' notas de fornecedor compativel e emitidas a partir do pedido.
+     O status nunca anda para tras.
+     ------------------------------------------------------------ */
+  var ORDEM_STATUS = { negociacao: 0, pedido: 1, transito: 2, recebido: 3 };
+  var SUFIXO_NOME = /^(ltda|sa|s|a|me|epp|eireli|cia|e|de|do|da|dos|das|ind|industria|comercio|com)$/;
+  function palavrasDoNome(s) {
+    return norm(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(function (p) { return p && !SUFIXO_NOME.test(p); });
+  }
+  // Primeiras duas palavras iguais (ou a unica): "CERAMICA FORMIGRES" bate
+  // com "CERAMICA FORMIGRES LTDA." e nao com "CERAMICA CAPRI".
+  function nomesCompativeis(a, b) {
+    var pa = palavrasDoNome(a), pb = palavrasDoNome(b);
+    if (!pa.length || !pb.length) return false;
+    if (pa[0] !== pb[0]) return false;
+    if (pa.length < 2 || pb.length < 2) return true;
+    return pa[1] === pb[1];
+  }
+  function palavras(s) {
+    var t = norm(s).replace(/[^a-z0-9]+/g, ' ').trim();
+    return t ? t.split(' ').filter(function (w) { return w.length >= 3; }) : [];
+  }
+  // Mesma regra do Etiquetas: referencia (4+ digitos) e tamanho (NNxNN) do
+  // nome da cotacao tem que existir na descricao da nota; corte 0,75.
+  function semelhancaNomes(a, b) {
+    var pa = palavras(a), pb = palavras(b);
+    if (!pa.length || !pb.length) return 0;
+    var set = new Set(pb), comum = 0;
+    var chave = pa.filter(function (w) { return /^[0-9]{4,}$/.test(w) || /^[0-9]+x[0-9]+/.test(w); });
+    if (chave.length && !chave.every(function (w) { return set.has(w); })) return 0;
+    pa.forEach(function (w) { if (set.has(w)) comum++; });
+    return comum / Math.min(pa.length, pb.length);
+  }
+  function codigoNorm(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+
+  // cotacao: { fornecedor, data, itens, chavesNfe }; itensDocs: notas com itens
+  // (chave, numero, dataEmissao, nomeEmitente, itens [{codigo, ean, descricao, qtd}]);
+  // notasPorChave: estado (noSistema, noSistemaEm, alteradoEm, status);
+  // eanPorCodigo: codigo interno -> barras. Devolve { itens, chavesNfe, mudou }.
+  function casarCotacaoComNotas(cotacao, itensDocs, notasPorChave, eanPorCodigo, hoje) {
+    var d = cotacao || {};
+    var itens = (d.itens || []).map(function (it) { return Object.assign({}, it); });
+    var chaves = (d.chavesNfe || []).slice();
+    var vinculadas = new Set(chaves);
+    var dataCot = dataISO(d.data);
+    var mudou = false;
+    var desde = null; // notas emitidas a partir do pedido (com folga de 3 dias)
+    itens.forEach(function (it) { if (it.pedidoEm && (!desde || it.pedidoEm < desde)) desde = it.pedidoEm; });
+    desde = desde || dataCot;
+    if (desde) desde = App.somarDias(desde, -3);
+
+    var candidatas = (itensDocs || []).filter(function (doc) {
+      if (!doc || !doc.chave) return false;
+      var nota = (notasPorChave || {})[doc.chave] || null;
+      if (nota && (nota.status || 'ativa') === 'cancelada') return false;
+      if (vinculadas.has(doc.chave)) return true;
+      if (!nomesCompativeis(d.fornecedor, doc.nomeEmitente)) return false;
+      return !desde || !doc.dataEmissao || doc.dataEmissao >= desde;
+    }).sort(function (a, b) {
+      // Vinculada primeiro; depois a mais recente.
+      return (vinculadas.has(b.chave) - vinculadas.has(a.chave)) || String(b.dataEmissao || '').localeCompare(String(a.dataEmissao || ''));
+    });
+
+    itens.forEach(function (it, idx) {
+      if ((it.status || 'negociacao') === 'recebido' && it.chaveNfe) return; // ja' fechado
+      var codForn = codigoNorm(it.codigoRecebido);
+      var ean = soDigitos(eanPorCodigo && eanPorCodigo[String(it.codigo == null ? '' : it.codigo).trim()]);
+      var achado = null;
+      for (var i = 0; i < candidatas.length && !achado; i++) {
+        var doc = candidatas[i];
+        var lista = doc.itens || [];
+        var porCodigo = codForn ? lista.filter(function (x) { return codigoNorm(x && x.codigo) === codForn; }) : [];
+        var porEan = (!porCodigo.length && ean) ? lista.filter(function (x) { return soDigitos(x && x.ean) === ean; }) : [];
+        var porNome = (!porCodigo.length && !porEan.length) ? lista.filter(function (x) { return semelhancaNomes(it.produto, x && x.descricao) >= 0.75; }) : [];
+        var item = porCodigo[0] || porEan[0] || (porNome.length === 1 ? porNome[0] : null);
+        if (item) achado = { doc: doc, item: item, por: porCodigo.length ? 'código do fornecedor' : porEan.length ? 'código de barras' : 'nome' };
+      }
+      if (!achado) return;
+      var nota = (notasPorChave || {})[achado.doc.chave] || null;
+      var recebida = !!(nota && nota.noSistema === true);
+      var novoStatus = recebida ? 'recebido' : 'transito';
+      var atual = it.status || 'negociacao';
+      var campos = {
+        chaveNfe: achado.doc.chave,
+        numeroNfe: achado.doc.numero == null ? '' : String(achado.doc.numero),
+        qtdNfe: Number(achado.item.qtd) || null,
+        casadoPor: achado.por,
+        faturadoEm: achado.doc.dataEmissao || it.faturadoEm || null,
+        recebidoEm: recebida ? (nota.noSistemaEm || dataISO(nota.alteradoEm) || achado.doc.dataEmissao || hoje || null) : (it.recebidoEm || null)
+      };
+      if (ORDEM_STATUS[novoStatus] > (ORDEM_STATUS[atual] || 0)) campos.status = novoStatus;
+      if (!it.pedidoEm && campos.status) campos.pedidoEm = it.pedidoEm || dataCot || null;
+      Object.keys(campos).forEach(function (k) {
+        if (campos[k] == null && it[k] == null) return;
+        if (JSON.stringify(it[k] == null ? null : it[k]) !== JSON.stringify(campos[k] == null ? null : campos[k])) { it[k] = campos[k]; mudou = true; }
+      });
+      if (!vinculadas.has(achado.doc.chave)) { vinculadas.add(achado.doc.chave); chaves.push(achado.doc.chave); mudou = true; }
+    });
+    return { itens: itens, chavesNfe: chaves, mudou: mudou };
+  }
+
+  // Botao "Pedido feito" na cotacao: tudo que ainda esta' em negociacao
+  // vira pedido, com a data. Devolve os itens novos (ou null se nada mudou).
+  function pedidoFeitoNaCotacao(cotacao, hoje) {
+    var mudou = false;
+    var itens = ((cotacao && cotacao.itens) || []).map(function (it) {
+      var c = Object.assign({}, it);
+      if ((c.status || 'negociacao') === 'negociacao') { c.status = 'pedido'; c.pedidoEm = hoje; mudou = true; }
+      else if (c.status === 'pedido' && !c.pedidoEm) { c.pedidoEm = hoje; mudou = true; }
+      return c;
+    });
+    return mudou ? itens : null;
+  }
+
+  /* ------------------------------------------------------------
      4. Etiquetas de carona: estoque dos pisos no catalogo
      ------------------------------------------------------------ */
   // Produto e' piso se ja' esta' no catalogo do Etiquetas (vindo do
@@ -455,6 +579,9 @@
     porFornecedor: porFornecedor,
     linhasExcel: linhasExcel,
     pisosParaEtiquetas: pisosParaEtiquetas,
+    nomesCompativeis: nomesCompativeis,
+    casarCotacaoComNotas: casarCotacaoComNotas,
+    pedidoFeitoNaCotacao: pedidoFeitoNaCotacao,
     eansComNcm: eansComNcm
   };
 
