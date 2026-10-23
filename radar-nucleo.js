@@ -32,7 +32,7 @@
     return n == null || isNaN(n) ? null : n;
   }
 
-  var PARAMETROS_PADRAO = { periodoDias: 60, coberturaDias: 30, baixoGiroMax: 0, compraMinima: 1, minVendasFeitas: 3 };
+  var PARAMETROS_PADRAO = { periodoDias: 60, coberturaDias: 30, baixoGiroMax: 0, compraMinima: 1, minVendasFeitas: 3, pedidoVelhoDias: 60 };
   // Classes do sistema que o app de Etiquetas controla (piso ceramico,
   // revestimento ceramico, porcelanato) — a coluna Ordem_Classe do relatorio.
   var CLASSES_PISOS = ['10000', '10016', '10002'];
@@ -274,7 +274,16 @@
       // Venda concentrada: muita quantidade em poucas vendas (um pedido
       // grande) nao e' giro — a sugestao fica para conferir, fora da soma.
       var concentrada = transacoes != null && vendas > 0 && transacoes < par.minVendasFeitas;
-      var carteiraQtd = c ? c.qtd : 0;
+      // Carteira so' conta enquanto e' pedido vivo: com recebimento DEPOIS
+      // da data do pedido ela foi entregue; sem nota por mais de
+      // pedidoVelhoDias e' cotacao que ficou como "pedido" e ninguem
+      // atualizou. Nos dois casos sai de Chegando e nao desconta da compra.
+      if (c) {
+        c = Object.assign({}, c);
+        c.entregue = !!(m && m.recebido && m.recebido.em && c.em && m.recebido.em >= c.em);
+        c.velho = !c.entregue && !!(c.em && o.hoje && App.diasEntre(c.em, o.hoje) > par.pedidoVelhoDias);
+      }
+      var carteiraQtd = c && !c.entregue && !c.velho ? c.qtd : 0;
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
       var naoRepor = /^\*/.test(nome);
       var alvo = mediaDia * par.coberturaDias;
@@ -289,6 +298,8 @@
         comprar: sugestao > 0 && !pedidoFeito && !concentrada,
         conferir: sugestao > 0 && !pedidoFeito && concentrada,
         chegando: carteiraQtd > 0 || faturadoQtd > 0,
+        carteira: carteiraQtd > 0,
+        faturado: faturadoQtd > 0,
         baixoGiro: estoque > 0 && vendas <= par.baixoGiroMax,
         semFicha: !ficha,
         pedidoFeito: pedidoFeito
@@ -315,6 +326,8 @@
     comprar: { rotulo: 'Comprar', flag: 'comprar' },
     conferir: { rotulo: 'Conferir', flag: 'conferir' },
     chegando: { rotulo: 'Chegando', flag: 'chegando' },
+    carteira: { rotulo: 'Em carteira', flag: 'carteira' },
+    faturado: { rotulo: 'Faturado', flag: 'faturado' },
     baixoGiro: { rotulo: 'Baixo giro', flag: 'baixoGiro' },
     semFicha: { rotulo: 'Sem ficha', flag: 'semFicha' },
     pedidoFeito: { rotulo: 'Pedido feito', flag: 'pedidoFeito' },
@@ -322,7 +335,7 @@
   };
 
   function contar(linhas) {
-    var c = { comprar: 0, valorComprar: 0, conferir: 0, chegando: 0, baixoGiro: 0, valorParado: 0, semFicha: 0, pedidoFeito: 0, todos: 0 };
+    var c = { comprar: 0, valorComprar: 0, conferir: 0, chegando: 0, carteira: 0, faturado: 0, baixoGiro: 0, valorParado: 0, semFicha: 0, pedidoFeito: 0, todos: 0 };
     (linhas || []).forEach(function (l) {
       c.todos++;
       Object.keys(l.flags).forEach(function (f) { if (l.flags[f] && c[f] != null) c[f]++; });
