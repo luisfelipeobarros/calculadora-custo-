@@ -32,16 +32,26 @@
     return n == null || isNaN(n) ? null : n;
   }
 
-  var PARAMETROS_PADRAO = { periodoDias: 60, coberturaDias: 30, baixoGiroMax: 0, compraMinima: 1 };
+  var PARAMETROS_PADRAO = { periodoDias: 60, coberturaDias: 30, baixoGiroMax: 0, compraMinima: 1, minVendasFeitas: 3 };
+  // Classes do sistema que o app de Etiquetas controla (piso ceramico,
+  // revestimento ceramico, porcelanato) — a coluna Ordem_Classe do relatorio.
+  var CLASSES_PISOS = ['10000', '10016', '10002'];
   var DIAS_PEDIDO_FEITO = 60; // marca manual "pedido feito" expira depois disto
 
   /* ------------------------------------------------------------
      1. Leitura do relatorio de vendas
      ------------------------------------------------------------ */
+  // Dois relatorios do sistema: o de vendas (codigo, nome, barras, vendas,
+  // valor, estoque) e o "Produtos a Comprar" (o mesmo, mais fornecedor,
+  // classe, periodo, ultima compra, custo e numero de vendas feitas).
   var COLUNAS = {
-    codigo: /^codigo( do)? produto$|^codigo$/, nome: /^nome( do)? produto$|^produto$|^descricao/,
+    codigo: /^codigo( do)? produto$|^codigo$/, nome: /^nome( do)? produto$|^nome$|^produto$|^descricao/,
     ean: /^codigo (de )?barras/, vendas: /^vendas$|^qtd(\.|e)? vendida|^quantidade vendida/,
-    valor: /^valor( vendido| total)?$/, estoque: /^estoque/
+    valor: /^valor( vendido| total)?$/, estoque: /^estoque/,
+    fornecedor: /^fornecedor/, classe: /^ordem[ _]?classe|^classe$/,
+    dataInicial: /^data[ _]?inicial/, dataFinal: /^data[ _]?final/,
+    ultCompraQtd: /^qtde?\.? ?ult\.? ?compra/, ultCompra: /^ult\.? ?compra/,
+    custo: /^c\.? ?nf-?e|^custo|^preco (de )?compra/, transacoes: /^qtd\.? ?vendas feitas|^vendas feitas|^transacoes/
   };
 
   // matriz: linhas da planilha. Devolve { itens, problemas }.
@@ -60,42 +70,92 @@
     var itens = [], problemas = [];
     if (pos.ean == null) problemas.push('coluna "Código Barras" não encontrada: sem ela o radar não casa com as notas emitidas');
     var celula = function (linha, k) { return pos[k] == null ? null : linha[pos[k]]; };
+    var texto = function (v) { return String(v == null ? '' : v).trim(); };
+    var completo = pos.fornecedor != null; // relatorio "Produtos a Comprar"
+    var periodo = null;
     linhas.slice(cab + 1).forEach(function (linha, idx) {
       if (!linha || celula(linha, 'codigo') == null || celula(linha, 'codigo') === '') return;
-      var nome = String(celula(linha, 'nome') == null ? '' : celula(linha, 'nome')).trim();
+      var nome = texto(celula(linha, 'nome'));
       var vendas = num(celula(linha, 'vendas')), estoque = num(celula(linha, 'estoque'));
       if (vendas == null || estoque == null) {
         problemas.push('linha ' + (cab + idx + 2) + ': vendas ou estoque ilegível (' + nome + ')');
         return;
       }
-      itens.push({
-        codigo: String(celula(linha, 'codigo')).trim(),
+      if (!periodo && pos.dataInicial != null && pos.dataFinal != null) {
+        var ini = App.dataDeCelula(celula(linha, 'dataInicial')), fim = App.dataDeCelula(celula(linha, 'dataFinal'));
+        if (ini && fim) periodo = { ini: ini, fim: fim, dias: App.diasEntre(ini, fim) + 1 };
+      }
+      var it = {
+        codigo: texto(celula(linha, 'codigo')),
         nome: nome,
         naoRepor: /^\*/.test(nome),
         ean: soDigitos(celula(linha, 'ean')),
         vendas: vendas,
         valor: num(celula(linha, 'valor')) || 0,
         estoque: estoque
-      });
+      };
+      if (completo) {
+        it.fornecedor = texto(celula(linha, 'fornecedor'));
+        it.classe = soDigitos(celula(linha, 'classe'));
+        it.custo = num(celula(linha, 'custo'));
+        it.transacoes = pos.transacoes != null ? (num(celula(linha, 'transacoes')) || 0) : null;
+        var uc = App.dataDeCelula(celula(linha, 'ultCompra'));
+        it.ultimaCompra = uc ? { em: uc, qtd: num(celula(linha, 'ultCompraQtd')), preco: it.custo } : null;
+      }
+      itens.push(it);
     });
-    return { itens: itens, problemas: problemas };
+    if (completo && !periodo) problemas.push('colunas Data_Inicial/Data_Final sem data legível: o período fica o configurado');
+    return { itens: itens, problemas: problemas, periodo: periodo, completo: completo };
   }
 
   // Documento compacto a gravar (config/radarVendas). `atual` e' o
   // documento anterior: o estoque dele vira "anterior" para mostrar a
   // variacao entre uma importacao e outra.
-  function resumoVendas(itens, hoje, periodoDias, atual) {
+  // periodo: { ini, fim, dias } do relatorio completo (vence periodoDias).
+  function resumoVendas(itens, hoje, periodoDias, atual, periodo) {
     var produtos = {}, anterior = {};
     (itens || []).forEach(function (it) {
-      produtos[it.codigo] = { n: it.nome, e: it.ean || '', v: it.vendas, r: it.valor, q: it.estoque };
+      var p = { n: it.nome, e: it.ean || '', v: it.vendas, r: it.valor, q: it.estoque };
+      if (it.fornecedor) p.f = it.fornecedor;
+      if (it.classe) p.k = it.classe;
+      if (it.custo != null) p.c = it.custo;
+      if (it.transacoes != null) p.t = it.transacoes;
+      if (it.ultimaCompra) { p.ud = it.ultimaCompra.em; if (it.ultimaCompra.qtd != null) p.uq = it.ultimaCompra.qtd; }
+      produtos[it.codigo] = p;
     });
     var antes = (atual && atual.produtos) || {};
     Object.keys(antes).forEach(function (c) { if (antes[c] && antes[c].q != null) anterior[c] = antes[c].q; });
     return {
       produtos: produtos, qtd: Object.keys(produtos).length, importadoEm: hoje,
-      periodoDias: periodoDias || PARAMETROS_PADRAO.periodoDias,
+      periodoDias: (periodo && periodo.dias) || periodoDias || PARAMETROS_PADRAO.periodoDias,
+      periodoIni: (periodo && periodo.ini) || null, periodoFim: (periodo && periodo.fim) || null,
       anterior: anterior, anteriorEm: (atual && atual.importadoEm) || null
     };
+  }
+
+  // O Firestore limita cada documento a 1 MB e o relatorio inteiro
+  // passa de 1,5 MB: o resumo vai em partes — config/radarVendas (meta +
+  // estoque anterior) e config/radarVendas_p1..pN (os produtos).
+  var BYTES_POR_PARTE = 700000;
+  function dividirResumo(doc, maxBytes) {
+    var limite = maxBytes || BYTES_POR_PARTE;
+    var partes = [], atual = {}, bytes = 0;
+    Object.keys(doc.produtos || {}).forEach(function (codigo) {
+      var b = JSON.stringify(doc.produtos[codigo]).length + codigo.length + 6;
+      if (bytes + b > limite && Object.keys(atual).length) { partes.push(atual); atual = {}; bytes = 0; }
+      atual[codigo] = doc.produtos[codigo];
+      bytes += b;
+    });
+    if (Object.keys(atual).length || !partes.length) partes.push(atual);
+    var meta = Object.assign({}, doc);
+    delete meta.produtos;
+    meta.partes = partes.length;
+    return { meta: meta, partes: partes };
+  }
+  function juntarResumo(meta, partes) {
+    var produtos = {};
+    (partes || []).forEach(function (p) { Object.assign(produtos, (p && p.produtos) || p || {}); });
+    return Object.assign({}, meta || {}, { produtos: produtos });
   }
 
   /* ------------------------------------------------------------
@@ -176,18 +236,32 @@
     var periodo = Number(o.periodoDias) > 0 ? Number(o.periodoDias) : par.periodoDias;
     var fichas = o.fichas || {}, cart = o.carteira || {}, mov = o.movimentos || {}, pedidos = o.pedidos || {};
     var anterior = o.anterior || {};
+    // Codigo de barras repetido em mais de um produto: a nota nao diz de
+    // qual deles e' — nao se atribui faturado/recebido a nenhum, e a
+    // linha avisa para corrigir o cadastro.
+    var usoEan = {};
+    Object.keys(o.produtos || {}).forEach(function (codigo) {
+      var e = soDigitos((o.produtos[codigo] || {}).e);
+      if (e) usoEan[e] = (usoEan[e] || 0) + 1;
+    });
     var linhas = [];
     Object.keys(o.produtos || {}).forEach(function (codigo) {
       var p = o.produtos[codigo] || {};
       var nome = p.n || '';
       var ean = soDigitos(p.e);
+      var eanRepetido = !!(ean && usoEan[ean] > 1);
       var vendas = Number(p.v) || 0, estoque = Number(p.q) || 0;
       var mediaDia = vendas / periodo;
       var cobertura = mediaDia > 0 ? estoque / mediaDia : null; // null = sem venda no periodo
       var ficha = fichas[codigo] || null;
-      var custo = ficha && ficha.custo > 0 ? ficha.custo : null;
+      // Custo: o da ultima compra (relatorio) vale mais que o da ficha.
+      var custo = p.c > 0 ? Number(p.c) : (ficha && ficha.custo > 0 ? ficha.custo : null);
       var c = cart[codigo] || null;
-      var m = (ean && mov[ean]) || null;
+      var m = (ean && !eanRepetido && mov[ean]) || null;
+      var transacoes = p.t == null ? null : Number(p.t);
+      // Venda concentrada: muita quantidade em poucas vendas (um pedido
+      // grande) nao e' giro — a sugestao fica para conferir, fora da soma.
+      var concentrada = transacoes != null && vendas > 0 && transacoes < par.minVendasFeitas;
       var carteiraQtd = c ? c.qtd : 0;
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
       var naoRepor = /^\*/.test(nome);
@@ -200,19 +274,22 @@
       var pf = pedidos[codigo] || null;
       var pedidoFeito = !!(pf && pf.em && o.hoje && App.diasEntre(pf.em, o.hoje) <= DIAS_PEDIDO_FEITO && !(carteiraQtd > 0 || faturadoQtd > 0));
       var flags = {
-        comprar: sugestao > 0 && !pedidoFeito,
+        comprar: sugestao > 0 && !pedidoFeito && !concentrada,
+        conferir: sugestao > 0 && !pedidoFeito && concentrada,
         chegando: carteiraQtd > 0 || faturadoQtd > 0,
         baixoGiro: estoque > 0 && vendas <= par.baixoGiroMax,
         semFicha: !ficha,
         pedidoFeito: pedidoFeito
       };
       linhas.push({
-        codigo: codigo, nome: nome, ean: ean, naoRepor: naoRepor,
-        vendas: vendas, valor: Number(p.r) || 0, estoque: estoque,
+        codigo: codigo, nome: nome, ean: ean, naoRepor: naoRepor, eanRepetido: eanRepetido, classe: p.k || '',
+        vendas: vendas, valor: Number(p.r) || 0, estoque: estoque, transacoes: transacoes, concentrada: concentrada,
         estoqueAnterior: anterior[codigo] != null ? Number(anterior[codigo]) : null,
         mediaDia: mediaDia, coberturaDias: cobertura == null ? null : Math.round(cobertura),
-        fornecedor: ficha && ficha.fornecedor ? ficha.fornecedor : (c && c.fornecedor) || (m && m.faturado && m.faturado.fornecedor) || '',
-        custo: custo, venda: ficha && ficha.venda > 0 ? ficha.venda : null,
+        fornecedor: p.f || (ficha && ficha.fornecedor) || (c && c.fornecedor) || (m && m.faturado && m.faturado.fornecedor) || '',
+        custo: custo, custoDe: p.c > 0 ? 'última compra' : (custo != null ? 'ficha' : null),
+        venda: ficha && ficha.venda > 0 ? ficha.venda : null,
+        ultimaCompra: p.ud ? { em: p.ud, qtd: p.uq == null ? null : Number(p.uq), preco: p.c > 0 ? Number(p.c) : null } : null,
         carteira: c, faturado: m && m.faturado || null, recebido: m && m.recebido || null,
         sugestao: sugestao, valorSugestao: custo != null ? App.centavos(sugestao * custo) : null,
         valorParado: custo != null ? App.centavos(estoque * custo) : null,
@@ -224,6 +301,7 @@
 
   var ABAS = {
     comprar: { rotulo: 'Comprar', flag: 'comprar' },
+    conferir: { rotulo: 'Conferir', flag: 'conferir' },
     chegando: { rotulo: 'Chegando', flag: 'chegando' },
     baixoGiro: { rotulo: 'Baixo giro', flag: 'baixoGiro' },
     semFicha: { rotulo: 'Sem ficha', flag: 'semFicha' },
@@ -232,7 +310,7 @@
   };
 
   function contar(linhas) {
-    var c = { comprar: 0, valorComprar: 0, chegando: 0, baixoGiro: 0, valorParado: 0, semFicha: 0, pedidoFeito: 0, todos: 0 };
+    var c = { comprar: 0, valorComprar: 0, conferir: 0, chegando: 0, baixoGiro: 0, valorParado: 0, semFicha: 0, pedidoFeito: 0, todos: 0 };
     (linhas || []).forEach(function (l) {
       c.todos++;
       Object.keys(l.flags).forEach(function (f) { if (l.flags[f] && c[f] != null) c[f]++; });
@@ -264,7 +342,7 @@
   // Comprar: maior valor primeiro; baixo giro: maior valor parado; o resto: menor cobertura.
   function ordenar(linhas, aba) {
     return (linhas || []).slice().sort(function (a, b) {
-      if (aba === 'comprar') return (b.valorSugestao || 0) - (a.valorSugestao || 0) || b.sugestao - a.sugestao;
+      if (aba === 'comprar' || aba === 'conferir') return (b.valorSugestao || 0) - (a.valorSugestao || 0) || b.sugestao - a.sugestao;
       if (aba === 'baixoGiro') return (b.valorParado || 0) - (a.valorParado || 0) || b.estoque - a.estoque;
       var ca = a.coberturaDias == null ? 1e9 : a.coberturaDias, cb = b.coberturaDias == null ? 1e9 : b.coberturaDias;
       return ca - cb || b.vendas - a.vendas;
@@ -286,14 +364,15 @@
     return (linhas || []).map(function (l) {
       return {
         'Código': l.codigo, 'Produto': l.nome, 'Código de barras': l.ean, 'Fornecedor': l.fornecedor,
-        'Vendas no período': l.vendas, 'Média/dia': Math.round(l.mediaDia * 100) / 100,
+        'Vendas no período': l.vendas, 'Vendas feitas': l.transacoes == null ? '' : l.transacoes, 'Média/dia': Math.round(l.mediaDia * 100) / 100,
+        'Última compra': l.ultimaCompra ? l.ultimaCompra.em : '', 'Qtd últ. compra': l.ultimaCompra && l.ultimaCompra.qtd != null ? l.ultimaCompra.qtd : '',
         'Estoque': l.estoque, 'Estoque anterior': l.estoqueAnterior == null ? '' : l.estoqueAnterior,
         'Cobertura (dias)': l.coberturaDias == null ? '' : l.coberturaDias,
         'Em carteira': l.carteira ? l.carteira.qtd : 0, 'Pedido em': l.carteira && l.carteira.em ? l.carteira.em : '',
         'Faturado': l.faturado ? l.faturado.qtd : 0, 'Faturado em': l.faturado && l.faturado.em ? l.faturado.em : '',
         'Recebido em': l.recebido && l.recebido.em ? l.recebido.em : '', 'Qtd recebida': l.recebido ? l.recebido.qtd : '',
         'Sugestão': l.sugestao, 'Custo unit.': l.custo == null ? '' : l.custo, 'Valor sugerido': l.valorSugestao == null ? '' : l.valorSugestao,
-        'Situação': [l.flags.comprar ? 'comprar' : '', l.flags.chegando ? 'chegando' : '', l.flags.baixoGiro ? 'baixo giro' : '', l.flags.semFicha ? 'sem ficha' : '', l.flags.pedidoFeito ? 'pedido feito' : ''].filter(Boolean).join(', ')
+        'Situação': [l.flags.comprar ? 'comprar' : '', l.flags.conferir ? 'conferir (venda concentrada)' : '', l.flags.chegando ? 'chegando' : '', l.flags.baixoGiro ? 'baixo giro' : '', l.flags.semFicha ? 'sem ficha' : '', l.flags.pedidoFeito ? 'pedido feito' : '', l.eanRepetido ? 'barras repetido' : ''].filter(Boolean).join(', ')
       };
     });
   }
@@ -304,6 +383,7 @@
   // Produto e' piso se ja' esta' no catalogo do Etiquetas (vindo do
   // Estoque-Grade, sem amostras/lojinha) OU se aparece em nota com NCM
   // 6907, casado pelo codigo de barras. Devolve o catalogo novo.
+  // ... OU se a classe do relatorio e' uma das de piso (CLASSES_PISOS).
   function pisosParaEtiquetas(itensVendas, catalogoDoc, eansNcm6907, hoje) {
     var porCodigo = Object.assign({}, (catalogoDoc && catalogoDoc.porCodigo) || {});
     var eans = eansNcm6907 instanceof Set ? eansNcm6907 : new Set(eansNcm6907 || []);
@@ -313,8 +393,8 @@
       if (atual) {
         porCodigo[it.codigo] = { n: atual.n || it.nome, e: atual.e || it.ean || '', q: it.estoque };
         atualizados++;
-      } else if (it.ean && eans.has(it.ean)) {
-        porCodigo[it.codigo] = { n: it.nome, e: it.ean, q: it.estoque };
+      } else if ((it.classe && CLASSES_PISOS.indexOf(it.classe) !== -1) || (it.ean && eans.has(it.ean))) {
+        porCodigo[it.codigo] = { n: it.nome, e: it.ean || '', q: it.estoque };
         novos++;
       }
     });
@@ -334,10 +414,13 @@
 
   var RadarNucleo = {
     PARAMETROS_PADRAO: PARAMETROS_PADRAO,
+    CLASSES_PISOS: CLASSES_PISOS,
     DIAS_PEDIDO_FEITO: DIAS_PEDIDO_FEITO,
     ABAS: ABAS,
     lerPlanilhaVendas: lerPlanilhaVendas,
     resumoVendas: resumoVendas,
+    dividirResumo: dividirResumo,
+    juntarResumo: juntarResumo,
     carteira: carteira,
     movimentos: movimentos,
     calcularRadar: calcularRadar,

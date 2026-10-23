@@ -732,8 +732,9 @@ Tupan</textarea>
         </div>
       </div>
       <p class="nota-explicativa" style="margin-top:8px;">
-        Importe todo dia o relatório de vendas do sistema (vendas e estoque do período, com "não mostrar inativos").
-        Para cada produto o radar junta a <strong>ficha</strong> (fornecedor e custo, pelo código interno), a <strong>carteira</strong>
+        Importe todo dia o relatório <strong>Produtos a Comprar (NF-e)</strong> do sistema (fornecedor, classe, período, última compra, estoque,
+        vendas e número de vendas feitas; o relatório de vendas simples também serve).
+        Para cada produto o radar junta a <strong>ficha</strong> (preço de venda; custo e fornecedor só quando o relatório não traz), a <strong>carteira</strong>
         (itens de cotação com status "pedido") e o <strong>faturado / recebido</strong> (NF-e emitidas, pelo código de barras),
         e sugere a compra: média diária × dias de cobertura − estoque − carteira − faturado. A mesma importação atualiza o
         estoque dos pisos no app de Etiquetas.
@@ -745,6 +746,7 @@ Tupan</textarea>
         <div><label for="rdCobertura" class="rd-rot">Cobertura desejada (dias)</label><input type="number" id="rdCobertura" value="30" min="1" step="1" class="rd-num"></div>
         <div><label for="rdBaixoGiro" class="rd-rot">Baixo giro: vendas até</label><input type="number" id="rdBaixoGiro" value="0" min="0" step="1" class="rd-num"></div>
         <div><label for="rdMinimo" class="rd-rot">Compra mínima (unid.)</label><input type="number" id="rdMinimo" value="1" min="0" step="1" class="rd-num"></div>
+        <div><label for="rdMinVendas" class="rd-rot" title="Com menos vendas feitas que isto, a quantidade vendida pode ser um pedido só: a sugestão vai para Conferir">Mín. vendas feitas</label><input type="number" id="rdMinVendas" value="3" min="0" step="1" class="rd-num"></div>
       </div>
 
       <div class="etq-resumo" id="radarResumo" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:8px; margin-bottom:12px;"></div>
@@ -986,7 +988,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=1"></script>
+<script src="radar-nucleo.js?v=3"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -7102,7 +7104,7 @@ Tupan</textarea>
   let radarLinhas = [];
   let radarAba = 'comprar';
   let radarCarregado = false;
-  const RD_CHIPS = [['comprar', '🛒 Comprar'], ['chegando', '🚚 Chegando'], ['baixoGiro', '🐢 Baixo giro'], ['semFicha', '📋 Sem ficha'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
+  const RD_CHIPS = [['comprar', '🛒 Comprar'], ['conferir', '⚠ Conferir'], ['chegando', '🚚 Chegando'], ['baixoGiro', '🐢 Baixo giro'], ['semFicha', '📋 Sem ficha'], ['pedidoFeito', '✔ Pedido feito'], ['todos', 'Todos']];
   $('radarChips').innerHTML = RD_CHIPS.map(([a, rot]) => '<button type="button" class="chip-filtro" data-aba="' + a + '" aria-pressed="' + (a === radarAba ? 'true' : 'false') + '">' + rot + '</button>').join('');
   App.buscaComChips($('buscaRadar'));
   const setRadarMsg = (t) => { $('radarMsg').textContent = t; };
@@ -7125,6 +7127,7 @@ Tupan</textarea>
       $('rdCobertura').value = radarParametros.coberturaDias;
       $('rdBaixoGiro').value = radarParametros.baixoGiroMax;
       $('rdMinimo').value = radarParametros.compraMinima;
+      $('rdMinVendas').value = radarParametros.minVendasFeitas;
     }).catch(e => console.error('parâmetros do radar:', e));
   }
   function gravarParametrosRadar(campos){
@@ -7132,12 +7135,41 @@ Tupan</textarea>
       .then(() => { Object.assign(radarParametros, campos); })
       .catch(e => App.toastErro('Erro ao guardar os parâmetros', e));
   }
-  ['rdPeriodo', 'rdCobertura', 'rdBaixoGiro', 'rdMinimo'].forEach(id => $(id).addEventListener('change', () => {
+  ['rdPeriodo', 'rdCobertura', 'rdBaixoGiro', 'rdMinimo', 'rdMinVendas'].forEach(id => $(id).addEventListener('change', () => {
     gravarParametrosRadar({
       periodoDias: Math.max(1, Number($('rdPeriodo').value) || 60), coberturaDias: Math.max(1, Number($('rdCobertura').value) || 30),
-      baixoGiroMax: Math.max(0, Number($('rdBaixoGiro').value) || 0), compraMinima: Math.max(0, Number($('rdMinimo').value) || 0)
+      baixoGiroMax: Math.max(0, Number($('rdBaixoGiro').value) || 0), compraMinima: Math.max(0, Number($('rdMinimo').value) || 0),
+      minVendasFeitas: Math.max(0, Number($('rdMinVendas').value) || 0)
     }).then(calcularERenderRadar);
   }));
+
+  // O resumo mora em partes (config/radarVendas + radarVendas_pN): o
+  // Firestore nao aceita documento acima de 1 MB e o relatorio passa disso.
+  async function lerResumoRadar(){
+    const meta = await App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC).get());
+    if(!meta.exists) return null;
+    const m = meta.data();
+    if(!m.partes) return m; // formato antigo, num documento so'
+    const partes = await Promise.all(Array.from({ length: m.partes }, (_, i) =>
+      App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC + '_p' + (i + 1)).get()).then(d => d.exists ? d.data() : {})));
+    return R.juntarResumo(m, partes);
+  }
+  async function gravarResumoRadar(doc){
+    const div = R.dividirResumo(doc);
+    const db = exigirDb();
+    // Partes primeiro, meta por ultimo: quem ler no meio ve a importacao anterior inteira.
+    for(let i = 0; i < div.partes.length; i++){
+      await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + (i + 1)).set({ produtos: div.partes[i] }));
+    }
+    await App.comAuth(() => db.collection('config').doc(RADAR_DOC).set(div.meta));
+    // Partes que sobraram de uma importacao maior sao apagadas.
+    if(radarDoc && radarDoc.partes > div.partes.length){
+      for(let i = div.partes.length + 1; i <= radarDoc.partes; i++){
+        await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + i).delete()).catch(() => {});
+      }
+    }
+    return Object.assign({}, div.meta, { produtos: doc.produtos });
+  }
 
   let radarCarregando = null;
   function carregarRadar(forcar){
@@ -7148,13 +7180,13 @@ Tupan</textarea>
       setRadarMsg('Carregando vendas, cotações, notas e fichas...');
       try{
         const [docVendas] = await Promise.all([
-          App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC).get()),
+          lerResumoRadar(),
           lerParametrosRadar(),
           (produtosCache && produtosCache.length && !forcar) ? Promise.resolve() : atualizarListaSalvos(),
           (historicoDocsCache.length && !forcar) ? Promise.resolve() : carregarHistorico(),
           carregarNotasEmitidas(!!forcar)
         ]);
-        radarDoc = docVendas.exists ? docVendas.data() : null;
+        radarDoc = docVendas;
         radarCarregado = true;
         calcularERenderRadar();
       }catch(e){
@@ -7179,7 +7211,8 @@ Tupan</textarea>
       movimentos: R.movimentos(notasEmitidasCache || [], notasInfoPorChave),
       parametros: radarParametros, pedidos: radarParametros.pedidos, hoje: App.hojeISO()
     });
-    setRadarMsg(radarDoc.qtd + ' produtos · vendas de ' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' dias · importado em ' + App.fmtData(radarDoc.importadoEm) +
+    setRadarMsg(radarDoc.qtd + ' produtos · vendas de ' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' dias' +
+      (radarDoc.periodoIni ? ' (' + App.fmtData(radarDoc.periodoIni) + ' a ' + App.fmtData(radarDoc.periodoFim) + ')' : '') + ' · importado em ' + App.fmtData(radarDoc.importadoEm) +
       (radarDoc.anteriorEm ? ' (anterior: ' + App.fmtData(radarDoc.anteriorEm) + ')' : '') +
       ' · ' + (historicoDocsCache.length) + ' cotações · ' + (notasEmitidasCache ? notasEmitidasCache.length : 0) + ' notas');
     const forn = [...new Set(radarLinhas.map(l => l.fornecedor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
@@ -7191,6 +7224,7 @@ Tupan</textarea>
   const fmtQ = (q) => q == null ? '—' : Number(q).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
   function htmlChegando(l){
     const partes = [];
+    if(l.ultimaCompra) partes.push('🛒 últ. compra ' + App.fmtData(l.ultimaCompra.em) + (l.ultimaCompra.qtd != null ? ' · ' + fmtQ(l.ultimaCompra.qtd) : '') + (l.ultimaCompra.preco != null ? ' · ' + brl(l.ultimaCompra.preco) : ''));
     if(l.carteira) partes.push('📝 pedido ' + (l.carteira.em ? App.fmtData(l.carteira.em) : '') + ' · ' + fmtQ(l.carteira.qtd) + (l.carteira.fornecedor ? ' · ' + escapeHtml(l.carteira.fornecedor) : ''));
     if(l.faturado) partes.push('🧾 faturado ' + (l.faturado.em ? App.fmtData(l.faturado.em) : '') + ' · ' + fmtQ(l.faturado.qtd) + (l.faturado.numero ? ' · NF ' + escapeHtml(l.faturado.numero) : ''));
     if(l.recebido) partes.push('📦 recebido ' + (l.recebido.em ? App.fmtData(l.recebido.em) : '') + ' · ' + fmtQ(l.recebido.qtd));
@@ -7201,6 +7235,7 @@ Tupan</textarea>
     const c = R.contar(radarLinhas);
     $('radarResumo').innerHTML = [
       ['comprar', 'Comprar', c.comprar + (c.valorComprar ? ' · ' + brl(c.valorComprar) : ''), c.comprar ? 'alerta' : ''],
+      ['conferir', 'Conferir (venda concentrada)', c.conferir, ''],
       ['chegando', 'Chegando', c.chegando, 'azul'],
       ['baixoGiro', 'Baixo giro', c.baixoGiro + (c.valorParado ? ' · ' + brl(c.valorParado) + ' parado' : ''), ''],
       ['semFicha', 'Sem ficha', c.semFicha, ''],
@@ -7209,7 +7244,7 @@ Tupan</textarea>
     $('radarChips').querySelectorAll('.chip-filtro').forEach(b => b.setAttribute('aria-pressed', b.dataset.aba === radarAba ? 'true' : 'false'));
 
     const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')), fornecedor: $('radarFornecedor').value }), radarAba);
-    $('radarFornecedores').innerHTML = radarAba !== 'comprar' || !lista.length ? '' :
+    $('radarFornecedores').innerHTML = (radarAba !== 'comprar' && radarAba !== 'conferir') || !lista.length ? '' :
       '<div class="rd-forn">' + R.porFornecedor(lista).map(g =>
         '<button type="button" class="chip-filtro" data-forn="' + escapeHtml(g.fornecedor) + '">' + escapeHtml(g.fornecedor) + ' · ' + g.itens + (g.valor ? ' · ' + brl(g.valor) : '') + '</button>').join('') + '</div>';
     if(!lista.length){
@@ -7223,9 +7258,12 @@ Tupan</textarea>
       '</tr></thead><tbody>' + lista.map(l => {
         const delta = l.estoqueAnterior != null ? l.estoque - l.estoqueAnterior : null;
         return '<tr>' +
-          '<td><div class="prod">' + escapeHtml(l.nome) + '</div><div class="mono">' + escapeHtml(l.codigo) + (l.ean ? ' · ' + l.ean : '') + (l.naoRepor ? ' · não repor' : '') + '</div></td>' +
-          '<td>' + escapeHtml(l.fornecedor || '—') + (l.custo != null ? '<div class="mono">custo ' + brl(l.custo) + (l.venda != null ? ' · venda ' + brl(l.venda) : '') + '</div>' : (l.flags.semFicha ? '<div class="mono">sem ficha</div>' : '')) + '</td>' +
-          '<td class="num">' + fmtQ(l.vendas) + '<div class="mono">' + fmtQ(Math.round(l.mediaDia * 100) / 100) + '/dia</div></td>' +
+          '<td><div class="prod">' + escapeHtml(l.nome) + '</div><div class="mono">' + escapeHtml(l.codigo) + (l.ean ? ' · ' + l.ean : '') + (l.naoRepor ? ' · não repor' : '') +
+            (l.eanRepetido ? ' · <span style="color:var(--loss);">barras repetido no cadastro</span>' : '') + '</div></td>' +
+          '<td>' + escapeHtml(l.fornecedor || '—') + (l.custo != null ? '<div class="mono">custo ' + brl(l.custo) + (l.custoDe ? ' (' + l.custoDe + ')' : '') + (l.venda != null ? ' · venda ' + brl(l.venda) : '') + '</div>' : '') +
+            (l.flags.semFicha ? '<div class="mono">sem ficha na Calculadora</div>' : '') + '</td>' +
+          '<td class="num">' + fmtQ(l.vendas) + '<div class="mono">' + fmtQ(Math.round(l.mediaDia * 100) / 100) + '/dia' + (l.transacoes != null ? ' · ' + fmtQ(l.transacoes) + ' venda(s)' : '') + '</div>' +
+            (l.concentrada ? '<div class="mono" style="color:var(--loss);">venda concentrada</div>' : '') + '</td>' +
           '<td class="num"><b>' + fmtQ(l.estoque) + '</b>' + (delta != null && delta !== 0 ? '<div class="mono">' + (delta > 0 ? '+' : '') + fmtQ(delta) + ' desde ' + App.fmtData(radarDoc.anteriorEm) + '</div>' : '') + '</td>' +
           '<td class="num">' + (l.coberturaDias == null ? '<span class="mono">sem venda</span>' : l.coberturaDias + ' d') + '</td>' +
           '<td>' + htmlChegando(l) + '</td>' +
@@ -7294,14 +7332,14 @@ Tupan</textarea>
       if(!lido.itens.length){ setRadarMsg(lido.problemas.join(' · ') || 'A planilha está vazia.'); return; }
       const ok = await App.confirmar({ titulo: 'Importar vendas e estoque', mensagem: lido.itens.length + ' produto(s) em ' + arq.name +
         (lido.problemas.length ? '\n' + lido.problemas.length + ' linha(s) com problema: ' + lido.problemas.slice(0, 3).join('; ') : '') +
-        '\n\nPeríodo das vendas: ' + radarParametros.periodoDias + ' dias (ajuste em "Período do relatório" se for outro).' +
+        '\n\nPeríodo das vendas: ' + (lido.periodo ? lido.periodo.dias + ' dias (' + App.fmtData(lido.periodo.ini) + ' a ' + App.fmtData(lido.periodo.fim) + ', lido do relatório)' : radarParametros.periodoDias + ' dias (ajuste em "Período do relatório" se for outro)') +
+        (lido.completo ? '' : '\nRelatório de vendas simples: sem fornecedor, última compra e vendas feitas.') +
         '\nSubstitui a importação anterior e atualiza o estoque dos pisos no Etiquetas.', confirmar: 'Importar' });
       if(!ok){ setRadarMsg(''); return; }
       if(!radarCarregado) await carregarRadar(false);
       const hoje = App.hojeISO();
-      const novoDoc = R.resumoVendas(lido.itens, hoje, radarParametros.periodoDias, radarDoc);
-      await App.comAuth(() => exigirDb().collection('config').doc(RADAR_DOC).set(novoDoc));
-      radarDoc = novoDoc;
+      const novoDoc = R.resumoVendas(lido.itens, hoje, radarParametros.periodoDias, radarDoc, lido.periodo);
+      radarDoc = await gravarResumoRadar(novoDoc);
       // Etiquetas de carona: pisos pelo catalogo ja' existente ou por nota com NCM 6907.
       let resumoEtq = '';
       try{

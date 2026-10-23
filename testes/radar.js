@@ -47,6 +47,19 @@ eq('resumo: compacto, com periodo e data', [doc1.qtd, doc1.produtos['200'], doc1
 const doc2 = N.resumoVendas(lido.itens.map(it => it.codigo === '200' ? Object.assign({}, it, { estoque: 8 }) : it), '2026-10-23', 60, doc1);
 eq('resumo seguinte guarda o estoque anterior', [doc2.anterior['200'], doc2.anteriorEm, doc2.produtos['200'].q], [20, '2026-10-22', 8]);
 
+// ── Partes: documento do Firestore nao passa de 1 MB ─────────
+{
+  const muitos = {};
+  for (let i = 0; i < 300; i++) muitos['c' + i] = { n: 'PRODUTO NUMERO ' + i + ' COM NOME COMPRIDO', e: '78990000' + String(i).padStart(5, '0'), v: i, r: i * 10, q: i % 7 };
+  const doc = { produtos: muitos, qtd: 300, importadoEm: '2026-10-23', periodoDias: 62, anterior: { c1: 2 }, anteriorEm: '2026-10-22' };
+  const div = N.dividirResumo(doc, 4000);
+  eq('divide os produtos em partes abaixo do limite, com a meta separada',
+    [div.partes.length > 1, div.partes.every(p => JSON.stringify(p).length <= 4200), div.meta.partes === div.partes.length, div.meta.produtos, div.meta.anterior],
+    [true, true, true, undefined, { c1: 2 }]);
+  eq('juntar devolve o documento inteiro', (j => [Object.keys(j.produtos).length, j.importadoEm, j.produtos.c299.v])(N.juntarResumo(div.meta, div.partes.map(p => ({ produtos: p })))), [300, '2026-10-23', 299]);
+  eq('o relatorio real (9 mil produtos) cabe em poucas partes de 700 KB', N.dividirResumo({ produtos: muitos }).partes.length, 1);
+}
+
 // ── Carteira e movimentos ────────────────────────────────────
 const ts = (y, m, d) => ({ toDate: () => new Date(y, m - 1, d, 12) });
 const cotacoes = [
@@ -103,6 +116,32 @@ eq('por fornecedor: valor somado, sem ficha agrupado',
 eq('por fornecedor: sem ficha e sem nota vai para o grupo proprio',
   N.porFornecedor([{ fornecedor: '', valorSugestao: 10 }, { fornecedor: 'F', valorSugestao: 5 }]).map(g => g.fornecedor + ':' + g.valor), ['Sem fornecedor (sem ficha):10', 'F:5']);
 eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido em'], r[1]['Recebido em']])(N.linhasExcel([por['100'], por['200']])), [2, '2026-10-01', '2026-10-14']);
+
+// ── Relatorio "Produtos a Comprar" (completo) ─────────────────
+{
+  const cabC = ['Fornecedor', 'Ordem_Classe', 'Data_Inicial', 'Data_Final', 'Codigo', 'Nome', 'Codigo Barras', 'Qtde. Últ. Compra', 'Últ. Compra', 'Estoque', 'Vendas', 'V. Mensal', 'Sugestão', 'Pedido', 'C. NF-e', 'Total', 'Qtd. Vendas Feitas'];
+  const mC = [cabC,
+    ['CERAMICA X', 10000, '22/08/2026', '22/10/2026', '200', 'PISO X 60X60', '7899000000011', 100, '15/09/2026', 8, 120, 60, 52, null, 25, 1300, 12],
+    ['DO MESTRE', 10020, '22/08/2026', '22/10/2026', '100', 'ARGAMASSA AC-1', '0700371770037', 500, '01/10/2026', 300, 600, 300, 0, null, 20, 0, 40],
+    ['FORN GRANDE', 10002, '22/08/2026', '22/10/2026', '700', 'PORC 1 PEDIDO SO', '7899000000042', 50, '02/02/2026', 0, 400, 200, 200, null, 30, 6000, 1],
+    ['FORN Z', 10007, '22/08/2026', '22/10/2026', '800', 'TINTA', '7899000000011', null, null, 2, 10, 5, 3, null, 9, 27, 5]
+  ];
+  const lC = N.lerPlanilhaVendas(mC);
+  eq('relatorio completo: periodo lido das colunas (62 dias), fornecedor, classe, custo, ultima compra e vendas feitas',
+    [lC.completo, lC.periodo, lC.itens[0].fornecedor, lC.itens[0].classe, lC.itens[0].custo, lC.itens[0].ultimaCompra, lC.itens[0].transacoes, lC.itens[3].ultimaCompra],
+    [true, { ini: '2026-08-22', fim: '2026-10-22', dias: 62 }, 'CERAMICA X', '10000', 25, { em: '2026-09-15', qtd: 100, preco: 25 }, 12, null]);
+  const docC = N.resumoVendas(lC.itens, '2026-10-23', 60, null, lC.periodo);
+  eq('resumo completo: campos compactos e periodo do relatorio', [docC.periodoDias, docC.periodoIni, docC.produtos['200']], [62, '2026-08-22', { n: 'PISO X 60X60', e: '7899000000011', v: 120, r: 0, q: 8, f: 'CERAMICA X', k: '10000', c: 25, t: 12, ud: '2026-09-15', uq: 100 }]);
+  const lin = N.calcularRadar({ produtos: docC.produtos, periodoDias: docC.periodoDias, fichas: { '100': { fornecedor: 'FICHA', custo: 99, venda: 30 } }, carteira: {}, movimentos: mov, parametros: { coberturaDias: 30, baixoGiroMax: 0, compraMinima: 1, minVendasFeitas: 3 }, hoje: '2026-10-23' });
+  const pc = {}; lin.forEach(l => { pc[l.codigo] = l; });
+  eq('fornecedor e custo vem do relatorio (a ficha so completa o preco de venda)', [pc['100'].fornecedor, pc['100'].custo, pc['100'].custoDe, pc['100'].venda], ['DO MESTRE', 20, 'última compra', 30]);
+  eq('venda concentrada (1 venda feita): sugestao vai para Conferir, fora do Comprar', [pc['700'].concentrada, pc['700'].flags.comprar, pc['700'].flags.conferir, pc['700'].sugestao > 0], [true, false, true, true]);
+  eq('barras repetido em dois produtos: nenhum ganha faturado/recebido, e a linha avisa', [pc['200'].eanRepetido, pc['200'].faturado, pc['800'].eanRepetido, pc['200'].flags.chegando], [true, null, true, false]);
+  eq('ultima compra na linha', pc['200'].ultimaCompra, { em: '2026-09-15', qtd: 100, preco: 25 });
+  eq('contagem separa comprar de conferir', (c => [c.comprar, c.conferir])(N.contar(lin)), [2, 1]);
+  eq('pisos pela classe do relatorio entram no catalogo do Etiquetas (10000/10016/10002), tinta nao',
+    (r => [r.novos, Object.keys(r.doc.porCodigo).sort()])(N.pisosParaEtiquetas(lC.itens, null, new Set(), '2026-10-23')), [2, ['200', '700']]);
+}
 
 // ── Etiquetas de carona ──────────────────────────────────────
 const catalogo = { porCodigo: { '200': { n: 'PISO X 60X60', e: '7899000000011', q: 20 }, '999': { n: 'OUTRO', e: '', q: 3 } }, geradoEm: '2026-10-09', qtd: 2 };

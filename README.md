@@ -439,7 +439,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     do cadastro decidindo quem não precisa de azul e a etiqueta "não exposto"
     (produto novo: barras na nota e fora do cadastro), o registro de **saldão**
     (interno/externo, estoque acompanhado pelo catálogo, encerrado ao zerar).
-15c. **Radar de estoque e compras** — 24 verificações em
+15c. **Radar de estoque e compras** — 35 verificações em
     `radar-nucleo.js` (aba Radar da Calculadora): leitura do relatório de
     vendas do sistema, resumo compacto com o estoque anterior, carteira
     (itens "pedido" das cotações, com a data do pedido), faturado e
