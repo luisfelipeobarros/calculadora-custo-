@@ -129,7 +129,17 @@
   .rd-tab td.num, .rd-tab th.num{ text-align:right; white-space:nowrap; }
   .rd-tab .prod{ font-weight:600; }
   .rd-tab .mono{ font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); }
-  .rd-tab tr.rd-forn-cab td{ background:var(--stripe2); border-top:2px solid var(--line); padding-top:10px; }
+  /* Cabecalho do fornecedor: faixa escura, linha grossa e respiro acima,
+     para o olho separar um fornecedor do outro na lista comprida. */
+  .rd-tab tr.rd-forn-cab td{
+    background:var(--ink); color:var(--paper);
+    border-top:14px solid var(--paper); border-bottom:3px solid var(--brick);
+    padding:12px 12px; font-size:15px; letter-spacing:.02em; text-transform:uppercase;
+  }
+  .rd-tab tr.rd-forn-cab:first-child td{ border-top-width:0; }
+  .rd-tab tr.rd-forn-cab td .mono{ color:var(--stripe); text-transform:none; font-size:12px; margin-left:6px; }
+  .rd-tab tr.rd-forn-cab td .btn.secondary{ color:var(--paper); border-color:var(--paper); margin-left:10px; }
+  .rd-tab tr.rd-forn-cab td .btn.secondary:hover{ background:var(--paper); color:var(--ink); }
 </style>
 </head>
 <body>
