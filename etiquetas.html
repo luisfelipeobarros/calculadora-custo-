@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos apps da empresa. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=17">
+<link rel="stylesheet" href="app-shared.css?v=18">
 <style>
   /* Somente o que e' exclusivo do app de Etiquetas. Feito para o
      celular (quem etiqueta anda pela loja com o telefone), mas a
@@ -88,27 +88,8 @@
   .etq-tab td.marca{ width:30px; }
   .etq-tab td.marca input{ width:18px; height:18px; }
 
-  /* Relatorio: invisivel na tela, sozinho no papel. */
-  #relatorioImpressao{ display:none; }
-  @media print{
-    body.imprimindo .wrap, body.imprimindo .modal-fundo, body.imprimindo .toast{ display:none !important; }
-    body.imprimindo{ background:#fff; }
-    body.imprimindo #relatorioImpressao{ display:block; }
-    @page{ size:A4; margin:14mm 12mm; }
-  }
-  .rl{ font-family:Arial, Helvetica, sans-serif; color:#000; font-size:11.5px; }
-  .rl-loja{ text-align:center; font-size:16px; font-weight:700; }
-  .rl-titulo{ text-align:center; font-size:14px; font-weight:700; text-decoration:underline; margin-top:6px; }
-  .rl-ref{ text-align:center; font-size:10.5px; margin:4px 0 10px; }
-  .rl-secao{ font-weight:700; font-size:12.5px; margin:16px 0 4px; padding:4px 6px; background:#ddd; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  .rl-qtd{ font-weight:400; }
-  .rl-vazio{ padding:4px 6px; color:#444; }
-  .rl-forn{ font-weight:700; margin:8px 0 2px; }
-  .rl-tab{ width:100%; border-collapse:collapse; }
-  .rl-tab th{ font-size:10px; text-align:left; padding:2px 5px; border-bottom:1px solid #000; }
-  .rl-tab td{ padding:3px 5px; border-bottom:1px solid #bbb; vertical-align:top; }
-  .rl-ok{ width:22px; } .rl-cod{ width:12%; } .rl-q{ width:14%; text-align:right; } .rl-nf{ width:20%; white-space:nowrap; }
-  .rl-caixa{ display:inline-block; width:12px; height:12px; border:1px solid #000; }
+  /* O relatorio impresso (.rl, #relatorioImpressao) mora no app-shared.css:
+     a tela de Pagamentos imprime do mesmo jeito. */
 </style>
 </head>
 <body>

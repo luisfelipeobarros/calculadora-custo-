@@ -17,7 +17,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <!-- Design system comum aos apps. Ver app-shared.css -->
-<link rel="stylesheet" href="app-shared.css?v=17">
+<link rel="stylesheet" href="app-shared.css?v=18">
 
 <style>
   /* Somente o que e' exclusivo do Controle de Notas. */
@@ -503,6 +503,8 @@
           title="De hoje até o último dia do mês — o mesmo cartão do Painel">Até fim do mês</button>
         <button type="button" class="chip-filtro" data-f="pagas" aria-pressed="false">Pagas</button>
         <button type="button" class="chip-filtro" data-f="todas" aria-pressed="false">Todas</button>
+        <button type="button" class="btn secondary" id="imprimirPagBtn" style="margin-left:auto;"
+          title="Imprime a lista como está na tela (escopo, filtro e busca), agrupada por dia de vencimento">🖨 Imprimir</button>
       </div>
 
       <!-- Barra de selecao em massa (aparece quando ha selecao) -->
@@ -813,6 +815,7 @@
     <div id="danfeDoc"></div>
   </div>
 </div>
+<div id="relatorioImpressao" aria-hidden="true"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -829,6 +832,8 @@
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=6"></script>
 <script src="custos-nucleo.js?v=3"></script>
+<!-- Relatorio impresso da tela de Pagamentos. -->
+<script src="pagamentos-nucleo.js?v=1"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
@@ -3035,6 +3040,7 @@
 
   var filtroPag = 'pendentes';
   var escopoPag = 'fornecedores';
+  var listaPagRelatorio = null; // a lista inteira do ultimo render (o relatorio imprime ela)
   var limitePag = 200;
   // Indice id -> item da lista filtrada. Substituiu a lista solta que
   // as acoes em massa varriam com .find() uma vez por item selecionado:
@@ -3122,6 +3128,20 @@
     setFiltroPag(chip.dataset.f);
   });
   $('buscaPag').addEventListener('input', App.debounce(function(){ limitePag = 200; renderPagamentos(); }));
+  // Relatorio impresso: a lista como esta' na tela (escopo + chip +
+  // busca), inteira — nao so' as linhas ate' o "Mostrar mais".
+  $('imprimirPagBtn').addEventListener('click', function(){
+    if(!listaPagRelatorio){ App.toast('A lista ainda não carregou.', 'info'); return; }
+    $('relatorioImpressao').innerHTML = PagamentosNucleo.htmlRelatorio(listaPagRelatorio, {
+      hoje: hojeISO(), hora: App.horaAgora(), inicioHoje: inicioJanelaHoje(),
+      escopo: escopoPag, filtro: filtroPag, busca: $('buscaPag').value.trim(),
+      categoriaRotulo: function(v){ return categoriaPorValor(v).rotulo; }
+    });
+    document.body.classList.add('imprimindo');
+    var limpar = function(){ document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
+    window.addEventListener('afterprint', limpar);
+    window.print();
+  });
   $('maisPagBtn').addEventListener('click', function(){ limitePag += 300; renderPagamentos(); });
 
   // ─── Formulario de pagamento interno ────────────────────────
@@ -3721,6 +3741,7 @@
           numeroNota: d.numeroNota,
           obsPagamento: d.obsPagamento || null,
           _recebido: dupRecebida(d),
+          dataPagamento: d.dataPagamento || null,
           recorrente: false
         });
       });
@@ -3752,6 +3773,7 @@
             : (p.parcelaAtual ? String(p.parcelaAtual) : null),
           numeroNota: null,
           _recebido: null,
+          dataPagamento: p.dataPagamento || null,
           recorrente: p.recorrente === true
         });
       });
@@ -3759,6 +3781,7 @@
 
     lista.sort(function(a,b){ return (a.vencimento || '9999').localeCompare(b.vencimento || '9999'); });
     pagPorId = new Map(lista.map(function(d){ return [d.id, d]; }));
+    listaPagRelatorio = lista;
 
     var totalFiltrado = lista.length;
     var somaFiltrada = lista.reduce(function(s,d){ return s + d.valor; }, 0);

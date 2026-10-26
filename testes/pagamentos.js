@@ -319,5 +319,29 @@ eq('  ...com a regex escrita com as barras na pagina',
     /App\.aoRecusarCarimbo\(function\(\)\{ if\(db && escutasAbertas\) escutarColecoes\(\); \}\);/.test(html), true);
 })();
 
+// ── Relatorio impresso (pagamentos-nucleo.js) ─────────────────
+(function(){
+  const P = require('../pagamentos-nucleo.js');
+  const eqj = (t, a, b) => eq(t, JSON.stringify(a), JSON.stringify(b));
+  const lista = [
+    { id: 'a', _tipo: 'fornecedor', descricao: 'CERAMICA X', numeroNota: '10', parcela: '1', valor: 100.1, vencimento: '2026-10-20', pago: false, _recebido: true },
+    { id: 'b', _tipo: 'fornecedor', descricao: 'CERAMICA X', numeroNota: '11', parcela: '2', valor: 50, vencimento: '2026-10-20', pago: true, dataPagamento: '2026-10-19', _recebido: false, obsPagamento: 'pix' },
+    { id: 'c', _tipo: 'interno', descricao: 'Energia', categoria: 'energia', valor: 300, vencimento: '2026-10-28', pago: false, recorrente: true },
+    { id: 'd', _tipo: 'interno', descricao: 'Sem data', categoria: 'outro', valor: 1, vencimento: null, pago: false }
+  ];
+  const r = P.resumo(lista, '2026-10-26');
+  eqj('resumo: total, atrasado (vencido antes de hoje e nao pago), a vencer (inclui sem data) e pago', [r.itens, r.total, r.atrasado, r.aVencer, r.pago], [4, 451.1, 100.1, 301, 50]);
+  eqj('por dia: agrupa por vencimento com subtotal, sem data por ultimo', P.porDia(lista).map(d => d.dia + ':' + d.linhas.length + ':' + d.total), ['2026-10-20:2:150.1', '2026-10-28:1:300', ':1:1']);
+  const h = P.htmlRelatorio(lista, { hoje: '2026-10-26', hora: '08:40', inicioHoje: '2026-10-26', escopo: 'todos', filtro: 'todas', busca: 'x', categoriaRotulo: v => v === 'energia' ? 'Energia elétrica' : 'Outros' });
+  eqj('relatorio: titulo, filtro, busca, dia atrasado marcado, pago com data, categoria pelo rotulo, recorrente e observacao',
+    ['CONTROLE DE PAGAMENTOS — TODOS', 'filtro: Todas', 'busca: "x"', 'VENCIMENTO 20/10/2026 — ATRASADO', 'PAGO 19/10/2026', 'Energia elétrica', '· recorrente', '· pix', 'SEM VENCIMENTO'].map(t => h.includes(t)), [true, true, true, true, true, true, true, true, true]);
+  eqj('relatorio: escopo fornecedores tem a coluna recebido e nao tem categoria; interno o contrario',
+    [P.htmlRelatorio(lista, { escopo: 'fornecedores' }).includes('REC.'), P.htmlRelatorio(lista, { escopo: 'fornecedores' }).includes('CATEGORIA'),
+     P.htmlRelatorio(lista, { escopo: 'interno' }).includes('REC.'), P.htmlRelatorio(lista, { escopo: 'interno' }).includes('CATEGORIA')], [true, false, false, true]);
+  eq('relatorio: lista vazia avisa', P.htmlRelatorio([], {}).includes('Nenhum item nesse filtro.'), true);
+  eq('relatorio: escapa HTML', P.htmlRelatorio([{ descricao: '<b>x</b>', valor: 1, vencimento: '2026-01-01' }], {}).includes('&lt;b&gt;x&lt;/b&gt;'), true);
+  eq('a tela guarda a lista inteira do render para o relatorio', /listaPagRelatorio = lista;/.test(html) && /PagamentosNucleo\.htmlRelatorio\(listaPagRelatorio/.test(html), true);
+})();
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

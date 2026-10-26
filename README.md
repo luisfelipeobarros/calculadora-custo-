@@ -314,11 +314,13 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 83 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 90 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de
-   dizer "nenhum item" — zero é uma afirmação.
+   dizer "nenhum item" — zero é uma afirmação. E o relatório impresso
+   da tela (`pagamentos-nucleo.js`): a lista como está na tela, por dia
+   de vencimento, com resumo, subtotais e caixinha para marcar.
 9. **Conferência de DDA** — 180 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
