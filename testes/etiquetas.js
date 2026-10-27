@@ -248,6 +248,12 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
   const docQ = [{ chave: 'Q', itens: [{ n: 1, descricao: 'A', ean: '7899000000011' }, { n: 2, descricao: 'B', ean: '7899000000028' }, { n: 3, descricao: 'C', ean: '9' }] }];
   eq('com estoque acima do minimo no cadastro: "com estoque" (sem ninguem marcar); abaixo e desconhecido: etiquetar',
     N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ, minimo: 40 }).map(l => l.situacao + ':' + l.estoqueCadastro), ['comEstoque:120', 'etiquetar:3', 'etiquetar:null']);
+  eq('"estoque baixo" marcado a mao vale por cima do cadastro: vai para etiquetar, com a marca; desmarcado volta a "com estoque"',
+    [N.linhasDeTransito(docQ, {}, { Q_1: { estoqueBaixo: true } }, { catalogo: catQ, minimo: 40 }).map(l => l.situacao + ':' + l.estoqueBaixo)[0],
+     N.linhasDeTransito(docQ, {}, { Q_1: { estoqueBaixo: false } }, { catalogo: catQ, minimo: 40 })[0].situacao],
+    ['etiquetar:true', 'comEstoque']);
+  eq('relatorio: a linha de estoque baixo sai em "colocar etiqueta azul" com a marca',
+    N.htmlRelatorio(N.linhasDeTransito(docQ, {}, { Q_1: { estoqueBaixo: true } }, { catalogo: catQ, minimo: 40 }), [], { hoje: '2026-10-27' }).includes('estoque baixo (marcado à mão)'), true);
   eq('quem ja marcou etiquetei ou recebeu nao e mexido pelo cadastro',
     N.linhasDeTransito(docQ, { Q: { noSistema: true } }, { Q_1: { etiquetada: true } }, { catalogo: catQ, minimo: 40 }).map(l => l.situacao), ['retirar', 'recebida', 'recebida']);
   eq('sem minimo informado o cadastro nao decide', N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ }).map(l => l.situacao), ['etiquetar', 'etiquetar', 'etiquetar']);

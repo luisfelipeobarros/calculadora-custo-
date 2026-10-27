@@ -178,12 +178,15 @@
           tipoEtiqueta: e.etiquetada === true ? (e.tipo === 'naoExposto' ? 'naoExposto' : 'azul') : null,
           etiquetada: e.etiquetada === true,
           dispensada: e.dispensada === true,
+          // Decisao manual de quem olha o Radar: "estoque baixo" vale por
+          // cima do estoque do cadastro e manda a linha para Etiquetar.
+          estoqueBaixo: e.estoqueBaixo === true,
           retirada: e.retirada === true,
           situacao: situacaoDe(recebida, e)
         });
         var l = linhas[linhas.length - 1];
         // Ninguem decidiu nada e o cadastro diz que tem estoque: nao precisa de etiqueta.
-        if (l.situacao === 'etiquetar' && minimo != null && l.estoqueCadastro != null && l.estoqueCadastro > minimo) l.situacao = 'comEstoque';
+        if (l.situacao === 'etiquetar' && !l.estoqueBaixo && minimo != null && l.estoqueCadastro != null && l.estoqueCadastro > minimo) l.situacao = 'comEstoque';
       });
     });
     return linhas;
@@ -596,6 +599,7 @@
             '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') +
             (l.possivelNovo ? ' <b>· NOVO? (não está no cadastro)</b>' : '') +
             (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') +
+            (l.estoqueBaixo && l.situacao === 'etiquetar' ? ' <span class="rl-qtd">· estoque baixo (marcado à mão)</span>' : '') +
             (l.recebidaEm ? ' <span class="rl-qtd">· recebida em ' + e(App.fmtData(l.recebidaEm)) + '</span>' : '') + '</td>' +
             '<td class="rl-q">' + e(fmtQtd(l.qtd) + (l.un ? ' ' + l.un : '')) + '</td>' +
             '<td class="rl-nf">' + e([textoNotas(l), textoEmissao(l)].filter(Boolean).join(' · ')) + '</td></tr>';

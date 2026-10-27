@@ -211,7 +211,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=12"></script>
+<script src="etiquetas-nucleo.js?v=13"></script>
 <script>
 (() => {
   'use strict';
@@ -287,8 +287,12 @@
   function htmlAcoes(l, vermelha){
     const b = (acao, rotulo, cls) => '<button type="button" class="btn secondary mini' + (cls ? ' ' + cls : '') + '" data-acao="' + acao + '" data-id="' + escapeHtml(l.id) + '">' + rotulo + '</button>';
     switch(l.situacao){
-      case 'etiquetar':  return (vermelha ? b('trocar', '🔴→🔵 Troquei pela azul') : b('etiquetar', '🏷 Etiquetei')) + b('naoExposto', '🆕 Não exposto') + b('dispensar', '📦 Com estoque');
-      case 'comEstoque': return b('etiquetar', '🏷 Etiquetei mesmo assim') + b('naoExposto', '🆕 Não exposto');
+      case 'etiquetar':  return (vermelha ? b('trocar', '🔴→🔵 Troquei pela azul') : b('etiquetar', '🏷 Etiquetei')) + b('naoExposto', '🆕 Não exposto') +
+        (l.estoqueBaixo ? b('temEstoque', '↩ Tem estoque') : b('dispensar', '📦 Com estoque'));
+      // O cadastro diz que tem estoque, mas quem olha o Radar sabe que
+      // baixou: "Estoque baixo" manda para a lista Etiquetar, e quem
+      // etiqueta pega de la' (ou do relatorio impresso).
+      case 'comEstoque': return b('estoqueBaixo', '📉 Estoque baixo → etiquetar') + b('naoExposto', '🆕 Não exposto');
       case 'dispensada': return b('etiquetar', '🏷 Etiquetei') + b('desfazer', '↩ Desfazer');
       case 'transito':
       case 'naoExposto': return b('desfazer', '↩ Desfazer');
@@ -370,7 +374,8 @@
         '<td data-r="Emissão"><span class="mono">' + escapeHtml([N.textoEmissao(l), N.textoNotas(l)].filter(Boolean).join(' · ')) + '</span></td>' +
         '<td data-r="Produto" class="prod">' + escapeHtml(l.descricao) +
           (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') +
-            (l.estoqueCadastro != null ? ' · estoque ' + escapeHtml(String(l.estoqueCadastro)) + (catalogo.geradoEm ? ' em ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') : '') + '</div>' : '') +
+            (l.estoqueCadastro != null ? ' · estoque ' + escapeHtml(String(l.estoqueCadastro)) + (catalogo.geradoEm ? ' em ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') : '') +
+            (l.estoqueBaixo && l.situacao === 'etiquetar' ? ' · <span style="color:var(--loss);">estoque baixo (marcado à mão)</span>' : '') + '</div>' : '') +
           (l.possivelNovo ? '<div class="dica">🆕 Possível produto novo: tem código de barras e não está no cadastro.</div>' : '') +
           (comVermelha[l.id] ? '<div class="dica" style="color:var(--loss);">🔴 Tem etiqueta vermelha na gôndola' + (comVermelha[l.id].criadaEm ? ' desde ' + escapeHtml(App.fmtData(comVermelha[l.id].criadaEm)) : '') + ' — trocar pela azul.</div>' : '') +
         '</td>' +
@@ -389,6 +394,8 @@
     'etiquetar':         () => ({ etiquetada: true, tipo: 'azul', dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
     'naoExposto':        () => ({ etiquetada: true, tipo: 'naoExposto', dispensada: false, retirada: false, etiquetadaEm: App.hojeISO() }),
     'dispensar':         () => ({ etiquetada: false, dispensada: true }),
+    'estoqueBaixo':      () => ({ estoqueBaixo: true, etiquetada: false, dispensada: false, estoqueBaixoEm: App.hojeISO() }),
+    'temEstoque':        () => ({ estoqueBaixo: false }),
     'desfazer':          () => ({ etiquetada: false, dispensada: false }),
     'retirar':           () => ({ retirada: true, retiradaEm: App.hojeISO() }),
     'desfazer-retirada': () => ({ retirada: false, retiradaEm: null })
