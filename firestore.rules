@@ -161,6 +161,14 @@ service cloud.firestore {
       allow read, write: if autenticado();
     }
 
+    // Exposicao (aba do etiquetas.html): um documento por expositor da
+    // loja (id = codigo do expositor, ex. E16) com a lista de produtos
+    // que estao nele. So' lista, sem quantidade. Colecao propria do app.
+    match /exposicao/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado() && id.matches('[A-Z][0-9]{1,2}');
+    }
+
     // Lancamentos contabeis (telas do controle-notas.html): bancos e categorias
     // (seed + cadastro), os lancamentos com as partidas montadas pelo
     // app e o doc de config com os contadores continuos da exportacao

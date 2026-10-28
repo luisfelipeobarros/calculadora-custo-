@@ -84,6 +84,7 @@ const etapas = [
   ['Concorrentes em lote (planilha)', 'concorrentes.js', []],
   ['Assistencias e reclamacoes', 'assistencias.js', []],
   ['Etiquetas de produto em transito', 'etiquetas.js', []],
+  ['Exposicao: mapa dos expositores', 'exposicao.js', []],
   ['Lancamentos contabeis', 'lancamentos.js', []],
   ['Custos da loja', 'custos.js', []],
   ['Dashboard de vendas', 'dashboard.js', []],

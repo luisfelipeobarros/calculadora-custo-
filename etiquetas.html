@@ -73,6 +73,29 @@
     .etq-tab td.sem-rotulo::before{ content:none; }
   }
 
+  /* Aba Exposicao: o mapa (SVG) em cima, a folha do expositor embaixo. */
+  .ex-mapa{ background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px; touch-action:pan-x pan-y pinch-zoom; }
+  .ex-mapa svg{ width:100%; height:auto; display:block; }
+  .ex-svg .ex-corpo{ stroke:#333; stroke-width:.25; }
+  .ex-svg .ex-hit{ fill:transparent; cursor:pointer; }
+  .ex-svg .ex text{ pointer-events:none; font-family:Arial, Helvetica, sans-serif; }
+  .ex-svg .ex.vazio .ex-corpo{ opacity:.55; }
+  .ex-svg .ex.apagado{ opacity:.25; }
+  .ex-svg .ex.ativo .ex-corpo{ stroke:#B23A2E; stroke-width:.9; opacity:1; }
+  .ex-svg .ex.sel .ex-corpo{ stroke:#335C8E; stroke-width:.9; opacity:1; }
+  .ex-svg .ex:focus-visible{ outline:none; } .ex-svg .ex:focus-visible .ex-corpo{ stroke:var(--copper); stroke-width:.9; }
+  .ex-legenda{ display:flex; gap:10px; flex-wrap:wrap; font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); margin:6px 0 10px; }
+  .ex-legenda span i{ display:inline-block; width:11px; height:11px; border:1px solid #333; border-radius:2px; vertical-align:-1px; margin-right:4px; }
+  .ex-detalhe{ background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-top:10px; }
+  .ex-detalhe h3{ margin:0 0 6px; font-family:var(--font-display); font-size:18px; }
+  .ex-add{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; margin:8px 0; }
+  .ex-add input{ width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
+  .ex-lista{ list-style:none; margin:0; padding:0; }
+  .ex-lista li{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); }
+  .ex-lista li:last-child{ border-bottom:none; }
+  .ex-res{ margin:8px 0 0; }
+  .ex-res li{ display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
+  .ex-res b{ font-family:var(--font-mono); white-space:nowrap; }
   .verm-form{ display:grid; grid-template-columns:1fr 2fr 2fr auto; gap:8px; align-items:end; }
   .verm-form label{ display:block; font-family:var(--font-mono); font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:3px; }
   .verm-form input{ width:100%; box-sizing:border-box; padding:9px 10px; border:1.5px solid var(--line); border-radius:4px; background:#fff; color:var(--ink); font-family:var(--font-body); font-size:14px; }
@@ -119,6 +142,7 @@
     <div class="etq-acoes">
       <button type="button" class="btn" id="etqImprimirBtn">🖨 Imprimir relatório</button>
       <button type="button" class="btn secondary" id="etqVermelhaBtn">🔴 Etiqueta vermelha</button>
+      <button type="button" class="btn secondary" id="etqExposicaoBtn" title="Mapa dos expositores da loja: o que está em cada um">🗺 Exposição</button>
       <button type="button" class="btn secondary" id="etqSaldaoBtn" title="Produto que foi para o saldão (interno ou externo), com o estoque acompanhado pelo catálogo">🏷 Saldão</button>
       <button type="button" class="btn secondary" id="etqEstoqueBtn" title="Relatório Estoque - Grade do sistema: sugere as etiquetas vermelhas">📥 Importar estoque</button>
       <input type="file" id="etqEstoqueArquivo" accept=".xlsx,.xls,.csv" style="display:none;">
@@ -156,6 +180,19 @@
       <div id="estPromocao"></div>
       <div id="estMarcados"></div>
       <p class="empty-note" id="estMsg" style="display:block;"></p>
+    </div>
+
+    <!-- Exposicao: mapa dos expositores e o que esta' em cada um. -->
+    <div class="card" id="etqExposicao" style="display:none; margin-bottom:12px;">
+      <h2 style="margin:0 0 6px;">Exposição — o que está em cada expositor</h2>
+      <p class="empty-note" style="display:block; margin:0 0 8px;">Toque num expositor para ver e cadastrar os produtos dele. A busca acende no mapa onde o produto está.</p>
+      <label class="sr-only" for="exBusca">Buscar produto ou expositor</label>
+      <input type="search" id="exBusca" placeholder="Buscar por código, barras, nome ou expositor (ex.: E16)..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
+      <ul class="ex-res" id="exResultados" style="list-style:none; padding:0;"></ul>
+      <div class="ex-legenda" id="exLegenda"></div>
+      <div class="ex-mapa" id="exMapa"></div>
+      <div class="ex-detalhe" id="exDetalhe" style="display:none;"></div>
+      <p class="empty-note" id="exMsg" style="display:block;"></p>
     </div>
 
     <!-- Etiquetas vermelhas: so' aparece no chip "Vermelhas". -->
@@ -211,7 +248,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=13"></script>
+<script src="etiquetas-nucleo.js?v=14"></script>
+<!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
+<script src="exposicao-nucleo.js?v=1"></script>
 <script>
 (() => {
   'use strict';
@@ -267,7 +306,7 @@
   // ─── Chips ───
   const CHIPS = [['', 'Ativas'], ['retirar', '⚠ Retirar'], ['etiquetar', 'Etiquetar'], ['transito', 'Em trânsito'],
     ['azul', '🔵 Só azul'], ['naoExposto', '🆕 Só não exposto'],
-    ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas'], ['saldao', '🏷 Saldão']];
+    ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas'], ['saldao', '🏷 Saldão'], ['exposicao', '🗺 Exposição']];
   $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
     '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');
   function irParaGrupo(g){
@@ -338,6 +377,13 @@
 
     $('etqVermelhas').style.display = grupo === 'vermelhas' ? '' : 'none';
     $('etqSaldao').style.display = grupo === 'saldao' ? '' : 'none';
+    $('etqExposicao').style.display = grupo === 'exposicao' ? '' : 'none';
+    if(grupo === 'exposicao'){
+      renderExposicao();
+      $('etqLista').innerHTML = '';
+      $('etqListaMsg').textContent = '';
+      return;
+    }
     if(grupo === 'saldao'){
       renderSaldao();
       $('etqLista').innerHTML = '';
@@ -376,6 +422,7 @@
           (l.codigoInterno ? '<div class="mono">cód. ' + escapeHtml(l.codigoInterno) + (l.nomeInterno ? ' · ' + escapeHtml(l.nomeInterno) : '') +
             (l.estoqueCadastro != null ? ' · estoque ' + escapeHtml(String(l.estoqueCadastro)) + (catalogo.geradoEm ? ' em ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') : '') +
             (l.estoqueBaixo && l.situacao === 'etiquetar' ? ' · <span style="color:var(--loss);">estoque baixo (marcado à mão)</span>' : '') + '</div>' : '') +
+          (ondeLinha(l) ? '<div class="mono">📍 exposto em <b>' + escapeHtml(ondeLinha(l)) + '</b></div>' : '') +
           (l.possivelNovo ? '<div class="dica">🆕 Possível produto novo: tem código de barras e não está no cadastro.</div>' : '') +
           (comVermelha[l.id] ? '<div class="dica" style="color:var(--loss);">🔴 Tem etiqueta vermelha na gôndola' + (comVermelha[l.id].criadaEm ? ' desde ' + escapeHtml(App.fmtData(comVermelha[l.id].criadaEm)) : '') + ' — trocar pela azul.</div>' : '') +
         '</td>' +
@@ -799,7 +846,7 @@
   // ─── Relatorio ───
   $('etqImprimirBtn').addEventListener('click', () => {
     if(estoque) renderEstoque(); // a classificacao vai com o filtro de agora
-    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao, saldoes, catalogo });
+    $('relatorioImpressao').innerHTML = N.htmlRelatorio(linhasAtuais(), vermelhas, { hoje: App.hojeISO(), hora: App.horaAgora(), estoque: classificacao, saldoes, catalogo, onde: ondeLinha });
     document.body.classList.add('imprimindo');
     const limpar = () => { document.body.classList.remove('imprimindo'); window.removeEventListener('afterprint', limpar); };
     window.addEventListener('afterprint', limpar);
@@ -958,6 +1005,7 @@
       retirarAntes = null;
       await buscarItensQueFaltam();
       await pendenciasForaDaJanela();
+      await carregarExposicao(); // "exposto em" nas listas e no relatorio
       carregouItens = true;
       setStatus(Object.keys(itensPorChave).length + ' nota(s) nos últimos ' + DIAS_TRANSITO + ' dias · ao vivo' +
         (sinc ? ' · lendo só o que mudou' : '') +
@@ -972,6 +1020,106 @@
       render();
     }
   }
+  // ─── Exposicao: mapa dos expositores e o que esta' em cada um ───
+  // Colecao `exposicao`: um documento por expositor (id = codigo),
+  // { produtos: [{ codigo, nome, ean, desde }] }. Lida inteira (sao
+  // poucas dezenas de documentos) quando a aba abre e depois de gravar.
+  const X = window.ExposicaoNucleo;
+  let exposicao = {};          // id -> doc
+  let exposicaoOnde = null;    // indice codigo/barras -> expositores
+  let exCarregou = false;
+  let exSelecionado = null;
+  function ondeLinha(l){
+    return exposicaoOnde ? X.textoOnde(exposicaoOnde, l.codigoInterno, l.ean) : '';
+  }
+  async function carregarExposicao(){
+    if(!db) return;
+    try{
+      const snap = await App.comAuth(() => db.collection('exposicao').get());
+      const mapa = {};
+      snap.docs.forEach(d => { mapa[d.id] = d.data() || {}; });
+      exposicao = mapa;
+      exposicaoOnde = X.ondeEsta(exposicao);
+      exCarregou = true;
+    }catch(e){
+      console.error(e);
+      exCarregou = false;
+      $('exMsg').textContent = App.ehPermissaoNegada(e)
+        ? 'Acesso negado — a coleção "exposicao" precisa entrar nas regras publicadas no Console.'
+        : 'Erro ao carregar a exposição: ' + App.erroDe(e);
+    }
+  }
+  $('exLegenda').innerHTML = Object.keys(X.FAMILIAS).map(f => '<span><i style="background:' + X.FAMILIAS[f].cor + ';"></i>' + f + '</span>').join('') +
+    '<span><i style="opacity:.45; background:#999;"></i>sem produtos cadastrados</span>';
+  function renderExposicao(){
+    const termo = $('exBusca').value.trim();
+    const achados = termo ? X.buscar(exposicao, termo) : [];
+    const porExpositor = termo && X.ids().some(id => id.toLowerCase() === termo.toLowerCase());
+    const destaque = porExpositor ? [termo.toUpperCase()] : achados.reduce((s, a) => s.concat(a.expositores), []);
+    $('exMapa').innerHTML = X.svgMapa({ destaque, selecionado: exSelecionado, contagem: X.contagem(exposicao) });
+    $('exResultados').innerHTML = !termo ? '' : !achados.length && !porExpositor
+      ? '<li><span>Nenhum produto cadastrado com "' + escapeHtml(termo) + '".</span></li>'
+      : achados.map(a => '<li><span>' + escapeHtml(a.nome || a.codigo || a.ean) + (a.codigo ? ' <span class="mono">· cód. ' + escapeHtml(a.codigo) + '</span>' : '') + '</span><b>' + escapeHtml(a.expositores.join(', ')) + '</b></li>').join('');
+    const cadastrados = Object.keys(exposicao).filter(id => (exposicao[id].produtos || []).length).length;
+    if(exCarregou) $('exMsg').textContent = cadastrados + ' de ' + X.ids().length + ' expositores com produtos cadastrados.';
+    renderExDetalhe();
+  }
+  function renderExDetalhe(){
+    const el = $('exDetalhe');
+    if(!exSelecionado){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    const id = exSelecionado;
+    const doc = exposicao[id] || { produtos: [] };
+    const lista = doc.produtos || [];
+    el.style.display = '';
+    el.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
+        '<h3>Expositor ' + escapeHtml(id) + ' <span class="mono" style="font-weight:400;">· ' + lista.length + ' produto(s)</span></h3>' +
+        '<button type="button" class="btn secondary mini" id="exFecharBtn">✕ Fechar</button></div>' +
+      '<div class="ex-add"><div><label class="sr-only" for="exNovo">Produto</label>' +
+        '<input id="exNovo" list="exSugestoes" autocomplete="off" placeholder="Código interno, código de barras ou nome..."><datalist id="exSugestoes"></datalist></div>' +
+        '<button type="button" class="btn" id="exAddBtn">＋ Adicionar</button></div>' +
+      (lista.length
+        ? '<ul class="ex-lista">' + lista.map(pr => '<li><span>' + escapeHtml(pr.nome || '') +
+            (pr.codigo ? ' <span class="mono">· cód. ' + escapeHtml(pr.codigo) + '</span>' : '') + (pr.ean ? ' <span class="mono">· ' + escapeHtml(pr.ean) + '</span>' : '') + '</span>' +
+            '<button type="button" class="btn secondary mini" data-ex-rm="' + escapeHtml(X.chaveProduto(pr)) + '" aria-label="Tirar ' + escapeHtml(pr.nome || pr.codigo) + ' do expositor">✕</button></li>').join('') + '</ul>'
+        : '<p class="empty-note" style="display:block;">Nenhum produto cadastrado neste expositor.</p>');
+    const novo = $('exNovo');
+    novo.addEventListener('input', App.debounce(() => {
+      $('exSugestoes').innerHTML = X.sugestoes(catalogo, novo.value, 8).map(s => '<option value="' + escapeHtml(s.codigo) + '">' + escapeHtml(s.nome) + '</option>').join('');
+    }, 200));
+    novo.addEventListener('keydown', (ev) => { if(ev.key === 'Enter'){ ev.preventDefault(); $('exAddBtn').click(); } });
+    $('exFecharBtn').addEventListener('click', () => { exSelecionado = null; renderExposicao(); });
+    $('exAddBtn').addEventListener('click', async () => {
+      const produto = X.produtoDoTexto(novo.value, catalogo);
+      if(!produto){ novo.focus(); return; }
+      const r = X.adicionar(doc, produto, App.hojeISO());
+      if(!r.mudou){ App.toast('Esse produto já está neste expositor.', 'info'); novo.value = ''; return; }
+      await gravarExpositor(id, r.produtos, $('exAddBtn'));
+      $('exNovo') && $('exNovo').focus();
+    });
+  }
+  async function gravarExpositor(id, produtos, btn){
+    if(btn) btn.disabled = true;
+    try{
+      await App.comAuth(() => db.collection('exposicao').doc(id).set({ produtos, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }));
+      exposicao = Object.assign({}, exposicao); exposicao[id] = Object.assign({}, exposicao[id] || {}, { produtos });
+      exposicaoOnde = X.ondeEsta(exposicao);
+      renderExposicao();
+    }catch(e){
+      App.toastErro('Erro ao gravar', e);
+    }finally{
+      if(btn) btn.disabled = false;
+    }
+  }
+  App.delegar($('exMapa'), 'click', '[data-ex]', (g) => { exSelecionado = g.dataset.ex === exSelecionado ? null : g.dataset.ex; renderExposicao(); if(exSelecionado) $('exDetalhe').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  App.delegar($('exMapa'), 'keydown', '[data-ex]', (g, ev) => { if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); g.click(); } });
+  App.delegar($('exDetalhe'), 'click', '[data-ex-rm]', async (b) => {
+    if(!exSelecionado) return;
+    const r = X.remover(exposicao[exSelecionado], b.dataset.exRm);
+    if(r.mudou) await gravarExpositor(exSelecionado, r.produtos, b);
+  });
+  $('exBusca').addEventListener('input', App.debounce(renderExposicao, 250));
+  $('etqExposicaoBtn').addEventListener('click', () => { irParaGrupo('exposicao'); $('exBusca').focus(); });
+
   $('etqRecarregarBtn').addEventListener('click', () => carregar(true));
   App.aoRecusarCarimbo(() => { if(db) carregar(false); });
 

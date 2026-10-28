@@ -597,6 +597,7 @@
         porForn[forn].forEach(function (l) {
           h += '<tr><td class="rl-ok"><span class="rl-caixa"></span></td><td>' + e(l.codigoInterno || '') + '</td>' +
             '<td>' + e(l.descricao) + (l.nomeInterno ? ' <span class="rl-qtd">· ' + e(l.nomeInterno) + '</span>' : '') +
+            (o.onde && o.onde(l) ? ' <b>· ' + e(o.onde(l)) + '</b>' : '') +
             (l.possivelNovo ? ' <b>· NOVO? (não está no cadastro)</b>' : '') +
             (l.tipoEtiqueta === 'naoExposto' ? ' <b>· NÃO EXPOSTO — expor o produto</b>' : '') +
             (l.estoqueBaixo && l.situacao === 'etiquetar' ? ' <span class="rl-qtd">· estoque baixo (marcado à mão)</span>' : '') +

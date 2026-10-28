@@ -254,6 +254,8 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
     ['etiquetar:true', 'comEstoque']);
   eq('relatorio: a linha de estoque baixo sai em "colocar etiqueta azul" com a marca',
     N.htmlRelatorio(N.linhasDeTransito(docQ, {}, { Q_1: { estoqueBaixo: true } }, { catalogo: catQ, minimo: 40 }), [], { hoje: '2026-10-27' }).includes('estoque baixo (marcado à mão)'), true);
+  eq('relatorio: "onde esta exposto" entra na linha quando a pagina informa',
+    N.htmlRelatorio(N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ, minimo: 40 }), [], { hoje: '2026-10-28', onde: l => l.codigoInterno === '101' ? 'E16, F3' : '' }).includes('<b>· E16, F3</b>'), true);
   eq('quem ja marcou etiquetei ou recebeu nao e mexido pelo cadastro',
     N.linhasDeTransito(docQ, { Q: { noSistema: true } }, { Q_1: { etiquetada: true } }, { catalogo: catQ, minimo: 40 }).map(l => l.situacao), ['retirar', 'recebida', 'recebida']);
   eq('sem minimo informado o cadastro nao decide', N.linhasDeTransito(docQ, {}, {}, { catalogo: catQ }).map(l => l.situacao), ['etiquetar', 'etiquetar', 'etiquetar']);
