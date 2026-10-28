@@ -80,6 +80,68 @@
     r('F7', 2, 128.5, 27, 2.5), r('F6', 30, 128.5, 31, 2.5)
   ];
 
+  // ---- Layout editavel ----
+  // O desenho do codigo e' o ponto de partida; o que a loja arrastou
+  // fica em config/exposicaoMapa como { pecas: { 'E16#0': {x,y,w,h,rot} } }.
+  // Chave da peca: id + '#' + indice do pedaco (D1 tem quatro).
+  var GRADE = 0.5, MIN_LADO = 1.5;
+  function chavesPecas(lista) {
+    var cont = {};
+    return (lista || EXPOSITORES).map(function (p) {
+      var k = cont[p.id] || 0; cont[p.id] = k + 1;
+      return p.id + '#' + k;
+    });
+  }
+  function arred(v) { return Math.round(v / GRADE) * GRADE; }
+  function limitar(p) {
+    var q = Object.assign({}, p);
+    // Tamanho na grade e no minimo; esticar alem da borda corta o tamanho,
+    // mover alem da borda encosta nela.
+    q.w = Math.max(MIN_LADO, arred(q.w)); q.h = Math.max(MIN_LADO, arred(q.h));
+    q.x = Math.max(0, arred(q.x)); q.y = Math.max(0, arred(q.y));
+    q.w = Math.min(q.w, VIEWBOX.w - q.x); q.h = Math.min(q.h, VIEWBOX.h - q.y);
+    q.x = Math.min(q.x, VIEWBOX.w - q.w); q.y = Math.min(q.y, VIEWBOX.h - q.h);
+    q.rot = Math.round((q.rot || 0) / 5) * 5;
+    if (q.rot <= -180) q.rot += 360; if (q.rot > 180) q.rot -= 360;
+    return q;
+  }
+  // Lista de pecas com o que foi editado por cima do desenho original.
+  function comLayout(override) {
+    var pecas = (override && override.pecas) || {};
+    var chaves = chavesPecas();
+    return EXPOSITORES.map(function (p, i) {
+      var o = pecas[chaves[i]];
+      var q = Object.assign({}, p, { chave: chaves[i] });
+      if (o) { ['x', 'y', 'w', 'h', 'rot'].forEach(function (c) { if (o[c] != null && isFinite(Number(o[c]))) q[c] = Number(o[c]); }); }
+      return q;
+    });
+  }
+  function pecaAtual(override, chave) {
+    var lista = comLayout(override);
+    for (var i = 0; i < lista.length; i++) if (lista[i].chave === chave) return lista[i];
+    return null;
+  }
+  // Devolve o override novo (sem mexer no de entrada) com a peca ajustada.
+  function ajustarPeca(override, chave, delta) {
+    var atual = pecaAtual(override, chave);
+    if (!atual) return override || { pecas: {} };
+    var d = delta || {};
+    var nova = limitar({
+      x: atual.x + (d.dx || 0), y: atual.y + (d.dy || 0),
+      w: atual.w + (d.dw || 0), h: atual.h + (d.dh || 0),
+      rot: (atual.rot || 0) + (d.drot || 0)
+    });
+    var pecas = Object.assign({}, (override && override.pecas) || {});
+    pecas[chave] = { x: nova.x, y: nova.y, w: nova.w, h: nova.h, rot: nova.rot };
+    return { pecas: pecas };
+  }
+  function restaurarPeca(override, chave) {
+    var pecas = Object.assign({}, (override && override.pecas) || {});
+    delete pecas[chave];
+    return { pecas: pecas };
+  }
+  function pecasEditadas(override) { return Object.keys((override && override.pecas) || {}).length; }
+
   function familiaDe(id) { return FAMILIAS[String(id || '').charAt(0).toUpperCase()] || { cor: '#ddd', texto: '#000', nome: '?' }; }
   function ids() {
     var vistos = {}, lista = [];
@@ -108,7 +170,8 @@
     return '<text transform="' + tr + '" font-size="' + fmt(fs) + '" fill="' + fam.texto + '" text-anchor="middle" dominant-baseline="central" font-weight="700">' + e(txt) + '</text>';
   }
 
-  // o: { destaque: [ids], selecionado: id, contagem: { id: n } }
+  // o: { destaque: [ids], selecionado: id, contagem: { id: n },
+  //      expositores: lista (com layout), edicao: true, pecaSel: chave }
   // Pedaco do mesmo expositor vai no mesmo <g data-ex>; um rect
   // transparente maior por pedaco e' a area de toque (dedo no celular).
   function svgMapa(o) {
@@ -119,7 +182,8 @@
     var temDestaque = Object.keys(dest).length > 0;
     var grupos = {};
     var ordem = [];
-    EXPOSITORES.forEach(function (p) { if (!grupos[p.id]) { grupos[p.id] = []; ordem.push(p.id); } grupos[p.id].push(p); });
+    var lista = o.expositores || comLayout(null);
+    lista.forEach(function (p) { if (!grupos[p.id]) { grupos[p.id] = []; ordem.push(p.id); } grupos[p.id].push(p); });
     var h = '<svg class="ex-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + VIEWBOX.w + ' ' + VIEWBOX.h + '" role="img" aria-label="Mapa dos expositores da loja">';
     h += '<rect x="0" y="0" width="' + VIEWBOX.w + '" height="' + VIEWBOX.h + '" fill="#fff"/>';
     ordem.forEach(function (id) {
@@ -128,8 +192,12 @@
       h += '<g class="' + cls + '" data-ex="' + e(id) + '" role="button" tabindex="0" aria-label="Expositor ' + e(id) + (cont[id] ? ', ' + cont[id] + ' produto(s)' : ', sem produtos cadastrados') + '">';
       grupos[id].forEach(function (p) {
         var tr = p.rot ? ' transform="rotate(' + p.rot + ' ' + fmt(p.x + p.w / 2) + ' ' + fmt(p.y + p.h / 2) + ')"' : '';
-        h += '<rect class="ex-hit" x="' + fmt(p.x - 1.2) + '" y="' + fmt(p.y - 1.2) + '" width="' + fmt(p.w + 2.4) + '" height="' + fmt(p.h + 2.4) + '"' + tr + '/>';
-        h += '<rect class="ex-corpo" x="' + fmt(p.x) + '" y="' + fmt(p.y) + '" width="' + fmt(p.w) + '" height="' + fmt(p.h) + '" rx="0.4" fill="' + fam.cor + '"' + tr + '/>';
+        var sel = o.edicao && o.pecaSel === p.chave;
+        var dp = p.chave ? ' data-peca="' + e(p.chave) + '"' : '';
+        h += '<rect class="ex-hit" x="' + fmt(p.x - 1.2) + '" y="' + fmt(p.y - 1.2) + '" width="' + fmt(p.w + 2.4) + '" height="' + fmt(p.h + 2.4) + '"' + tr + dp + '/>';
+        h += '<rect class="ex-corpo' + (sel ? ' peca-sel' : '') + '" x="' + fmt(p.x) + '" y="' + fmt(p.y) + '" width="' + fmt(p.w) + '" height="' + fmt(p.h) + '" rx="0.4" fill="' + fam.cor + '"' + tr + dp + '/>';
+        // Puxador de tamanho no canto de baixo/direita da peca selecionada.
+        if (sel) h += '<rect class="ex-puxador" data-puxador="' + e(p.chave) + '" x="' + fmt(p.x + p.w - 1.2) + '" y="' + fmt(p.y + p.h - 1.2) + '" width="2.4" height="2.4"' + tr + '/>';
       });
       // Rotulo no maior pedaco
       var maior = grupos[id].reduce(function (m, p) { return (p.w * p.h > m.w * m.h) ? p : m; }, grupos[id][0]);
@@ -245,7 +313,8 @@
     VIEWBOX: VIEWBOX, FAMILIAS: FAMILIAS, EXPOSITORES: EXPOSITORES,
     ids: ids, ordenarIds: ordenarIds, familiaDe: familiaDe, svgMapa: svgMapa,
     chaveProduto: chaveProduto, produtoDoTexto: produtoDoTexto, sugestoes: sugestoes, adicionar: adicionar, remover: remover,
-    ondeEsta: ondeEsta, textoOnde: textoOnde, buscar: buscar, contagem: contagem
+    ondeEsta: ondeEsta, textoOnde: textoOnde, buscar: buscar, contagem: contagem,
+    GRADE: GRADE, chavesPecas: chavesPecas, comLayout: comLayout, pecaAtual: pecaAtual, ajustarPeca: ajustarPeca, restaurarPeca: restaurarPeca, pecasEditadas: pecasEditadas
   };
   global.ExposicaoNucleo = api;
   if (typeof module === 'object' && module.exports) module.exports = api;

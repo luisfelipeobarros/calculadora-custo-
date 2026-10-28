@@ -75,6 +75,12 @@
 
   /* Aba Exposicao: o mapa (SVG) em cima, a folha do expositor embaixo. */
   .ex-mapa{ background:#fff; border:1px solid var(--line); border-radius:6px; padding:6px; touch-action:pan-x pan-y pinch-zoom; }
+  .ex-mapa.editando{ touch-action:none; border-color:var(--copper); box-shadow:0 0 0 2px rgba(185,119,63,.25); }
+  .ex-mapa.editando .ex-hit{ cursor:move; }
+  .ex-svg .ex-corpo.peca-sel{ stroke:var(--copper); stroke-width:1; stroke-dasharray:1 .6; }
+  .ex-svg .ex-puxador{ fill:var(--copper); stroke:#fff; stroke-width:.3; cursor:nwse-resize; }
+  .ex-edit{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:8px 0; }
+  .ex-edit .btn.mini{ min-width:40px; }
   .ex-mapa svg{ width:100%; height:auto; display:block; }
   .ex-svg .ex-corpo{ stroke:#333; stroke-width:.25; }
   .ex-svg .ex-hit{ fill:transparent; cursor:pointer; }
@@ -189,7 +195,11 @@
       <label class="sr-only" for="exBusca">Buscar produto ou expositor</label>
       <input type="search" id="exBusca" placeholder="Buscar por código, barras, nome ou expositor (ex.: E16)..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
       <ul class="ex-res" id="exResultados" style="list-style:none; padding:0;"></ul>
-      <div class="ex-legenda" id="exLegenda"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <div class="ex-legenda" id="exLegenda" style="margin:0;"></div>
+        <button type="button" class="btn secondary mini" id="exEditarBtn" title="Arrastar, redimensionar e girar os expositores no mapa">✏️ Editar mapa</button>
+      </div>
+      <div class="ex-edit" id="exEdicao" style="display:none;"></div>
       <div class="ex-mapa" id="exMapa"></div>
       <div class="ex-detalhe" id="exDetalhe" style="display:none;"></div>
       <p class="empty-note" id="exMsg" style="display:block;"></p>
@@ -250,7 +260,7 @@
 <script src="app-shared.js?v=31"></script>
 <script src="etiquetas-nucleo.js?v=14"></script>
 <!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
-<script src="exposicao-nucleo.js?v=1"></script>
+<script src="exposicao-nucleo.js?v=2"></script>
 <script>
 (() => {
   'use strict';
@@ -1029,13 +1039,22 @@
   let exposicaoOnde = null;    // indice codigo/barras -> expositores
   let exCarregou = false;
   let exSelecionado = null;
+  // Mapa editado pela loja (config/exposicaoMapa): { pecas: { 'E16#0': {x,y,w,h,rot} } }
+  const MAPA_DOC = 'exposicaoMapa';
+  let exLayout = { pecas: {} };
+  let exEditando = false;
+  let exPecaSel = null;
   function ondeLinha(l){
     return exposicaoOnde ? X.textoOnde(exposicaoOnde, l.codigoInterno, l.ean) : '';
   }
   async function carregarExposicao(){
     if(!db) return;
     try{
-      const snap = await App.comAuth(() => db.collection('exposicao').get());
+      const [snap, docMapa] = await Promise.all([
+        App.comAuth(() => db.collection('exposicao').get()),
+        App.comAuth(() => db.collection('config').doc(MAPA_DOC).get())
+      ]);
+      exLayout = docMapa.exists && docMapa.data().pecas ? { pecas: docMapa.data().pecas } : { pecas: {} };
       const mapa = {};
       snap.docs.forEach(d => { mapa[d.id] = d.data() || {}; });
       exposicao = mapa;
@@ -1056,7 +1075,9 @@
     const achados = termo ? X.buscar(exposicao, termo) : [];
     const porExpositor = termo && X.ids().some(id => id.toLowerCase() === termo.toLowerCase());
     const destaque = porExpositor ? [termo.toUpperCase()] : achados.reduce((s, a) => s.concat(a.expositores), []);
-    $('exMapa').innerHTML = X.svgMapa({ destaque, selecionado: exSelecionado, contagem: X.contagem(exposicao) });
+    $('exMapa').innerHTML = X.svgMapa({ destaque, selecionado: exSelecionado, contagem: X.contagem(exposicao), expositores: X.comLayout(exLayout), edicao: exEditando, pecaSel: exPecaSel });
+    $('exMapa').classList.toggle('editando', exEditando);
+    renderExEdicao();
     $('exResultados').innerHTML = !termo ? '' : !achados.length && !porExpositor
       ? '<li><span>Nenhum produto cadastrado com "' + escapeHtml(termo) + '".</span></li>'
       : achados.map(a => '<li><span>' + escapeHtml(a.nome || a.codigo || a.ean) + (a.codigo ? ' <span class="mono">· cód. ' + escapeHtml(a.codigo) + '</span>' : '') + '</span><b>' + escapeHtml(a.expositores.join(', ')) + '</b></li>').join('');
@@ -1110,7 +1131,86 @@
       if(btn) btn.disabled = false;
     }
   }
-  App.delegar($('exMapa'), 'click', '[data-ex]', (g) => { exSelecionado = g.dataset.ex === exSelecionado ? null : g.dataset.ex; renderExposicao(); if(exSelecionado) $('exDetalhe').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+  // ─── Editar o mapa: arrastar, puxador de tamanho, setas e giro ───
+  // Cada mudanca vira o override inteiro gravado em config/exposicaoMapa
+  // (debounce: arrastar gera dezenas de passos). O desenho do codigo
+  // continua sendo o "restaurar".
+  let exGravarTimer = null;
+  function gravarLayout(){
+    clearTimeout(exGravarTimer);
+    exGravarTimer = setTimeout(() => {
+      App.comAuth(() => db.collection('config').doc(MAPA_DOC).set({ pecas: exLayout.pecas, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }))
+        .catch(e => App.toastErro('Erro ao gravar o mapa', e));
+    }, 600);
+  }
+  function renderExEdicao(){
+    const el = $('exEdicao');
+    $('exEditarBtn').textContent = exEditando ? '✔ Concluir edição' : '✏️ Editar mapa';
+    $('exEditarBtn').setAttribute('aria-pressed', exEditando ? 'true' : 'false');
+    if(!exEditando){ el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    const pc = exPecaSel ? X.pecaAtual(exLayout, exPecaSel) : null;
+    const b = (acao, rot, title) => '<button type="button" class="btn secondary mini" data-ed="' + acao + '" title="' + escapeHtml(title || rot) + '">' + rot + '</button>';
+    el.innerHTML = (pc
+      ? '<span class="mono"><b>' + escapeHtml(pc.id) + '</b>' + (X.EXPOSITORES.filter(x => x.id === pc.id).length > 1 ? ' (pedaço ' + (Number(pc.chave.split('#')[1]) + 1) + ')' : '') +
+          ' · ' + pc.x + ',' + pc.y + ' · ' + pc.w + '×' + pc.h + (pc.rot ? ' · ' + pc.rot + '°' : '') + '</span>' +
+        b('x-', '◀', 'Mover para a esquerda') + b('x+', '▶', 'Mover para a direita') + b('y-', '▲', 'Mover para cima') + b('y+', '▼', 'Mover para baixo') +
+        b('w-', 'Larg −') + b('w+', 'Larg +') + b('h-', 'Alt −') + b('h+', 'Alt +') + b('r-', '↺ 5°', 'Girar à esquerda') + b('r+', '↻ 5°', 'Girar à direita') +
+        b('restaurar', '↩ Restaurar esta', 'Volta esta peça ao desenho original')
+      : '<span class="mono">Toque numa peça para selecionar; arraste para mover; o quadradinho no canto muda o tamanho.</span>') +
+      (X.pecasEditadas(exLayout) ? b('restaurar-tudo', '↩ Restaurar o desenho original (' + X.pecasEditadas(exLayout) + ' editada(s))') : '');
+  }
+  App.delegar($('exEdicao'), 'click', '[data-ed]', async (b) => {
+    const a = b.dataset.ed;
+    if(a === 'restaurar-tudo'){
+      const okRes = await App.confirmar({ titulo: 'Restaurar o desenho original', mensagem: 'Todas as peças editadas voltam para a posição do desenho original. Continuar?', confirmar: 'Restaurar' });
+      if(!okRes) return;
+      exLayout = { pecas: {} };
+    } else if(!exPecaSel){ return; }
+    else if(a === 'restaurar') exLayout = X.restaurarPeca(exLayout, exPecaSel);
+    else {
+      const passo = X.GRADE, d = {};
+      if(a === 'x-') d.dx = -passo; if(a === 'x+') d.dx = passo; if(a === 'y-') d.dy = -passo; if(a === 'y+') d.dy = passo;
+      if(a === 'w-') d.dw = -passo; if(a === 'w+') d.dw = passo; if(a === 'h-') d.dh = -passo; if(a === 'h+') d.dh = passo;
+      if(a === 'r-') d.drot = -5; if(a === 'r+') d.drot = 5;
+      exLayout = X.ajustarPeca(exLayout, exPecaSel, d);
+    }
+    gravarLayout();
+    renderExposicao();
+  });
+  $('exEditarBtn').addEventListener('click', () => { exEditando = !exEditando; exPecaSel = null; if(exEditando) exSelecionado = null; renderExposicao(); });
+  // Arrastar com o dedo ou o mouse: pointer events, em unidades do viewBox.
+  let exArrasto = null;
+  function pontoSvg(ev){
+    const svg = $('exMapa').querySelector('svg');
+    const r = svg.getBoundingClientRect();
+    return { x: (ev.clientX - r.left) / r.width * X.VIEWBOX.w, y: (ev.clientY - r.top) / r.height * X.VIEWBOX.h };
+  }
+  $('exMapa').addEventListener('pointerdown', (ev) => {
+    if(!exEditando) return;
+    const alvo = ev.target.closest('[data-puxador], [data-peca]');
+    if(!alvo) return;
+    ev.preventDefault();
+    const chave = alvo.dataset.puxador || alvo.dataset.peca;
+    const modo = alvo.dataset.puxador ? 'tamanho' : 'mover';
+    if(exPecaSel !== chave){ exPecaSel = chave; renderExposicao(); }
+    exArrasto = { chave, modo, origem: pontoSvg(ev), base: exLayout, moveu: false };
+    $('exMapa').setPointerCapture(ev.pointerId);
+  });
+  $('exMapa').addEventListener('pointermove', (ev) => {
+    if(!exArrasto) return;
+    const pt = pontoSvg(ev);
+    const dx = pt.x - exArrasto.origem.x, dy = pt.y - exArrasto.origem.y;
+    if(Math.abs(dx) < X.GRADE / 2 && Math.abs(dy) < X.GRADE / 2 && !exArrasto.moveu) return;
+    exArrasto.moveu = true;
+    exLayout = X.ajustarPeca(exArrasto.base, exArrasto.chave, exArrasto.modo === 'mover' ? { dx, dy } : { dw: dx, dh: dy });
+    renderExposicao();
+  });
+  const fimArrasto = () => { if(!exArrasto) return; if(exArrasto.moveu) gravarLayout(); exArrasto = null; };
+  $('exMapa').addEventListener('pointerup', fimArrasto);
+  $('exMapa').addEventListener('pointercancel', fimArrasto);
+
+  App.delegar($('exMapa'), 'click', '[data-ex]', (g) => { if(exEditando) return; exSelecionado = g.dataset.ex === exSelecionado ? null : g.dataset.ex; renderExposicao(); if(exSelecionado) $('exDetalhe').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
   App.delegar($('exMapa'), 'keydown', '[data-ex]', (g, ev) => { if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); g.click(); } });
   App.delegar($('exDetalhe'), 'click', '[data-ex-rm]', async (b) => {
     if(!exSelecionado) return;

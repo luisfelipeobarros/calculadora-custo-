@@ -82,5 +82,23 @@ eq('busca: por nome, por prefixo do codigo, por barras e pelo expositor', [
 eq('busca vazia nao devolve nada', X.buscar(docs, '  '), []);
 eq('contagem por expositor', X.contagem(docs), { E16: 2, F3: 2, E2: 0 });
 
+// ── Layout editavel ──────────────────────────────────────────
+{
+  const chaves = X.chavesPecas();
+  eq('cada peca tem chave propria (D1 tem quatro)', [new Set(chaves).size === chaves.length, chaves.filter(c => c.startsWith('D1#'))], [true, ['D1#0', 'D1#1', 'D1#2', 'D1#3']]);
+  const base = X.comLayout(null);
+  eq('sem override, o layout e o desenho original com a chave em cada peca', [base.length, base[0].chave, base.find(p => p.chave === 'E16#0').x], [X.EXPOSITORES.length, 'A1#0', 23]);
+  let ov = X.ajustarPeca({ pecas: {} }, 'E16#0', { dx: 1.3, dy: -0.2 });
+  eq('ajustar: move na grade de 0,5 e guarda so a peca mexida', [ov.pecas['E16#0'], Object.keys(ov.pecas)], [{ x: 24.5, y: 79, w: 3, h: 14, rot: 0 }, ['E16#0']]);
+  ov = X.ajustarPeca(ov, 'E16#0', { dw: -5, dh: 100, drot: 7 });
+  eq('ajustar: lado minimo, nao sai do viewBox e giro em passos de 5', ov.pecas['E16#0'], { x: 24.5, y: 79, w: 1.5, h: X.VIEWBOX.h - 79, rot: 5 });
+  eq('ajustar peca desconhecida nao muda nada', X.ajustarPeca(ov, 'Z9#0', { dx: 1 }), ov);
+  eq('o override entra no layout sem alterar o desenho original', [X.comLayout(ov).find(p => p.chave === 'E16#0').w, X.EXPOSITORES.find(p => p.id === 'E16').w, X.pecasEditadas(ov)], [1.5, 3, 1]);
+  eq('restaurar a peca apaga so ela', X.pecasEditadas(X.restaurarPeca(ov, 'E16#0')), 0);
+  const svg = X.svgMapa({ expositores: X.comLayout(ov), edicao: true, pecaSel: 'E16#0' });
+  eq('svg em edicao: pecas com data-peca, a selecionada com o puxador de tamanho', [(svg.match(/data-peca="/g) || []).length, (svg.match(/data-puxador="E16#0"/g) || []).length, svg.includes('peca-sel')], [X.EXPOSITORES.length * 2, 1, true]);
+  eq('svg fora da edicao: sem puxador', X.svgMapa({}).includes('data-puxador'), false);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;
