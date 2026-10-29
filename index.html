@@ -1004,7 +1004,7 @@ Tupan</textarea>
 <script src="fiscal-nucleo.js?v=3"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
 <script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=9"></script>
+<script src="radar-nucleo.js?v=10"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -7192,7 +7192,10 @@ Tupan</textarea>
     (produtosCache || []).forEach(p => {
       const cod = normalizarCodigo(p.codigo);
       if(!cod || m[cod]) return;
-      m[cod] = { fornecedor: p.fornecedor && p.fornecedor !== 'Sem fornecedor' ? p.fornecedor : '', custo: p.r ? p.r.total : null, venda: p.r ? p.r.venda : null };
+      // Custo = o negociado na nota (custoNFe), que e' o que o Radar compara
+      // com a ultima compra e com o preco da NF-e. r.total e' outra coisa:
+      // o custo TOTAL da venda (com tributos, cartao e avarias).
+      m[cod] = { fornecedor: p.fornecedor && p.fornecedor !== 'Sem fornecedor' ? p.fornecedor : '', custo: p.cfg && p.cfg.custoNFe > 0 ? p.cfg.custoNFe : null, venda: p.r ? p.r.venda : null };
     });
     return m;
   }

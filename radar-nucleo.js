@@ -181,9 +181,10 @@
     return d && !isNaN(d.getTime()) ? App.iso(d) : null;
   }
 
-  // Itens de cotacao com status "pedido": { codigo: { qtd, em, fornecedor, cotacoes } }
+  // Itens de cotacao com status "pedido": { codigo: { qtd, restante, em, fornecedor, cotacoes, ids } }
   // `em` e' a data em que o item virou pedido (pedidoEm); cotacao antiga
-  // sem isso usa a data da cotacao.
+  // sem isso usa a data da cotacao. `restante` e' a parte de `qtd` que
+  // veio de pedidos faturados parcialmente (o que ainda falta vir).
   function carteira(cotacoes) {
     var mapa = {};
     (cotacoes || []).forEach(function (d) {
@@ -200,8 +201,9 @@
         if (!cod) return;
         if (!isFinite(qtd)) qtd = 0;
         var em = it.pedidoEm || dataCot || null;
-        var c = mapa[cod] || (mapa[cod] = { qtd: 0, em: null, fornecedor: '', cotacoes: 0, ids: [] });
+        var c = mapa[cod] || (mapa[cod] = { qtd: 0, restante: 0, em: null, fornecedor: '', cotacoes: 0, ids: [] });
         c.qtd += qtd;
+        if (st === 'transito') c.restante += qtd;
         c.cotacoes++;
         if (d.id && c.ids.indexOf(d.id) < 0) c.ids.push(d.id);
         if (em && (!c.em || em > c.em)) { c.em = em; c.fornecedor = d.fornecedor || c.fornecedor; }
@@ -286,6 +288,9 @@
       // o pedido virou a nota (ja' conta no faturado, nao soma duas vezes);
       // sem nota por mais de pedidoVelhoDias e' cotacao que ficou como
       // "pedido" e ninguem atualizou. Nos tres casos nao desconta da compra.
+      // Excecao: o que faltou vir de um pedido faturado em parte (restante)
+      // continua em carteira — a nota parcial que existe ja' conta no
+      // faturado, e e' justamente ela que faria o resto "sumir".
       if (c) {
         c = Object.assign({}, c);
         c.entregue = !!(m && m.recebido && m.recebido.em && c.em && m.recebido.em >= c.em);
@@ -293,7 +298,8 @@
         c.dias = c.em && o.hoje ? App.diasEntre(c.em, o.hoje) : null;
         c.velho = !c.entregue && !c.faturada && c.dias != null && c.dias > par.pedidoVelhoDias;
       }
-      var carteiraQtd = c && !c.entregue && !c.faturada && !c.velho ? c.qtd : 0;
+      var restante = c ? (Number(c.restante) || 0) : 0;
+      var carteiraQtd = restante + (c && !c.entregue && !c.faturada && !c.velho ? c.qtd - restante : 0);
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
       var naoRepor = /^\*/.test(nome);
       var alvo = mediaDia * par.coberturaDias;

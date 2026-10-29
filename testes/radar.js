@@ -73,7 +73,7 @@ const cotacoes = [
 ];
 const cart = N.carteira(cotacoes);
 eq('carteira: soma os pedidos do codigo; data = pedidoEm (ou a da cotacao); fornecedor do mais recente',
-  [cart['200'], cart['100'].em, cart['400']], [{ qtd: 120, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2, ids: [] }, '2026-10-01', undefined]);
+  [cart['200'], cart['100'].em, cart['400']], [{ qtd: 120, restante: 0, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2, ids: [] }, '2026-10-01', undefined]);
 eq('carteira guarda os ids das cotacoes de origem', N.carteira([{ id: 'c1', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }, { id: 'c2', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }])['9'].ids, ['c1', 'c2']);
 
 const itensDocs = [
@@ -120,6 +120,16 @@ eq('contagem', (c => [c.comprar, c.chegando, c.carteira, c.faturado, c.baixoGiro
   const rf = N.calcularRadar(Object.assign({}, base, { carteira: { '200': { qtd: 50, em: '2026-06-01', fornecedor: 'F1', cotacoes: 1 } }, movimentos: movF })).find(l => l.codigo === '200');
   eq('pedido com nota faturada depois dele: nao e antigo, sai da carteira (a nota ja conta no faturado), segue em Chegando',
     [rf.carteira.faturada, rf.carteira.velho, rf.flags.pedidoAntigo, rf.flags.carteira, rf.flags.faturado, rf.flags.chegando], [true, false, false, false, true, true]);
+  // Pedido faturado em parte: a NF parcial e' posterior ao pedido, mas o
+  // que faltou vir (restante) nao pode sair da carteira por causa dela.
+  const cartP = { '200': { qtd: 30, restante: 30, em: '2026-10-01', fornecedor: 'F1', cotacoes: 1, ids: ['c1'] } };
+  const rpF = N.calcularRadar(Object.assign({}, base, { carteira: cartP, movimentos: { '7899000000011': { faturado: { qtd: 70, em: '2026-10-10', fornecedor: 'X', numero: '1' }, recebido: null } } })).find(l => l.codigo === '200');
+  eq('pedido parcial: o restante (30) fica em carteira mesmo com a NF parcial faturada depois do pedido; alvo 60 - estoque 8 - 30 - faturado 70 < 0',
+    [rpF.flags.carteira, rpF.flags.faturado, rpF.carteira.faturada, rpF.sugestao], [true, true, true, 0]);
+  const rpR = N.calcularRadar(Object.assign({}, base, { carteira: cartP, movimentos: { '7899000000011': { faturado: null, recebido: { qtd: 70, em: '2026-10-12', fornecedor: 'X', numero: '1' } } }, parametros: { coberturaDias: 90 } })).find(l => l.codigo === '200');
+  eq('pedido parcial ja recebido em parte: o restante continua descontando da compra (alvo 180 - 8 - 30 = 142)', [rpR.flags.carteira, rpR.carteira.entregue, rpR.sugestao], [true, true, 142]);
+  const rpM = N.calcularRadar(Object.assign({}, base, { carteira: { '200': { qtd: 80, restante: 30, em: '2026-10-01', fornecedor: 'F1', cotacoes: 2, ids: ['c1', 'c2'] } }, movimentos: { '7899000000011': { faturado: { qtd: 70, em: '2026-10-10', fornecedor: 'X', numero: '1' }, recebido: null } }, parametros: { coberturaDias: 90 } })).find(l => l.codigo === '200');
+  eq('misto: o pedido inteiro (50) sai pela nota faturada depois dele, o restante parcial (30) fica: 180 - 8 - 30 - 70 = 72', rpM.sugestao, 72);
   eq('o prazo de pedido antigo e parametro', N.calcularRadar(Object.assign({}, base, { carteira: cartR, movimentos: movR, parametros: { coberturaDias: 30, pedidoVelhoDias: 400 } })).find(l => l.codigo === '100').carteira.velho, false);
   eq('abas: so carteira (o piso X tem nota faturada depois do pedido, saiu da carteira) e so faturado', [N.filtrar(linhas, { aba: 'carteira' }).map(l => l.codigo), N.filtrar(linhas, { aba: 'faturado' }).map(l => l.codigo)], [['100'], ['200', '400']]);
 }
@@ -209,8 +219,8 @@ eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido
   eq('parcial: soma as notas (70 de 100), fica em transito mesmo com uma recebida, guarda as duas NF e o preco da nota',
     [rp.itens[0].status, rp.itens[0].qtdNfe, rp.itens[0].parcial, rp.itens[0].notasNfe.map(x => x.numero), rp.itens[0].precoNfe, rp.chavesNfe.slice().sort()],
     ['transito', 70, { faturado: 70, pedido: 100 }, ['12', '11'], 11, ['P1', 'P2']]);
-  eq('carteira: o que faltou faturar continua em carteira (30), e o pedido sem nota inteiro (10)',
-    (c => [c['300'].qtd, c['301'].qtd])(N.carteira([Object.assign({}, cotP, { itens: rp.itens })])), [30, 10]);
+  eq('carteira: o que faltou faturar continua em carteira (30, marcado como restante), e o pedido sem nota inteiro (10, restante 0)',
+    (c => [c['300'].qtd, c['300'].restante, c['301'].qtd, c['301'].restante])(N.carteira([Object.assign({}, cotP, { itens: rp.itens })])), [30, 30, 10, 0]);
   eq('preco da NF contra o cotado: +10%', Math.round(N.diferencaPrecoNfe(rp.itens[0]) * 1000) / 1000, 0.1);
   eq('alertas: pedido sem nota ha mais de 60 dias, 1 parcial, 1 preco acima',
     N.alertasDaCotacao(Object.assign({}, cotP, { itens: rp.itens }), '2026-10-23', 60), { semNota: { itens: 1, dias: 83 }, parciais: 1, precoAcima: 1, precoAbaixo: 0 });

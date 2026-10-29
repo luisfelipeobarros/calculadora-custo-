@@ -93,6 +93,9 @@ exigir(/<script src="calculo-nucleo\.js\?v=\d+"><\/script>/.test(html),
 
 // As aliquotas e as metas nao podem reaparecer escritas na mao no HTML.
 exigir(!/pisCofins\s*:/.test(html), 'aliquotas de tributo voltaram para o index.html');
+// A ficha do produto leva ao Radar o custo da NF-e (p.cfg.custoNFe): r.total
+// e' o custo total da VENDA e ja' inflou a sugestao de compra uma vez.
+exigir(!/custo:\s*p\.r\s*\?\s*p\.r\.total/.test(html), 'fichasPorCodigo volta a usar p.r.total como custo (custo total da venda, nao de compra)');
 
 // Percentual de margem escrito no markup: so' o texto que o usuario le',
 // sem os <!-- comentarios --> (que citam "margem de 8%" de exemplo).
