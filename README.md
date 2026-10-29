@@ -449,7 +449,9 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     F4 na continuação do E19; F9 depois do E15), o SVG com área de toque
     maior, o cadastro do que está em cada expositor (coleção
     `exposicao`, um documento por expositor, só lista), a busca que
-    acende o mapa, o "exposto em" nas listas e no relatório, e o modo
+    acende o mapa (na aba só o mapa aparece: status, cartões, botões,
+    chips e busca somem, e "Voltar às etiquetas" devolve a lista), o
+    "exposto em" nas listas e no relatório, e o modo
     "Editar mapa" (arrastar, puxador de tamanho, setas e giro; o editado
     fica em `config/exposicaoMapa` por cima do desenho original).
 15c. **Radar de estoque e compras** — 56 verificações em

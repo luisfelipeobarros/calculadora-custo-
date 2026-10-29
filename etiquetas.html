@@ -60,6 +60,12 @@
   .btn.mini{ font-size:12px; padding:5px 9px; }
   .btn.mini.apagar{ background:#fff; color:var(--loss); border-color:var(--loss); }
 
+  /* Aba Exposicao: so' o mapa. Some o que fica acima dele (status,
+     cartoes, botoes, chips, busca e o checkbox do NCM); o "Voltar" do
+     cartao devolve a lista. */
+  body.so-exposicao .barra-status, body.so-exposicao #etqResumo, body.so-exposicao .etq-acoes,
+  body.so-exposicao .etq-filtros, body.so-exposicao .title-block p{ display:none; }
+
   /* No celular a tabela vira cartoes: cada celula com o seu rotulo. */
   @media (max-width:720px){
     .etq-resumo{ grid-template-columns:1fr 1fr; }
@@ -190,7 +196,10 @@
 
     <!-- Exposicao: mapa dos expositores e o que esta' em cada um. -->
     <div class="card" id="etqExposicao" style="display:none; margin-bottom:12px;">
-      <h2 style="margin:0 0 6px;">Exposição — o que está em cada expositor</h2>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;">
+        <h2 style="margin:0;">Exposição — o que está em cada expositor</h2>
+        <button type="button" class="btn secondary mini" id="exVoltarBtn" title="Volta para a lista de etiquetas">← Voltar às etiquetas</button>
+      </div>
       <p class="empty-note" style="display:block; margin:0 0 8px;">Toque num expositor para ver e cadastrar os produtos dele. A busca acende no mapa onde o produto está.</p>
       <label class="sr-only" for="exBusca">Buscar produto ou expositor</label>
       <input type="search" id="exBusca" placeholder="Buscar por código, barras, nome ou expositor (ex.: E16)..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
@@ -319,7 +328,9 @@
     ['dispensada', 'Com estoque'], ['encerradas', 'Encerradas'], ['vermelhas', '🔴 Vermelhas'], ['saldao', '🏷 Saldão'], ['exposicao', '🗺 Exposição']];
   $('etqChips').innerHTML = CHIPS.map(([g, rot]) =>
     '<button type="button" class="chip-filtro" data-g="' + g + '" aria-pressed="' + (g === grupo ? 'true' : 'false') + '">' + rot + '</button>').join('');
+  let grupoAntesDaExposicao = '';
   function irParaGrupo(g){
+    if(g === 'exposicao' && grupo !== 'exposicao') grupoAntesDaExposicao = grupo;
     grupo = g;
     $('etqChips').querySelectorAll('.chip-filtro').forEach(c => c.setAttribute('aria-pressed', c.dataset.g === g ? 'true' : 'false'));
     render();
@@ -388,6 +399,7 @@
     $('etqVermelhas').style.display = grupo === 'vermelhas' ? '' : 'none';
     $('etqSaldao').style.display = grupo === 'saldao' ? '' : 'none';
     $('etqExposicao').style.display = grupo === 'exposicao' ? '' : 'none';
+    document.body.classList.toggle('so-exposicao', grupo === 'exposicao');
     if(grupo === 'exposicao'){
       renderExposicao();
       $('etqLista').innerHTML = '';
@@ -1219,6 +1231,7 @@
   });
   $('exBusca').addEventListener('input', App.debounce(renderExposicao, 250));
   $('etqExposicaoBtn').addEventListener('click', () => { irParaGrupo('exposicao'); $('exBusca').focus(); });
+  $('exVoltarBtn').addEventListener('click', () => { if(exEditando){ exEditando = false; exPecaSel = null; } irParaGrupo(grupoAntesDaExposicao); });
 
   $('etqRecarregarBtn').addEventListener('click', () => carregar(true));
   App.aoRecusarCarimbo(() => { if(db) carregar(false); });
