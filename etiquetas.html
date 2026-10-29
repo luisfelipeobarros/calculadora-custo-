@@ -96,8 +96,6 @@
   .ex-svg .ex.ativo .ex-corpo{ stroke:#B23A2E; stroke-width:.9; opacity:1; }
   .ex-svg .ex.sel .ex-corpo{ stroke:#335C8E; stroke-width:.9; opacity:1; }
   .ex-svg .ex:focus-visible{ outline:none; } .ex-svg .ex:focus-visible .ex-corpo{ stroke:var(--copper); stroke-width:.9; }
-  .ex-legenda{ display:flex; gap:10px; flex-wrap:wrap; font-family:var(--font-mono); font-size:11px; color:var(--ink-soft); margin:6px 0 10px; }
-  .ex-legenda span i{ display:inline-block; width:11px; height:11px; border:1px solid #333; border-radius:2px; vertical-align:-1px; margin-right:4px; }
   .ex-detalhe{ background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px 12px; margin-top:10px; }
   .ex-detalhe h3{ margin:0 0 6px; font-family:var(--font-display); font-size:18px; }
   .ex-add{ display:grid; grid-template-columns:1fr auto; gap:8px; align-items:end; margin:8px 0; }
@@ -204,8 +202,7 @@
       <label class="sr-only" for="exBusca">Buscar produto ou expositor</label>
       <input type="search" id="exBusca" placeholder="Buscar por código, barras, nome ou expositor (ex.: E16)..." style="width:100%; box-sizing:border-box; margin-bottom:8px;">
       <ul class="ex-res" id="exResultados" style="list-style:none; padding:0;"></ul>
-      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
-        <div class="ex-legenda" id="exLegenda" style="margin:0;"></div>
+      <div style="display:flex; justify-content:flex-end;">
         <button type="button" class="btn secondary mini" id="exEditarBtn" title="Arrastar, redimensionar e girar os expositores no mapa">✏️ Editar mapa</button>
       </div>
       <div class="ex-edit" id="exEdicao" style="display:none;"></div>
@@ -1080,8 +1077,6 @@
         : 'Erro ao carregar a exposição: ' + App.erroDe(e);
     }
   }
-  $('exLegenda').innerHTML = Object.keys(X.FAMILIAS).map(f => '<span><i style="background:' + X.FAMILIAS[f].cor + ';"></i>' + f + '</span>').join('') +
-    '<span><i style="opacity:.45; background:#999;"></i>sem produtos cadastrados</span>';
   function renderExposicao(){
     const termo = $('exBusca').value.trim();
     const achados = termo ? X.buscar(exposicao, termo) : [];
