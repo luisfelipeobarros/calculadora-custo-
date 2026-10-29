@@ -217,9 +217,11 @@
   //
   // Anti-dobra: se a proxima ocorrencia JA' existe como documento
   // (criada ao pagar a anterior), quem continua a corrente e' ELA —
-  // este documento para de projetar ali. A chave e' a MESMA do
-  // criarProximoRecorrente: origemId + vencimento. Assim cada corrente
-  // e' projetada exatamente uma vez, a partir da ponta.
+  // este documento para de projetar ali. Cada documento gera UM
+  // sucessor (origemId = ele), entao basta existir alguem com esse
+  // origemId: comparar tambem o vencimento deixava passar o sucessor
+  // prorrogado (vencimento diferente do calculado) e a corrente saia
+  // em dobro — a partir do original e a partir do prorrogado.
   function projetarInternos(pagamentos, ateIso) {
     var projecoes = [];
     (pagamentos || []).forEach(function (p) {
@@ -236,7 +238,7 @@
         var prox = somarMeses(venc, 1,
           p.regra === 'ultimoDia' ? { ultimoDia: true } : { diaFixo: p.diaFixo });
         var jaExiste = pagamentos.some(function (x) {
-          return x.origemId === p.id && x.vencimento === prox;
+          return x !== p && (x.origemId === p.id || x.id === String(p.id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '') + '_' + prox);
         });
         if (jaExiste) break;
         if (prox > ateIso) break;

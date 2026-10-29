@@ -276,6 +276,13 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
   eq('a corrente segue a partir de B (out, nov, dez)',
     proj.map(p => p.vencimento), ['2026-10-05', '2026-11-05', '2026-12-05']);
 
+  // B prorrogado (vencimento 10/09, nao o 05/09 calculado): A continua
+  // parando em B — antes a corrente saia em dobro, de A e de B.
+  const Bp = Object.assign({}, B, { vencimento: '2026-09-10' });
+  const projP = S.projetarInternos([A, Bp], '2026-12-31');
+  eq('sucessor prorrogado: A nao projeta nada (quem segue e B), sem dobra',
+    [projP.filter(p => p.origemId === 'a').length, projP.map(p => p.vencimento)], [0, ['2026-10-05', '2026-11-05', '2026-12-05']]);
+
   // E no resumo, setembro aparece UMA vez: como contratado (doc B).
   const meses = S.resumoMensal({
     mesInicial: '2026-08', meses: 5,
