@@ -397,6 +397,7 @@
           <div class="field">
             <span style="display:block; font-size:12.5px; font-weight:600; margin-bottom:5px;">Produto</span>
             <div id="indNomeProduto" style="font-weight:700;"></div>
+            <div id="indFichaMsg" class="empty-note" style="display:block; margin:2px 0 0;"></div>
           </div>
           <div class="row2">
             <div class="field">
@@ -6574,7 +6575,18 @@ Tupan</textarea>
     atualizarMargemIndividual();
   });
 
-  $('individualSelect').addEventListener('change', ()=>{
+  // Lê a ficha gravada do produto (o registro cru, como o formulário
+  // guarda) para o Modo Individual partir dela em vez de zerar tudo.
+  async function fichaGravadaDe(r){
+    const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+    if(!salvo) return null;
+    try{
+      const res = await storageGet(chaveDoProduto(salvo.nome));
+      return res && res.value ? JSON.parse(res.value) : null;
+    }catch(e){ return null; }
+  }
+
+  $('individualSelect').addEventListener('change', async ()=>{
     const idx = $('individualSelect').value;
     if(idx === ''){ $('individualForm').style.display = 'none'; return; }
     const r = itensValidosParaSalvar()[parseInt(idx,10)];
@@ -6582,15 +6594,27 @@ Tupan</textarea>
     $('individualForm').style.display = 'block';
     $('indNomeProduto').textContent = r.produtoEsperado;
     $('indCustoNFe').textContent = brl(r.precoRecebido);
-    $('indFrete').value=''; $('indPctCredFrete').value=''; $('indValorST').value=''; $('indIcmsCredito').value='';
-    $('indIpi').value='0.65'; $('indCustoFinanceiroPct').value=''; $('indAvariasPct').value='1.5'; $('indBonificacao').value='';
+    // Produto que já tem ficha: frete, ST, crédito, IPI e avarias vêm
+    // dela — salvar sem mexer em nada mantém a ficha como estava. Sem
+    // ficha, os padrões de sempre.
+    const ficha = await fichaGravadaDe(r);
+    if($('individualSelect').value !== idx) return; // trocou de item enquanto lia
+    const t = (ficha && ficha.toggles) || {};
+    const campo = (id, chave, padrao) => { $(id).value = ficha && ficha[chave] != null && ficha[chave] !== '' ? String(ficha[chave]) : padrao; };
+    campo('indFrete', 'frete', ''); campo('indPctCredFrete', 'pctCredFrete', ''); campo('indValorST', 'valorST', ''); campo('indIcmsCredito', 'icmsCredito', '');
+    campo('indIpi', 'ipi', '0.65'); campo('indCustoFinanceiroPct', 'custoFinanceiroPct', ''); campo('indAvariasPct', 'avariasPct', '1.5'); campo('indBonificacao', 'bonificacao', '');
     // Preço de venda vem de Produtos Salvos, achado pelo código interno.
     const vendaSalva = precoVendaDoProduto(r.produtoEsperado, r.codigo);
     $('indVenda').value = vendaSalva != null ? vendaSalva : '';
-    $('indCredIcmsFrete').value='0'; $('indComST').value='1'; $('indTipoBonificacao').value='0'; $('indBonificacaoPrefix').textContent='R$';
-    $('indPctCredFreteSub').style.display='none';
-    $('indStSub').style.display='block';
-    $('indIcmsCreditoSub').style.display='none';
+    const credita = ficha ? (t.credIcmsFrete ? '1' : '0') : '0';
+    const comST = ficha ? (t.comST ? '1' : '0') : '1';
+    $('indCredIcmsFrete').value = credita; $('indComST').value = comST;
+    $('indTipoBonificacao').value = ficha && t.tipoBonificacao === 1 ? '1' : '0';
+    $('indBonificacaoPrefix').textContent = $('indTipoBonificacao').value === '1' ? '%' : 'R$';
+    $('indPctCredFreteSub').style.display = credita === '1' ? 'block' : 'none';
+    $('indStSub').style.display = comST === '1' ? 'block' : 'none';
+    $('indIcmsCreditoSub').style.display = comST === '1' ? 'none' : 'block';
+    $('indFichaMsg').textContent = ficha ? 'Ficha do cadastro carregada: frete, impostos e avarias são os já salvos.' : '';
     atualizarMargemIndividual();
   });
   ['indFrete','indPctCredFrete','indValorST','indIcmsCredito','indIpi','indCustoFinanceiroPct','indAvariasPct','indBonificacao','indVenda'].forEach(id=>{
