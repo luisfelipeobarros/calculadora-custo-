@@ -378,7 +378,8 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     por mês de compra** (escala mercadoria + ST + frete daquele mês,
     refazendo a divisão para a soma bater; trava em −100%), a projeção
     de recorrentes que **não conta em dobro** o mês cujo documento já
-    existe, e `parcelasTotal` encerrando a corrente mesmo com
+    existe (mesmo quando esse documento foi prorrogado: basta existir um
+    sucessor), e `parcelasTotal` encerrando a corrente mesmo com
     `parcelaAtual` ausente.
 12. **DANFE simplificado** — as duas leituras determinísticas do
     documento de conferência: a **UF do emitente** extraída dos 2
@@ -464,7 +465,9 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     carona (pisos pelo catálogo ou por nota com NCM 6907), e a **cotação ×
     NF-e automática** (faturado e recebido pelos itens das notas: código do
     fornecedor, barras ou nome único; status nunca volta; "Pedido feito"),
-    faturamento parcial em várias notas (o restante segue em carteira),
+    faturamento parcial em várias notas (o restante segue em carteira e
+    **não sai dela por causa da própria nota parcial**), a ficha mandando
+    o custo da NF-e (não o custo total da venda),
     preço da NF-e contra o cotado e selos no Histórico (pedido sem nota,
     parcial, preço acima), "Criar cotação" pelo Radar, aba "Pedido antigo"
     (pedido sem nota há mais que o prazo, do mais velho ao mais novo, com

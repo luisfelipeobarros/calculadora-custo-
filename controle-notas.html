@@ -3481,7 +3481,12 @@
 
   // Pagar selecionadas
   $('selPagarBtn').addEventListener('click', function(){
-    var ids = Object.keys(selecionados);
+    var todos = Object.keys(selecionados);
+    // Ja' pago fica de fora: pagar de novo regravaria o lancamento
+    // contabil por cima (perdendo a classificacao feita em Custos e o
+    // lancamento de juros). Quem quer refazer, desfaz primeiro.
+    var ids = todos.filter(function(id){ var it = pagPorId.get(id); return !(it && it.pago); });
+    if(todos.length !== ids.length) App.toast((todos.length - ids.length) + ' já pago(s) ficaram de fora do lote.', 'info');
     if(!ids.length) return;
 
     // O dialogo de pagamento vale para o lote inteiro: data, banco e
@@ -4328,7 +4333,12 @@
   App.delegar($('tabelaPag'), 'click', '.editar-pgto', function(btn){
     var id = btn.dataset.pgto;
     var pgto = pgtoInternoPorId(id);
-    if(pgto) abrirFormPgto(pgto);
+    if(!pgto) return;
+    // Pago, o lancamento contabil ja' nasceu com estes dados: editar
+    // so' o pagamento deixaria os dois diferentes. Desfazer o pagamento
+    // apaga o lancamento; depois edita e paga de novo.
+    if(pgto.pago){ App.toast('Este pagamento já está pago. Desfaça o pagamento (botão Pago) antes de editar — o lançamento contábil é refeito ao pagar de novo.', 'info'); return; }
+    abrirFormPgto(pgto);
   });
 
   // Excluir pagamento interno
@@ -4339,13 +4349,21 @@
 
     App.confirmar({
       titulo: 'Excluir pagamento',
-      mensagem: 'Excluir "' + (pgto.descricao || '') + '"?\nValor: ' + brl(pgto.valor) + '\n\nEssa ação não pode ser desfeita.',
+      mensagem: 'Excluir "' + (pgto.descricao || '') + '"?\nValor: ' + brl(pgto.valor) +
+        (pgto.pago ? '\n\nEle está pago: o lançamento contábil gerado por ele também é apagado.' : '') +
+        '\n\nEssa ação não pode ser desfeita.',
       confirmar: 'Excluir',
       perigo: true
     }).then(function(ok){
       if(!ok) return;
       App.comAuth(function(){
-        return db.collection('pagamentosInternos').doc(id).delete();
+        // Um lote so': o pagamento e o lancamento contabil dele (mais o
+        // de juros, se houver) somem juntos — ou nada some.
+        var batch = db.batch();
+        batch.delete(db.collection('pagamentosInternos').doc(id));
+        batch.delete(db.collection('lancamentos').doc('int_' + id));
+        batch.delete(db.collection('lancamentos').doc('jurosint_' + id));
+        return batch.commit();
       }).then(function(){
         App.toast('Pagamento excluído.', 'ok');
       }).catch(function(e){

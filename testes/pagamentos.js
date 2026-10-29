@@ -295,6 +295,13 @@ eq('  ...com a regex escrita com as barras na pagina',
     eq(nome + ': nenhum update() direto nessas colecoes',
       /collection\('(notas|duplicatas)'\)\.doc\([^)]*\)\.update\(/.test(t), false);
   });
+  // Auditoria de 29/10/2026: pagamento interno x lancamento contabil.
+  eq('excluir interno apaga o lancamento contabil dele no mesmo lote',
+    /\.excluir-pgto'[\s\S]{0,1500}batch\.delete\(db\.collection\('lancamentos'\)\.doc\('int_' \+ id\)\)/.test(html), true);
+  eq('editar interno ja pago e barrado (o lancamento nasceu dos dados antigos)',
+    /\.editar-pgto'[\s\S]{0,400}if\(pgto\.pago\)/.test(html), true);
+  eq('o lote Pagar deixa de fora o que ja esta pago',
+    /selPagarBtn'\)\.addEventListener[\s\S]{0,600}return !\(it && it\.pago\)/.test(html), true);
   eq('o lote de Pagamentos carimba so o que e duplicata',
     /c\.colecao === 'duplicatas' \? carimbar\(c\.dados\) : c\.dados/.test(html), true);
 
