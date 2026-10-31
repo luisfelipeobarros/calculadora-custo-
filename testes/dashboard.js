@@ -15,6 +15,10 @@
 const fs = require('fs');
 const path = require('path');
 const html = fs.readFileSync(path.resolve(__dirname, '..', 'dashboard.html'), 'utf8');
+// Sem filtro, "Mes a mes" mostra a linha da loja inteira (31/10/2026).
+if(!/data-visao="mensal"/.test(html) || !/const linhaMensal = recorteAtivo \|\| crescVisao === 'mensal'/.test(html)){
+  console.log('  [X] Crescimento anual sem filtro perdeu a visao "Mes a mes" (linha da loja inteira)'); process.exitCode = 1;
+} else console.log('  [ok] Crescimento anual: visao "Mes a mes" sem filtro');
 
 function extrair(nome){
   const i = html.indexOf('function ' + nome + '(');

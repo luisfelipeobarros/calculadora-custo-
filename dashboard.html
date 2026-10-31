@@ -224,10 +224,13 @@
       <div class="mini-toggle" id="toggleVisaoCresc" role="group" aria-label="Visão do crescimento">
         <button type="button" data-visao="categoria" aria-pressed="true">Categoria</button>
         <button type="button" data-visao="fornecedor" aria-pressed="false">Fornecedor</button>
+        <button type="button" data-visao="mensal" aria-pressed="false" title="A loja inteira, cada mês contra o mesmo mês do ano anterior">Mês a mês</button>
       </div>
       <!-- Com fornecedor/categoria filtrado, o toggle acima dá lugar a
            este (pedido de 06/09/2026): a linha mês a mês em % (× o
-           mesmo mês do ano anterior) ou em R$ (ano × ano anterior). -->
+           mesmo mês do ano anterior) ou em R$ (ano × ano anterior).
+           Sem filtro, a visão "Mês a mês" mostra os dois toggles: a
+           mesma linha, da loja inteira (pedido de 31/10/2026). -->
       <div class="mini-toggle" id="toggleModoLinha" role="group" aria-label="Modo da linha mês a mês" style="display:none;">
         <button type="button" data-modo="pct" aria-pressed="true">% vs ano anterior</button>
         <button type="button" data-modo="abs" aria-pressed="false">R$ mês a mês</button>
@@ -795,13 +798,17 @@
     // muda de pergunta e vira a LINHA do crescimento mês a mês — dá
     // para ver se o recorte está acelerando ou desacelerando ao longo
     // do ano, sem ir filtrando mês por mês.
+    // Sem filtro, a visão "Mês a mês" pede a MESMA linha para a loja
+    // inteira (pedido de 31/10/2026): o caminho da linha vale nos dois
+    // casos; só o nome do recorte muda.
     const recorteAtivo = !!(fornSel || catSel);
+    const linhaMensal = recorteAtivo || crescVisao === 'mensal';
     $('toggleVisaoCresc').style.display = recorteAtivo ? 'none' : '';
-    $('toggleModoLinha').style.display = recorteAtivo ? '' : 'none';
+    $('toggleModoLinha').style.display = linhaMensal ? '' : 'none';
 
     $('crescAcumulado').style.display = 'none';
-    if(recorteAtivo){
-      const nomeRecorte = [fornSel, catSel].filter(Boolean).join(' · ');
+    if(linhaMensal){
+      const nomeRecorte = recorteAtivo ? [fornSel, catSel].filter(Boolean).join(' · ') : 'Loja inteira';
 
       // Acumulado do ano, na grandeza do modo aberto: % e R$ falam de
       // faturamento; Qtd, de quantidade; Preco medio, do preco medio do

@@ -501,7 +501,8 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     (soma/soma, nunca média de margens — e null sem faturamento, nunca
     "0%"), séries mensais com mês vazio = null, a participação por
     categoria fechando 100%, o crescimento anual no período comparável
-    (e a linha mês a mês quando há fornecedor/categoria filtrado),
+    (e a linha mês a mês quando há fornecedor/categoria filtrado, ou na
+    visão "Mês a mês" sem filtro, para a loja inteira),
     a canonização de nomes (grafias que só diferem em maiúsculas/acento
     viram um nome só — o caso real "Outros"/"OUTROS") e os destaques
     automáticos calculados por regra, sem IA.
