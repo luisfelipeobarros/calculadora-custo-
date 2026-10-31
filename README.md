@@ -443,7 +443,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     marcado à mão por cima dele) e a etiqueta "não exposto"
     (produto novo: barras na nota e fora do cadastro), o registro de **saldão**
     (interno/externo, estoque acompanhado pelo catálogo, encerrado ao zerar).
-15b-2. **Exposição (mapa dos expositores)** — 38 verificações em
+15b-2. **Exposição (mapa dos expositores)** — 39 verificações em
     `exposicao-nucleo.js` (aba Exposição do Etiquetas): o desenho dos
     expositores com as correções combinadas (o "L" de E16/E17/E18 abraça
     P6, P7, P8–P11 e P4; F8 ao lado de F2; F7 e F6 fechando a loja; F5 e
@@ -452,7 +452,9 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     `exposicao`, um documento por expositor, só lista), a busca que
     acende o mapa (na aba só o mapa aparece: status, cartões, botões,
     chips e busca somem, e "Voltar às etiquetas" devolve a lista), o
-    "exposto em" nas listas e no relatório, e o modo
+    "exposto em" nas listas e no relatório, o estoque do catálogo ao lado
+    de cada produto (pelo código ou pelas barras, com a data da última
+    importação), e o modo
     "Editar mapa" (arrastar, puxador de tamanho, setas e giro; o editado
     fica em `config/exposicaoMapa` por cima do desenho original).
 15c. **Radar de estoque e compras** — 56 verificações em

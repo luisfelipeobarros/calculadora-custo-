@@ -103,6 +103,8 @@
   .ex-lista{ list-style:none; margin:0; padding:0; }
   .ex-lista li{ display:flex; justify-content:space-between; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--line); }
   .ex-lista li:last-child{ border-bottom:none; }
+  .ex-estoque{ color:var(--ink); font-weight:700; }
+  .ex-estoque.zerado{ color:var(--loss); }
   .ex-res{ margin:8px 0 0; }
   .ex-res li{ display:flex; justify-content:space-between; gap:8px; padding:6px 0; border-bottom:1px solid var(--line); }
   .ex-res b{ font-family:var(--font-mono); white-space:nowrap; }
@@ -266,7 +268,7 @@
 <script src="app-shared.js?v=31"></script>
 <script src="etiquetas-nucleo.js?v=14"></script>
 <!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
-<script src="exposicao-nucleo.js?v=2"></script>
+<script src="exposicao-nucleo.js?v=3"></script>
 <script>
 (() => {
   'use strict';
@@ -1087,10 +1089,16 @@
     renderExEdicao();
     $('exResultados').innerHTML = !termo ? '' : !achados.length && !porExpositor
       ? '<li><span>Nenhum produto cadastrado com "' + escapeHtml(termo) + '".</span></li>'
-      : achados.map(a => '<li><span>' + escapeHtml(a.nome || a.codigo || a.ean) + (a.codigo ? ' <span class="mono">· cód. ' + escapeHtml(a.codigo) + '</span>' : '') + '</span><b>' + escapeHtml(a.expositores.join(', ')) + '</b></li>').join('');
+      : achados.map(a => '<li><span>' + escapeHtml(a.nome || a.codigo || a.ean) + (a.codigo ? ' <span class="mono">· cód. ' + escapeHtml(a.codigo) + '</span>' : '') + htmlEstoqueEx(a) + '</span><b>' + escapeHtml(a.expositores.join(', ')) + '</b></li>').join('');
     const cadastrados = Object.keys(exposicao).filter(id => (exposicao[id].produtos || []).length).length;
     if(exCarregou) $('exMsg').textContent = cadastrados + ' de ' + X.ids().length + ' expositores com produtos cadastrados.';
     renderExDetalhe();
+  }
+  // Estoque do catalogo ao lado do produto (pedido da equipe): o numero
+  // e' o da ultima importacao/relatorio, por isso leva a data.
+  function htmlEstoqueEx(pr){
+    const q = X.estoqueDe(catalogo, pr);
+    return q == null ? '' : ' <span class="mono ex-estoque' + (q <= 0 ? ' zerado' : '') + '">· estoque ' + escapeHtml(fmtQtd(q)) + '</span>';
   }
   function renderExDetalhe(){
     const el = $('exDetalhe');
@@ -1100,14 +1108,15 @@
     const lista = doc.produtos || [];
     el.style.display = '';
     el.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
-        '<h3>Expositor ' + escapeHtml(id) + ' <span class="mono" style="font-weight:400;">· ' + lista.length + ' produto(s)</span></h3>' +
+        '<h3>Expositor ' + escapeHtml(id) + ' <span class="mono" style="font-weight:400;">· ' + lista.length + ' produto(s)' +
+          (catalogo.geradoEm ? ' · estoque de ' + escapeHtml(App.fmtData(catalogo.geradoEm)) : '') + '</span></h3>' +
         '<button type="button" class="btn secondary mini" id="exFecharBtn">✕ Fechar</button></div>' +
       '<div class="ex-add"><div><label class="sr-only" for="exNovo">Produto</label>' +
         '<input id="exNovo" list="exSugestoes" autocomplete="off" placeholder="Código interno, código de barras ou nome..."><datalist id="exSugestoes"></datalist></div>' +
         '<button type="button" class="btn" id="exAddBtn">＋ Adicionar</button></div>' +
       (lista.length
         ? '<ul class="ex-lista">' + lista.map(pr => '<li><span>' + escapeHtml(pr.nome || '') +
-            (pr.codigo ? ' <span class="mono">· cód. ' + escapeHtml(pr.codigo) + '</span>' : '') + (pr.ean ? ' <span class="mono">· ' + escapeHtml(pr.ean) + '</span>' : '') + '</span>' +
+            (pr.codigo ? ' <span class="mono">· cód. ' + escapeHtml(pr.codigo) + '</span>' : '') + (pr.ean ? ' <span class="mono">· ' + escapeHtml(pr.ean) + '</span>' : '') + htmlEstoqueEx(pr) + '</span>' +
             '<button type="button" class="btn secondary mini" data-ex-rm="' + escapeHtml(X.chaveProduto(pr)) + '" aria-label="Tirar ' + escapeHtml(pr.nome || pr.codigo) + ' do expositor">✕</button></li>').join('') + '</ul>'
         : '<p class="empty-note" style="display:block;">Nenhum produto cadastrado neste expositor.</p>');
     const novo = $('exNovo');

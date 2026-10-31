@@ -303,6 +303,20 @@
     return Object.keys(por).map(function (k) { por[k].expositores = ordenarIds(por[k].expositores); return por[k]; })
       .sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || '', 'pt-BR'); });
   }
+  // Estoque do catalogo (config/etiquetasProdutos) para um produto da
+  // exposicao: pelo codigo interno, senao pelas barras. null = o
+  // catalogo nao conhece (produto cadastrado por nome livre, ou sem
+  // estoque na planilha importada).
+  function estoqueDe(catalogo, produto) {
+    if (!catalogo || !produto) return null;
+    var cod = String(produto.codigo == null ? '' : produto.codigo).trim();
+    var p = cod && catalogo.porCodigo && catalogo.porCodigo[cod];
+    if (p && p.q != null && isFinite(Number(p.q))) return Number(p.q);
+    var ean = soDigitos(produto.ean);
+    var e = ean && catalogo.porEan && catalogo.porEan[ean];
+    if (e && e.qtd != null && isFinite(Number(e.qtd))) return Number(e.qtd);
+    return null;
+  }
   function contagem(docs) {
     var c = {};
     Object.keys(docs || {}).forEach(function (id) { c[id] = ((docs[id] && docs[id].produtos) || []).length; });
@@ -313,7 +327,7 @@
     VIEWBOX: VIEWBOX, FAMILIAS: FAMILIAS, EXPOSITORES: EXPOSITORES,
     ids: ids, ordenarIds: ordenarIds, familiaDe: familiaDe, svgMapa: svgMapa,
     chaveProduto: chaveProduto, produtoDoTexto: produtoDoTexto, sugestoes: sugestoes, adicionar: adicionar, remover: remover,
-    ondeEsta: ondeEsta, textoOnde: textoOnde, buscar: buscar, contagem: contagem,
+    ondeEsta: ondeEsta, textoOnde: textoOnde, buscar: buscar, contagem: contagem, estoqueDe: estoqueDe,
     GRADE: GRADE, chavesPecas: chavesPecas, comLayout: comLayout, pecaAtual: pecaAtual, ajustarPeca: ajustarPeca, restaurarPeca: restaurarPeca, pecasEditadas: pecasEditadas
   };
   global.ExposicaoNucleo = api;

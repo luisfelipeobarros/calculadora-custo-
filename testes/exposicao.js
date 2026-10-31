@@ -81,6 +81,13 @@ eq('busca: por nome, por prefixo do codigo, por barras e pelo expositor', [
 ], [['E16,F3'], ['200'], ['200', '100'], ['PISO BEGE 60X60', 'Rejunte branco']]);
 eq('busca vazia nao devolve nada', X.buscar(docs, '  '), []);
 eq('contagem por expositor', X.contagem(docs), { E16: 2, F3: 2, E2: 0 });
+{
+  const cat = { porCodigo: { '100': { n: 'PISO BEGE 60X60', e: '7899000000011', q: 41.04 }, '200': { n: 'ARGAMASSA AC2', e: '', q: 0 }, '300': { n: 'SEM ESTOQUE', e: '' } },
+    porEan: { '7899000000011': { codigo: '100', nome: 'PISO BEGE 60X60', qtd: 41.04 } } };
+  eq('estoque do catalogo: pelo codigo, pelas barras, zero e desconhecido',
+    [X.estoqueDe(cat, { codigo: '100' }), X.estoqueDe(cat, { codigo: '', ean: '7899000000011' }), X.estoqueDe(cat, { codigo: '200' }), X.estoqueDe(cat, { codigo: '300' }), X.estoqueDe(cat, { codigo: '', nome: 'Rejunte' }), X.estoqueDe(null, { codigo: '100' })],
+    [41.04, 41.04, 0, null, null, null]);
+}
 
 // ── Layout editavel ──────────────────────────────────────────
 {
