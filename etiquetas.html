@@ -268,7 +268,7 @@
 <script src="app-shared.js?v=31"></script>
 <script src="etiquetas-nucleo.js?v=14"></script>
 <!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
-<script src="exposicao-nucleo.js?v=3"></script>
+<script src="exposicao-nucleo.js?v=4"></script>
 <script>
 (() => {
   'use strict';
@@ -1105,7 +1105,8 @@
     if(!exSelecionado){ el.style.display = 'none'; el.innerHTML = ''; return; }
     const id = exSelecionado;
     const doc = exposicao[id] || { produtos: [] };
-    const lista = doc.produtos || [];
+    // Por codigo na tela, mesmo o gravado antes (que ficou em ordem de nome).
+    const lista = X.ordenarProdutos(doc.produtos || []);
     el.style.display = '';
     el.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">' +
         '<h3>Expositor ' + escapeHtml(id) + ' <span class="mono" style="font-weight:400;">· ' + lista.length + ' produto(s)' +

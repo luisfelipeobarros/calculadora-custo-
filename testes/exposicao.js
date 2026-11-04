@@ -63,7 +63,10 @@ eq('sugestoes: prefixo do codigo ou palavras do nome', [X.sugestoes(catalogo, '1
 let doc = { produtos: [] };
 let r1 = X.adicionar(doc, X.produtoDoTexto('200', catalogo), '2026-10-28');
 let r2 = X.adicionar({ produtos: r1.produtos }, X.produtoDoTexto('100', catalogo), '2026-10-28');
-eq('adicionar: entra com a data, em ordem de nome', r2.produtos.map(p => p.nome + '|' + p.desde), ['ARGAMASSA AC2|2026-10-28', 'PISO BEGE 60X60|2026-10-28']);
+eq('adicionar: entra com a data, em ordem de codigo', r2.produtos.map(p => p.codigo + '|' + p.nome + '|' + p.desde), ['100|PISO BEGE 60X60|2026-10-28', '200|ARGAMASSA AC2|2026-10-28']);
+eq('ordem do expositor: codigo como numero, sem codigo no fim por nome',
+  X.ordenarProdutos([{ codigo: '', nome: 'Rejunte' }, { codigo: '20000', nome: 'B' }, { codigo: '1000', nome: 'C' }, { codigo: '', nome: 'Argamassa' }, { codigo: '100', nome: 'Z' }, { codigo: '', ean: '7899000000011', nome: '' }]).map(p => p.codigo || p.nome || p.ean),
+  ['100', '1000', '20000', '7899000000011', 'Argamassa', 'Rejunte']);
 eq('adicionar: o mesmo produto nao entra duas vezes (por codigo ou por barras)',
   [X.adicionar({ produtos: r2.produtos }, X.produtoDoTexto('100', catalogo)).mudou, X.adicionar({ produtos: r2.produtos }, { codigo: '', ean: '7899000000011', nome: 'OUTRO NOME' }).mudou], [false, true]);
 eq('remover pela chave', X.remover({ produtos: r2.produtos }, 'c:200').produtos.map(p => p.codigo), ['100']);

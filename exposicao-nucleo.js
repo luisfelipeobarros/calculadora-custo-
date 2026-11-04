@@ -246,13 +246,27 @@
     }
     return out;
   }
+  // Ordem da lista do expositor (pedido de 04/11/2026): pelo codigo
+  // interno, como numero (100 antes de 1000, 1000 antes de 20000);
+  // sem codigo (nome livre ou so' barras) vai para o fim, por nome.
+  function ordenarProdutos(lista) {
+    return (lista || []).slice().sort(function (a, b) {
+      var ca = String(a.codigo == null ? '' : a.codigo).trim(), cb = String(b.codigo == null ? '' : b.codigo).trim();
+      if (!ca !== !cb) return ca ? -1 : 1;
+      if (ca && cb) {
+        var na = /^\d+$/.test(ca) ? Number(ca) : NaN, nb = /^\d+$/.test(cb) ? Number(cb) : NaN;
+        if (isFinite(na) && isFinite(nb) && na !== nb) return na - nb;
+        if (!(isFinite(na) && isFinite(nb)) && ca !== cb) return ca.localeCompare(cb, 'pt-BR', { numeric: true });
+      }
+      return (a.nome || '').localeCompare(b.nome || '', 'pt-BR');
+    });
+  }
   function adicionar(doc, produto, hoje) {
     var lista = ((doc && doc.produtos) || []).slice();
     var k = chaveProduto(produto);
     if (!k || lista.some(function (p) { return chaveProduto(p) === k; })) return { produtos: lista, mudou: false };
     lista.push({ codigo: produto.codigo || '', nome: produto.nome || '', ean: soDigitos(produto.ean), desde: hoje || App.hojeISO() });
-    lista.sort(function (a, b) { return (a.nome || '').localeCompare(b.nome || '', 'pt-BR'); });
-    return { produtos: lista, mudou: true };
+    return { produtos: ordenarProdutos(lista), mudou: true };
   }
   function remover(doc, chave) {
     var lista = ((doc && doc.produtos) || []).filter(function (p) { return chaveProduto(p) !== chave; });
@@ -326,7 +340,7 @@
   var api = {
     VIEWBOX: VIEWBOX, FAMILIAS: FAMILIAS, EXPOSITORES: EXPOSITORES,
     ids: ids, ordenarIds: ordenarIds, familiaDe: familiaDe, svgMapa: svgMapa,
-    chaveProduto: chaveProduto, produtoDoTexto: produtoDoTexto, sugestoes: sugestoes, adicionar: adicionar, remover: remover,
+    chaveProduto: chaveProduto, produtoDoTexto: produtoDoTexto, sugestoes: sugestoes, ordenarProdutos: ordenarProdutos, adicionar: adicionar, remover: remover,
     ondeEsta: ondeEsta, textoOnde: textoOnde, buscar: buscar, contagem: contagem, estoqueDe: estoqueDe,
     GRADE: GRADE, chavesPecas: chavesPecas, comLayout: comLayout, pecaAtual: pecaAtual, ajustarPeca: ajustarPeca, restaurarPeca: restaurarPeca, pecasEditadas: pecasEditadas
   };
