@@ -184,6 +184,7 @@
 
       <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
         <button type="button" class="btn" id="avSalvarBtn" style="flex:1;">💾 Salvar avaria</button>
+        <button type="button" class="btn secondary" id="avExcluirBtn" style="display:none;" title="Apaga esta avaria (lançada por engano)">🗑 Excluir</button>
       </div>
       <div class="empty-note" id="avMsg" style="display:block; margin-top:8px;"></div>
     </div>
@@ -274,6 +275,7 @@
       <div class="actions" style="margin-top:16px; display:flex; gap:8px;">
         <button type="button" class="btn" id="afSalvarBtn" style="flex:1;">💾 Salvar</button>
         <button type="button" class="btn secondary" id="afImprimirBtn" title="Ordem de entrega de material, com o que está na ficha">🖨 Imprimir ordem</button>
+        <button type="button" class="btn secondary" id="afExcluirBtn" style="display:none;" title="Apaga esta assistência (criada por engano)">🗑 Excluir</button>
       </div>
       <div class="empty-note" id="afMsg" style="display:block; margin-top:8px;"></div>
     </div>
@@ -287,12 +289,12 @@
      (N.htmlOrdemEntrega) na hora de imprimir. -->
 <div id="ordemImpressao" aria-hidden="true"></div>
 
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=31"></script>
-<script src="assistencias-nucleo.js?v=7"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" integrity="sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="app-shared.js?v=32"></script>
+<script src="assistencias-nucleo.js?v=8"></script>
 <script>
 (() => {
   'use strict';
@@ -310,6 +312,9 @@
   let fotosAtuais = [];       // dataURLs (base64) das fotos do problema
   let termoAtuais = [];       // dataURLs do termo de acordo (mesmo campo no Firestore)
   let outrosAnexos = [];      // entradas do campo fotos em formato desconhecido — preservadas no salvar
+  let fotosProntas = true;    // false enquanto os anexos de fora (assistenciasFotos) nao chegaram
+  let fotosErro = null;       // texto do erro da leitura dos anexos, se houve
+  let fotosForaAceito = true; // as regras no ar aceitam assistenciasFotos? (descoberto na 1a gravacao)
   let fichaToken = 0;         // invalida uploads em andamento quando outra ficha abre
   let fichaAbertaJson = null; // foto do documento no momento em que a ficha abriu (detector de conflito)
   let filtroStatus = '';
@@ -390,9 +395,9 @@
           (a.causa ? ' · ' + escapeHtml(a.causa) : '') +
           (a.custoLoja != null ? ' · custo ' + brl(a.custoLoja) : '') +
           (() => {
-            const fs = N.separarFotos(a.fotos);
-            return (fs.problema.length ? ' · 📷 ' + fs.problema.length : '') +
-              (fs.termo.length ? ' · 📄 termo' : '');
+            // Pelos contadores: as imagens nao moram mais na lista.
+            const an = N.contagemAnexos(a);
+            return (an.fotos ? ' · 📷 ' + an.fotos : '') + (an.termo ? ' · 📄 termo' : '');
           })() + '</div>' +
       '</button>').join('');
   }
@@ -512,6 +517,13 @@
     fotosAtuais = fs.problema;
     termoAtuais = fs.termo;
     outrosAnexos = fs.outros;
+    // Anexos fora do documento (assistenciasFotos/{id}): chegam logo
+    // depois de a ficha abrir. Ate' la' a ficha NAO sabe quais sao —
+    // e salvar nesse estado nao pode mexer neles (ver salvar()).
+    fotosProntas = !(a && a.fotosFora === true);
+    fotosErro = null;
+    $('afExcluirBtn').style.display = a ? '' : 'none';
+    if(!fotosProntas) carregarFotosDaFicha(a.id, fichaToken);
     $('afTitulo').textContent = a ? 'Assistência #' + (a.sequencia || '') : 'Nova assistência';
     CAMPOS_TEXTO.forEach(([elId, campo]) => { $(elId).value = (a && a[campo]) || ''; });
     CAMPOS_NUMERO.forEach(([elId, campo]) => {
@@ -540,13 +552,70 @@
     window.scrollTo(0, 0);
   }
 
+  // Le os anexos da ficha aberta e junta com o que por acaso ainda
+  // esteja no campo `fotos` (aba antiga do app pode ter gravado ali).
+  // O token garante que a resposta de uma ficha nao caia em outra.
+  function carregarFotosDaFicha(id, token){
+    renderFotos();
+    return App.comAuth(() => db.collection('assistenciasFotos').doc(id).get()).then((doc) => {
+      if(fichaToken !== token) return;
+      const u = N.unirAnexos(doc.exists ? doc.data().fotos : [], N.juntarFotos(fotosAtuais, termoAtuais, outrosAnexos));
+      fotosAtuais = u.problema;
+      termoAtuais = u.termo;
+      outrosAnexos = u.outros;
+      fotosProntas = true;
+      fotosErro = null;
+      renderFotos();
+    }).catch((e) => {
+      if(fichaToken !== token) return;
+      console.error('Fotos da ficha:', e);
+      fotosErro = App.erroDe(e);
+      renderFotos();
+    });
+  }
+
   $('asstNovaBtn').addEventListener('click', () => abrirFicha(null));
   $('asstVoltarBtn').addEventListener('click', () => router.ir('Lista'));
+
+  // ─── Excluir (ficha ou avaria lancada por engano) ───
+  // Apaga o documento e os anexos dele. Sem as regras novas publicadas
+  // (assistenciasFotos), o lote e' recusado: apaga so' o documento, que
+  // nesse caso ainda carrega as proprias fotos.
+  async function excluirRegistro(id, rotulo, btn){
+    const ok = await App.confirmar({
+      titulo: 'Excluir ' + rotulo,
+      mensagem: 'Excluir esta ' + rotulo + ' de vez? As fotos e o termo vão junto. Não dá para desfazer.',
+      confirmar: 'Excluir', perigo: true
+    });
+    if(!ok) return;
+    btn.disabled = true;
+    try{
+      const ref = db.collection('assistencias').doc(id);
+      await App.comAuth(() => {
+        const batch = db.batch();
+        batch.delete(ref);
+        batch.delete(db.collection('assistenciasFotos').doc(id));
+        return batch.commit();
+      }).catch((e) => {
+        if(!App.ehPermissaoNegada(e)) throw e;
+        return App.comAuth(() => ref.delete());
+      });
+      App.toast(rotulo.charAt(0).toUpperCase() + rotulo.slice(1) + ' excluída.', 'ok');
+      router.ir('Lista');
+    }catch(e){
+      App.toastErro('Erro ao excluir', e);
+    }finally{
+      btn.disabled = false;
+    }
+  }
+  $('afExcluirBtn').addEventListener('click', () => { if(editandoId) excluirRegistro(editandoId, 'assistência', $('afExcluirBtn')); });
+  $('avExcluirBtn').addEventListener('click', () => { if(editandoAvariaId) excluirRegistro(editandoAvariaId, 'avaria', $('avExcluirBtn')); });
 
   // ─── Avaria: ficha curta ───
   let editandoAvariaId = null;
   function abrirAvaria(a){
     editandoAvariaId = a ? a.id : null;
+    $('avExcluirBtn').style.display = a ? '' : 'none';
     $('avTitulo').textContent = a ? 'Avaria de ' + App.fmtData(a.dataAbertura) : 'Lançar avaria';
     $('avData').value = (a && a.dataAbertura) || App.hojeISO();
     selecionarComForaDaLista('avMotivo', N.MOTIVOS_AVARIA, (a && a.motivo) || '', true);
@@ -668,6 +737,18 @@
     ' aria-label="Remover ' + rotulo.toLowerCase() + ' ' + (i + 1) + '">×</button></div>').join('');
 
   function renderFotos(){
+    // Anexos de fora ainda nao chegaram (ou a leitura falhou): a ficha
+    // diz isso em vez de parecer "sem fotos".
+    if(!fotosProntas){
+      const aviso = fotosErro
+        ? 'Não consegui carregar as fotos desta ficha (' + fotosErro + '). Toque em "Adicionar fotos" para tentar de novo — salvar agora não mexe nelas.'
+        : 'Carregando as fotos desta ficha...';
+      $('afFotosPreview').innerHTML = '';
+      $('afTermoPreview').innerHTML = '';
+      $('afFotosMsg').textContent = aviso;
+      $('afTermoMsg').textContent = '';
+      return;
+    }
     $('afFotosPreview').innerHTML = miniaturas(fotosAtuais, 'Foto', 'data-tirar');
     $('afFotosMsg').textContent = fotosAtuais.length
       ? fotosAtuais.length + ' foto(s) · ' + Math.round(tamanhoFotos() / 1024) + ' KB de ' + Math.round(LIMITE_FOTOS_CHARS / 1024) + ' KB no total'
@@ -712,9 +793,22 @@
     }
   }
 
-  $('afFotoBtn').addEventListener('click', () => $('afFotos').click());
+  // Sem os anexos carregados nao se acrescenta nada: a foto nova iria
+  // para uma lista que o salvar nao grava (ele so' regrava os anexos
+  // quando sabe quais ja' existiam).
+  function anexosDisponiveis(){
+    if(fotosProntas) return true;
+    if(fotosErro && editandoId){
+      fotosErro = null;
+      carregarFotosDaFicha(editandoId, fichaToken);
+    } else {
+      App.toast('Aguarde as fotos desta ficha terminarem de carregar.', 'info');
+    }
+    return false;
+  }
+  $('afFotoBtn').addEventListener('click', () => { if(anexosDisponiveis()) $('afFotos').click(); });
   $('afFotos').addEventListener('change', function(){ receberImagens(this, 'foto', 'A foto'); });
-  $('afTermoBtn').addEventListener('click', () => $('afTermo').click());
+  $('afTermoBtn').addEventListener('click', () => { if(anexosDisponiveis()) $('afTermo').click(); });
   $('afTermo').addEventListener('change', function(){ receberImagens(this, 'termo', 'A página do termo'); });
 
   App.delegar($('afFotosPreview'), 'click', '[data-tirar]', (b) => {
@@ -790,10 +884,12 @@
         }
       }
 
-      // Fotos do problema + termo de acordo no MESMO campo (o termo vai
+      // Fotos do problema + termo de acordo na MESMA lista (o termo vai
       // marcado com {termo:true}); anexos em formato desconhecido são
-      // devolvidos intactos — regravar sem eles seria apagá-los.
-      const dados = { fotos: N.juntarFotos(fotosAtuais, termoAtuais, outrosAnexos) };
+      // devolvidos intactos — regravar sem eles seria apagá-los. A lista
+      // é gravada à parte (ver "Gravação" abaixo), não dentro de `dados`.
+      const anexos = N.juntarFotos(fotosAtuais, termoAtuais, outrosAnexos);
+      const dados = {};
       CAMPOS_TEXTO.forEach(([elId, campo]) => { dados[campo] = $(elId).value.trim() || null; });
       // parseDinheiroBR, não parseNumeroBR: "25.000" aqui é vinte e
       // cinco mil (a leitura antiga corrompia valores >= 1000).
@@ -814,10 +910,50 @@
       if(dados.status !== 'Resolvida' && N.STATUS.indexOf(dados.status) !== -1) dados.dataResolucao = null;
 
       $('afMsg').textContent = 'Salvando...';
-      if(editandoId){
-        await App.comAuth(() => db.collection('assistencias').doc(editandoId).set(dados, { merge: true }));
+      // ─ Gravação ─
+      // Os anexos vão para assistenciasFotos/{id}, fora do documento que
+      // a lista escuta; no principal ficam a marca e os contadores. As
+      // duas gravações saem num lote só: ou as duas, ou nenhuma.
+      const col = db.collection('assistencias');
+      const ref = editandoId ? col.doc(editandoId) : col.doc();
+      const aberta = editandoId ? assistencias.find(x => x.id === editandoId) : null;
+      const jaFora = !!(aberta && aberta.fotosFora === true);
+      // Tudo no próprio documento, como sempre foi. Com os anexos em
+      // mãos (fotosProntas), a lista inteira vai junto e a marca de
+      // "fora" cai; sem eles, o campo fotos nem é tocado.
+      const gravarDentro = () => App.comAuth(() => {
+        const d = Object.assign({}, dados);
+        if(fotosProntas){ d.fotos = anexos; d.fotosFora = false; }
+        return ref.set(d, { merge: true });
+      });
+      const gravarFora = () => App.comAuth(() => {
+        const FV = firebase.firestore.FieldValue;
+        const batch = db.batch();
+        const refFotos = db.collection('assistenciasFotos').doc(ref.id);
+        if(anexos.length) batch.set(refFotos, { fotos: anexos, atualizadoEm: FV.serverTimestamp() });
+        else batch.delete(refFotos);
+        batch.set(ref, Object.assign({}, dados, {
+          fotos: FV.delete(), fotosFora: true,
+          fotosQtd: fotosAtuais.length, termoQtd: termoAtuais.length,
+          // muda a cada gravação de anexos: é o que faz o detector de
+          // conflito acima enxergar foto trocada por outra pessoa
+          fotosVersao: FV.increment(1)
+        }), { merge: true });
+        return batch.commit();
+      });
+      // Dentro: anexos ainda não carregados (não se mexe neles), ficha
+      // sem anexo nenhum, ou regras novas ainda não publicadas.
+      if(!fotosProntas || (!anexos.length && !jaFora) || !fotosForaAceito){
+        await gravarDentro();
       } else {
-        await App.comAuth(() => db.collection('assistencias').add(dados));
+        try{ await gravarFora(); }
+        catch(e){
+          // As regras no ar ainda não conhecem assistenciasFotos: grava
+          // do jeito antigo e não tenta de novo nesta sessão.
+          if(!App.ehPermissaoNegada(e)) throw e;
+          fotosForaAceito = false;
+          await gravarDentro();
+        }
       }
       App.toast('Assistência #' + seq + ' salva.', 'ok');
       $('afMsg').textContent = '';

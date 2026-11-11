@@ -185,11 +185,33 @@ service cloud.firestore {
     // config/notasSync e' o interruptor da leitura por carimbo e o
     // contador de exclusoes — so' o Apps Script escreve (ligar/desligar
     // e a limpeza de gemeas). Do navegador, so' leitura.
-    match /config/notasSync {
+    //
+    // UM bloco so', com a excecao DENTRO da condicao. Havia dois
+    // (config/notasSync com write false + config/{id} com write
+    // liberado), e as regras do Firestore SOMAM permissoes: se qualquer
+    // match que casa permite, a gravacao passa — o curinga liberava a
+    // escrita em notasSync e o bloqueio nao valia (auditoria de
+    // 11/11/2026).
+    match /config/{id} {
+      allow read: if autenticado();
+      allow write: if autenticado() && id != 'notasSync';
+    }
+
+    // Vendas (dashboard.html e a tela Vendas do Controle de Notas): um
+    // documento por ano (id 'aaaa'), gravado pelo Apps Script da
+    // planilha de vendas — credencial IAM, que ignora estas regras. Do
+    // navegador, so' leitura: e' o que tira o faturamento da planilha
+    // publica e o poe atras do login.
+    match /vendas/{ano} {
       allow read: if autenticado();
       allow write: if false;
     }
-    match /config/{id} {
+
+    // Fotos e termo das assistencias (assistencias.html), um documento
+    // por assistencia (mesmo id). Ficam FORA do documento principal
+    // para a lista nao baixar todas as fotos de todas as fichas a cada
+    // abertura: este so' e' lido quando a ficha abre.
+    match /assistenciasFotos/{id} {
       allow read, write: if autenticado();
     }
 

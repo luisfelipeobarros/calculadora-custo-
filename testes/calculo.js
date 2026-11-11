@@ -281,4 +281,35 @@ console.log('metas de margem: ' + novo.METAS.map(m => m.rotulo).join(', ')
 console.log(divSug === 0 ? '>>> precoSugerido bate com a calculadora'
                          : '>>> ' + divSug + ' DIVERGENCIA(S) no precoSugerido');
 
-process.exitCode = (falhas || divSug || ligacao) ? 1 : 0;
+// ---------- avisosDaFicha: o que se pergunta antes de salvar ----------
+// Custo vazio/zero e valor negativo nao dao erro na conta: a ficha sai
+// com margem irreal e vira referencia. A regra mora no nucleo; a tela
+// so' pergunta.
+let divAvisos = 0;
+const avisoEq = (titulo, obtido, esperado) => {
+  if (JSON.stringify(obtido) !== JSON.stringify(esperado)) {
+    divAvisos++;
+    console.log('AVISOS diverge — ' + titulo + ': esperava ' + JSON.stringify(esperado) + ', veio ' + JSON.stringify(obtido));
+  }
+};
+const fichaBoa = { custoNFe: 30, frete: 2, pctCredFrete: 0, valorST: 12, icmsCredito: 0, ipi: 0.65,
+  custoFinanceiroPct: 0, avariasPct: 1.5, bonificacao: 0, tipoBonificacao: 0, venda: 59.9, comST: 1, prejuizoContabil: 0 };
+avisoEq('ficha normal nao pergunta nada', novo.avisosDaFicha(fichaBoa), []);
+avisoEq('venda zerada e estado normal (produto sem preco)',
+  novo.avisosDaFicha(Object.assign({}, fichaBoa, { venda: 0 })), []);
+avisoEq('custo zero avisa', novo.avisosDaFicha(Object.assign({}, fichaBoa, { custoNFe: 0 })), ['Custo NF-e vazio ou zero']);
+avisoEq('custo vazio (texto do campo) avisa igual',
+  novo.avisosDaFicha(Object.assign({}, fichaBoa, { custoNFe: '' })), ['Custo NF-e vazio ou zero']);
+avisoEq('custo negativo avisa UMA vez, como negativo',
+  novo.avisosDaFicha(Object.assign({}, fichaBoa, { custoNFe: -5 })), ['Custo NF-e negativo']);
+avisoEq('frete e venda negativos: um aviso por campo',
+  novo.avisosDaFicha(Object.assign({}, fichaBoa, { frete: -1, venda: -10 })), ['Frete negativo', 'Venda negativo']);
+avisoEq('sem ficha nenhuma: so o custo', novo.avisosDaFicha(null), ['Custo NF-e vazio ou zero']);
+if (!/Calculo\.avisosDaFicha\(getFormValues\(\)\)/.test(html)) {
+  divAvisos++;
+  console.log('salvarProduto nao consulta Calculo.avisosDaFicha antes de gravar');
+}
+console.log(divAvisos === 0 ? '>>> avisosDaFicha: custo vazio/zero e negativos perguntam antes de salvar'
+                            : '>>> ' + divAvisos + ' PROBLEMA(S) no avisosDaFicha');
+
+process.exitCode = (falhas || divSug || ligacao || divAvisos) ? 1 : 0;

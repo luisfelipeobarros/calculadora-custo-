@@ -15,6 +15,7 @@ Seis páginas (Calculadora, Controle de Notas, Assistências, Dashboard, Etiquet
 | `app-shared.js` | Helpers, login, avisos, roteador — comum aos apps |
 | `firestore.rules` | Regras de segurança do banco (**precisa ser publicada**) |
 | `testes/` | Verificação automatizada, roda só com Node |
+| `.github/workflows/testes.yml` | Roda os testes no GitHub a cada envio (não impede a publicação; avisa quando quebra) |
 
 Tudo precisa ficar **na mesma pasta**. Se você publica os aplicativos em
 algum lugar, suba também os `*-nucleo.js`, `app-shared.css`,
@@ -30,15 +31,25 @@ comportamento novo com antigo.
 Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
-<link rel="stylesheet" href="app-shared.css?v=17">
-<script src="app-shared.js?v=31"></script>
-<script src="calculo-nucleo.js?v=8"></script>
+<link rel="stylesheet" href="app-shared.css?v=18">
+<script src="app-shared.js?v=32"></script>
+<script src="calculo-nucleo.js?v=9"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número em todos os
 HTML que os carregam** (os números acima são os de hoje; eles só crescem). Trocar `?v=12` por `?v=13` faz cada navegador baixar a versão nova
 na hora, sem ninguém precisar limpar cache. O `node testes/executar.js`
-reclama se a referência estiver sem `?v=`.
+reclama se a referência estiver sem `?v=`, se dois HTML apontarem versões
+diferentes do mesmo arquivo, e — desde 11/11/2026 — se um arquivo
+compartilhado **mudou e a versão não subiu** (`testes/versoes.js`, que
+guarda o conteúdo de cada versão em `testes/versoes.json`).
+
+O fluxo completo, então:
+
+1. suba o `?v=` do arquivo em todos os HTML que o carregam (o
+   `dashboard.html` carrega o `app-shared.js` por uma string no JavaScript:
+   procure por `app-shared.js?v=` nele também);
+2. rode `node testes/versoes.js --gravar` para registrar a versão nova.
 
 O `calculo-nucleo.js` só é carregado pelo `index.html` (o Controle de
 Notas não faz conta de margem), e precisa vir **depois** do
@@ -125,7 +136,90 @@ sozinho a operação que falhou.
   `metasMensais`, `fiscaisNcm` — leitura e escrita para quem está
   autenticado (cada uma com as travas descritas no próprio
   `firestore.rules`).
+- `vendas` — só leitura pelo navegador; quem grava é o Apps Script da
+  planilha de vendas (ver "Vendas no Firestore").
+- `assistenciasFotos` — fotos e termo das assistências, um documento
+  por ficha (ver "Assistências: fotos fora da ficha").
+- `config/notasSync` — só leitura pelo navegador. A exceção fica
+  **dentro** do bloco `config/{id}`: as regras do Firestore somam
+  permissões, e um bloco separado com `write: if false` não bloqueava
+  nada enquanto o curinga ao lado liberava.
 - Qualquer outra coleção: bloqueada.
+
+### Antes de publicar as regras: fechar o cadastro de contas
+
+As regras confiam em "quem está autenticado". Com e-mail/senha ativado,
+o Firebase por padrão deixa **qualquer pessoa criar a própria conta**
+pela API, usando a `apiKey` pública — e conta criada é "autenticado".
+No Console: **Authentication → Settings → User actions → desmarque
+"Enable create (sign-up)"** (feito em 11/11/2026). Confira também que o
+provedor **Anônimo** está desligado em Sign-in method. Usuário novo,
+só pelo Console.
+
+### Bibliotecas de fora: versão travada e conferida
+
+Firebase, SheetJS, pdf.js e Chart.js vêm de CDN e rodam com a sessão
+logada. Cada `<script>` traz `integrity="sha384-..."`: o navegador
+recusa o arquivo se a CDN entregar algo diferente do que foi conferido.
+Ao trocar a versão de uma biblioteca, troque o hash junto:
+
+```bash
+curl -s URL_DO_ARQUIVO | openssl dgst -sha384 -binary | openssl base64 -A
+```
+
+O pdf.js abre arquivos com `isEvalSupported: false` (a versão 3.11 tem a
+falha CVE-2024-4367: PDF forjado executa código na página). Não tire.
+
+---
+
+## Vendas no Firestore
+
+O Dashboard e a tela Vendas do Controle de Notas liam a planilha de
+vendas direto pelo Google Sheets. Para isso a planilha tinha de ser
+**pública**, e o endereço dela está no HTML, que também é público:
+faturamento e lucro por fornecedor ficavam legíveis sem login (o login
+do Dashboard só escondia a tela).
+
+Agora as vendas vêm da coleção `vendas` (um documento por ano), gravada
+por um Apps Script na própria planilha. O script está em
+`amostras/apps-script-vendas.gs` (fora do git, como o coletor de NF-e), e
+o passo a passo de instalação está no cabeçalho dele. Em resumo:
+
+1. publicar o `firestore.rules`;
+2. colar o script na planilha e rodar `enviarVendas`;
+3. conferir no rodapé do Dashboard: "Vendas do banco, enviadas pela
+   planilha em ...";
+4. **só então** tirar o compartilhamento público da planilha.
+
+Enquanto a coleção não existir, os dois apps continuam lendo a planilha
+como antes (`App.lerVendas` devolve `null` e cada tela cai na leitura
+antiga) — nada quebra por publicar o código antes de rodar o script.
+Depois de a planilha ficar privada, a leitura antiga deixa de funcionar
+e o `SHEET_ID` nos dois HTML pode ser apagado.
+
+---
+
+## Assistências: fotos fora da ficha
+
+A lista do app escuta a coleção `assistencias` inteira. Com as fotos
+dentro de cada ficha (até ~700 KB em base64), todo celular baixava
+**todas as fotos de todas as fichas** a cada abertura, sem teto.
+
+Desde 11/11/2026 os anexos de cada ficha moram em
+`assistenciasFotos/{mesmo id}` e só são lidos quando a ficha abre. No
+documento principal ficam a marca e os contadores (`fotosFora`,
+`fotosQtd`, `termoQtd`, `fotosVersao`), que é o que a lista e a planilha
+exportada mostram.
+
+- Ficha antiga (fotos ainda no campo `fotos`) continua abrindo normal e
+  **migra sozinha na próxima vez que alguém a salvar**. O ganho de
+  leitura vem aos poucos, conforme as fichas são salvas.
+- A ficha e os anexos são gravados num lote só. Se as regras novas
+  ainda não estiverem publicadas, o app grava do jeito antigo.
+- Enquanto os anexos carregam, a ficha diz "Carregando as fotos..."; se
+  a leitura falhar, salvar **não mexe** nas fotos.
+- A ficha e a avaria ganharam **Excluir** (com confirmação), que apaga
+  os anexos junto.
 
 ---
 
@@ -279,7 +373,11 @@ ali.
 node testes/executar.js
 ```
 
-Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
+Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
+
+0. **Versões dos arquivos compartilhados** — `testes/versoes.js`: o
+   `?v=` de cada arquivo é o mesmo em todos os HTML, e arquivo que mudou
+   de conteúdo mudou de versão (ver o começo deste README).
 
 1. **Núcleo de cálculo** — carrega o `calculo-nucleo.js` de verdade (o
    mesmo arquivo que a tela usa) e compara com a fórmula original em
@@ -295,7 +393,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 177 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 188 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -314,14 +412,14 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 90 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 134 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de
    dizer "nenhum item" — zero é uma afirmação. E o relatório impresso
    da tela (`pagamentos-nucleo.js`): a lista como está na tela, por dia
    de vencimento, com resumo, subtotais e caixinha para marcar.
-9. **Conferência de DDA** — 180 verificações em `dda-nucleo.js`. O parser
+9. **Conferência de DDA** — 186 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que
@@ -348,7 +446,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
    diz PAGO, aqui em aberto, nenhum 🔴 na linha; BAIXADO nunca entra) e
    — principalmente — que boleto sem par **fora da janela de carga**
    vira ⚪ indeterminado, nunca 🔴 fraude.
-10. **Painel de metas** — 81 verificações em `painel-nucleo.js`, com os
+10. **Painel de metas** — 90 verificações em `painel-nucleo.js`, com os
     números da planilha de 2026 como referência: dias de trabalho mês a
     mês (sem domingos e feriados; sábado é dia normal; feriado no
     domingo não desconta duas vezes), limite = 60% do objetivo, diários
@@ -367,7 +465,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     filtro "Pgto semana"): a soma das semanas fecha com o total do mês,
     e a semana que cruza a virada aparece nos dois meses, cada um com
     a sua parte.
-11. **Simulador de compra** — 58 verificações em `simulador-nucleo.js`:
+11. **Simulador de compra** — 80 verificações em `simulador-nucleo.js`:
     a soma das parcelas **sempre bate** com o valor da compra (centavos
     inteiros, sobra na última), a **ST** como valor adicional cobrado
     junto da 1ª parcela (quando ela vence antes de 30 dias) ou em
@@ -388,7 +486,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     (interna/interestadual/exterior; venda com/sem ST; e 5405/6404 como
     "ST retida anteriormente", que legitimamente vem sem cobrança e não
     pode virar alarme falso na checagem cruzada com o valor de ST).
-13. **Fiscal (NCM & ST)** — 28 verificações em `fiscal-nucleo.js`: o
+13. **Fiscal (NCM & ST)** — 32 verificações em `fiscal-nucleo.js`: o
     agrupamento por **NCM + UF de origem** (da chave de acesso), o % de
     ST observado em centavos inteiros (null sem base, nunca zero
     inventado), a contagem por classe de CFOP (com "retida
@@ -398,7 +496,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     de cadastro (`grupoCadastravel`), que espelha o regex do
     `firestore.rules`: item sem NCM ou UF desconhecida não ganha
     formulário, senão o salvamento morreria em permission-denied.
-14. **Concorrentes em lote (planilha)** — 42 verificações em
+14. **Concorrentes em lote (planilha)** — 59 verificações em
     `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
     ordem/acento/caixa, preço com sujeira de float → centavos inteiros,
     linha ruim **contada com motivo**, nunca engolida), a consulta de
@@ -409,7 +507,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     de desatualização — nunca pesquisado, preço mudou desde a pesquisa
     (vence o prazo: comparação contra preço que não praticamos mais diz
     a coisa errada) e prazo vencido.
-15. **Assistências e reclamações** — 80 verificações em
+15. **Assistências e reclamações** — 89 verificações em
     `assistencias-nucleo.js`: as **avarias** (perda sem cliente, na mesma
     coleção com `tipo: 'avaria'`: motivos, somadas à parte no mês, nunca
     "em aberto", chip e coluna próprios), as listas de status/causa/solução (a troca
@@ -428,7 +526,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     strings continua funcionando, e juntar/separar fecham o ciclo) e a
     exportação (linha sem dinheiro sai com líquido em branco, não "0";
     fotos exportam como contagem, termo como "sim").
-15b. **Etiquetas de produto em trânsito** — 90 verificações em
+15b. **Etiquetas de produto em trânsito** — 93 verificações em
     `etiquetas-nucleo.js`: a situação de cada item (nota que entrou no
     ERP = recebida → **retirar etiqueta**; cancelada some; etiquetada /
     dispensada / retirada), uma linha por item de NF-e com o fornecedor
@@ -458,7 +556,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     última importação), e o modo
     "Editar mapa" (arrastar, puxador de tamanho, setas e giro; o editado
     fica em `config/exposicaoMapa` por cima do desenho original).
-15c. **Radar de estoque e compras** — 56 verificações em
+15c. **Radar de estoque e compras** — 82 verificações em
     `radar-nucleo.js` (aba Radar da Calculadora): leitura do relatório de
     vendas do sistema, resumo compacto com o estoque anterior, carteira
     (itens "pedido" das cotações, com a data do pedido), faturado e
@@ -476,7 +574,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     (pedido sem nota há mais que o prazo, do mais velho ao mais novo, com
     botão que abre a cotação no Histórico); todas as abas agrupadas por
     fornecedor; pedido com nota faturada depois dele sai da carteira.
-16. **Lançamentos contábeis** — 62 verificações em
+16. **Lançamentos contábeis** — 95 verificações em
     `lancamentos-nucleo.js`: as **partidas dobradas** montadas pelo app
     (saída = D categoria / C banco; entrada = D banco / C categoria;
     transferência = D destino / C origem — dado faltando não monta
@@ -522,7 +620,7 @@ Não precisa instalar nada. São trinta etapas, em vinte e uma frentes:
     direto de lá — o Controle de Notas e o Dashboard usam a mesma
     função, sem cópia; a leitura do gviz é extraída do
     `controle-notas.html`.
-19. **Custos da loja** — 74 verificações em `custos-nucleo.js`, com dados
+19. **Custos da loja** — 88 verificações em `custos-nucleo.js`, com dados
     fabricados na forma das planilhas do contador (layout de 19 colunas, uma
     por banco/caixa): leitura em pares D/C com o que não fecha indo para
     "problemas" (nunca lançamento pela metade), natureza pelo caminho do
@@ -664,6 +762,111 @@ escrita com ponto de milhar e sem casas decimais.
 
 Se você confirmar que nenhum fornecedor usa três casas decimais em preço
 unitário, dá para tratar `"1.234"` como 1234 com segurança — é uma linha.
+
+---
+
+## Auditoria de 11/11/2026: o que mudou de comportamento
+
+Uma varredura completa (segurança, erros e custo) gerou as correções
+abaixo. Só o que muda o que a pessoa vê ou como o dado é gravado.
+
+### Controle de Notas
+
+- **Recorrente tem data programada.** Cada pagamento interno recorrente
+  guarda `vencimentoBase`: a data em que aquela parcela estava
+  programada. **Prorrogar e editar o vencimento não mexem nela**, e a
+  próxima parcela é contada a partir dela (antes: 30/11 prorrogado para
+  05/12 fazia a próxima nascer em 30/01, pulando dezembro). O Simulador
+  e o Painel usam a mesma regra (`simulador-nucleo.js`, seção 4). A
+  edição do recorrente tem o campo "Data programada desta parcela" para
+  corrigir um cadastro errado. Parcela antiga sem o campo usa a data do
+  próprio id; por isso uma parcela antiga prorrogada por vários meses,
+  quando paga, gera a seguinte no mês certo — que pode já estar vencido.
+- **Pagar é uma gravação só.** Pagamento individual, lote e baixa pelo
+  DDA passam por `gravarPagamentos`: o pagamento, o lançamento contábil e
+  o de juros entram no mesmo lote do Firestore, ou nenhum entra. Desfazer
+  também. A próxima parcela do recorrente é criada logo depois, por
+  transação (só grava se ainda não existir).
+- **Aviso de recorrente interrompido.** Recorrente pago, que não é a
+  última parcela e ficou sem a seguinte, aparece num aviso na tela de
+  Pagamentos com "Criar próximas parcelas" e "não repete mais".
+- **Painel soma os recorrentes futuros** em "Próximo mês" e "Próximos 5
+  meses", marcados como "🔄 projetado".
+- **Fornecedores** ignora, no cálculo de prazo, a nota emitida antes do
+  corte das duplicatas (ela aparecia como "à vista" ou com prazo cortado).
+- **Fim de semana:** no domingo o vencimento de sábado conta como de
+  hoje, como já era na segunda.
+- **DDA:** casamento só por valor e vencimento, com cedente diferente do
+  fornecedor da duplicata, **não entra no lote** (baixa-se pelo botão da
+  linha). Número de documento que coincide com a nota de outro fornecedor
+  não gera mais vermelho quando o cedente tem a duplicata exata. O botão
+  da linha baixa o boleto daquela linha. Data em branco nunca gera
+  pagamento com data futura. Trocar de DDA descarta o extrato carregado.
+- **Exportação ao contador:** a numeração usada e a cópia do que foi
+  exportado ficam em `config/exportacao_<mês>`; há **"Baixar de novo"**
+  (mesmos arquivos, sem gastar numeração). Criar, editar ou excluir
+  lançamento em mês já exportado pede confirmação; pagamento que cai em
+  mês exportado avisa.
+- **Custos:** a reimportação compara com o que já está gravado e oferece
+  apagar o que não está mais nas planilhas (antes, linha corrigida pelo
+  contador ficava em dobro).
+- **Simulador:** remover linha e "usar" redesenham o formulário.
+
+### Calculadora
+
+- **Cotação é gravada por transação** (`gravarCotacao`): o documento é
+  relido na hora e só a mudança é aplicada. Duas máquinas, ou a
+  sincronização automática e um clique, não se sobrescrevem mais. Sem
+  internet a gravação é recusada com aviso.
+- **Desvincular NF-e vale de verdade.** A nota desvinculada entra em
+  `chavesNfeRecusadas` e não é mais oferecida àquela cotação; os itens
+  voltam a "pedido". Uma linha de nota não fecha duas cotações: cada
+  item consome só a quantidade pedida.
+- **Status só avança** em "Marcar todos como faturado"; a data do pedido
+  tem uma regra só (`RadarNucleo.mudarStatusItem`).
+- **Nota cancelada** aparece como "✕ cancelada" na NF-e Emitidas e fica
+  fora da soma do Fiscal.
+- **Radar** não calcula sugestão quando as cotações ou as notas não
+  carregaram: mostra o erro.
+- **Painel de metas:** mês fechado com lançamento parcial ("até 19/10")
+  mostra "⚠ lançado até dd/mm" e fica fora dos totais.
+- **Erro de leitura não vira "produto novo".** Salvar cotação com a
+  ficha do produto ilegível (rede, cota) aborta com aviso, em vez de
+  gravar a configuração do lote por cima da ficha.
+- **Falha de conexão na abertura não rebaixa para o armazenamento
+  local** quando há Firebase configurado: o erro aparece e nada é
+  gravado "só neste computador" sem a pessoa saber.
+- **Pesquisa de concorrentes:** salvar de novo regrava a mesma pesquisa
+  (não duplica); sair da tela para a varredura; depois de "Parar" há
+  "▶ Continuar" só com o que falta.
+- **Desconectar** do Firebase e do Gemini pede confirmação, e há "↺ Usar
+  configuração padrão" para voltar.
+- **Salvar produto** com custo vazio, zero ou negativo pede confirmação.
+- **Previsão de entrega** só grava com ano plausível (digitar o ano pelo
+  teclado gravava `0002-…` no meio do caminho).
+- **Carregar um produto** limpa os campos que a ficha não tem, em vez de
+  herdar os do produto carregado antes.
+
+### Etiquetas e Assistências
+
+- **Exposição** grava o expositor por transação (dois celulares não se
+  apagam). Precisa de internet para salvar.
+- **Catálogo do Etiquetas** (`config/etiquetasProdutos`) é gravado como
+  texto JSON (`porCodigoJson`); o formato antigo continua sendo lido.
+
+### O que ficou de fora, e por quê
+
+- **Backup do banco:** é configuração do Console (Firestore → Disaster
+  recovery). Hoje só Produtos e Cotações têm exportação manual.
+- **Papéis nas regras** (conta do financeiro × conta da loja): precisa da
+  lista de usuários de cada grupo.
+- **SheetJS 0.18.5 → 0.20:** a versão nova muda como as datas das
+  planilhas são lidas; trocar sem testar em navegador arrisca errar um
+  dia em DDA, extrato e estoque.
+- **Janela na escuta de `etiquetas`:** a coleção tem um mês; a mudança
+  mexe com gravação offline no celular e pede teste no aparelho.
+- **Nomes de categorias e CNPJ no código:** já estão no histórico público
+  do repositório; tirá-los do arquivo atual não os apaga de lá.
 
 ---
 

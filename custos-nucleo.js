@@ -271,15 +271,120 @@
     return { lancamentos: lancamentos, problemas: problemas, ignorados: ignorados, linhasDeModelo: linhasDeModelo };
   }
 
-  // Id deterministico para gravar: reimportar nao duplica, nem com o
-  // arquivo renomeado. O numero do contador se REPETE entre arquivos,
-  // por isso entram o sequencial, a data, o valor e as duas contas — o
-  // nome do arquivo fica de fora de proposito.
+  // Id deterministico para gravar: reimportar a MESMA linha nao duplica,
+  // nem com o arquivo renomeado. O numero do contador se REPETE entre
+  // arquivos, por isso entram o sequencial, a data, o valor e as duas
+  // contas — o nome do arquivo fica de fora de proposito.
+  //
+  // Atencao ao limite disto: linha que o contador ALTERA (valor, data,
+  // conta) ou renumera ganha id novo, e a versao antiga continua no
+  // banco. Quem ve isso e' o compararImportacao, logo abaixo.
   function idImportado(l) {
     var base = [l.numero, l.sequencial, l.data, l.valorCentavos, l.contaDebito, l.contaCredito].join('|');
     var h = 5381;
     for (var i = 0; i < base.length; i++) h = ((h * 33) ^ base.charCodeAt(i)) >>> 0;
     return 'imp_' + l.mes + '_' + h.toString(36) + '_' + String(l.valorCentavos);
+  }
+
+  /* ============================================================
+     2b. Reimportacao: o que saiu ou mudou nas planilhas
+
+     A importacao grava por id e nunca apagava nada. Reimportar o mes
+     depois de o contador corrigir uma linha deixava as DUAS versoes no
+     banco — custo contado em dobro, com a tela dizendo "nada duplica"
+     (auditoria de 11/11/2026). Aqui se compara o que ja' esta' gravado
+     no mes com o lote que acabou de ser lido.
+     ============================================================ */
+
+  // existentes: os importados ja' gravados no mes ({ id, arquivo, data,
+  //   valorCentavos, contaDebito, contaCredito, historico, grupoCusto }).
+  // lote: os lancamentos lidos agora (lerLayoutContador/juntarLeituras).
+  //
+  // Devolve:
+  //   iguais  — quantos existentes continuam no lote (so' atualizados);
+  //   novos   — lancamentos do lote que ainda nao estavam gravados;
+  //   sumidos — existentes que vieram de um arquivo que ESTA' no lote
+  //             (mesmo nome) e nao estao mais nele: o contador alterou
+  //             ou tirou a linha. Sao os que a tela oferece apagar;
+  //   outros  — existentes de arquivos que NAO estao no lote
+  //             ([{ arquivo, qtd }]). Sem o arquivo na mao nao se afirma
+  //             nada: importar so' o banco X nao pode condenar o banco Y.
+  //             A tela so' avisa;
+  //   herdar  — [{ de, para, grupoCusto }]: sumido classificado A MAO
+  //             cujo substituto e' obvio (mesmo arquivo, data, contas e
+  //             historico, um de cada lado). Na duvida, nao herda.
+  function compararImportacao(existentes, lote) {
+    var noLote = Object.create(null), arquivosDoLote = Object.create(null);
+    var chaveArq = function (nome) { return App.normalizarTexto(nome || ''); };
+    (lote || []).forEach(function (l) {
+      noLote[idImportado(l)] = true;
+      if (l.arquivo) arquivosDoLote[chaveArq(l.arquivo)] = true;
+    });
+    var gravados = Object.create(null);
+    var iguais = 0, sumidos = [], sumidosCentavos = 0, outrosQtd = 0;
+    var porArquivo = Object.create(null);
+    (existentes || []).forEach(function (e) {
+      gravados[e.id] = true;
+      if (noLote[e.id]) { iguais++; return; }
+      if (e.arquivo && arquivosDoLote[chaveArq(e.arquivo)]) {
+        sumidos.push(e);
+        sumidosCentavos += e.valorCentavos || 0;
+      } else {
+        var nome = e.arquivo || '(arquivo não registrado)';
+        porArquivo[nome] = (porArquivo[nome] || 0) + 1;
+        outrosQtd++;
+      }
+    });
+    var novos = (lote || []).filter(function (l) { return !gravados[idImportado(l)]; });
+
+    // Substituto obvio: a mesma linha com valor corrigido ou renumerada.
+    var chaveLinha = function (x) {
+      return [chaveArq(x.arquivo), x.data, x.contaDebito, x.contaCredito, App.normalizarTexto(x.historico || '')].join('|');
+    };
+    var sumidosPorChave = Object.create(null), novosPorChave = Object.create(null);
+    sumidos.forEach(function (e) { var k = chaveLinha(e); (sumidosPorChave[k] = sumidosPorChave[k] || []).push(e); });
+    novos.forEach(function (l) { var k = chaveLinha(l); (novosPorChave[k] = novosPorChave[k] || []).push(l); });
+    var herdar = [];
+    Object.keys(sumidosPorChave).forEach(function (k) {
+      var s = sumidosPorChave[k], n = novosPorChave[k];
+      if (s.length !== 1 || !n || n.length !== 1) return;
+      if (s[0].grupoCusto && GRUPOS[s[0].grupoCusto]) herdar.push({ de: s[0].id, para: idImportado(n[0]), grupoCusto: s[0].grupoCusto });
+    });
+
+    return {
+      iguais: iguais,
+      novos: novos,
+      sumidos: sumidos,
+      sumidosCentavos: sumidosCentavos,
+      outros: Object.keys(porArquivo).sort().map(function (a) { return { arquivo: a, qtd: porArquivo[a] }; }),
+      outrosQtd: outrosQtd,
+      herdar: herdar
+    };
+  }
+
+  /* ============================================================
+     2c. Regras da configuracao (config/custos)
+
+     A lista e' alterada DENTRO de uma transacao, a partir do que esta'
+     no banco naquele instante — duas maquinas criando regra nao apagam
+     a regra uma da outra. Por isso as duas operacoes sao funcoes puras
+     que recebem a lista atual e devolvem a nova.
+     ============================================================ */
+
+  // Uma regra por texto (sem caixa e sem acento): a nova substitui a
+  // que tinha o mesmo texto e vai para o fim.
+  function adicionarRegra(regras, contem, grupo) {
+    var alvo = App.normalizarTexto(contem || '');
+    var lista = (regras || []).filter(function (r) { return App.normalizarTexto(r.contem || '') !== alvo; });
+    lista.push({ contem: contem, grupo: grupo });
+    return lista;
+  }
+
+  // Pelo TEXTO, nunca pela posicao: a posicao que a tela mostra pode
+  // nao ser mais a do banco.
+  function removerRegra(regras, contem) {
+    var alvo = App.normalizarTexto(contem || '');
+    return (regras || []).filter(function (r) { return App.normalizarTexto(r.contem || '') !== alvo; });
   }
 
   /* ============================================================
@@ -419,6 +524,9 @@
     lerLayoutContador: lerLayoutContador,
     juntarLeituras: juntarLeituras,
     idImportado: idImportado,
+    compararImportacao: compararImportacao,
+    adicionarRegra: adicionarRegra,
+    removerRegra: removerRegra,
     ehCaixa: ehCaixa,
     natureza: natureza,
     classificar: classificar,

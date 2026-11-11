@@ -37,10 +37,17 @@
   // bolso aparece primeiro), com tudo que da' para OBSERVAR:
   // % de ST efetivo (soma ST / soma produtos, em centavos inteiros),
   // contagem por classe de CFOP, fornecedores e produtos envolvidos.
-  function agruparFiscal(docsItens) {
+  //
+  // notasPorChave (opcional): o estado das notas (colecao "notas"). Os
+  // itensNotas nao sabem se a nota foi CANCELADA — sem este mapa, valor
+  // e ST de nota cancelada entravam no "observado" e podiam acusar
+  // divergencia que nao existe.
+  function agruparFiscal(docsItens, notasPorChave) {
     var grupos = Object.create(null);
 
     (docsItens || []).forEach(function (doc) {
+      var nota = doc && notasPorChave ? notasPorChave[doc.chave] : null;
+      if (!doc || (nota && (nota.status || 'ativa') === 'cancelada')) return;
       // 'PE (Pernambuco)' -> 'PE'; chave fora do padrao -> '??' (o
       // grupo aparece, mas a tela nao deixa cadastrar em cima dele).
       var ufRotulo = App.ufDaChave(doc.chave);
@@ -129,10 +136,22 @@
     return !!(grupo && ID_CADASTRAVEL.test(grupo.id));
   }
 
+  // O "% ST" digitado no cadastro: { vazio } (sem percentual e' valido),
+  // { valor } ou { invalido }. Antes "abc" virava null e apagava calado
+  // o percentual salvo. Aceita "18", "18,5", "18,5%"; negativo nao.
+  function percentualDigitado(texto) {
+    var t = String(texto == null ? '' : texto).trim();
+    if (t === '') return { vazio: true };
+    if (!/^\d+([.,]\d+)?\s*%?$/.test(t)) return { invalido: true };
+    var v = App.parseNumeroBR(t.replace(/\s*%$/, '').replace('.', ','));
+    return (v == null || !isFinite(v)) ? { invalido: true } : { valor: v };
+  }
+
   var FiscalNucleo = {
     agruparFiscal: agruparFiscal,
     divergenciaFiscal: divergenciaFiscal,
-    grupoCadastravel: grupoCadastravel
+    grupoCadastravel: grupoCadastravel,
+    percentualDigitado: percentualDigitado
   };
 
   global.FiscalNucleo = FiscalNucleo;

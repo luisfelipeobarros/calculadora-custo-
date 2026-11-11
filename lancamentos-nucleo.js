@@ -334,13 +334,20 @@
   // resposta devolve os próximos, para gravar de volta na config.
   // Lançamento pendente aqui é ERRO de quem chamou: a exportação tem
   // que barrar antes (a numeração não pode queimar número com lixo).
+  // A ordem dentro do arquivo: pela data (sort estavel — empate fica
+  // na ordem recebida). Uma funcao so' para as linhas e para o registro
+  // da exportacao: os dois TEM de sair na mesma ordem.
+  function ordenarParaExportar(lista) {
+    return (lista || []).slice().sort(function (a, b) {
+      return String(a.data || '').localeCompare(String(b.data || ''));
+    });
+  }
+
   function linhasExportacao(lista, cont) {
     var numero = cont.lancamento;
     var linha = cont.linha;
     var linhas = [];
-    var ordenada = (lista || []).slice().sort(function (a, b) {
-      return String(a.data || '').localeCompare(String(b.data || ''));
-    });
+    var ordenada = ordenarParaExportar(lista);
     ordenada.forEach(function (l) {
       if (pendente(l)) throw new Error('Lançamento pendente na exportação (sem data, valor ou partida): ' + (l.historico || l.id || ''));
       var num = String(numero).padStart(8, '0');
@@ -374,6 +381,124 @@
     return { linhas: linhas, proximoLancamento: numero, proximaLinha: linha };
   }
 
+  /* ============================================================
+     6. Registro da exportação — o que permite "baixar de novo"
+
+     A numeração avança (e não volta) ANTES de o navegador baixar os
+     arquivos. Se um download falha ou é bloqueado, sem registro só
+     restava voltar os contadores à mão e exportar de novo. Por isso
+     cada exportação deixa gravado o que saiu: o intervalo usado e uma
+     cópia mínima de cada lançamento, na ordem — dá para regerar os
+     MESMOS arquivos, com a MESMA numeração, sem tocar nos contadores
+     (auditoria de 11/11/2026).
+     ============================================================ */
+
+  // Tudo o que a exportação de um mês produz, de uma vez: os arquivos
+  // (um por banco, em ordem alfabética do nome — a numeração tem de
+  // ser reproduzível), os próximos contadores e o REGISTRO do que saiu.
+  // grupos: { bancoId: [lançamentos] } (agruparPorArquivo).
+  function montarExportacao(grupos, bancosPorId, mes, cont) {
+    var b = bancosPorId || {};
+    var atual = { lancamento: cont.lancamento, linha: cont.linha };
+    var arquivos = [], doRegistro = [], qtd = 0, totalLinhas = 0;
+    Object.keys(grupos || {}).sort(function (x, y) {
+      return String((b[x] || {}).nome || x).localeCompare(String((b[y] || {}).nome || y), 'pt-BR');
+    }).forEach(function (id) {
+      var nome = nomeArquivo(b[id] || {}, mes);
+      var r = linhasExportacao(grupos[id], atual);
+      arquivos.push({ nome: nome, linhas: r.linhas });
+      // Cópia mínima: [id, data, valor, conta D, conta C, histórico].
+      doRegistro.push({ nome: nome, itens: ordenarParaExportar(grupos[id]).map(function (l) {
+        return [l.id || null, l.data, l.valor, l.contaDebito, l.contaCredito, String(l.historico || '')];
+      }) });
+      qtd += grupos[id].length;
+      totalLinhas += r.linhas.length;
+      atual = { lancamento: r.proximoLancamento, linha: r.proximaLinha };
+    });
+    return {
+      arquivos: arquivos,
+      proximoLancamento: atual.lancamento,
+      proximaLinha: atual.linha,
+      totalLinhas: totalLinhas,
+      registro: {
+        mes: mes, qtd: qtd, linhas: totalLinhas,
+        lancDe: cont.lancamento, lancAte: atual.lancamento - 1,
+        linhaDe: cont.linha, linhaAte: atual.linha - 1,
+        arquivos: doRegistro
+      }
+    };
+  }
+
+  // O resumo que vai em mesesExportados[mes] (config/contadoresExportacao):
+  // pequeno de propósito — esse documento é lido a cada exportação.
+  function resumoDoRegistro(registro, hoje) {
+    return {
+      em: hoje, linhas: registro.linhas, qtd: registro.qtd,
+      lancDe: registro.lancDe, lancAte: registro.lancAte,
+      linhaDe: registro.linhaDe, linhaAte: registro.linhaAte
+    };
+  }
+
+  // O documento do registro (config/exportacao_<mes>). A cópia vai como
+  // TEXTO (o Firestore não aceita lista dentro de lista). Mês grande
+  // demais para caber num documento (limite de 1 MB) NÃO trava a
+  // exportação: o registro sai só com o intervalo e a tela avisa que
+  // aquele mês não tem "baixar de novo".
+  var LIMITE_REGISTRO = 700000; // caracteres; folga para acento (UTF-8)
+  function docDoRegistro(registro, hoje) {
+    var json = JSON.stringify(registro);
+    var doc = resumoDoRegistro(registro, hoje);
+    doc.mes = registro.mes;
+    doc.registroJson = json.length <= LIMITE_REGISTRO ? json : null;
+    return doc;
+  }
+
+  // O caminho de volta. Devolve null quando o documento não tem a cópia
+  // (exportação antiga, mês grande demais, texto corrompido).
+  function registroDoDoc(dados) {
+    if (!dados || !dados.registroJson) return null;
+    var r;
+    try { r = JSON.parse(dados.registroJson); } catch (e) { return null; }
+    if (!r || !Array.isArray(r.arquivos) || !(r.lancDe >= 1) || !(r.linhaDe >= 1)) return null;
+    return r;
+  }
+
+  // Os MESMOS arquivos da exportação, a partir do registro: mesma
+  // ordem, mesma numeração. Não lê os lançamentos de hoje — o que foi
+  // editado ou excluído depois NÃO muda o que o contador recebeu.
+  function arquivosDoRegistro(registro) {
+    var cont = { lancamento: registro.lancDe, linha: registro.linhaDe };
+    return (registro.arquivos || []).map(function (a) {
+      var r = linhasExportacao((a.itens || []).map(function (it) {
+        return { id: it[0], data: it[1], valor: it[2], contaDebito: it[3], contaCredito: it[4], historico: it[5] };
+      }), cont);
+      cont = { lancamento: r.proximoLancamento, linha: r.proximaLinha };
+      return { nome: a.nome, linhas: r.linhas };
+    });
+  }
+
+  // O que mudou no mês DEPOIS da exportação: lançamentos novos (não
+  // estão no arquivo do contador), excluídos e alterados (data, valor,
+  // contas ou histórico). Só conta — quem decide o que fazer é a pessoa.
+  function diferencasDaExportacao(registro, atuais) {
+    var exportados = Object.create(null);
+    (registro.arquivos || []).forEach(function (a) {
+      (a.itens || []).forEach(function (it) { if (it[0]) exportados[it[0]] = it; });
+    });
+    var d = { novos: 0, removidos: 0, alterados: 0 };
+    var vistos = Object.create(null);
+    (atuais || []).forEach(function (l) {
+      var it = exportados[l.id];
+      if (!it) { d.novos++; return; }
+      vistos[l.id] = true;
+      if (it[1] !== l.data || App.emCentavos(it[2]) !== App.emCentavos(l.valor) ||
+          it[3] !== l.contaDebito || it[4] !== l.contaCredito ||
+          String(it[5] || '').toUpperCase() !== String(l.historico || '').toUpperCase()) d.alterados++;
+    });
+    Object.keys(exportados).forEach(function (id) { if (!vistos[id]) d.removidos++; });
+    return d;
+  }
+
   var LancamentosNucleo = {
     EMPRESA_EXPORTACAO: EMPRESA_EXPORTACAO,
     SEED_BANCOS: SEED_BANCOS,
@@ -387,7 +512,13 @@
     bancoDoArquivo: bancoDoArquivo,
     agruparPorArquivo: agruparPorArquivo,
     nomeArquivo: nomeArquivo,
-    linhasExportacao: linhasExportacao
+    linhasExportacao: linhasExportacao,
+    montarExportacao: montarExportacao,
+    resumoDoRegistro: resumoDoRegistro,
+    docDoRegistro: docDoRegistro,
+    registroDoDoc: registroDoDoc,
+    arquivosDoRegistro: arquivosDoRegistro,
+    diferencasDaExportacao: diferencasDaExportacao
   };
 
   global.LancamentosNucleo = LancamentosNucleo;

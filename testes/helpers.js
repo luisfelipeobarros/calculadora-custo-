@@ -70,6 +70,13 @@ conferir('parseNumeroBR duas virgulas = milhar', App.parseNumeroBR('1,234,567'),
 // formatam as planilhas — precos quase sempre trazem centavos
 // ("1.234,56"), que caem no ramo correto. Ver README.
 conferir('parseNumeroBR ponto sem virgula = decimal', App.parseNumeroBR('1.234'), 1.234);
+// Auditoria de 11/11/2026: dois pontos sem virgula so' pode ser milhar
+// (devolvia 1,234), e o sinal a' direita ou antes do R$ era lido errado.
+conferir('parseNumeroBR dois pontos = milhar', App.parseNumeroBR('1.234.567'), 1234567);
+conferir('parseNumeroBR negativo a direita', App.parseNumeroBR('1.234,56-'), -1234.56);
+conferir('parseNumeroBR negativo antes do R$', App.parseNumeroBR('-R$ 5,00'), -5);
+conferir('parseNumeroBR negativo comum nao muda', App.parseNumeroBR('-12,5'), -12.5);
+conferir('parseNumeroBR so o sinal e nulo', App.parseNumeroBR('-'), null);
 conferir('parseNumeroBR vazio', App.parseNumeroBR(''), null);
 conferir('parseNumeroBR nulo', App.parseNumeroBR(null), null);
 conferir('parseNumeroBR ja numero', App.parseNumeroBR(9.9), 9.9);
@@ -809,6 +816,35 @@ assincrono('gravarCarimbado: grava com carimbo e se ajusta as regras que estiver
     App.itensQueFaltam(info, com, { B: { n: 3, em: 0 } }, { agora: 9e9, corte: '2026-06-01' }), ['F']);
   conferir('itensQueFaltam: nada falta quando todas tem itens',
     App.itensQueFaltam(info, new Set(['A', 'B', 'E', 'F']), {}, { agora: 1 }), []);
+})();
+
+// --- Vendas no Firestore (colecao `vendas`, um documento por ano) ---
+(function () {
+  const r = App.vendasDosDocs([
+    { id: '2026', dados: { linhasJson: JSON.stringify([[1, ' Karina ', 'Pisos', 10, 1000.5, 150], [13, 'X', 'Y', 1, 1, 1], 'lixo']),
+      atualizadoEm: { toMillis: () => 5000 } } },
+    { id: '2025', dados: { linhasJson: JSON.stringify([[12, 'Outros', '', null, '200', null]]), atualizadoEm: { toMillis: () => 3000 } } },
+    { id: 'abc', dados: { linhasJson: '[[1,"A","B",1,1,1]]' } },
+    { id: '2024', dados: { linhasJson: '{quebrado' } }
+  ]);
+  conferir('vendasDosDocs: linhas validas no formato das telas', r.linhas, [
+    { ano: 2026, mes: 1, fornecedor: 'Karina', categoria: 'Pisos', quantidade: 10, faturamento: 1000.5, lucro: 150 },
+    { ano: 2025, mes: 12, fornecedor: 'Outros', categoria: '', quantidade: 0, faturamento: 200, lucro: 0 }
+  ]);
+  conferir('vendasDosDocs: mes invalido, linha lixo e documento quebrado sao CONTADOS, nunca somados', r.descartadas, 3);
+  conferir('vendasDosDocs: a data e a da gravacao mais recente', r.atualizadoEm, 5000);
+  conferir('vendasDosDocs: sem documentos, sem linhas', App.vendasDosDocs([]).linhas, []);
+})();
+
+// O quadro de vencimentos aceita a "janela de hoje" de quem chama: o que
+// venceu no fim de semana nao pode sair ATRASADO aqui e A VENCER na tela.
+(function () {
+  const ontem = App.somarDias(App.hojeISO(), -1);
+  const dup = [{ parcela: '1', vencimento: ontem, valor: 10, pago: false }];
+  conferir('tabelaVencimentos: sem a opcao, vencido ontem e ATRASADO',
+    /ATRASADO/.test(App.tabelaVencimentos(dup, {})), true);
+  conferir('tabelaVencimentos: com inicioHoje recuado, o mesmo titulo e A VENCER',
+    /A VENCER/.test(App.tabelaVencimentos(dup, { inicioHoje: ontem })), true);
 })();
 
 // E o confirmar nao pode voltar a aceitar inputDate por engano.

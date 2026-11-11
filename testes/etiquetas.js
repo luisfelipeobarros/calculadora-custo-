@@ -232,7 +232,16 @@ eq('dica acha a argamassa em transito', N.dicaDeFaturamento({ produto: 'ARGAMASS
     { codigo: '102', nome: 'AMOSTRA', ean: '7899000000028', classe: 'Amostras' }
   ];
   const doc = N.montarCatalogo(estoque, '2026-10-15');
-  eq('catalogo: so vendaveis, compacto, com data e estoque', [doc.qtd, doc.porCodigo['100'], doc.porCodigo['102'], doc.geradoEm], [2, { n: 'PISO INTERNO 60X60', e: '7899000000011', q: null }, undefined, '2026-10-15']);
+  const mapaDoc = N.mapaDoCatalogo(doc);
+  eq('catalogo: so vendaveis, compacto, com data e estoque', [doc.qtd, mapaDoc['100'], mapaDoc['102'], doc.geradoEm], [2, { n: 'PISO INTERNO 60X60', e: '7899000000011', q: null }, undefined, '2026-10-15']);
+  // O mapa vai como TEXTO (um campo so'): como mapa de verdade, cada
+  // produto gerava entradas de indice e o documento tinha teto de produtos.
+  eq('catalogo gravado como texto JSON, sem o mapa solto', [typeof doc.porCodigoJson, doc.porCodigo], ['string', undefined]);
+  eq('catalogo no formato ANTIGO (mapa) continua sendo lido',
+    N.expandirCatalogo({ porCodigo: { '7': { n: 'ANTIGO', e: '789', q: 3 } }, geradoEm: '2026-10-01' }).porEan['789'],
+    { codigo: '7', nome: 'ANTIGO', qtd: 3 });
+  eq('texto corrompido nao derruba: cai no mapa antigo, ou vazio',
+    [N.mapaDoCatalogo({ porCodigoJson: '{quebrado', porCodigo: { a: 1 } }), N.mapaDoCatalogo({ porCodigoJson: '[1]' }), N.mapaDoCatalogo(null)], [{ a: 1 }, {}, {}]);
   const cat = N.expandirCatalogo(doc);
   eq('catalogo expandido: indice por barras so de quem tem', [Object.keys(cat.porEan), cat.porEan['7899000000011'].codigo], [['7899000000011'], '100']);
   eq('produtoDoCatalogo: acha pelo codigo (com espaco), nao acha o que nao existe',

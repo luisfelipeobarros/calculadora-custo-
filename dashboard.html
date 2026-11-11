@@ -262,7 +262,7 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt" crossorigin="anonymous"></script>
 <script>
 (() => {
   'use strict';
@@ -679,6 +679,7 @@
 
   // ═══ ESTADO E RENDER ══════════════════════════════════════════
   let linhasTodas = [];
+  let fonteVendas = { banco: false }; // de onde vieram as vendas (rodapé)
   let anoSel = null, mesSel = 0, fornSel = '', catSel = '';
   let ordem = { categoria: { campo: 'faturamento', desc: true },
                 fornecedor: { campo: 'faturamento', desc: true } };
@@ -1326,17 +1327,35 @@
     $('conteudoDash').style.display = 'none';
     $('rodapeDash').style.display = 'none';
     try{
-      const resp = await fetch(URL_GVIZ);
-      if(!resp.ok) throw new Error('HTTP ' + resp.status);
-      const texto = await resp.text();
-      linhasTodas = canonizarNomes(linhasDaResposta(parseGvizTexto(texto)));
+      // As vendas vêm do BANCO (coleção `vendas`, gravada pelo Apps
+      // Script da planilha — ver App.lerVendas), atrás do login de
+      // verdade. Enquanto essa coleção não existir, cai na leitura da
+      // planilha, como sempre foi; com ela no ar, a planilha pode voltar
+      // a ser privada (11/11/2026: pública, ela deixava o faturamento
+      // legível para quem tivesse o endereço, com ou sem login).
+      const doBanco = vxp.db ? await window.App.lerVendas(vxp.db) : null;
+      let linhas;
+      if(doBanco){
+        linhas = doBanco.linhas;
+        fonteVendas = { banco: true, em: doBanco.atualizadoEm, descartadas: doBanco.descartadas };
+      } else {
+        const resp = await fetch(URL_GVIZ);
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
+        const texto = await resp.text();
+        linhas = linhasDaResposta(parseGvizTexto(texto));
+        fonteVendas = { banco: false };
+      }
+      linhasTodas = canonizarNomes(linhas);
       if(!linhasTodas.length) throw new Error('A aba "dados" veio vazia.');
       montarFiltros();
       $('estadoCarga').style.display = 'none';
       $('conteudoDash').style.display = '';
       $('rodapeDash').style.display = '';
-      $('rodapeInfo').textContent = 'Dados atualizados da planilha em ' +
-        new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) + '.';
+      const quando = (ms) => new Date(ms).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      $('rodapeInfo').textContent = fonteVendas.banco
+        ? 'Vendas do banco' + (fonteVendas.em ? ', enviadas pela planilha em ' + quando(fonteVendas.em) : '') +
+          (fonteVendas.descartadas ? ' · ' + fonteVendas.descartadas + ' linha(s) ilegível(is) ficaram de fora' : '') + '.'
+        : 'Dados lidos da planilha em ' + quando(Date.now()) + '.';
       renderTudo();
     }catch(e){
       console.error(e);
@@ -1355,11 +1374,15 @@
   // entrar. O que protege compras e pagamentos são as regras do
   // Firestore; o portão esconde também as vendas da interface —
   // quem tem o link não vê nada sem conta.
+  // [endereço, integridade]. O hash (SRI) faz o navegador recusar a
+  // biblioteca se a CDN entregar um arquivo diferente do conferido em
+  // 11/11/2026 — ela roda com a sessão logada. Ao trocar de versão,
+  // troque o hash junto (o README diz como calcular).
   const VXP_SDK = [
-    'https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js',
-    'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js',
-    'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js',
-    'app-shared.js?v=31'
+    ['https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js', 'sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1'],
+    ['https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js', 'sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj'],
+    ['https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js', 'sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3'],
+    ['app-shared.js?v=32', null]
   ];
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
@@ -1368,9 +1391,10 @@
 
   function vxpCarregarSdk(){
     if(vxpSdkPromise) return vxpSdkPromise;
-    vxpSdkPromise = VXP_SDK.reduce((cadeia, src) => cadeia.then(() => new Promise((ok, falha) => {
+    vxpSdkPromise = VXP_SDK.reduce((cadeia, [src, sri]) => cadeia.then(() => new Promise((ok, falha) => {
       if(vxpSdkCarregado.has(src)) return ok();
       const s = document.createElement('script');
+      if(sri){ s.integrity = sri; s.crossOrigin = 'anonymous'; }
       s.src = src;
       s.onload = () => { vxpSdkCarregado.add(src); ok(); };
       s.onerror = () => { s.remove(); falha(new Error('Falha ao carregar ' + src)); };
@@ -1396,6 +1420,10 @@
         '<input id="loginUser" autocomplete="username" required>' +
         '<label class="sub-periodo" for="loginSenha" style="text-align:left; margin:0;">Senha</label>' +
         '<input id="loginSenha" type="password" autocomplete="current-password" required>' +
+        // Como nos outros apps: desmarcado, a sessão morre ao fechar o
+        // navegador (celular ou computador emprestado).
+        '<label class="sub-periodo" for="loginLembrar" style="text-align:left; margin:0; display:flex; align-items:center; gap:8px; cursor:pointer;">' +
+        '<input id="loginLembrar" type="checkbox" checked style="width:16px; height:16px;"> Manter conectado neste aparelho</label>' +
         '<button type="submit">Entrar</button></form>';
       const u = $('loginUser');
       if(u) u.focus();
@@ -1423,9 +1451,11 @@
       .catch((e) => renderLogin('erro', (e && e.message) || String(e)));
   }
 
-  function entrar(usuario, senha){
+  function entrar(usuario, senha, lembrar){
     renderLogin('carregando');
-    vxp.auth.signInWithEmailAndPassword(window.App.usuarioParaEmail(usuario), senha)
+    const P = window.firebase.auth.Auth.Persistence;
+    vxp.auth.setPersistence(lembrar === false ? P.SESSION : P.LOCAL)
+      .then(() => vxp.auth.signInWithEmailAndPassword(window.App.usuarioParaEmail(usuario), senha))
       .then(aoLogar)
       .catch((e) => renderLogin('form', window.App.mensagemErroAuth(e)));
   }
@@ -1582,7 +1612,7 @@
     $('loginConteudo').addEventListener('submit', function(e){
       if(e.target && e.target.id === 'loginForm'){
         e.preventDefault();
-        entrar($('loginUser').value, $('loginSenha').value);
+        entrar($('loginUser').value, $('loginSenha').value, $('loginLembrar') ? $('loginLembrar').checked : true);
       }
     });
     $('loginConteudo').addEventListener('click', function(e){

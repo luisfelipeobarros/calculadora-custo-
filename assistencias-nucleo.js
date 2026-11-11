@@ -225,6 +225,47 @@
       outros || []);
   }
 
+  // Fotos FORA do documento principal (11/11/2026). A lista escuta a
+  // colecao inteira, e com as fotos dentro de cada ficha (ate' ~700 KB
+  // em base64) todo celular baixava TODAS as fotos de TODAS as fichas
+  // a cada abertura. Agora os anexos moram em `assistenciasFotos/{id}`
+  // (mesmo id), lidos so' quando a ficha abre; no documento principal
+  // ficam a marca e os contadores:
+  //   { fotosFora: true, fotosQtd, termoQtd, fotosVersao }
+  // Ficha antiga (anexos ainda no campo `fotos`) continua valendo e
+  // migra sozinha na proxima vez que alguem a salvar.
+  //
+  // Contagem para a lista e a planilha, sem precisar das imagens. Os
+  // dois lados SOMAM: uma aba antiga do app pode ter gravado foto nova
+  // no campo `fotos` de uma ficha que ja' tinha anexos fora.
+  function contagemAnexos(a) {
+    var dentro = separarFotos(a && a.fotos);
+    var fora = !!(a && a.fotosFora === true);
+    return {
+      fotos: dentro.problema.length + (fora ? (Number(a.fotosQtd) || 0) : 0),
+      termo: dentro.termo.length + (fora ? (Number(a.termoQtd) || 0) : 0)
+    };
+  }
+  // Junta os anexos de fora com os de dentro sem repetir imagem (a
+  // mesma foto nos dois lados aparece uma vez). Devolve no formato do
+  // separarFotos, pronto para a ficha.
+  function unirAnexos(fotosFora, fotosDentro) {
+    var a = separarFotos(fotosFora), b = separarFotos(fotosDentro);
+    var semRepetir = function (x, y) {
+      var visto = Object.create(null);
+      return x.concat(y).filter(function (img) {
+        if (visto[img]) return false;
+        visto[img] = true;
+        return true;
+      });
+    };
+    return {
+      problema: semRepetir(a.problema, b.problema),
+      termo: semRepetir(a.termo, b.termo),
+      outros: a.outros.concat(b.outros)
+    };
+  }
+
   // Dinheiro digitado a brasileira: "25.000" sem virgula e' vinte e
   // cinco mil. A leitura errada (parseNumeroBR) corrompia valores
   // >= 1000 a cada salvamento da ficha. A regra canonica mora no
@@ -233,7 +274,7 @@
 
   function linhasExcel(lista) {
     return (lista || []).map(function (a) {
-      var fotos = separarFotos(a.fotos);
+      var anexos = contagemAnexos(a);
       // Varios produtos numa celula so', separados por "; " (uma linha
       // por assistencia, como a planilha sempre foi).
       var itens = produtosDaFicha(a);
@@ -267,8 +308,8 @@
           ? App.centavos((a.custoLoja || 0) - (a.ressarcimentoFabrica || 0)) : '',
         'Resolução': a.dataResolucao || '',
         'Responsável': a.responsavel || '',
-        'Fotos': fotos.problema.length,
-        'Termo de acordo': fotos.termo.length ? 'sim' : ''
+        'Fotos': anexos.fotos,
+        'Termo de acordo': anexos.termo ? 'sim' : ''
       };
     });
   }
@@ -391,6 +432,8 @@
     sequenciaDuplicada: sequenciaDuplicada,
     separarFotos: separarFotos,
     juntarFotos: juntarFotos,
+    contagemAnexos: contagemAnexos,
+    unirAnexos: unirAnexos,
     parseDinheiroBR: parseDinheiroBR,
     linhasExcel: linhasExcel,
     itensDaOrdem: itensDaOrdem,

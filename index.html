@@ -598,6 +598,7 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:10px 0;">
         <button class="btn" id="iniciarLoteBtn">🏪 Iniciar pesquisa</button>
         <button class="btn secondary" id="pararLoteBtn" style="display:none;">⏸ Parar</button>
+        <button class="btn" id="continuarLoteBtn" style="display:none;">▶ Continuar</button>
         <button class="btn secondary" id="salvarPesqLoteBtn" style="display:none;">💾 Salvar estas pesquisas</button>
         <button class="btn secondary" id="refazerFalhasBtn" style="display:none;">🔍 Refazer as sem resultado (precisão máxima)</button>
         <span id="pesqLoteMsg" style="font-family:var(--font-mono); font-size:12px; color:var(--ink-soft);"></span>
@@ -676,8 +677,11 @@ Tupan</textarea>
     </div>
 
     <div class="card" style="max-width:1400px;">
-      <h2>Comparações salvas</h2>
-      <div id="concorrentesHistLista"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+        <h2 style="margin:0;">Comparações salvas</h2>
+        <button type="button" class="btn secondary mini" id="recarregarConcorrentesHistBtn" title="Relê do banco as 50 comparações mais recentes (o que foi salvo em outro computador)">⟳ Recarregar</button>
+      </div>
+      <div id="concorrentesHistLista" style="margin-top:10px;"></div>
       <div class="empty-note" id="concorrentesHistMsg" style="display:block;">Carregando...</div>
     </div>
   </div>
@@ -693,6 +697,7 @@ Tupan</textarea>
       <div class="actions">
         <button class="btn" id="firebaseSaveBtn">Conectar</button>
         <button class="btn secondary" id="firebaseClearBtn">Desconectar</button>
+        <button class="btn secondary" id="firebasePadraoBtn" title="Desfaz o Desconectar: volta à configuração que vem com o app">↺ Usar configuração padrão</button>
       </div>
       <div class="empty-note" id="firebaseMsg" style="margin-top:8px;"></div>
     </div>
@@ -707,6 +712,7 @@ Tupan</textarea>
       <div class="actions">
         <button class="btn" id="geminiSaveBtn">Conectar</button>
         <button class="btn secondary" id="geminiClearBtn">Desconectar</button>
+        <button class="btn secondary" id="geminiPadraoBtn" title="Desfaz o Desconectar: volta à chave que vem com o app">↺ Usar chave padrão</button>
       </div>
       <div class="empty-note" id="geminiMsg" style="margin-top:8px;"></div>
     </div>
@@ -991,21 +997,21 @@ Tupan</textarea>
   </div>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="app-shared.js?v=31"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" integrity="sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
+<script src="app-shared.js?v=32"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
-<script src="calculo-nucleo.js?v=8"></script>
+<script src="calculo-nucleo.js?v=9"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
-<script src="painel-nucleo.js?v=5"></script>
+<script src="painel-nucleo.js?v=6"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
-<script src="fiscal-nucleo.js?v=3"></script>
+<script src="fiscal-nucleo.js?v=4"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
-<script src="concorrentes-nucleo.js?v=5"></script>
-<script src="radar-nucleo.js?v=10"></script>
+<script src="concorrentes-nucleo.js?v=6"></script>
+<script src="radar-nucleo.js?v=11"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1811,8 +1817,15 @@ Tupan</textarea>
   }
 
   function preencherForm(data){
+    // Campo que a ficha nao tem fica VAZIO. Antes ele era pulado e o
+    // formulario seguia com o valor do produto carregado antes: ficha
+    // antiga (de antes do campo "codigo") herdava o codigo interno e o
+    // do fornecedor de outro produto, e salvar gravava isso nela.
+    // Vazio, e nao o padrao de "Novo calculo" (IPI 0,65 / avarias 1,5):
+    // a lista de Produtos salvos le campo ausente como zero
+    // (dadosParaCalculo), e a margem aqui tem de ser a mesma de la'.
     fields.forEach(id=>{
-      if(data[id] !== undefined) $(id).value = data[id];
+      $(id).value = (data[id] !== undefined && data[id] !== null) ? data[id] : '';
     });
     Object.keys(toggles).forEach(key=>{
       toggles[key] = data.toggles && data.toggles[key] ? 1 : 0;
@@ -1924,10 +1937,21 @@ Tupan</textarea>
     const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
     const key = chaveDoProduto(nomeDestino);
     let dados = null;
-    try{
-      const res = await storageGet(key);
-      if(res && res.value) dados = JSON.parse(res.value);
-    }catch(e){ /* sem registro anterior (ou corrompido): cria um novo abaixo */ }
+    // A LEITURA fica fora do try: erro de rede/cota nao e' "produto
+    // novo". Antes o catch engolia a falha, a ficha era remontada com a
+    // configuracao do lote e gravada por cima — frete, ST, IPI e avarias
+    // do produto sumiam calados. Agora o erro sobe e nada e' gravado.
+    const res = await storageGet(key);
+    // A lista diz que o produto existe e a ficha nao veio: algo esta'
+    // errado (apagado em outra maquina, lista velha). Criar por cima
+    // seria o mesmo estrago — melhor parar e avisar.
+    if(salvo && !(res && res.value)){
+      throw new Error('a ficha de "' + nomeDestino + '" não pôde ser lida — recarregue os Produtos salvos e tente de novo');
+    }
+    if(res && res.value){
+      try{ dados = JSON.parse(res.value); }
+      catch(e){ /* registro corrompido (so' no armazenamento local): cria um novo abaixo */ }
+    }
     if(dados){
       dados.venda = String(r.precoVenda);
       // Produto salvo antes de existir campo de código ganha o código
@@ -2217,6 +2241,21 @@ Tupan</textarea>
       return;
     }
 
+    // Custo NF-e em branco (ou um valor negativo) nao da' erro na conta:
+    // a ficha sai com margem irreal, entra na "margem media" do
+    // fornecedor e vira referencia nas cotacoes. A regra mora no nucleo
+    // (Calculo.avisosDaFicha); aqui so' se pergunta.
+    const avisos = Calculo.avisosDaFicha(getFormValues());
+    if(avisos.length){
+      const ok = await App.confirmar({
+        titulo: 'Confira os valores antes de salvar',
+        mensagem: avisos.join('\n') + '\n\nCom isso a margem de "' + nome + '" não vai refletir a realidade. Salvar assim mesmo?',
+        confirmar: 'Salvar mesmo assim',
+        perigo: true
+      });
+      if(!ok){ $('custoNFe').focus(); return; }
+    }
+
     // A chave e' o proprio nome do produto. Salvar duas vezes o mesmo
     // nome substituia o registro anterior sem avisar — e o anterior
     // podia ter outro fornecedor, outro frete, outro preco.
@@ -2427,18 +2466,50 @@ Tupan</textarea>
     ev.target.value = '';
   });
 
+  let ultimoErroConexao = null; // o erro do ultimo teste, para o arranque poder mostra-lo
   async function testarConexaoFirebase(mostrarMsg){
     try{
       await firebaseListar();
+      ultimoErroConexao = null;
       if(mostrarMsg) $('firebaseMsg').textContent = '✓ Conectado com sucesso.';
       storageBackend = 'firebase';
       atualizarStatusArmazenamento();
       return true;
     }catch(e){
       console.error('Erro ao conectar ao Firebase:', e);
+      ultimoErroConexao = e;
       if(mostrarMsg) $('firebaseMsg').textContent = 'Não foi possível conectar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se colou o firebaseConfig certo e se publicou as regras do Firestore.';
-      rebaixarBackend();
+      // Mesma regra do falhaFirebase: com o banco CONFIGURADO, uma
+      // leitura que falha (rede, cota, regra) e' erro, nao motivo para
+      // trocar de armazenamento. Rebaixar aqui deixava a sessao inteira
+      // gravando no navegador com "salvo com sucesso" — e a lista vazia.
+      // O backend continua 'firebase': cada operacao falha alto ate' a
+      // conexao voltar.
+      if(firestoreDb){
+        storageBackend = 'firebase';
+        atualizarStatusArmazenamento();
+      } else {
+        rebaixarBackend();
+      }
       return false;
+    }
+  }
+
+  // Liga o app a uma configuracao do Firebase. `guardar` grava a escolha
+  // neste navegador; a configuracao padrao NAO e' guardada — ela vale
+  // justamente quando nao ha' nada gravado (getFirebaseConfigSalva).
+  async function conectarFirebaseCom(config, guardar){
+    $('firebaseMsg').textContent = 'Conectando...';
+    try{
+      await inicializarFirebase(config); // agora e' assincrona (aguarda o delete do app anterior)
+      if(guardar) setFirebaseConfigSalva(config);
+      storageBackend = 'firebase';
+      await testarConexaoFirebase(true);
+      await atualizarListaSalvos();
+    }catch(e){
+      console.error(e);
+      $('firebaseMsg').textContent = 'Erro ao inicializar: ' + (e && e.message ? e.message : 'erro desconhecido');
+      rebaixarBackend();
     }
   }
 
@@ -2450,29 +2521,39 @@ Tupan</textarea>
       $('firebaseMsg').textContent = 'Não consegui identificar apiKey/projectId/appId nesse texto. Confira se colou o bloco firebaseConfig completo.';
       return;
     }
-    $('firebaseMsg').textContent = 'Conectando...';
-    try{
-      await inicializarFirebase(config); // agora e' assincrona (aguarda o delete do app anterior)
-      setFirebaseConfigSalva(config);
-      storageBackend = 'firebase';
-      await testarConexaoFirebase(true);
-      await atualizarListaSalvos();
-    }catch(e){
-      console.error(e);
-      $('firebaseMsg').textContent = 'Erro ao inicializar: ' + (e && e.message ? e.message : 'erro desconhecido');
-      rebaixarBackend();
-    }
+    await conectarFirebaseCom(config, true);
   });
 
+  // Desconectar tira o app do banco da empresa NESTE navegador, e a
+  // escolha fica gravada: nas proximas aberturas ele entra vazio, sem
+  // login. Um clique sem pergunta fazia isso — e a volta exigia colar
+  // um firebaseConfig que quem usa o app nao tem. Agora pergunta antes,
+  // e "Usar configuração padrão" desfaz.
   $('firebaseClearBtn').addEventListener('click', async ()=>{
+    const ok = await App.confirmar({
+      titulo: 'Desconectar do Firebase',
+      mensagem: 'Este navegador deixa de usar o banco da empresa: produtos, histórico, notas e pesquisas somem da tela, e o que for salvo daqui em diante fica só neste computador.\n\n' +
+        'Nada é apagado do banco. Para voltar, use "Usar configuração padrão" nesta mesma tela.',
+      confirmar: 'Desconectar',
+      perigo: true
+    });
+    if(!ok) return;
     setFirebaseConfigSalva(null);
     $('firebaseConfigInput').value = '';
     firestoreDb = null;
     storageBackend = localStorageFunciona() ? 'local' : 'memoria';
-    $('firebaseMsg').textContent = 'Desconectado do Firebase.';
+    $('firebaseMsg').textContent = 'Desconectado do Firebase. Para voltar, clique em "Usar configuração padrão".';
     atualizarStatusArmazenamento();
     await atualizarListaSalvos();
   });
+
+  // O caminho de volta: apaga a escolha gravada (inclusive o
+  // "desconectado") e religa na configuracao que vem com o app.
+  $('firebasePadraoBtn').addEventListener('click', App.umPorVez(async ()=>{
+    try{ localStorage.removeItem(FIREBASE_CONFIG_KEY); }catch(e){ /* preferencia de maquina: segue */ }
+    $('firebaseConfigInput').value = JSON.stringify(FIREBASE_CONFIG_PADRAO, null, 2);
+    await conectarFirebaseCom(FIREBASE_CONFIG_PADRAO, false);
+  }, $('firebasePadraoBtn')));
 
   const firebaseConfigSalva = getFirebaseConfigSalva();
   // A inicializacao virou assincrona; guardamos a promessa para que o
@@ -2495,7 +2576,10 @@ Tupan</textarea>
     }
     try{
       await window.geminiConectar(config, siteKey);
-      if(mostrarMsg) $('geminiMsg').textContent = '✓ Gemini conectado — os PDFs agora são lidos por IA.';
+      // "Configurado", nao "conectado": aqui so' se montam os objetos do
+      // SDK. A Site Key e o App Check so' sao postos a' prova na primeira
+      // chamada de verdade — chave errada passava com "✓ conectado".
+      if(mostrarMsg) $('geminiMsg').textContent = '✓ Gemini configurado — a chave é testada na primeira leitura de PDF ou pesquisa de preços.';
       return true;
     }catch(e){
       console.error(e);
@@ -2512,12 +2596,29 @@ Tupan</textarea>
     await conectarGemini(siteKey, true);
   });
 
-  $('geminiClearBtn').addEventListener('click', ()=>{
+  $('geminiClearBtn').addEventListener('click', async ()=>{
+    // Mesmo cuidado do Firebase: a escolha fica gravada neste navegador.
+    const ok = await App.confirmar({
+      titulo: 'Desconectar o Gemini',
+      mensagem: 'A leitura de PDF volta ao modo automático (sem IA) e a pesquisa de concorrentes para de funcionar neste navegador.\n\n' +
+        'Para voltar, use "Usar chave padrão" nesta mesma tela.',
+      confirmar: 'Desconectar'
+    });
+    if(!ok) return;
     setRecaptchaSiteKeySalva('');
     $('recaptchaSiteKey').value = '';
     if(window.geminiDesconectar) window.geminiDesconectar();
-    $('geminiMsg').textContent = 'Desconectado. A leitura de PDF volta a usar o modo automático (sem IA).';
+    $('geminiMsg').textContent = 'Desconectado. A leitura de PDF volta a usar o modo automático (sem IA). Para voltar, clique em "Usar chave padrão".';
   });
+
+  // O caminho de volta: apaga a escolha gravada e religa com a chave
+  // que vem com o app.
+  $('geminiPadraoBtn').addEventListener('click', App.umPorVez(async ()=>{
+    try{ localStorage.removeItem(RECAPTCHA_KEY); }catch(e){ /* preferencia de maquina: segue */ }
+    $('recaptchaSiteKey').value = RECAPTCHA_SITE_KEY_PADRAO;
+    $('geminiMsg').textContent = 'Conectando...';
+    await conectarGemini(RECAPTCHA_SITE_KEY_PADRAO, true);
+  }, $('geminiPadraoBtn')));
 
   function aguardarGeminiBridge(timeoutMs){
     return new Promise((resolve, reject)=>{
@@ -2584,7 +2685,7 @@ Tupan</textarea>
         Painel:'verPainelBtn', Calculadora:'verCalculadoraBtn',
         Frete:'verFreteBtn', Produtos:'verProdutosBtn', Cotacao:'verCotacaoBtn',
         Historico:'verHistoricoBtn', Concorrentes:'verConcorrentesBtn',
-        Notas:'verNotasBtn', Fiscal:'verFiscalBtn', Sync:'verSyncBtn'
+        Notas:'verNotasBtn', Fiscal:'verFiscalBtn', Radar:'verRadarBtn', Sync:'verSyncBtn'
       };
       Object.keys(botoes).forEach(v => {
         const b = $(botoes[v]);
@@ -2594,6 +2695,13 @@ Tupan</textarea>
       });
       // A nota de PIS/COFINS/IRPJ/CSLL so' faz sentido ao lado da conta.
       $('rodapeTributos').style.display = (nome === 'Calculadora') ? '' : 'none';
+      // Saiu da tela da pesquisa em lote com a varredura rodando: para.
+      // So' o "← Voltar ao histórico" parava; pela barra de telas (ou o
+      // Voltar do navegador) o laco seguia chamando o Gemini — produtos
+      // x lojas — para uma tela a' qual nao da' para voltar. O produto
+      // em andamento termina; na origem planilha o progresso ja' esta'
+      // guardado e a retomada aparece na aba Concorrentes.
+      pararLoteAoSairDaTela(nome);
     }
   });
 
@@ -2683,37 +2791,63 @@ Tupan</textarea>
     $('cmpPedido').innerHTML = html;
     $('cmpEditarPedidoBtn').addEventListener('click', ()=>carregarCotacaoParaEdicao(d.id));
 
-    // Gravação do status direto daqui (só o status muda depois do pedido feito;
-    // Firestore não atualiza um elemento do array isoladamente, então regrava o array de itens)
-    async function salvarStatusPedido(){
+    // Gravação do status direto daqui. O Firestore não atualiza um elemento
+    // do array isoladamente, então o array de itens é regravado — mas a
+    // partir do documento FRESCO, dentro da transação de gravarCotacao: a
+    // cópia desta tela pode estar velha, e regravar por cima dela apagava
+    // o que outra máquina (ou a sincronização com as notas) tinha mudado.
+    // `mudar(fresco)` devolve os campos a gravar, ou null = nada a fazer.
+    const seletoresStatus = () => Array.from($('cmpPedido').querySelectorAll('.cmp-status-sel'));
+    // Sucesso ou erro, os seletores voltam a mostrar o que está gravado de
+    // verdade (gravarCotacao atualiza `d` no lugar). Se a lista de itens
+    // mudou em outra tela, o painel é remontado.
+    function repintarStatus(){
+      const sels = seletoresStatus();
+      if(sels.length !== (d.itens||[]).length){ abrirComparacao(d.id); return; }
+      sels.forEach(sel => { const it = d.itens[Number(sel.dataset.idx)]; if(it) sel.value = it.status || 'negociacao'; });
+    }
+    repintarComparacao = repintarStatus; // vincular/desvincular NF-e tambem muda status
+    async function salvarStatusPedido(mudar, avisoSemMudanca){
       $('cmpStatusMsg').textContent = 'Gravando status...';
       try{
-        await App.comAuth(()=> exigirDb().collection('cotacoes').doc(d.id).update({ itens: d.itens }));
-        $('cmpStatusMsg').textContent = 'Status gravado ✓ ' + new Date().toLocaleTimeString('pt-BR');
+        const r = await gravarCotacao(d.id, mudar);
+        $('cmpStatusMsg').textContent = r.gravou ? ('Status gravado ✓ ' + new Date().toLocaleTimeString('pt-BR')) : '';
+        if(!r.gravou && avisoSemMudanca) App.toast(avisoSemMudanca, 'info');
         renderHistorico();
       }catch(e){
-        $('cmpStatusMsg').textContent = 'Erro ao gravar: ' + (e.message||e);
+        $('cmpStatusMsg').textContent = 'Erro ao gravar: ' + App.erroDe(e);
       }
+      repintarStatus();
     }
-    $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel=>sel.addEventListener('change', ()=>{
+    seletoresStatus().forEach(sel=>sel.addEventListener('change', ()=>{
       const idx = Number(sel.dataset.idx);
-      if(d.itens && d.itens[idx]){
-        d.itens[idx].status = sel.value;
-        if(sel.value === 'pedido' && !d.itens[idx].pedidoEm) d.itens[idx].pedidoEm = App.hojeISO();
-        salvarStatusPedido();
-      }
+      const referencia = d.itens && d.itens[idx];
+      if(!referencia) return;
+      const novo = sel.value;
+      salvarStatusPedido(fresco => {
+        // O item é localizado no documento fresco (posição, código e nome):
+        // a linha 3 daqui pode não ser mais a linha 3 de lá.
+        const i = R.indiceDoItem(fresco.itens, referencia, idx);
+        if(i === -1) throw new Error('este item não está mais na cotação (ela foi alterada em outra tela)');
+        const itens = fresco.itens.slice();
+        itens[i] = R.mudarStatusItem(itens[i], novo, App.hojeISO());
+        return { itens };
+      });
     }));
     $('cmpPedidoFeitoBtn').addEventListener('click', ()=>{
-      const itens = R.pedidoFeitoNaCotacao(d, App.hojeISO());
-      if(!itens){ App.toast('Nenhum item em negociação nesta cotação.', 'info'); return; }
-      d.itens = itens;
-      $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel => { const it = d.itens[Number(sel.dataset.idx)]; if(it) sel.value = it.status; });
-      salvarStatusPedido();
+      salvarStatusPedido(fresco => {
+        const itens = R.pedidoFeitoNaCotacao(fresco, App.hojeISO());
+        return itens ? { itens } : null;
+      }, 'Nenhum item em negociação nesta cotação.');
     });
+    // Só AVANÇA: item que já está "Recebido" continua recebido (antes
+    // este botão rebaixava tudo para "em trânsito").
     $('cmpTodosFaturadoBtn').addEventListener('click', ()=>{
-      (d.itens||[]).forEach(it => it.status = 'transito');
-      $('cmpPedido').querySelectorAll('.cmp-status-sel').forEach(sel => sel.value = 'transito');
-      salvarStatusPedido();
+      salvarStatusPedido(fresco => {
+        const antes = fresco.itens || [];
+        const itens = antes.map(it => R.mudarStatusItem(it, 'transito', App.hojeISO(), { soAvancar: true }));
+        return itens.some((it, i) => it.status !== (antes[i] && antes[i].status)) ? { itens } : null;
+      }, 'Todos os itens já estão faturados ou recebidos.');
     });
 
     // Painel direito: pré-filtra as NF-e pelo fornecedor e pela data do pedido
@@ -2742,6 +2876,12 @@ Tupan</textarea>
   let loteOrigemPlanilha = false; // origem catálogo: grava codigo/fabricante e progresso anti-F5
   let loteSoPendentes = false;    // retomada: o laço pula produtos já completos
 
+  // Chamada pelo router a cada troca de tela (aoTrocar). Função à parte
+  // porque o router é montado antes destas variáveis existirem.
+  function pararLoteAoSairDaTela(nome){
+    if(nome !== 'PesquisaLote' && loteRodando) loteParar = true;
+  }
+
   // O reset da tela de lote, extraído para as DUAS origens de pesquisa
   // (pedido do Histórico e planilha) não copiarem dez linhas de
   // show/hide uma da outra.
@@ -2761,6 +2901,7 @@ Tupan</textarea>
     $('iniciarLoteBtn').disabled = false;
     $('iniciarLoteBtn').textContent = '🏪 Iniciar pesquisa';
     $('pararLoteBtn').style.display = 'none';
+    $('continuarLoteBtn').style.display = 'none';
     $('salvarPesqLoteBtn').style.display = 'none';
     $('refazerFalhasBtn').style.display = 'none';
     $('pesqLoteMsg').textContent = '';
@@ -2816,13 +2957,15 @@ Tupan</textarea>
   // ao que a pesquisa individual faz na coluna Preço. Só as lojas
   // VISÍVEIS entram: um índice órfão de execução antiga dava o troféu
   // a um preço que não estava em coluna nenhuma.
+  //
+  // A regra de "preço válido" é a do núcleo (sem erro, sem pendente,
+  // preço > 0): a cópia que havia aqui aceitava resultado marcado com
+  // erro, e o 🏆 ia para uma célula que a própria tabela mostra como
+  // "não encontrado".
   function menorPrecoDaLinha(item){
-    let menor = null;
-    lojasAtuais().forEach((_, lojaIdx)=>{
-      const r = item.porLoja[lojaIdx];
-      if(r && !r.pendente && r.preco != null && (menor === null || r.preco < menor)) menor = r.preco;
-    });
-    return menor;
+    const m = ConcorrentesNucleo.menorConcorrente(
+      lojasAtuais().map((_, lojaIdx) => item.porLoja[lojaIdx]));
+    return m ? m.preco : null;
   }
 
   // Conteúdo de UMA célula produto×loja, extraída para que o resultado
@@ -3002,6 +3145,7 @@ Tupan</textarea>
     loteRodando = true;
     loteParar = false;
     $('iniciarLoteBtn').style.display = 'none';
+    $('continuarLoteBtn').style.display = 'none';
     $('pararLoteBtn').style.display = 'inline-block';
 
     for(let idx = 0; idx < loteItens.length; idx++){
@@ -3009,7 +3153,7 @@ Tupan</textarea>
       const item = loteItens[idx];
       // Retomada pos-F5: pula quem ja' tem resposta de todas as lojas.
       // Fora da retomada nada muda — "Pesquisar novamente" refaz tudo.
-      if(loteSoPendentes && loteLojas.every((_, li) => item.porLoja[li] && !item.porLoja[li].pendente)) continue;
+      if(loteSoPendentes && ConcorrentesNucleo.produtoPesquisado(item, loteLojas.length)) continue;
       loteIdxAtual = idx;
       loteLojas.forEach((_, lojaIdx) => { item.porLoja[lojaIdx] = { pendente: true }; });
       $('pesqLoteMsg').textContent = 'Pesquisando produto ' + (idx+1) + ' de ' + loteItens.length + ': ' + item.produto;
@@ -3047,13 +3191,37 @@ Tupan</textarea>
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('iniciarLoteBtn').textContent = '🔁 Pesquisar novamente';
     $('pararLoteBtn').style.display = 'none';
+    const faltam = atualizarBotaoContinuar();
     $('pesqLoteMsg').textContent = loteParar
-      ? 'Pesquisa interrompida.'
+      ? 'Pesquisa interrompida' + (faltam ? ' — faltam ' + faltam + ' de ' + loteItens.length + ' produto(s).' : '.')
       : 'Pesquisa concluída — ' + loteItens.length + ' produto(s) · ' + new Date().toLocaleTimeString('pt-BR');
     const temAlgoPesquisado = loteItens.some(it => Object.values(it.porLoja).some(r => r && !r.pendente));
     $('salvarPesqLoteBtn').style.display = temAlgoPesquisado ? 'inline-block' : 'none';
     atualizarBotaoFalhas();
     renderLoteTabela();
+  });
+
+  // Parou no meio: "Continuar" pesquisa só o que falta. Antes a única
+  // saída era "Pesquisar novamente", que refaz (e paga) do zero também
+  // os produtos que já tinham resposta de todas as lojas. O botão só
+  // aparece com a varredura parada e ALGUM produto já pesquisado — com
+  // nada feito, continuar e iniciar são a mesma coisa. Devolve quantos
+  // faltam quando há o que continuar (0 = botão escondido).
+  function atualizarBotaoContinuar(){
+    const faltam = loteItens.filter(it => !ConcorrentesNucleo.produtoPesquisado(it, loteLojas.length)).length;
+    const pode = !loteRodando && !loteSomenteLeitura && faltam > 0 && faltam < loteItens.length;
+    $('continuarLoteBtn').style.display = pode ? 'inline-block' : 'none';
+    $('continuarLoteBtn').textContent = '▶ Continuar (' + faltam + (faltam === 1 ? ' que falta)' : ' que faltam)');
+    return pode ? faltam : 0;
+  }
+
+  $('continuarLoteBtn').addEventListener('click', ()=>{
+    if(loteRodando) return;
+    loteSoPendentes = true; // o laço pula quem já tem resposta de todas as lojas
+    $('iniciarLoteBtn').click();
+    // A varredura não começou (Gemini desligado, sem lojas): a marca não
+    // pode sobrar para um "Pesquisar novamente", que tem de refazer tudo.
+    if(!loteRodando) loteSoPendentes = false;
   });
 
   // Conta os pares produto×loja que voltaram sem preço — são os candidatos
@@ -3096,23 +3264,35 @@ Tupan</textarea>
     loteParar = false;
     $('refazerFalhasBtn').style.display = 'none';
     $('iniciarLoteBtn').style.display = 'none';
+    $('continuarLoteBtn').style.display = 'none';
     $('pararLoteBtn').style.display = 'inline-block';
 
     for(let i = 0; i < falhas.length; i++){
       if(loteParar || meuToken !== loteExecToken) break;
       const f = falhas[i];
-      loteItens[f.idx].porLoja[f.lojaIdx] = { pendente: true };
+      // O ITEM é capturado antes do await, como no laço principal. A
+      // busca em precisão máxima demora; se nesse meio tempo outro
+      // pedido for aberto, `loteItens` já é a lista DELE — e gravar por
+      // índice ali punha o preço de um produto na linha de outro.
+      const itemF = loteItens[f.idx];
+      if(!itemF) continue;
+      itemF.porLoja[f.lojaIdx] = { pendente: true };
       $('pesqLoteMsg').textContent = 'Precisão máxima ' + (i+1) + '/' + falhas.length + ': ' + f.produto + ' — ' + f.loja;
       atualizarLinhaLote(f.idx);
+      let resultado;
       try{
-        const itemF = loteItens[f.idx];
-        const r = await window.geminiRebuscarUmaLoja((itemF && itemF.consulta) || f.produto, f.loja, 'maxima');
-        loteItens[f.idx].porLoja[f.lojaIdx] = resultadoParaGuardar(r, f.loja, 'maxima');
+        const r = await window.geminiRebuscarUmaLoja(itemF.consulta || f.produto, f.loja, 'maxima');
+        resultado = resultadoParaGuardar(r, f.loja, 'maxima');
       }catch(e){
         console.error('Erro no reprocessamento:', e);
-        loteItens[f.idx].porLoja[f.lojaIdx] = { erro:true, mensagemErro: e.message||String(e) };
+        resultado = { erro:true, mensagemErro: e.message||String(e) };
       }
-      if(meuToken === loteExecToken) atualizarLinhaLote(f.idx);
+      // No item CAPTURADO (nunca em loteItens[f.idx]): se a tela já é de
+      // outro pedido, este objeto nem está mais nela — e a resposta
+      // atrasada para aqui, sem redesenhar a linha de ninguém.
+      itemF.porLoja[f.lojaIdx] = resultado;
+      if(meuToken !== loteExecToken) break;
+      atualizarLinhaLote(f.idx);
     }
 
     if(meuToken !== loteExecToken) return;
@@ -3120,6 +3300,7 @@ Tupan</textarea>
     loteRodando = false;
     $('iniciarLoteBtn').style.display = 'inline-block';
     $('pararLoteBtn').style.display = 'none';
+    atualizarBotaoContinuar();
     const restantes = listarFalhasLote().length;
     $('pesqLoteMsg').textContent = loteParar
       ? 'Reprocessamento interrompido.'
@@ -3155,12 +3336,34 @@ Tupan</textarea>
       // planilha, o fabricante vem de lá — é o que faz "Ver última
       // pesquisa" do fabricante enxergar também as pesquisas de pedido.
       const fabricantePorCodigo = Object.create(null);
-      ((catalogoLote && catalogoLote.itens) || []).forEach(c => { fabricantePorCodigo[c.codigo] = c.fabricante || null; });
+      // Preço do CATÁLOGO (centavos) por código: vai gravado no documento
+      // das pesquisas de planilha, ao lado do meuPreco (que é o "Nosso
+      // preço" da tabela, editável). É por ele que o painel se reidrata
+      // — ver ConcorrentesNucleo.precoReferenciaCent.
+      const precoCatalogo = Object.create(null);
+      ((catalogoLote && catalogoLote.itens) || []).forEach(c => {
+        fabricantePorCodigo[c.codigo] = c.fabricante || null;
+        precoCatalogo[c.codigo] = c.precoCent;
+      });
+      // Cada produto guarda o id do documento que o salvou (it.docId). A
+      // 2ª gravação da MESMA varredura — depois de "Refazer as sem
+      // resultado", ou repetindo um salvamento que falhou pela metade —
+      // REGRAVA o mesmo documento. Antes era .add() de tudo a cada
+      // clique: o pedido de 50 produtos aparecia com 100 em "Pesquisas
+      // salvas". Uma falha não derruba as outras: a mensagem diz quantas
+      // ficaram de fora, e o próximo clique regrava todas nos mesmos ids.
+      const col = firestoreDb.collection('concorrentes');
+      const falhasAoSalvar = [];
       await Promise.all(itensParaSalvar.map(it => {
         const resultados = Object.values(it.porLoja).filter(r => r && !r.pendente);
-        return App.comAuth(()=> firestoreDb.collection('concorrentes').add({
+        // O id nasce AQUI, antes da gravação: mesmo que ela falhe (ou
+        // fique sem resposta), repetir cai no mesmo documento.
+        if(!it.docId) it.docId = col.doc().id;
+        const ref = col.doc(it.docId);
+        const dados = {
           produto: it.produto,
           meuPreco: (it.nossoPreco != null && it.nossoPreco > 0) ? it.nossoPreco : null,
+          precoCatalogoCent: (loteOrigemPlanilha && it.codigo && precoCatalogo[it.codigo] != null) ? precoCatalogo[it.codigo] : null,
           data: firebase.firestore.FieldValue.serverTimestamp(),
           resultados: resultados,
           origemPedido: loteNomePedido || null,
@@ -3173,11 +3376,20 @@ Tupan</textarea>
           // por texto de nome quebraria na primeira renomeação.
           codigo: it.codigo || null,
           fabricante: it.fabricante || (it.codigo && fabricantePorCodigo[it.codigo]) || null
-        }));
+        };
+        return App.comAuth(()=> ref.set(dados))
+          .catch(e =>{ console.error('Erro ao salvar a pesquisa de "' + it.produto + '":', e); falhasAoSalvar.push({ it, erro: e }); });
       }));
+      const salvos = itensParaSalvar.filter(it => !falhasAoSalvar.some(f => f.it === it));
+      // Os ids precisam sobreviver a um F5 (origem planilha): sem isto a
+      // retomada salvaria tudo de novo, em documentos novos.
+      if(loteOrigemPlanilha) salvarProgressoLote();
       // O pedido ganhou pesquisas novas: a próxima abertura do painel no
       // histórico busca de novo, em vez de mostrar o cache anterior.
-      if(loteDocId) delete pesquisasPorPedido[loteDocId];
+      if(loteDocId && salvos.length) delete pesquisasPorPedido[loteDocId];
+      // Idem para "Ver última pesquisa" do fabricante (guardada na sessão).
+      if(salvos.length) esquecerPesquisasPorFabricante();
+      if(!salvos.length) throw falhasAoSalvar[0].erro;
       // Origem planilha: atualiza o índice local de "última pesquisa
       // por código" (o painel por fabricante lê dele). O preço
       // registrado é o do CATÁLOGO, não o editado na tabela — o motivo
@@ -3185,20 +3397,17 @@ Tupan</textarea>
       // pesquisou; registrar o editado marcava o produto como
       // desatualizado no instante seguinte à pesquisa.
       if(loteOrigemPlanilha){
-        const precoCatalogo = Object.create(null);
-        ((catalogoLote && catalogoLote.itens) || []).forEach(c => { precoCatalogo[c.codigo] = c.precoCent; });
-        itensParaSalvar.forEach(it => {
+        salvos.forEach(it => {
           if(it.codigo) registrarUltimaPesquisa(it.codigo,
             precoCatalogo[it.codigo] != null ? precoCatalogo[it.codigo] / 100 : it.nossoPreco,
             Object.values(it.porLoja).filter(r => r && !r.pendente));
         });
-        // O progresso anti-F5 só morre quando TUDO foi pesquisado:
-        // salvar uma varredura parcial apagava a retomada dos que
-        // faltavam (auditoria de 02/09/2026).
-        const tudoPesquisado = loteItens.every(it =>
-          loteLojas.every((_, li) => it.porLoja[li] && !it.porLoja[li].pendente));
-        if(tudoPesquisado) limparProgressoLote();
-        else App.toast('Pesquisa parcial salva — a retomada dos produtos que faltam continua disponível na aba Concorrentes.', 'info');
+        // O progresso anti-F5 só morre quando TUDO foi pesquisado E
+        // salvo: salvar uma varredura parcial apagava a retomada dos
+        // que faltavam (auditoria de 02/09/2026).
+        const tudoPesquisado = loteItens.every(it => ConcorrentesNucleo.produtoPesquisado(it, loteLojas.length));
+        if(tudoPesquisado && !falhasAoSalvar.length) limparProgressoLote();
+        else if(!tudoPesquisado) App.toast('Pesquisa parcial salva — a retomada dos produtos que faltam continua disponível na aba Concorrentes.', 'info');
       } else {
         // Pesquisa vinda de um PEDIDO do histórico (09/09/2026): os
         // códigos são os mesmos da planilha, então ela conta no painel
@@ -3206,13 +3415,16 @@ Tupan</textarea>
         // referência: o "meu preço" daqui é o de venda do produto
         // salvo, não o da tabela, e compará-lo gerava "preço mudou"
         // falso. Sem meuPrecoCent, só a data decide se está em dia.
-        itensParaSalvar.forEach(it => {
+        salvos.forEach(it => {
           if(it.codigo) registrarUltimaPesquisa(it.codigo, null,
             Object.values(it.porLoja).filter(r => r && !r.pendente));
         });
       }
-      $('salvarLoteMsg').textContent = '✓ ' + itensParaSalvar.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.';
-      carregarHistoricoConcorrentes();
+      $('salvarLoteMsg').textContent = '✓ ' + salvos.length + ' comparação(ões) salva(s) — aparecem no histórico, em "Pesquisas salvas", e na aba Concorrentes.' +
+        (falhasAoSalvar.length
+          ? ' ⚠ ' + falhasAoSalvar.length + ' não foram gravadas (' + App.erroDe(falhasAoSalvar[0].erro) + ') — clique em salvar de novo: as já gravadas não se repetem.'
+          : '');
+      carregarHistoricoConcorrentes(true); // há documento novo: relê a lista de comparações salvas
     }catch(e){
       console.error(e);
       $('salvarLoteMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
@@ -3298,10 +3510,17 @@ Tupan</textarea>
       const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
       const atual = idx[d.codigo];
       if(!atual || (quando && (!atual.data || quando > atual.data))){
+        // O preço de referência é o do CATÁLOGO no dia da pesquisa
+        // (precoCatalogoCent), o mesmo que registrarUltimaPesquisa guarda
+        // ao salvar — não o meuPreco, que é o "Nosso preço" editável da
+        // tabela. Hidratar pelo editado fazia "Atualizar painel" marcar
+        // "preço mudou" em produto recém-pesquisado. Documento antigo,
+        // sem o campo, segue pelo meuPreco (regra no núcleo).
+        const refCent = ConcorrentesNucleo.precoReferenciaCent(d, daPlanilha);
         idx[d.codigo] = {
           data: quando,
-          meuPrecoCent: (daPlanilha && d.meuPreco != null) ? Math.round(d.meuPreco * 100) : null,
-          menor: ConcorrentesNucleo.menorConcorrente(d.resultados, daPlanilha ? d.meuPreco : null)
+          meuPrecoCent: refCent,
+          menor: ConcorrentesNucleo.menorConcorrente(d.resultados, refCent != null ? refCent / 100 : null)
         };
       }
     });
@@ -3371,8 +3590,7 @@ Tupan</textarea>
       // Sem a lista de lojas não dá para afirmar "concluído":
       // [].every() é true e o banner diria "100 de 100" sobre nada.
       const feitos = (Array.isArray(prog.lojas) && prog.lojas.length)
-        ? prog.itens.filter(it =>
-            prog.lojas.every((_, li) => it.porLoja && it.porLoja[li] && !it.porLoja[li].pendente)).length
+        ? prog.itens.filter(it => ConcorrentesNucleo.produtoPesquisado(it, prog.lojas.length)).length
         : 0;
       $('retomarLoteAviso').innerHTML =
         '<div class="empty-note" style="display:block; border:1.5px solid var(--brick); border-radius:4px; padding:8px 10px; margin-bottom:8px;">' +
@@ -3600,7 +3818,7 @@ Tupan</textarea>
 
   (function(){ const p = lerLS(PRAZO_LS); if(p >= 1) $('prazoDesatualizado').value = p; })();
   $('prazoDesatualizado').addEventListener('change', ()=>{ gravarLS(PRAZO_LS, prazoDias()); renderLotePlanilha(); });
-  $('atualizarPainelFabBtn').addEventListener('click', ()=>{ ultimaPorCodigo = null; renderLotePlanilha(); });
+  $('atualizarPainelFabBtn').addEventListener('click', ()=>{ ultimaPorCodigo = null; esquecerPesquisasPorFabricante(); renderLotePlanilha(); });
 
   App.delegar($('painelFabricantes'), 'click', '[data-abrir-fab]', (b)=>{
     const f = b.dataset.abrirFab;
@@ -3640,6 +3858,16 @@ Tupan</textarea>
   // mesma tabela produto × loja do histórico. "Última por produto":
   // produtos pesquisados em dias diferentes aparecem juntos, cada um
   // com o resultado mais recente — a mensagem mostra o intervalo.
+  //
+  // A consulta lê TODAS as pesquisas do fabricante (cresce a cada
+  // varredura) e rodava a cada clique. O resultado fica guardado na
+  // sessão, por fabricante; esquece quando algo muda: salvar uma
+  // varredura, excluir uma comparação, "⟳ Atualizar painel" (o botão de
+  // "o que outra máquina fez") ou trocar de banco.
+  const pesquisasPorFabricante = new Map(); // fabricante -> [dados dos documentos]
+  let pesquisasPorFabricanteDb = null;
+  function esquecerPesquisasPorFabricante(){ pesquisasPorFabricante.clear(); }
+
   async function abrirUltimaPesquisaFabricante(btn){
     if(!firestoreDb){ App.toast('Conecte o Firebase (aba Sincronização) primeiro.', 'info'); return; }
     if(!fabricanteAberto) return;
@@ -3647,11 +3875,17 @@ Tupan</textarea>
     try{
       // O rótulo "(sem fabricante)" é da tela; no documento o campo é null.
       const alvo = fabricanteAberto === '(sem fabricante)' ? null : fabricanteAberto;
-      const snap = await App.comAuth(()=> exigirDb().collection('concorrentes')
-        .where('fabricante', '==', alvo).get());
+      if(pesquisasPorFabricanteDb !== firestoreDb){ esquecerPesquisasPorFabricante(); pesquisasPorFabricanteDb = firestoreDb; }
+      let docsFab = pesquisasPorFabricante.get(fabricanteAberto);
+      if(!docsFab){
+        const fab = fabricanteAberto;
+        const snap = await App.comAuth(()=> exigirDb().collection('concorrentes')
+          .where('fabricante', '==', alvo).get());
+        docsFab = snap.docs.map(doc => doc.data());
+        pesquisasPorFabricante.set(fab, docsFab);
+      }
       const porCodigo = {};
-      snap.forEach(doc => {
-        const d = doc.data();
+      docsFab.forEach(d => {
         if(!d.codigo) return;
         // Pesquisa de pedido entra quando o fabricante foi preenchido
         // pela planilha na hora de salvar (09/09/2026). No grupo "(sem
@@ -3805,6 +4039,11 @@ Tupan</textarea>
   const MAX_ITENS_AVULSOS = 60;
   let pararEscutaNotas = null;      // cancela a escuta; null = nao ha' escuta viva
   let cargaNotasEmAndamento = null; // duas abas pedindo ao mesmo tempo = uma carga so'
+  let recargaNaFila = false;        // "Recarregar" clicado com uma carga em voo
+  let cargaAtualForcada = false;    // a carga em voo ja' e' uma leitura completa
+  // Erro da ultima carga (null = deu certo). As telas que CALCULAM com as
+  // notas (Radar, Fiscal) olham para isto: carga que falhou nao e' "zero notas".
+  let notasEmitidasErro = null;
   let corteNotasEmitidas = '';
   const tentativasItens = {};       // { chave: { n, em } } das buscas avulsas
   const itensEmBusca = new Set();
@@ -3889,8 +4128,10 @@ Tupan</textarea>
     });
     if(!faltam.length) return 0;
     faltam.forEach(ch => itensEmBusca.add(ch));
+    // Dentro do App.comAuth como as outras leituras da aba: com a sessao
+    // vencida, pede o login em vez de contar a falha como "nota sem itens".
     const docs = await Promise.all(faltam.map(ch =>
-      firestoreDb.collection('itensNotas').doc(ch).get()
+      App.comAuth(() => firestoreDb.collection('itensNotas').doc(ch).get())
         .catch(e => { console.error('Erro ao buscar itens da nota:', e); return null; })));
     let novos = 0, semItens = 0;
     docs.forEach((doc, i) => {
@@ -3935,6 +4176,8 @@ Tupan</textarea>
     }
     if(pararEscutaNotas) setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora() + modoEscutaNotas);
     if(router.atual() === 'Notas') renderNotasEmitidas();
+    // O selo de recebimento das cotacoes deriva deste mesmo estado.
+    if(router.atual() === 'Historico') renderHistorico();
     const cmp = $('listaNotasEmitidasCmp');
     if(cmp && cmp.offsetParent !== null) renderListaNotasCmp();
   }
@@ -3948,12 +4191,26 @@ Tupan</textarea>
     if(notasEmitidasCache && pararEscutaNotas && !forcar){ renderNotasEmitidas(); return Promise.resolve(); }
     if(cargaNotasEmAndamento){
       // Recarregar pedido com uma carga em voo: roda depois dela, em vez
-      // de ser perdido em silencio.
-      if(forcar) cargaNotasEmAndamento = cargaNotasEmAndamento.then(() => baixarNotasEmitidas(true)).then(() => { cargaNotasEmAndamento = null; });
+      // de ser perdido em silencio — UMA vez, por mais que cliquem, e nem
+      // isso se a carga em voo ja' e' uma recarga completa.
+      if(forcar && !cargaAtualForcada) recargaNaFila = true;
       return cargaNotasEmAndamento;
     }
-    cargaNotasEmAndamento = baixarNotasEmitidas(!!forcar).then(() => { cargaNotasEmAndamento = null; });
-    return cargaNotasEmAndamento;
+    // A trava so' e' solta por QUEM a pos, e depois da fila: antes o
+    // .then da 1a carga zerava a variavel com a recarga ja' encadeada
+    // nela, e durante a recarga um terceiro pedido abria outra carga em
+    // paralelo (duas escutas vivas, ou uma parando a da outra).
+    const carga = (async () => {
+      cargaAtualForcada = !!forcar;
+      await baixarNotasEmitidas(!!forcar);
+      while(recargaNaFila){
+        recargaNaFila = false;
+        cargaAtualForcada = true;
+        await baixarNotasEmitidas(true);
+      }
+    })().then(() => { if(cargaNotasEmAndamento === carga) cargaNotasEmAndamento = null; });
+    cargaNotasEmAndamento = carga;
+    return carga;
   }
 
   async function baixarNotasEmitidas(forcar){
@@ -3987,12 +4244,14 @@ Tupan</textarea>
         if(!lidas.has(n.chave) && (n.dataEmissao || '') >= corteISO && !leitura.docs.some(d => d.id === n.chave)) notasEmitidasCache.push(n);
       });
       ordenarNotasEmitidas();
+      notasEmitidasErro = null;
       await buscarItensQueFaltam();
       setNotasMsg('Ao vivo · atualizada às ' + App.horaAgora() + modoEscutaNotas);
       renderNotasEmitidas();
       renderListaNotasCmp();
     }catch(e){
       console.error(e);
+      notasEmitidasErro = App.erroDe(e);
       setNotasMsg('Erro ao carregar: ' + (e.message||e) + ' — confira as regras da coleção "itensNotas" e se a carga inicial do Apps Script já rodou.');
     }
   }
@@ -4111,7 +4370,13 @@ Tupan</textarea>
       const previsaoVencida = !!previsao && previsao < hojeNotas && !recebida && !disponivel;
       let estadoHtml = '';
       if(info){
-        if(recebida){
+        // Cancelada vem primeiro e sem controles: a lista nasce de
+        // itensNotas, que nao sabe do cancelamento, e a nota cancelada
+        // aparecia como pendente — com "disponivel", previsao e atraso.
+        if((info.status || 'ativa') === 'cancelada'){
+          estadoHtml = '<span class="nf-badge atraso" title="Nota cancelada' +
+            (info.canceladaEm ? ' em ' + App.fmtData(info.canceladaEm) : '') + '">✕ cancelada</span>';
+        } else if(recebida){
           estadoHtml = '<span class="nf-badge ok">✓ recebida</span>';
         } else {
           estadoHtml =
@@ -4201,9 +4466,17 @@ Tupan</textarea>
         })
         .catch(e=>{ App.toastErro('Erro ao gravar', e); chk.checked = !marcado; chk.disabled = false; });
     });
+    // O campo de data dispara `change` a cada valor COMPLETO — e, digitando
+    // pelo teclado, o ano vai passando por 0002, 0020, 0202 ate' chegar
+    // em 2026. Gravar no primeiro change punha "0002-..." no banco e
+    // travava o campo no meio da digitacao. So' grava data de ano
+    // plausivel (previsaoPlausivel) ou o campo limpo; o resto e'
+    // digitacao em andamento. Quem escolhe no calendario ja' chega com a
+    // data inteira: grava na hora, como sempre.
     App.delegar(container, 'change', 'input[data-prev]', (inp)=>{
       const chave = inp.dataset.prev;
       const valor = inp.value || null;
+      if(valor !== null && !previsaoPlausivel(valor)) return;
       const antes = notasInfoPorChave[chave] || {};
       inp.disabled = true;
       App.comAuth(()=> App.gravarCarimbado(carimbar =>
@@ -4218,7 +4491,26 @@ Tupan</textarea>
           inp.disabled = false;
         });
     });
+    // Saiu do campo com a data pela metade (ano 0202...): nada foi
+    // gravado, entao o campo volta a mostrar o que esta' no banco — sem
+    // isto a tela ficaria exibindo uma data que nao existe em lugar nenhum.
+    App.delegar(container, 'focusout', 'input[data-prev]', (inp)=>{
+      if(!inp.isConnected || inp.disabled || !inp.value || previsaoPlausivel(inp.value)) return;
+      const info = notasInfoPorChave[inp.dataset.prev];
+      inp.value = (info && info.previsaoEntrega) || '';
+      App.toast('Data de previsão incompleta — não foi gravada.', 'info');
+    });
   });
+
+  // Data de previsao que pode ser gravada: aaaa-mm-dd com ano entre 2020
+  // e 2099. Fora disso e' ano ainda sendo digitado (0002, 0202) ou erro
+  // de dedo (20266) — nunca uma previsao de entrega de verdade.
+  function previsaoPlausivel(valor){
+    const m = /^(\d{4})-\d{2}-\d{2}$/.exec(String(valor == null ? '' : valor));
+    if(!m) return false;
+    const ano = Number(m[1]);
+    return ano >= 2020 && ano <= 2099;
+  }
 
   // ─── DANFE simplificado ───
   // O documento e' o MESMO do Controle de Notas (App.htmlDanfe); aqui
@@ -4279,6 +4571,44 @@ Tupan</textarea>
   });
   $('imprimirDanfeBtn').addEventListener('click', ()=> window.print());
 
+  // ─── Redesenhar sem tirar o campo debaixo do dedo ───
+  // O Painel e a aba NCM & ST gravam a cada campo e redesenham a tabela
+  // inteira. Com `innerHTML = ...` puro, quem ja' estava digitando no
+  // campo SEGUINTE quando a gravacao voltava perdia o foco e os digitos
+  // (e o "change" dele nunca disparava). Aqui o campo em foco — e so'
+  // ele — fica no lugar; todo o resto e' trocado pelo HTML novo. Sem
+  // campo em foco dentro do alvo, e' a troca simples de sempre.
+  function trocarHtmlMantendoFoco(alvo, html){
+    const ativo = document.activeElement;
+    const digitando = !!(ativo && ativo !== alvo && alvo.contains && alvo.contains(ativo) &&
+      ativo.matches && ativo.matches('input, select, textarea'));
+    if(!digitando){ alvo.innerHTML = html; return; }
+    const novo = document.createElement(alvo.tagName);
+    novo.innerHTML = html;
+    // false = a estrutura mudou justamente no caminho do campo: fica como
+    // esta' ate' o proximo desenho (que vem assim que o foco sair dali).
+    encaixarHtmlNovo(alvo, novo, ativo);
+  }
+  // Troca os filhos de `vivo` pelos de `novo`, menos o ramo que leva ao
+  // campo em foco (esse e' percorrido para dentro).
+  function encaixarHtmlNovo(vivo, novo, ativo){
+    const vivos = Array.from(vivo.children);
+    const k = vivos.findIndex(f => f === ativo || f.contains(ativo));
+    const novos = Array.from(novo.children);
+    const par = k >= 0 ? novos[k] : null;
+    if(!par || par.tagName !== vivos[k].tagName) return false;
+    if(vivos[k] !== ativo){
+      if(!encaixarHtmlNovo(vivos[k], par, ativo)) return false;
+      if(vivos[k].className !== par.className) vivos[k].className = par.className;
+    }
+    vivos.forEach((f, i) => { if(i !== k) f.remove(); });
+    novos.forEach((n, i) => {
+      if(i < k) vivo.insertBefore(n, vivos[k]);
+      else if(i > k) vivo.appendChild(n);
+    });
+    return true;
+  }
+
   // ─── Fiscal (NCM & ST) ───
   // O agrupamento observado sai do FiscalNucleo sobre os itensNotas
   // que a NF-e Emitidas ja' baixa; o cadastro oficial mora na colecao
@@ -4329,7 +4659,8 @@ Tupan</textarea>
     const alvo = $('listaFiscal');
     if(!notasEmitidasCache || fiscaisCadastro === null) return;
 
-    const grupos = FiscalNucleo.agruparFiscal(notasEmitidasCache);
+    // Com o estado das notas junto: nota CANCELADA nao entra no observado.
+    const grupos = FiscalNucleo.agruparFiscal(notasEmitidasCache, notasInfoPorChave);
     const termo = normalizarTexto($('buscaFiscal').value);
     const visiveis = !termo ? grupos : grupos.filter(g =>
       g.ncm.includes(termo) || normalizarTexto(g.uf).includes(termo) ||
@@ -4394,7 +4725,9 @@ Tupan</textarea>
       '</div>';
     });
 
-    alvo.innerHTML = html;
+    // Quem esta' digitando o % ou a observacao nao perde o campo quando a
+    // gravacao do campo anterior volta (trocarHtmlMantendoFoco).
+    trocarHtmlMantendoFoco(alvo, html);
   }
 
   // Gravacao do cadastro: qualquer um dos tres campos alterado salva o
@@ -4404,20 +4737,34 @@ Tupan</textarea>
     const pct = document.querySelector('[data-fiscal-pct="' + CSS.escape(id) + '"]');
     const obs = document.querySelector('[data-fiscal-obs="' + CSS.escape(id) + '"]');
     if(!mod) return;
+    // "abc" no % virava null e apagava calado o percentual salvo: agora
+    // avisa e NAO grava (o texto fica no campo para a pessoa corrigir).
+    const lido = FiscalNucleo.percentualDigitado(pct ? pct.value : '');
+    if(lido.invalido){
+      App.toastErro('% de ST inválido', 'Digite só o número (ex.: 18 ou 18,5). Nada foi gravado.');
+      if(pct) pct.focus();
+      return;
+    }
     const partes = id.split('_');
     const doc = {
       ncm: partes[0], uf: partes[1],
       modalidade: mod.value || null,
-      percentual: pct && pct.value.trim() !== '' ? parseNumeroBR(pct.value) : null,
+      percentual: lido.vazio ? null : lido.valor,
       obs: (obs && obs.value.trim()) || null,
       atualizadoEm: App.hojeISO()
     };
+    // A memoria ja' fica com o valor novo ENQUANTO grava: como a pessoa
+    // segue digitando no campo ao lado, um redesenho no meio (a gravacao
+    // do campo anterior voltando) nao pode repor o valor velho nos outros
+    // campos da linha — o salvamento seguinte leria esse valor velho.
+    const anterior = fiscaisCadastro[id];
+    fiscaisCadastro[id] = doc;
     try{
       await App.comAuth(()=> exigirDb().collection('fiscaisNcm').doc(id).set(doc, { merge: true }));
-      fiscaisCadastro[id] = doc;
       renderFiscal(); // reavalia a divergencia na hora
     }catch(e){
       App.toastErro('Erro ao gravar o cadastro fiscal', e);
+      if(fiscaisCadastro[id] === doc) fiscaisCadastro[id] = anterior; // erro devolve o que esta' salvo de verdade
       renderFiscal();
     }
   }
@@ -4652,7 +4999,7 @@ Tupan</textarea>
         resultados: ultimosConcorrentes
       }));
       $('salvarConcorrentesMsg').textContent = '✓ Comparação salva.';
-      carregarHistoricoConcorrentes();
+      carregarHistoricoConcorrentes(true); // há documento novo: relê
     }catch(e){
       console.error(e);
       $('salvarConcorrentesMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "concorrentes" está liberada nas regras do Firestore.';
@@ -4666,8 +5013,14 @@ Tupan</textarea>
   // Antes, abrir ou fechar UMA comparação chamava a carga inteira de
   // novo: 50 leituras no Firestore por clique, sem nenhum dado novo.
   let concorrentesDocsCache = null;
+  let concorrentesDocsDb = null; // de qual banco veio o cache (trocar de configuracao invalida)
 
-  async function carregarHistoricoConcorrentes(){
+  // forcar = reler do servidor. Sem ele, a lista ja' lida nesta sessao
+  // e' reaproveitada: cada entrada na aba Concorrentes pagava 50
+  // leituras para mostrar o que ja' estava em memoria. Quem relê: o
+  // salvamento de uma comparacao (ha' documento novo), o login e o
+  // botao "⟳ Recarregar" do card (o que OUTRA maquina salvou).
+  async function carregarHistoricoConcorrentes(forcar){
     const lista = $('concorrentesHistLista');
     const msg = $('concorrentesHistMsg');
     if(!firestoreDb){
@@ -4677,11 +5030,17 @@ Tupan</textarea>
       msg.style.display = 'block';
       return;
     }
+    if(!forcar && concorrentesDocsCache && concorrentesDocsDb === firestoreDb){
+      renderHistoricoConcorrentes();
+      return;
+    }
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
     try{
-      const snap = await App.comAuth(()=> firestoreDb.collection('concorrentes').orderBy('data','desc').limit(50).get());
+      const db = firestoreDb;
+      const snap = await App.comAuth(()=> db.collection('concorrentes').orderBy('data','desc').limit(50).get());
       concorrentesDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
+      concorrentesDocsDb = db;
       renderHistoricoConcorrentes();
     }catch(e){
       console.error(e);
@@ -4691,6 +5050,8 @@ Tupan</textarea>
       msg.style.display = 'block';
     }
   }
+
+  $('recarregarConcorrentesHistBtn').addEventListener('click', ()=> carregarHistoricoConcorrentes(true));
 
   // Delegação única para as comparações salvas: antes eram dois
   // listeners por comparação, reanexados a cada abrir/fechar.
@@ -4716,6 +5077,7 @@ Tupan</textarea>
       // O indice "ultima pesquisa por codigo" le do cache: exclusao e'
       // rara, entao a proxima leitura dele e' completa.
       App.esquecerLeitura(LEITURA_CONCORRENTES);
+      esquecerPesquisasPorFabricante(); // a "ultima pesquisa" de algum fabricante pode ter sido esta
       App.toast('Comparação excluída.', 'ok');
       // Tira do cache e redesenha, em vez de reler a coleção.
       concorrentesDocsCache = (concorrentesDocsCache || []).filter(x => x.id !== id);
@@ -4740,8 +5102,10 @@ Tupan</textarea>
     lista.innerHTML = '';
     docs.forEach(d=>{
       const resultados = d.resultados || [];
-      let menorPreco = null;
-      resultados.forEach(r=>{ if(r.preco != null && (menorPreco===null || r.preco < menorPreco)) menorPreco = r.preco; });
+      // Mesma regra do painel e da tabela do lote (nucleo): resultado
+      // com erro ou preco zerado nao e' "o menor".
+      const menorAchado = ConcorrentesNucleo.menorConcorrente(resultados);
+      const menorPreco = menorAchado ? menorAchado.preco : null;
 
       const aberto = concorrentesHistAbertos.has(d.id);
       const item = document.createElement('div');
@@ -4856,16 +5220,59 @@ Tupan</textarea>
     renderHistorico();
   });
 
-  async function marcarPedidoFeito(id){
-    const d = historicoDocsCache.find(x => x.id === id);
-    if(!d) return;
-    const itens = R.pedidoFeitoNaCotacao(d, App.hojeISO());
-    if(!itens){ App.toast('Nenhum item em negociação nesta cotação.', 'info'); return; }
+  // ─── UM ponto de gravação de cotação ───
+  // Toda mudança numa cotação que já existe passa por aqui: a transação
+  // lê o documento FRESCO, `mudar(fresco)` devolve os campos a gravar
+  // (ou null = nada a fazer) e só então grava. Antes cada tela mandava o
+  // array `itens` inteiro tirado da cópia em memória (lida ao entrar no
+  // Histórico): quem estivesse com a aba aberta há uma hora apagava, sem
+  // aviso, o que outra máquina ou a sincronização com as notas gravou.
+  //
+  // - `mudar` pode rodar mais de uma vez (a transação repete se o
+  //   documento mudar no meio): tem de ser pura.
+  // - Transação não roda sem conexão (ela precisa ler do servidor): o
+  //   erro sai dizendo isso, em vez do "unavailable" do Firestore.
+  // - A cópia em memória é atualizada NO LUGAR: quem segura a referência
+  //   (a tela Comparar) passa a ver o documento novo.
+  // Devolve { gravou, doc }.
+  const semConexao = e => !!e && (e.code === 'unavailable' || /offline/i.test(String(e.message || '')) ||
+    (typeof navigator !== 'undefined' && navigator.onLine === false));
+  async function gravarCotacao(id, mudar){
+    const db = exigirDb();
+    const ref = db.collection('cotacoes').doc(id);
+    let r;
     try{
-      await App.comAuth(() => exigirDb().collection('cotacoes').doc(id).update({ itens }));
-      d.itens = itens;
+      r = await App.comAuth(() => db.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        if(!snap.exists) throw new Error('essa cotação não existe mais (foi excluída em outra tela)');
+        const fresco = Object.assign({ id }, snap.data());
+        const campos = mudar(fresco);
+        if(!campos) return { gravou: false, doc: fresco };
+        tx.update(ref, campos);
+        return { gravou: true, doc: Object.assign({}, fresco, campos) };
+      }));
+    }catch(e){
+      if(semConexao(e)) throw new Error('sem conexão com o servidor — a cotação NÃO foi gravada. Confira a internet e tente de novo');
+      throw e;
+    }
+    const emMemoria = historicoDocsCache.find(x => x.id === id);
+    if(emMemoria){
+      Object.keys(emMemoria).forEach(k => { delete emMemoria[k]; });
+      Object.assign(emMemoria, r.doc);
+    }
+    return r;
+  }
+
+  async function marcarPedidoFeito(id){
+    if(!historicoDocsCache.some(x => x.id === id)) return;
+    try{
+      const r = await gravarCotacao(id, fresco => {
+        const itens = R.pedidoFeitoNaCotacao(fresco, App.hojeISO());
+        return itens ? { itens } : null;
+      });
       renderHistorico();
-      App.toast('Pedido feito: ' + itens.filter(i => i.status === 'pedido').length + ' item(ns) em carteira. Quando a nota chegar, o status avança sozinho.', 'ok');
+      if(!r.gravou){ App.toast('Nenhum item em negociação nesta cotação.', 'info'); return; }
+      App.toast('Pedido feito: ' + r.doc.itens.filter(i => i.status === 'pedido').length + ' item(ns) em carteira. Quando a nota chegar, o status avança sozinho.', 'ok');
     }catch(e){ App.toastErro('Erro ao marcar o pedido', e); }
   }
   App.delegar($('historicoLista'), 'click', '[data-acao]', (btn)=>{
@@ -4936,8 +5343,10 @@ Tupan</textarea>
         });
         // "Mais caros" conta por produto: basta um concorrente abaixo
         // do nosso preço para o produto entrar na conta.
-        const menor = (p.resultados||[]).reduce((m,r)=>
-          (r && r.preco != null && (m === null || r.preco < m)) ? r.preco : m, null);
+        // O menor é o do núcleo (sem erro, sem pendente, preço > 0) —
+        // o mesmo critério da tabela do lote e do painel por fabricante.
+        const menorAchado = ConcorrentesNucleo.menorConcorrente(p.resultados);
+        const menor = menorAchado ? menorAchado.preco : null;
         if(menor != null && p.meuPreco != null && p.meuPreco > 0){
           comparados++;
           if(p.meuPreco > menor) maisCaros++;
@@ -5000,7 +5409,7 @@ Tupan</textarea>
 
     router.ir('PesquisaLote');
     $('loteTitulo').textContent = titulo;
-    ['iniciarLoteBtn','pararLoteBtn','salvarPesqLoteBtn','refazerFalhasBtn']
+    ['iniciarLoteBtn','pararLoteBtn','continuarLoteBtn','salvarPesqLoteBtn','refazerFalhasBtn']
       .forEach(id => { $(id).style.display = 'none'; });
     $('pesqLoteMsg').textContent = mensagem + ' — ' + loteItens.length +
       ' produto(s) em ' + lojas.length + ' loja(s).';
@@ -5049,12 +5458,20 @@ Tupan</textarea>
   }
 
   // ─── Vínculo cotação ↔ NF-e (recebimento derivado) ───
-  // O vinculo e' MANUAL (um clique na tela Comparar) e mora na
-  // cotacao (chavesNfe: [chave...]) — automatizar por fornecedor/valor
-  // seria chute, e chute virando status e' o que este projeto evita.
-  // O selo e' DERIVADO na hora de exibir, nunca gravado: quando a
-  // ultima nota vinculada entra no ERP, o pedido "vira" sozinho.
+  // O vinculo mora na cotacao (chavesNfe: [chave...]) e tem duas origens:
+  // - AUTOMATICA: a sincronizacao com as notas emitidas casa item a item
+  //   (codigo do fornecedor, barras ou nome unico — R.casarCotacoesComNotas)
+  //   e vincula a nota sozinha;
+  // - MANUAL: o botao da tela Comparar. Vincular acrescenta a nota as
+  //   candidatas; DESVINCULAR a poe em chavesNfeRecusadas — a sincronizacao
+  //   nunca mais a oferece a esta cotacao — e os itens casados com ela
+  //   esquecem o casamento (R.desvincularNota). E' assim que se corrige um
+  //   casamento automatico errado: antes o desvinculo era desfeito na
+  //   abertura seguinte do Historico.
+  // O selo do cabecalho e' DERIVADO na hora de exibir, nunca gravado:
+  // quando a ultima nota vinculada entra no ERP, o pedido "vira" sozinho.
   let cotacaoComparandoId = null;
+  let repintarComparacao = null; // a tela Comparar aberta sabe atualizar os proprios seletores
 
   // Sem vinculo -> null (sem selo): nao ha' como afirmar nada.
   // Nota vinculada cujo documento nao veio conta como NAO recebida:
@@ -5071,14 +5488,19 @@ Tupan</textarea>
     return { total: chaves.length, recebidas, completa: recebidas === chaves.length };
   }
 
-  // Estado das notas vinculadas, buscado PELA CHAVE (acesso direto ao
-  // documento): funciona mesmo para nota mais velha que a janela da
-  // aba NF-e Emitidas. Poucas dezenas de leituras por abertura.
+  // Estado das notas vinculadas. A fonte principal e' a escuta AO VIVO
+  // da aba NF-e Emitidas (notasInfoPorChave, ultimos 120 dias): o selo
+  // acompanha a nota que entra no ERP durante a sessao e nao custa
+  // leitura. So' a nota vinculada que estiver FORA dessa janela e'
+  // buscada pela chave (acesso direto ao documento), uma vez por sessao.
   let estadoNotasVinculadas = {};
+  function estadoDasVinculadas(){
+    return Object.assign({}, estadoNotasVinculadas, notasInfoPorChave);
+  }
   async function carregarEstadoVinculos(){
     const faltam = [];
     historicoDocsCache.forEach(d => (d.chavesNfe||[]).forEach(c=>{
-      if(!(c in estadoNotasVinculadas) && faltam.indexOf(c) === -1) faltam.push(c);
+      if(!(c in estadoNotasVinculadas) && !(c in notasInfoPorChave) && faltam.indexOf(c) === -1) faltam.push(c);
     }));
     if(!faltam.length || !firestoreDb) return;
     try{
@@ -5098,22 +5520,44 @@ Tupan</textarea>
   async function alternarVinculoNfe(chave){
     const d = historicoDocsCache.find(x => x.id === cotacaoComparandoId);
     if(!d) return;
-    const atual = d.chavesNfe || [];
-    const tinha = atual.indexOf(chave) !== -1;
-    const novo = tinha ? atual.filter(c => c !== chave) : atual.concat([chave]);
+    const id = d.id;
+    const tinha = (d.chavesNfe || []).indexOf(chave) !== -1;
     try{
-      await App.comAuth(()=> exigirDb().collection('cotacoes').doc(d.id).update({ chavesNfe: novo }));
-      d.chavesNfe = novo;
-      if($('cmpQtdVinculos')) $('cmpQtdVinculos').textContent = novo.length;
+      // Sobre o documento fresco (gravarCotacao): desvincular recusa a nota
+      // e limpa os itens casados com ela; vincular desfaz a recusa.
+      await gravarCotacao(id, fresco => tinha ? R.desvincularNota(fresco, chave) : R.vincularNota(fresco, chave));
+      // O casamento e' refeito ja', sem (ou com) a nota: os itens que
+      // voltaram a "pedido" recasam com as notas que sobraram.
+      if(sincronizandoCotacoes) await sincronizandoCotacoes.catch(() => {});
+      await sincronizarCotacoes();
+      const agora = historicoDocsCache.find(x => x.id === id);
+      if($('cmpQtdVinculos') && agora) $('cmpQtdVinculos').textContent = (agora.chavesNfe || []).length;
       renderListaNotasCmp();
+      if(repintarComparacao && cotacaoComparandoId === id) repintarComparacao();
       carregarEstadoVinculos(); // o selo do Historico ja' fica pronto para quando voltar
-      App.toast(tinha ? 'NF-e desvinculada do pedido.' : 'NF-e vinculada ao pedido.', 'ok');
+      App.toast(tinha
+        ? 'NF-e desvinculada: ela não será mais casada com este pedido (para voltar atrás, vincule de novo).'
+        : 'NF-e vinculada ao pedido.', 'ok');
     }catch(e){
       App.toastErro('Erro ao gravar o vínculo', e);
     }
   }
 
-  async function carregarHistorico(){
+  // Devolve true/false (carregou ou não): quem CALCULA com as cotações (o
+  // Radar) precisa distinguir "não há cotação" de "não consegui ler".
+  // Duas chamadas ao mesmo tempo — o aoEntrar da aba e quem abriu a aba
+  // por código — viram UMA leitura das 200 cotações, não duas.
+  let historicoCarregando = null;
+  function carregarHistorico(){
+    if(historicoCarregando) return historicoCarregando;
+    const carga = baixarHistorico().then(ok => {
+      if(historicoCarregando === carga) historicoCarregando = null;
+      return ok;
+    });
+    historicoCarregando = carga;
+    return carga;
+  }
+  async function baixarHistorico(){
     const lista = $('historicoLista');
     const msg = $('historicoMsg');
     if(!firestoreDb){
@@ -5121,7 +5565,7 @@ Tupan</textarea>
       $('historicoTotalPeriodo').style.display = 'none';
       msg.textContent = 'Conecte o Firebase (aba Sincronização) para ver o histórico.';
       msg.style.display = 'block';
-      return;
+      return false;
     }
     msg.textContent = 'Carregando...';
     msg.style.display = 'block';
@@ -5135,15 +5579,23 @@ Tupan</textarea>
       historicoDocsCache = snap.docs.map(doc => Object.assign({ id: doc.id }, doc.data()));
       atualizarFiltroMesHistorico();
       renderHistorico();
-      carregarEstadoVinculos(); // assincrono: o selo de recebimento aparece quando chegar
+      // O prazo do selo "pedido há X d sem nota" é o parâmetro do Radar:
+      // lido aqui também, senão valia o padrão (60) até alguém abrir o Radar.
+      if(!radarParametrosLidos) lerParametrosRadar().then(renderHistorico);
       // As notas emitidas avancam os status sozinhas (faturado / recebido).
-      carregarNotasEmitidas(false).then(sincronizarCotacoes).catch(e => console.error(e));
+      // O selo de recebimento vem DEPOIS da sincronizacao: assim ele ja'
+      // enxerga as notas que ela acabou de vincular (antes saia "0/1
+      // recebida(s)" ao lado de itens "Recebido").
+      carregarNotasEmitidas(false).then(sincronizarCotacoes).catch(e => console.error(e))
+        .then(carregarEstadoVinculos).then(renderHistorico);
+      return true;
     }catch(e){
       console.error(e);
       lista.innerHTML = '';
       $('historicoTotalPeriodo').style.display = 'none';
       msg.textContent = 'Erro ao carregar histórico: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Confira se a coleção "cotacoes" está liberada nas regras do Firestore.';
       msg.style.display = 'block';
+      return false;
     }
   }
 
@@ -5219,7 +5671,11 @@ Tupan</textarea>
     const grupos = docs.map(d=>{
       let itensFiltrados = d.itens || [];
       if(filtroStatus) itensFiltrados = itensFiltrados.filter(it => (it.status||'negociacao') === filtroStatus);
-      if(filtroProduto) itensFiltrados = itensFiltrados.filter(it => normalizarTexto(it.produto||'').includes(filtroProduto));
+      // Pelo nome OU pelo código interno exato: o Radar abre a cotação pelo
+      // código (é por ele que a carteira casa), e o nome na planilha do
+      // fornecedor nem sempre é o do sistema.
+      if(filtroProduto) itensFiltrados = itensFiltrados.filter(it => normalizarTexto(it.produto||'').includes(filtroProduto) ||
+        normalizarTexto(String(it.codigo == null ? '' : it.codigo)).trim() === filtroProduto.trim());
       return { doc: d, itensFiltrados, totalOriginal: (d.itens||[]).length };
     });
     const gruposVisiveis = temFiltroItem ? grupos.filter(g => g.itensFiltrados.length > 0) : grupos;
@@ -5236,6 +5692,7 @@ Tupan</textarea>
 
     let totalGeral = 0;
     let totalCompradoGeral = 0;
+    const estadoVinculadas = estadoDasVinculadas(); // uma vez por desenho, não por cotação
     gruposVisiveis.forEach(({doc: d, itensFiltrados, totalOriginal})=>{
       let totalImpacto = 0;
       itensFiltrados.forEach(it=>{
@@ -5265,7 +5722,7 @@ Tupan</textarea>
       // Selo de recebimento derivado do vinculo com as NF-e: todas as
       // vinculadas com noSistema -> "recebida"; parte -> "n/m"; sem
       // vinculo -> nada (ausencia de vinculo nao e' "nao recebida").
-      const rec = statusRecebimentoCotacao(d.chavesNfe, estadoNotasVinculadas);
+      const rec = statusRecebimentoCotacao(d.chavesNfe, estadoVinculadas);
       const seloRec = !rec ? '' : (rec.completa
         ? '<span class="nf-badge ok" title="Todas as '+rec.total+' NF-e vinculadas deram entrada no ERP">✓ recebida</span>'
         : '<span class="nf-badge aguarda" title="NF-e vinculadas que já deram entrada no ERP">📦 '+rec.recebidas+'/'+rec.total+' recebida(s)</span>');
@@ -5419,7 +5876,12 @@ Tupan</textarea>
     try{
       await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(docId).delete());
       App.toast('Cotação excluída.', 'ok');
-      await carregarHistorico();
+      // Sai da cópia em memória e a lista é redesenhada: reler as 200
+      // cotações do servidor só para tirar uma linha era leitura à toa.
+      historicoDocsCache = historicoDocsCache.filter(x => x.id !== docId);
+      historicoAbertos.delete(docId);
+      atualizarFiltroMesHistorico();
+      renderHistorico();
     }catch(e){
       App.toastErro('Erro ao excluir', e);
     }
@@ -5437,8 +5899,9 @@ Tupan</textarea>
       $('fornecedorProdutos').value = d.fornecedor || '';
       ultimosEsperados = [];
       ultimosRecebidos = [];
-      ultimosResultados = (d.itens || []).map(it=>{
+      ultimosResultados = (d.itens || []).map((it, posicao)=>{
         const r = {
+          origemIdx: posicao, // posição do item no documento lido: é por ela que o Salvar reencontra o item no banco
           codigo: it.codigo || '',
           produtoEsperado: it.produto || '',
           quantidadeEsperada: it.quantidadeEsperada != null ? it.quantidadeEsperada : null,
@@ -5459,6 +5922,11 @@ Tupan</textarea>
         recalcularFlags(r);
         return r;
       });
+      // A "base" da edição: os itens como foram lidos, já no formato em que
+      // são salvos. Ao salvar, o que continuar IGUAL à base não foi mexido
+      // nesta tela e vale o que estiver no banco (R.mesclarEdicao).
+      cotacaoEditandoBase = ultimosResultados.map(itemDaCotacaoParaSalvar);
+      cotacaoEditandoNome = d.nomeCotacao || d.fornecedor || '';
       produtosCotacaoSalvos = new Set();
       $('resultadoCotacaoCard').style.display = 'block';
       renderResultadoCotacao();
@@ -5466,7 +5934,7 @@ Tupan</textarea>
       $('addProdutosCard').style.display = 'block';
       renderListaLote();
       popularSelectIndividual();
-      $('cotacaoMsg').textContent = 'Editando: ' + (d.nomeCotacao || d.fornecedor || '') + '. Ajuste os preços e clique em "Salvar cotação" pra atualizar (não cria duplicata).';
+      $('cotacaoMsg').textContent = 'Editando: ' + cotacaoEditandoNome + '. Ajuste os preços e clique em "Salvar cotação" pra atualizar (não cria duplicata).';
       mostrarViewCotacao();
     }catch(e){
       console.error(e);
@@ -5598,7 +6066,10 @@ Tupan</textarea>
 
   async function parsePdfFornecedor(file){
     const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+    // isEvalSupported:false — PDF de fornecedor é arquivo de fora, e o
+    // pdf.js com eval ligado executa código embutido em fonte maliciosa
+    // (CVE-2024-4367).
+    const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
 
     // O agrupamento posicional (itens -> linhas de células) mora no
     // app-shared.js, compartilhado com a conferência de DDA do Controle
@@ -5944,6 +6415,21 @@ Tupan</textarea>
     el.innerHTML = html;
   }
 
+  // Status de uma linha da cotação: a regra (inclusive a data do pedido)
+  // é a do radar-nucleo, a mesma da tela Comparar e do "Pedido feito".
+  function aplicarStatusNaLinha(r, novo){
+    Object.assign(r, R.mudarStatusItem(r, novo, App.hojeISO()));
+  }
+  // O que a linha já carregava e não vem da planilha nem do PDF: de que
+  // item do documento ela saiu (cotação em edição), o status e o que a
+  // nota fiscal gravou nela. Refazer a correspondência não pode apagar isso.
+  const CAMPOS_HERDADOS = ['origemIdx', 'status', 'pedidoEm', 'faturadoEm', 'recebidoEm', 'chaveNfe',
+    'numeroNfe', 'qtdNfe', 'casadoPor', 'notasNfe', 'parcial', 'precoNfe'];
+  function herdarDoItem(novo, anterior){
+    if(anterior) CAMPOS_HERDADOS.forEach(k => { if(anterior[k] !== undefined) novo[k] = anterior[k]; });
+    return novo;
+  }
+
   // Delegação registrada UMA vez no container estável #resultadoCotacao.
   // Antes cada render reanexava cinco listeners por linha — e esta
   // tabela se redesenha a cada preço digitado.
@@ -5963,7 +6449,7 @@ Tupan</textarea>
       }
       selecionadas.forEach(cb=>{
         const idx = parseInt(cb.dataset.idx,10);
-        if(ultimosResultados[idx]) ultimosResultados[idx].status = novoStatus;
+        if(ultimosResultados[idx]) aplicarStatusNaLinha(ultimosResultados[idx], novoStatus);
       });
       const qtd = selecionadas.length;
       renderResultadoCotacao();
@@ -5990,11 +6476,18 @@ Tupan</textarea>
     App.delegar(el, 'change', '.match-select', (sel)=>{
       const idx = parseInt(sel.dataset.idx,10);
       const novoRecIdx = parseInt(sel.value,10);
-      const exp = ultimosEsperados[idx];
+      const anterior = ultimosResultados[idx];
+      if(!anterior) return;
+      // Cotação aberta para edição (ou montada pelo Radar e depois
+      // alterada) não tem a planilha em ultimosEsperados: o "esperado" é
+      // o próprio item da linha. Sem isto, escolher uma opção aqui
+      // estourava em construirResultado(undefined, ...).
+      const exp = ultimosEsperados[idx] || {
+        codigo: anterior.codigo, produto: anterior.produtoEsperado,
+        quantidade: anterior.quantidadeEsperada, precoEsperado: anterior.precoEsperado
+      };
       const rec = novoRecIdx === -1 ? null : ultimosRecebidos[novoRecIdx];
-      const statusAnterior = ultimosResultados[idx] ? ultimosResultados[idx].status : 'negociacao';
-      ultimosResultados[idx] = construirResultado(exp, rec, novoRecIdx);
-      ultimosResultados[idx].status = statusAnterior || 'negociacao';
+      ultimosResultados[idx] = herdarDoItem(construirResultado(exp, rec, novoRecIdx), anterior);
       renderResultadoCotacao();
       renderSugestoesCotacao();
       sincronizarIndividual();
@@ -6002,7 +6495,7 @@ Tupan</textarea>
 
     App.delegar(el, 'change', '.status-select', (sel)=>{
       const idx = parseInt(sel.dataset.idx,10);
-      if(ultimosResultados[idx]) ultimosResultados[idx].status = sel.value;
+      if(ultimosResultados[idx]) aplicarStatusNaLinha(ultimosResultados[idx], sel.value);
     });
 
     App.delegar(el, 'change', '.preco-atual-input', (inp)=>{
@@ -6099,9 +6592,38 @@ Tupan</textarea>
 
   let produtosCotacaoSalvos = new Set(); // nomes já enviados a Produtos Salvos nesta cotação
   let cotacaoEditandoId = null; // se preenchido, "Salvar" atualiza essa cotação em vez de criar uma nova
+  let cotacaoEditandoBase = null; // os itens dela como foram lidos (formato de gravação) — ver R.mesclarEdicao
+  let cotacaoEditandoNome = '';
 
   function itensValidosParaSalvar(){
     return ultimosResultados.filter(r=>!r.flags.includes('missing') && r.precoRecebido!=null);
+  }
+
+  // A linha da tela no formato em que o item mora no Firestore. Usada
+  // para gravar E para tirar a "base" da edição (carregarCotacaoParaEdicao).
+  function itemDaCotacaoParaSalvar(r){
+    return {
+      codigo: r.codigo || '',
+      produto: r.produtoEsperado,
+      quantidadeEsperada: r.quantidadeEsperada,
+      precoEsperado: r.precoEsperado,
+      produtoRecebido: r.produtoRecebido,
+      quantidadeRecebida: r.quantidadeRecebida,
+      precoRecebido: r.precoRecebido,
+      codigoRecebido: r.codigoRecebido || '', // código do fornecedor, como veio no PDF
+      // Sem `precoVenda` aqui de propósito: o preço de venda mora em
+      // Produtos Salvos, e o histórico o lê de lá. Guardar uma cópia
+      // nesta linha é o que fazia os dois números divergirem.
+      flags: r.flags,
+      status: r.status || 'negociacao',
+      // Data em que o item virou "pedido": e' o que o Radar mostra como
+      // "pedido em" (cotacao antiga sem isto usa a data da cotacao). Quem
+      // a decide e' R.mudarStatusItem, na hora em que o status muda.
+      pedidoEm: r.pedidoEm || null,
+      faturadoEm: r.faturadoEm || null, recebidoEm: r.recebidoEm || null, chaveNfe: r.chaveNfe || null,
+      numeroNfe: r.numeroNfe || null, qtdNfe: r.qtdNfe != null ? r.qtdNfe : null, casadoPor: r.casadoPor || null,
+      notasNfe: r.notasNfe || null, parcial: r.parcial || null, precoNfe: r.precoNfe != null ? r.precoNfe : null
+    };
   }
 
   function resetCotacao(){
@@ -6110,6 +6632,8 @@ Tupan</textarea>
     ultimosResultados = [];
     produtosCotacaoSalvos = new Set();
     cotacaoEditandoId = null;
+    cotacaoEditandoBase = null;
+    cotacaoEditandoNome = '';
     $('arquivoExcel').value = '';
     $('arquivoPdf').value = '';
     $('previewExcel').innerHTML = '';
@@ -6177,12 +6701,39 @@ Tupan</textarea>
     XLSX.writeFile(wb, nomeArquivo);
   });
 
-  $('compararBtn').addEventListener('click', ()=>{
+  $('compararBtn').addEventListener('click', async ()=>{
     if(!ultimosEsperados.length){ App.toast('Carregue a planilha de cotação primeiro.', 'info'); return; }
     if(!ultimosRecebidos.length){ App.toast('Carregue o PDF do fornecedor primeiro.', 'info'); return; }
-    ultimosResultados = compararCotacao(ultimosEsperados, ultimosRecebidos);
+    // Cotação aberta para edição + arquivos novos (o fornecedor mandou o
+    // PDF revisado). Antes o id era zerado em silêncio e o Salvar criava
+    // OUTRA cotação, com a tela ainda dizendo "não cria duplicata". Agora
+    // pergunta, e ao confirmar continua na MESMA cotação: cada linha nova
+    // herda do item antigo (achado por código/nome) o status e o que a
+    // nota gravou; item que não está mais na planilha sai ao salvar.
+    const editando = !!cotacaoEditandoId;
+    if(editando){
+      const ok = await App.confirmar({
+        titulo: 'Atualizar a cotação em edição',
+        mensagem: 'Você está editando "' + cotacaoEditandoNome + '". Comparar com estes arquivos ATUALIZA essa cotação: ' +
+          'os itens passam a ser os da planilha (status e notas dos que continuam são mantidos; os que não estiverem mais nela saem ao salvar).' +
+          '\n\nPara criar uma cotação NOVA em vez disso, cancele e clique em "Limpar" antes de comparar.',
+        confirmar: 'Atualizar esta cotação'
+      });
+      if(!ok || !cotacaoEditandoId) return;
+    }
+    let resultados = compararCotacao(ultimosEsperados, ultimosRecebidos);
+    if(editando){
+      const base = cotacaoEditandoBase || [], usados = new Set();
+      resultados = resultados.map(r => {
+        const i = R.indiceDoItem(base, { codigo: r.codigo, produto: r.produtoEsperado }, -1, usados);
+        if(i === -1) return r;
+        usados.add(i);
+        return herdarDoItem(r, Object.assign({}, base[i], { origemIdx: i }));
+      });
+      $('cotacaoMsg').textContent = 'Editando: ' + cotacaoEditandoNome + ' — itens atualizados pelos arquivos. "Salvar cotação" atualiza essa mesma cotação (não cria duplicata).';
+    }
+    ultimosResultados = resultados;
     produtosCotacaoSalvos = new Set();
-    cotacaoEditandoId = null;
     $('resultadoCotacaoCard').style.display = 'block';
     renderResultadoCotacao();
     renderSugestoesCotacao();
@@ -6207,6 +6758,7 @@ Tupan</textarea>
     const fornecedor = $('fornecedorProdutos').value.trim() || $('fornecedorCotacao').value.trim();
     let gravados = 0;
     let escreveu = false;
+    const falhas = [];
     for(const r of ultimosResultados){
       if(!(r.precoVenda > 0)) continue;
       const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
@@ -6220,9 +6772,18 @@ Tupan</textarea>
         await gravarPrecoVenda(r, cfg, fornecedor, salvo);
         escreveu = true;
         if(!precoIgual) gravados++; // o aviso conta preço mudado, não código preenchido
-      }catch(e){ console.error('Erro ao gravar o preço de venda de ' + r.produtoEsperado, e); }
+      }catch(e){
+        console.error('Erro ao gravar o preço de venda de ' + r.produtoEsperado, e);
+        falhas.push({ produto: r.produtoEsperado, erro: e });
+      }
     }
     if(escreveu) await atualizarListaSalvos();
+    // Falha alto: a cotacao e' salva de qualquer jeito, mas quem digitou
+    // um preco precisa saber que ele NAO chegou em Produtos salvos.
+    if(falhas.length){
+      App.toastErro(falhas.length + (falhas.length === 1 ? ' preço de venda não foi gravado' : ' preços de venda não foram gravados') +
+        ' em Produtos salvos (' + falhas.slice(0, 3).map(f => f.produto).join(', ') + (falhas.length > 3 ? '…' : '') + ')', falhas[0].erro);
+    }
     return gravados;
   }
 
@@ -6239,40 +6800,29 @@ Tupan</textarea>
     const fornecedor = $('fornecedorCotacao').value.trim();
     if(!fornecedor){ App.toast('Informe o fornecedor desta cotação antes de salvar.', 'info'); $('fornecedorCotacao').focus(); return; }
     if(ultimosResultados.length === 0){ App.toast('Não há itens nesta cotação pra salvar (todos foram removidos).', 'info'); return; }
-    const itens = ultimosResultados.map(r=>({
-      codigo: r.codigo || '',
-      produto: r.produtoEsperado,
-      quantidadeEsperada: r.quantidadeEsperada,
-      precoEsperado: r.precoEsperado,
-      produtoRecebido: r.produtoRecebido,
-      quantidadeRecebida: r.quantidadeRecebida,
-      precoRecebido: r.precoRecebido,
-      codigoRecebido: r.codigoRecebido || '', // código do fornecedor, como veio no PDF
-      // Sem `precoVenda` aqui de propósito: o preço de venda mora em
-      // Produtos Salvos, e o histórico o lê de lá. Guardar uma cópia
-      // nesta linha é o que fazia os dois números divergirem.
-      flags: r.flags,
-      status: r.status || 'negociacao',
-      // Data em que o item virou "pedido": e' o que o Radar mostra como
-      // "pedido em" (cotacao antiga sem isto usa a data da cotacao).
-      pedidoEm: (r.status === 'pedido') ? (r.pedidoEm || App.hojeISO()) : (r.pedidoEm || null),
-      faturadoEm: r.faturadoEm || null, recebidoEm: r.recebidoEm || null, chaveNfe: r.chaveNfe || null,
-      numeroNfe: r.numeroNfe || null, qtdNfe: r.qtdNfe != null ? r.qtdNfe : null, casadoPor: r.casadoPor || null,
-      notasNfe: r.notasNfe || null, parcial: r.parcial || null, precoNfe: r.precoNfe != null ? r.precoNfe : null
-    }));
+    const itens = ultimosResultados.map(itemDaCotacaoParaSalvar);
     try{
       const precosGravados = await gravarPrecosVendaDaCotacao();
       if(cotacaoEditandoId){
-        // Atualiza a cotação existente (mantém nome/data originais) — não cria duplicata
-        await App.comAuth(()=> firestoreDb.collection('cotacoes').doc(cotacaoEditandoId).set({ fornecedor, itens }, { merge: true }));
+        // Atualiza a cotação existente (mantém nome/data originais) — não
+        // cria duplicata. Sobre o documento FRESCO (gravarCotacao): o que
+        // não foi mexido nesta tela vale o que está no banco agora — o
+        // status que a nota avançou enquanto a edição estava aberta não
+        // volta atrás, e item acrescentado em outra máquina não some.
+        const base = cotacaoEditandoBase || [];
+        const origens = ultimosResultados.map(r => r.origemIdx != null ? r.origemIdx : -1);
+        await gravarCotacao(cotacaoEditandoId, fresco =>
+          ({ fornecedor, itens: R.mesclarEdicao(base, itens, origens, fresco.itens || []) }));
         App.toast('Cotação atualizada no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       } else {
         const agora = new Date();
+        const hoje = App.hojeISO();
         await App.comAuth(()=> firestoreDb.collection('cotacoes').add({
           fornecedor,
           nomeCotacao: gerarNomeCotacao(fornecedor, agora),
           data: firebase.firestore.FieldValue.serverTimestamp(),
-          itens
+          // Item que já nasce "pedido" sem data ganha a de hoje (regra do núcleo).
+          itens: itens.map(it => R.mudarStatusItem(it, it.status, hoje))
         }));
         App.toast('Cotação salva no histórico.' + sufixoPrecosGravados(precosGravados), 'ok');
       }
@@ -6724,6 +7274,10 @@ Tupan</textarea>
   let painelAno = new Date().getFullYear();
   let painelDados = null;        // { ano, metas, aPagar, aPagarDia } | { ano, erro } | { ano, semFirebase }
   let painelCarregandoAno = null;
+  // metasMensais (a colecao inteira) e as notas canceladas NAO dependem do
+  // ano exibido: ficam em memoria entre um ano e outro (◀ ▶) em vez de
+  // serem relidas a cada troca; so' o "Recarregar" as busca de novo.
+  let painelFixos = null;        // { metas, canceladas }
   const semanasAbertas = Object.create(null); // meses com o detalhe por semana aberto
 
   const mesAtualISO = () => App.hojeISO().substring(0, 7);
@@ -6733,7 +7287,9 @@ Tupan</textarea>
 
   async function carregarPainel(forcar){
     $('anoPainel').textContent = painelAno;
-    if(painelDados && painelDados.ano === painelAno && !painelDados.erro && !forcar){
+    // "Sem Firebase" tambem nao e' resultado para guardar: depois de
+    // conectar na aba Sincronizacao o Painel seguia preso no aviso.
+    if(painelDados && painelDados.ano === painelAno && !painelDados.erro && !painelDados.semFirebase && !forcar){
       renderPainel();
       return;
     }
@@ -6751,11 +7307,12 @@ Tupan</textarea>
         painelDados = { ano: ano, semFirebase: true };
         return;
       }
+      const emMemoria = (!forcar && painelFixos) ? painelFixos : null;
       const [metasSnap, dupSnap, cancSnap] = await Promise.all([
         // A colecao INTEIRA (um doc por mes, poucas dezenas): o total
         // do ano anterior, o "vs ano anterior" e a sazonalidade
         // precisam dos outros anos, nao so do exibido.
-        App.comAuth(() => firestoreDb.collection('metasMensais').get()),
+        emMemoria ? null : App.comAuth(() => firestoreDb.collection('metasMensais').get()),
         // Ate junho do ANO SEGUINTE: as notas de agora ja' vencem no
         // ano que vem, e a linha do 1º semestre embaixo do total
         // mostra isso sem trocar de ano.
@@ -6772,13 +7329,17 @@ Tupan</textarea>
         // So' as canceladas, para excluir as duplicatas delas do "a
         // pagar" — baixar todas as notas do ano custaria muito mais
         // leitura para usar um campo so'.
-        App.comAuth(() => firestoreDb.collection('notas')
+        emMemoria ? null : App.comAuth(() => firestoreDb.collection('notas')
           .where('status', '==', 'cancelada').get())
       ]);
-      const canceladas = Object.create(null);
-      cancSnap.forEach(doc => { canceladas[doc.id] = true; });
-      const metas = Object.create(null);
-      metasSnap.forEach(doc => { metas[doc.id] = doc.data(); });
+      if(!emMemoria){
+        const lidas = { metas: Object.create(null), canceladas: Object.create(null) };
+        cancSnap.forEach(doc => { lidas.canceladas[doc.id] = true; });
+        metasSnap.forEach(doc => { lidas.metas[doc.id] = doc.data(); });
+        painelFixos = lidas;
+      }
+      const canceladas = painelFixos.canceladas;
+      const metas = painelFixos.metas; // o MESMO objeto em todos os anos: salvarMeta atualiza um lugar so'
       const aPagar = Object.create(null);
       const aPagarDia = Object.create(null); // por dia: alimenta o detalhe por semana
       const somar = (venc, valor) => {
@@ -6804,13 +7365,26 @@ Tupan</textarea>
   }
 
   async function salvarMeta(mes, campos){
+    // As metas em memoria sao a colecao inteira (todos os anos, o mesmo
+    // objeto de painelFixos): atualiza seja qual for o ano exibido.
+    // O valor novo entra na memoria ANTES de a gravacao voltar: a pessoa
+    // segue digitando nos campos seguintes, e o redesenho de uma gravacao
+    // anterior nao pode repor o valor velho neste campo no meio do caminho.
+    const metas = (painelFixos && painelFixos.metas) || (painelDados && painelDados.metas);
+    const anterior = metas ? metas[mes] : null;
+    if(metas) metas[mes] = Object.assign({}, anterior, campos);
     try{
       await App.comAuth(() => exigirDb().collection('metasMensais').doc(mes).set(campos, { merge: true }));
-      if(painelDados && painelDados.metas && painelDados.ano === Number(mes.substring(0, 4))){
-        painelDados.metas[mes] = Object.assign({}, painelDados.metas[mes], campos);
-      }
     }catch(e){
       App.toastErro('Erro ao gravar a meta', e);
+      // So' os campos DESTA gravacao voltam ao que estava salvo.
+      if(metas){
+        const volta = Object.assign({}, metas[mes]);
+        Object.keys(campos).forEach(k => {
+          if(anterior && anterior[k] !== undefined) volta[k] = anterior[k]; else delete volta[k];
+        });
+        metas[mes] = volta;
+      }
     }
     // Rerender nos dois casos: sucesso mostra o derivado novo; erro
     // devolve o campo ao valor que esta' salvo de verdade.
@@ -6923,6 +7497,9 @@ Tupan</textarea>
     // pode ser silenciosa.
     const avisos = [];
     if(p.fechadosSemVendas.length) avisos.push('sem vendas lançadas: ' + p.fechadosSemVendas.map(nomeMesCurto).join(', '));
+    // Mes que fechou com o lancamento parado no meio (o acumulado do card
+    // "ate' o dia D"): fica fora da conta ate' alguem lancar o mes inteiro.
+    if(p.fechadosParciais.length) avisos.push('lançamento parcial, fora da conta: ' + p.fechadosParciais.map(nomeMesCurto).join(', '));
     // Os avisos de meta so' importam quando a projecao exibida e' a
     // das metas (reserva) — com a sazonalidade na tela, objetivo
     // faltando nao muda o numero mostrado.
@@ -7014,7 +7591,9 @@ Tupan</textarea>
         aPagar: aPagarMes
       }, hoje);
 
-      if(r.vendas != null){
+      // Mes fechado com lancamento parcial (r.parcialAte) fica FORA do
+      // total: somar 19 dias como se fossem o mes derrubaria o ano calado.
+      if(r.vendas != null && !r.parcialAte){
         tot.vendas += r.vendas;
         tot.temVendas = true;
         // O comparavel (proporcional no mes corrente) entra no total no
@@ -7041,16 +7620,24 @@ Tupan</textarea>
           (r.disponivel != null ? brl(r.disponivel) : '') + '</td>' +
         '<td><input class="painel-num" type="text" inputmode="decimal" data-vendas="' + mes + '"' +
           ' value="' + numBR(r.vendas) + '"' +
-          ' aria-label="Vendas realizadas de ' + nomeMes + '"></td>' +
+          ' aria-label="Vendas realizadas de ' + nomeMes + '">' +
+          // O mes fechou e o ultimo lancamento parou antes do fim: o numero
+          // NAO e' o mes inteiro. Avisa aqui e o mes sai dos totais.
+          (r.parcialAte
+            ? '<div style="font-family:var(--font-mono); font-size:10.5px; color:var(--loss); white-space:nowrap;"' +
+              ' title="O valor é o acumulado até essa data, não o mês inteiro. Digite o total do mês para ele voltar a contar nos totais, no crescimento e na projeção.">' +
+              '⚠ lançado até ' + App.fmtData(r.parcialAte).substring(0, 5) + '</div>'
+            : '') + '</td>' +
         '<td class="' + (r.difPct == null ? '' : r.difPct < 0 ? 'neg' : 'pos') + '"' +
-          (r.estado === 'corrente' && r.objetivoComparavel != null && meta.objetivo != null && r.objetivoComparavel !== meta.objetivo
-            ? ' title="Mês em andamento: comparado ao objetivo proporcional até a data lançada (' + brl(r.objetivoComparavel) + '), não ao mês inteiro"'
+          ((r.estado === 'corrente' || r.parcialAte) && r.objetivoComparavel != null && meta.objetivo != null && r.objetivoComparavel !== meta.objetivo
+            ? ' title="' + (r.parcialAte ? 'Lançamento parcial' : 'Mês em andamento') + ': comparado ao objetivo proporcional até a data lançada (' + brl(r.objetivoComparavel) + '), não ao mês inteiro"'
             : '') + '>' + pctBR(r.difPct) + '</td>' +
-        // vs ano anterior: SO' mes fechado — parcial contra mes cheio
-        // diria a coisa errada; o corrente compara no card, pro-rata.
+        // vs ano anterior: SO' mes fechado e lancado por inteiro — parcial
+        // contra mes cheio diria a coisa errada (dos dois lados); o
+        // corrente compara no card, pro-rata.
         (function(){
-          const vAnt = PainelNucleo.vendasDoMes(painelDados.metas, (painelAno - 1) + '-' + String(m).padStart(2, '0'));
-          const mostra = r.estado === 'fechado' && r.vendas != null && vAnt != null && vAnt > 0;
+          const vAnt = PainelNucleo.vendasFechadasDoMes(painelDados.metas, (painelAno - 1) + '-' + String(m).padStart(2, '0'));
+          const mostra = r.estado === 'fechado' && r.vendas != null && !r.parcialAte && vAnt != null && vAnt > 0;
           const pctAnt = mostra ? r.vendas / vAnt - 1 : null;
           return '<td class="' + (pctAnt == null ? '' : pctAnt < 0 ? 'neg' : 'pos') + '"' +
             (mostra ? ' title="' + nomeMes + ' de ' + (painelAno - 1) + ': ' + brl(vAnt) + '"' : '') + '>' +
@@ -7126,12 +7713,27 @@ Tupan</textarea>
         '<span style="display:inline-block; width:84px; font-weight:600; color:var(--ink);">Total</span>' +
         '<strong style="color:var(--ink);">' + brl(somaSemestre) + '</strong></div></td></tr>';
 
-    alvo.innerHTML = html + '</tbody></table>';
+    // Cada campo grava ao sair dele e a tabela e' redesenhada: quem ja'
+    // esta' digitando no campo seguinte nao pode perder o que digitou.
+    trocarHtmlMantendoFoco(alvo, html + '</tbody></table>');
+  }
+
+  // Campo de dinheiro com texto que nao e' numero: avisa e NAO grava. Antes
+  // "abc" virava null e apagava o valor salvo do mes, e "6,47mi" virava 647.
+  function dinheiroDoCampo(inp){
+    const lido = PainelNucleo.valorDigitado(inp.value);
+    if(lido.invalido){
+      App.toastErro('Valor inválido', '"' + inp.value.trim() + '" não é um número. Nada foi gravado — corrija o campo (ex.: 6.470.000 ou 6470000,50).');
+      inp.focus();
+    }
+    return lido;
   }
 
   $('prevSalvarBtn').addEventListener('click', () => {
     const mes = mesAtualISO();
-    const v = App.parseDinheiroBR($('prevFaturado').value);
+    const lido = dinheiroDoCampo($('prevFaturado'));
+    if(lido.invalido) return;
+    const v = lido.vazio ? null : lido.valor;
     const ate = $('prevAte').value;
     if(v == null){ App.toastErro('Valor em falta', 'Informe o faturado acumulado.'); return; }
     if(!ate || ate.substring(0, 7) !== mes){
@@ -7150,14 +7752,19 @@ Tupan</textarea>
 
   // parseDinheiroBR nos campos de DINHEIRO grande: "6.470.000" digitado
   // sem centavos é seis milhões e meio, não R$ 6,47.
+  // Campo VAZIO apaga o valor (e' resposta valida); texto que nao e'
+  // numero e' recusado (dinheiroDoCampo), nunca gravado como "sem valor".
   App.delegar($('tabelaPainel'), 'change', 'input[data-objetivo]', inp => {
-    const v = App.parseDinheiroBR(inp.value);
-    salvarMeta(inp.dataset.objetivo, { objetivo: v });
+    const lido = dinheiroDoCampo(inp);
+    if(lido.invalido) return;
+    salvarMeta(inp.dataset.objetivo, { objetivo: lido.vazio ? null : lido.valor });
   });
   App.delegar($('tabelaPainel'), 'change', 'input[data-vendas]', inp => {
     const mes = inp.dataset.vendas;
-    const v = App.parseDinheiroBR(inp.value);
-    if(v == null){ salvarMeta(mes, { faturamento: null }); return; }
+    const lido = dinheiroDoCampo(inp);
+    if(lido.invalido) return;
+    if(lido.vazio){ salvarMeta(mes, { faturamento: null }); return; }
+    const v = lido.valor;
     // Mes fechado: o valor e' o total do mes. Mes corrente: e' o mesmo
     // acumulado do card de previsao, valendo ate ontem — e no dia 1º,
     // hoje (ontem cairia fora do mes e zeraria a previsao).
@@ -7224,10 +7831,14 @@ Tupan</textarea>
     return m;
   }
 
+  // O Historico tambem le estes parametros (o prazo do selo "pedido ha' X d
+  // sem nota"): a marca evita reler a cada entrada na aba.
+  let radarParametrosLidos = false;
   function lerParametrosRadar(){
     return App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).get()).then(d => {
       const x = d.exists ? d.data() : {};
       radarParametros = Object.assign({}, R.PARAMETROS_PADRAO, x, { pedidos: x.pedidos || {} });
+      radarParametrosLidos = true;
       $('rdPeriodo').value = radarParametros.periodoDias;
       $('rdCobertura').value = radarParametros.coberturaDias;
       $('rdBaixoGiro').value = radarParametros.baixoGiroMax;
@@ -7263,22 +7874,43 @@ Tupan</textarea>
   async function gravarResumoRadar(doc){
     const div = R.dividirResumo(doc);
     const db = exigirDb();
-    // Partes primeiro, meta por ultimo: quem ler no meio ve a importacao anterior inteira.
+    const parte = (n) => db.collection('config').doc(RADAR_DOC + '_p' + n);
+    const antigas = (radarDoc && radarDoc.partes) || 0;
+    // Partes + meta + limpeza das partes que sobraram, num LOTE so': ou
+    // entra tudo ou nao entra nada. Gravando uma a uma (como antes), a
+    // rede caindo depois da 1a parte deixava a parte nova misturada com
+    // as velhas e com a data da importacao anterior — sem erro nenhum na
+    // proxima abertura. Um commit leva ate' ~10 MB; o relatorio de hoje
+    // (3-4 partes de ~0,7 MB) cabe com folga.
+    if(div.partes.length <= 8){
+      await App.comAuth(() => {
+        const lote = db.batch();
+        div.partes.forEach((p, i) => lote.set(parte(i + 1), p));
+        lote.set(db.collection('config').doc(RADAR_DOC), div.meta);
+        for(let i = div.partes.length + 1; i <= antigas; i++) lote.delete(parte(i));
+        return lote.commit();
+      });
+      return Object.assign({}, doc, { partes: div.partes.length });
+    }
+    // Relatorio grande demais para um commit: volta a gravar em sequencia
+    // (partes primeiro, meta por ultimo), sabendo que nao e' atomico.
     for(let i = 0; i < div.partes.length; i++){
-      await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + (i + 1)).set(div.partes[i]));
+      await App.comAuth(() => parte(i + 1).set(div.partes[i]));
     }
     await App.comAuth(() => db.collection('config').doc(RADAR_DOC).set(div.meta));
-    // Partes que sobraram de uma importacao maior sao apagadas.
-    if(radarDoc && radarDoc.partes > div.partes.length){
-      for(let i = div.partes.length + 1; i <= radarDoc.partes; i++){
-        await App.comAuth(() => db.collection('config').doc(RADAR_DOC + '_p' + i).delete()).catch(() => {});
-      }
+    for(let i = div.partes.length + 1; i <= antigas; i++){
+      await App.comAuth(() => parte(i).delete()).catch(() => {});
     }
     return Object.assign({}, doc, { partes: div.partes.length });
   }
 
-  // Cotacao x NF-e, sem clique: faturado e recebido pelos itens das notas
-  // (R.casarCotacaoComNotas). Grava so' as cotacoes que mudaram.
+  // Cotacao x NF-e, sem clique: faturado e recebido pelos itens das notas.
+  // - R.casarCotacoesComNotas olha TODAS as cotacoes juntas, para a mesma
+  //   linha de nota nao fechar duas (a recompra do mesmo produto).
+  // - So' as que mudaram sao gravadas, e por gravarCotacao: o casamento e'
+  //   REFEITO sobre o documento fresco dentro da transacao. A copia em
+  //   memoria serve para decidir quem olhar, nunca para regravar por cima
+  //   do que outra tela mudou.
   let sincronizandoCotacoes = null;
   function sincronizarCotacoes(){
     if(sincronizandoCotacoes) return sincronizandoCotacoes;
@@ -7287,18 +7919,27 @@ Tupan</textarea>
       if(!radarDoc){ try{ radarDoc = await lerResumoRadar(); }catch(e){ console.error('radar para a sincronização:', e); } }
       const eanPorCodigo = {};
       Object.keys((radarDoc && radarDoc.produtos) || {}).forEach(c => { if(radarDoc.produtos[c].e) eanPorCodigo[c] = radarDoc.produtos[c].e; });
+      const notas = notasEmitidasCache, estado = notasInfoPorChave, hoje = App.hojeISO();
+      const plano = R.casarCotacoesComNotas(historicoDocsCache, notas, estado, eanPorCodigo, hoje);
       let gravadas = 0;
-      for(const d of historicoDocsCache){
-        const r = R.casarCotacaoComNotas(d, notasEmitidasCache, notasInfoPorChave, eanPorCodigo, App.hojeISO());
-        if(!r.mudou) continue;
+      for(const p of plano){
+        if(!p.resultado.mudou) continue;
         try{
-          await App.comAuth(() => exigirDb().collection('cotacoes').doc(d.id).update({ itens: r.itens, chavesNfe: r.chavesNfe }));
-          d.itens = r.itens; d.chavesNfe = r.chavesNfe;
-          gravadas++;
-        }catch(e){ console.error('sincronizar cotação', d.id, e); }
+          const r = await gravarCotacao(p.cotacao.id, fresco => {
+            const novo = R.casarCotacaoComNotas(fresco, notas, estado, eanPorCodigo, hoje, p.consumo);
+            return novo.mudou ? { itens: novo.itens, chavesNfe: novo.chavesNfe } : null;
+          });
+          if(r.gravou) gravadas++;
+        }catch(e){
+          console.error('sincronizar cotação', p.cotacao.id, e);
+          // Sem conexao nenhuma das seguintes vai gravar: para aqui, a
+          // proxima abertura do Historico tenta de novo.
+          if(/sem conexão/.test(String(e && e.message))) break;
+        }
       }
       if(gravadas){
         if(router.atual() === 'Historico') renderHistorico();
+        if(router.atual() === 'Comparar' && repintarComparacao) repintarComparacao();
         App.toast(gravadas + ' cotação(ões) atualizada(s) pelas notas emitidas (faturado / recebido).', 'info');
       }
       return gravadas;
@@ -7314,19 +7955,32 @@ Tupan</textarea>
     radarCarregando = (async () => {
       setRadarMsg('Carregando vendas, cotações e notas...');
       try{
-        const [docVendas] = await Promise.all([
+        const [docVendas, , , historicoOk] = await Promise.all([
           lerResumoRadar(),
           lerParametrosRadar(),
           (produtosCache && produtosCache.length && !forcar) ? Promise.resolve() : atualizarListaSalvos(),
-          (historicoDocsCache.length && !forcar) ? Promise.resolve() : carregarHistorico(),
+          (historicoDocsCache.length && !forcar) ? Promise.resolve(true) : carregarHistorico(),
           carregarNotasEmitidas(!!forcar)
         ]);
         radarDoc = docVendas;
+        // Carga que FALHOU nao e' "zero cotacoes" nem "zero notas". As duas
+        // funcoes avisam na propria aba e nao rejeitam; se o Radar seguisse,
+        // calculava sem carteira e sem faturado e mandava comprar o que ja'
+        // esta' pedido — com um "0 notas" cinza como unico sinal.
+        if(historicoOk === false) throw new Error('não consegui ler as cotações (veja a aba Histórico)');
+        if(!notasEmitidasCache || notasEmitidasErro){
+          throw new Error('não consegui ler as notas emitidas' + (notasEmitidasErro ? ' — ' + notasEmitidasErro : '') + ' (veja a aba NF-e Emitidas)');
+        }
         radarCarregado = true;
         await sincronizarCotacoes();
         calcularERenderRadar();
       }catch(e){
         console.error(e);
+        radarCarregado = false; // a proxima entrada na aba tenta de novo
+        radarLinhas = [];
+        $('radarResumo').innerHTML = '';
+        $('radarLista').innerHTML = '';
+        $('radarListaMsg').textContent = 'O Radar NÃO foi calculado: sem as cotações e as notas, a sugestão de compra sairia inflada (nada em carteira, nada faturado). Toque em "⟳ Recarregar".';
         setRadarMsg('Erro ao carregar o radar: ' + App.erroDe(e));
       }finally{ radarCarregando = null; }
     })();
@@ -7341,14 +7995,23 @@ Tupan</textarea>
       renderRadar();
       return;
     }
+    // O periodo vem do relatorio quando ele traz as datas; no relatorio
+    // simples vale o campo da tela, inclusive mudado DEPOIS de importar
+    // (R.periodoDoRadar). Com as datas no relatorio o campo nao tem o que
+    // decidir: fica desabilitado, dizendo por que.
+    const periodo = R.periodoDoRadar(radarDoc, radarParametros);
+    $('rdPeriodo').disabled = periodo.doRelatorio;
+    $('rdPeriodo').title = periodo.doRelatorio
+      ? 'O relatório importado traz o período (' + periodo.dias + ' dias): este campo só vale para o relatório de vendas simples, que não traz as datas.'
+      : 'Dias de venda que o relatório importado cobre — muda a média por dia, a cobertura e a sugestão.';
     radarLinhas = R.calcularRadar({
-      produtos: radarDoc.produtos, anterior: radarDoc.anterior, periodoDias: radarDoc.periodoDias || radarParametros.periodoDias,
+      produtos: radarDoc.produtos, anterior: radarDoc.anterior, periodoDias: periodo.dias,
       fichas: fichasPorCodigo(), carteira: R.carteira(historicoDocsCache),
       movimentos: R.movimentos(notasEmitidasCache || [], notasInfoPorChave),
       parametros: radarParametros, pedidos: radarParametros.pedidos, hoje: App.hojeISO()
     });
-    setRadarMsg(radarDoc.qtd + ' produtos · vendas de ' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' dias' +
-      (radarDoc.periodoIni ? ' (' + App.fmtData(radarDoc.periodoIni) + ' a ' + App.fmtData(radarDoc.periodoFim) + ')' : '') + ' · importado em ' + App.fmtData(radarDoc.importadoEm) +
+    setRadarMsg(radarDoc.qtd + ' produtos · vendas de ' + periodo.dias + ' dias' +
+      (periodo.doRelatorio ? ' (' + App.fmtData(radarDoc.periodoIni) + ' a ' + App.fmtData(radarDoc.periodoFim) + ', lido do relatório)' : ' (campo "Período do relatório")') + ' · importado em ' + App.fmtData(radarDoc.importadoEm) +
       (radarDoc.anteriorEm ? ' (anterior: ' + App.fmtData(radarDoc.anteriorEm) + ')' : '') +
       ' · ' + (historicoDocsCache.length) + ' cotações · ' + (notasEmitidasCache ? notasEmitidasCache.length : 0) + ' notas');
     // Sugestao de fornecedor enquanto digita na busca (datalist nativa).
@@ -7391,7 +8054,7 @@ Tupan</textarea>
     const todosRecolhidos = grupos.length > 0 && grupos.every(g => radarRecolhidos.has(chaveGrupo(g.fornecedor)));
     $('radarRecolherTodos').textContent = todosRecolhidos ? '▾ Expandir todos' : '▸ Recolher todos';
     $('radarLista').innerHTML = '<div class="tabela-rolavel"><table class="quote-table rd-tab"><thead><tr>' +
-      '<th>Produto</th><th class="num">Vendas (' + (radarDoc.periodoDias || radarParametros.periodoDias) + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
+      '<th>Produto</th><th class="num">Vendas (' + R.periodoDoRadar(radarDoc, radarParametros).dias + ' d)</th><th class="num">Estoque</th><th class="num">Cobertura</th><th>Chegando / histórico</th><th class="num">Sugestão</th><th>Ações</th>' +
       '</tr></thead><tbody>' + blocosRadar(lista).map(bloco => (bloco.cabecalho || '') + bloco.linhas.map(l => {
         const delta = l.estoqueAnterior != null ? l.estoque - l.estoqueAnterior : null;
         return '<tr>' +
@@ -7430,11 +8093,22 @@ Tupan</textarea>
   // com os produtos da fila, a sugestao como quantidade e o custo da
   // ultima compra como preco esperado. Dali, salvar -> Pedido feito ->
   // a nota chega e o status anda sozinho.
-  App.delegar($('radarLista'), 'click', '[data-rd-cotacao]', (b) => {
+  App.delegar($('radarLista'), 'click', '[data-rd-cotacao]', async (b) => {
     const forn = b.dataset.rdCotacao;
     const lista = R.ordenar(R.filtrar(radarLinhas, { aba: radarAba, termos: App.termosDaBusca($('buscaRadar')) }), radarAba)
       .filter(l => (l.fornecedor || 'Sem fornecedor') === forn && l.sugestao > 0);
     if(!lista.length){ App.toast('Nada a cotar deste fornecedor.', 'info'); return; }
+    // A aba Cotação é uma só: montar esta apaga o que estiver lá. Com
+    // uma comparação não salva ou uma cotação em edição, pergunta antes.
+    if(ultimosResultados.length){
+      const ok = await App.confirmar({
+        titulo: 'Substituir a cotação em andamento',
+        mensagem: 'A aba Cotação tem ' + (cotacaoEditandoId ? 'a cotação "' + cotacaoEditandoNome + '" aberta para edição' : 'uma comparação que ainda não foi salva') +
+          ' (' + ultimosResultados.length + ' item(ns)). Criar a cotação de ' + forn + ' descarta o que está lá.',
+        confirmar: 'Descartar e criar', perigo: true
+      });
+      if(!ok) return;
+    }
     resetCotacao();
     const nomeForn = /^Sem fornecedor/.test(forn) ? '' : forn;
     $('fornecedorCotacao').value = nomeForn;
@@ -7445,7 +8119,9 @@ Tupan</textarea>
     produtosCotacaoSalvos = new Set();
     $('resultadoCotacaoCard').style.display = 'block';
     renderResultadoCotacao();
-    renderSugestoesCotacao();
+    // Sem o card de sugestões aqui: a cotação ainda nem foi enviada, e ele
+    // diria "cobrar do fornecedor — não veio na cotação recebida" para
+    // todos os itens. Ele aparece quando um preço for digitado.
     $('addProdutosCard').style.display = 'block';
     renderListaLote();
     popularSelectIndividual();
@@ -7478,20 +8154,35 @@ Tupan</textarea>
     if(b.dataset.rd === 'cotacao'){
       // Abre o Historico com a(s) cotacao(oes) do pedido ja' expandida(s)
       // e filtra pelo produto, para marcar recebido ou cancelar o item.
+      // - Mes e status ZERADOS: o filtro de mes nasce no mes atual, e o
+      //   pedido antigo (o caso desta aba) e' sempre de um mes anterior —
+      //   a cotacao ficava de fora e a tela dizia "nenhuma cotacao".
+      // - Pelo CODIGO, que e' como a carteira casa; o nome na planilha do
+      //   fornecedor nem sempre e' o do sistema.
       l.carteira.ids.forEach(id => historicoAbertos.add(id));
-      $('buscaProdutoHistorico').value = l.nome; $('buscaFornecedorHistorico').value = '';
+      $('filtroMesHistorico').value = '';
+      $('filtroMesHistorico').dataset.jaInicializado = '1'; // "todos os meses" e' escolha, nao o padrao a repor
+      $('filtroStatusHistorico').value = '';
+      $('buscaProdutoHistorico').value = l.codigo; $('buscaFornecedorHistorico').value = '';
+      // O aoEntrar da aba ja' dispara carregarHistorico(); esta chamada
+      // pega a MESMA carga (trava de carga unica) — antes eram duas
+      // leituras das 200 cotacoes.
       mostrarViewHistorico();
       await carregarHistorico();
       const alvo = document.querySelector('.historico-item[data-id="' + CSS.escape(l.carteira.ids[0]) + '"]');
-      if(alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if(alvo) alvo.scrollIntoView({ block: 'start' });
       return;
     }
     const pedidos = Object.assign({}, radarParametros.pedidos);
     if(b.dataset.rd === 'desfazer'){
-      delete pedidos[codigo];
       b.disabled = true;
       const campos = {}; campos['pedidos.' + codigo] = firebase.firestore.FieldValue.delete();
-      await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).update(campos)).catch(e => App.toastErro('Erro ao gravar', e));
+      // Erro de gravacao PARA aqui: antes a marca saia da tela mesmo sem
+      // ter saido do banco, e voltava no F5.
+      try{
+        await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).update(campos));
+      }catch(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; return; }
+      delete pedidos[codigo];
       radarParametros.pedidos = pedidos;
       calcularERenderRadar();
       return;
@@ -7501,10 +8192,13 @@ Tupan</textarea>
     const n = App.parseNumeroBR(qtd);
     if(!(n > 0)){ App.toast('Quantidade inválida.', 'info'); return; }
     const ref = await App.pedirTexto({ titulo: 'Referência do pedido', mensagem: 'Número ou observação (opcional)', valor: '' });
-    const marca = { qtd: n, em: App.hojeISO(), ref: ref || null };
+    // Cancelar aqui e' desistir (null); confirmar em branco ('') e' "sem referencia".
+    if(ref === null) return;
+    const marca = { qtd: n, em: App.hojeISO(), ref: ref.trim() || null };
     b.disabled = true;
-    const campos = {}; campos['pedidos.' + codigo] = marca;
-    await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).set({ pedidos: { [codigo]: marca } }, { merge: true })).catch(e => App.toastErro('Erro ao gravar', e));
+    try{
+      await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).set({ pedidos: { [codigo]: marca } }, { merge: true }));
+    }catch(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; return; }
     pedidos[codigo] = marca;
     radarParametros.pedidos = pedidos;
     calcularERenderRadar();
@@ -7550,8 +8244,14 @@ Tupan</textarea>
         }
       }catch(e){ console.error('catálogo do Etiquetas:', e); resumoEtq = ' · não consegui atualizar o Etiquetas: ' + App.erroDe(e); }
       App.toast('Vendas importadas: ' + lido.itens.length + ' produtos.' + resumoEtq, 'ok');
-      calcularERenderRadar();
-      setRadarMsg($('radarMsg').textContent + resumoEtq);
+      // Se as cotacoes ou as notas nao carregaram (carregarRadar avisou),
+      // a importacao vale, mas a sugestao NAO e' calculada com zero.
+      if(radarCarregado){
+        calcularERenderRadar();
+        setRadarMsg($('radarMsg').textContent + resumoEtq);
+      } else {
+        setRadarMsg('Vendas importadas (' + lido.itens.length + ' produtos), mas o Radar não foi calculado: as cotações ou as notas não carregaram. Toque em "⟳ Recarregar".' + resumoEtq);
+      }
     }catch(e){
       console.error(e);
       setRadarMsg('Não consegui importar: ' + App.erroDe(e));
@@ -7575,7 +8275,7 @@ Tupan</textarea>
     await atualizarListaSalvos();
     if(router.atual() === 'Painel') carregarPainel(true);
     if(router.atual() === 'Historico') carregarHistorico();
-    if(router.atual() === 'Concorrentes'){ carregarHistoricoConcorrentes(); renderLotePlanilha(); }
+    if(router.atual() === 'Concorrentes'){ carregarHistoricoConcorrentes(true); renderLotePlanilha(); }
     if(router.atual() === 'Notas') carregarNotasEmitidas(true);
     if(router.atual() === 'Fiscal') carregarFiscal(true);
     if(router.atual() === 'Radar') carregarRadar(true);
@@ -7587,7 +8287,10 @@ Tupan</textarea>
       const ok = await testarConexaoFirebase(false);
       $('firebaseMsg').textContent = ok
         ? '✓ Conectado automaticamente.'
-        : 'Não foi possível conectar automaticamente. Verifique a configuração e clique em Conectar.';
+        : 'Não foi possível ler do Firebase (' + App.erroDe(ultimoErroConexao) + '). O app continua ligado a ele — nada é gravado neste navegador no lugar. Recarregue a página ou clique em Conectar.';
+      // Quem abre o app nao esta' na aba Sincronizacao: o aviso tem de
+      // aparecer onde a pessoa esta'.
+      if(!ok) App.toastErro('Não consegui ler os produtos do Firebase — recarregue a página', ultimoErroConexao);
     }
     await atualizarListaSalvos();
   })();

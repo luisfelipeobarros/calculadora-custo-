@@ -323,6 +323,72 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
     proj.map(q => q.vencimento), ['2026-02-28', '2026-03-31', '2026-04-30']);
 }
 
+// ── 7b. Base fixa da recorrencia (auditoria de 11/11/2026) ───
+// A proxima parcela conta a partir da data PROGRAMADA, nao do
+// vencimento: prorrogar (ou editar) para o mes seguinte fazia a corrente
+// pular um mes inteiro — 30/11 prorrogada para 05/12 gerava 30/01.
+{
+  const prorrogada = { id: 'imp', valor: 100, vencimento: '2026-12-05', vencimentoBase: '2026-11-30',
+                       recorrente: true, regra: 'diaFixo', diaFixo: 30, parcelaAtual: 3, parcelasTotal: 12 };
+  eq('prorrogada de 30/11 para 05/12: a proxima e 30/12, nao 30/01',
+    S.proximoVencimentoRecorrente(prorrogada), '2026-12-30');
+  eq('  ...e o id da proxima sai da data programada', S.idProximoRecorrente(prorrogada), 'imp_2026-12-30');
+  eq('  ...sem o campo (o defeito antigo) contaria do vencimento',
+    S.proximoVencimentoRecorrente(Object.assign({}, prorrogada, { vencimentoBase: undefined })), '2027-01-30');
+
+  const ultimoDia = { id: 'fim', valor: 100, vencimento: '2026-12-01', vencimentoBase: '2026-11-30',
+                      recorrente: true, regra: 'ultimoDia' };
+  eq('"ultimo dia" prorrogado de 30/11 para 01/12: a proxima e 31/12',
+    S.proximoVencimentoRecorrente(ultimoDia), '2026-12-31');
+
+  // Sucessor criado antes de existir o campo: a data programada esta' no
+  // sufixo do id, e vale mesmo com o vencimento prorrogado.
+  const antigo = { id: 'abc_2026-10-15_2026-11-15', valor: 100, vencimento: '2026-12-03',
+                   recorrente: true, regra: 'diaFixo', diaFixo: 15, origemId: 'abc_2026-10-15' };
+  eq('sucessor antigo sem vencimentoBase usa o sufixo do id', S.baseRecorrencia(antigo), '2026-11-15');
+  eq('  ...a proxima dele e 15/12', S.proximoVencimentoRecorrente(antigo), '2026-12-15');
+  eq('  ...com o id da PRIMEIRA parcela + a data (sem empilhar datas)', S.idProximoRecorrente(antigo), 'abc_2026-12-15');
+  eq('primeira parcela antiga (sem campo nem sufixo) usa o vencimento',
+    S.baseRecorrencia({ id: 'abc', vencimento: '2026-08-07' }), '2026-08-07');
+  eq('vencimentoBase fora do formato nao vale como base',
+    S.baseRecorrencia({ id: 'abc', vencimento: '2026-08-07', vencimentoBase: 'ontem' }), '2026-08-07');
+  // Dentro do mesmo mes ja' dava certo (o dia fixo corrigia) — continua.
+  eq('prorrogada dentro do mes (10 -> 20) segue no dia 10',
+    S.proximoVencimentoRecorrente({ id: 'x', vencimento: '2026-11-20', vencimentoBase: '2026-11-10', regra: 'diaFixo', diaFixo: 10 }), '2026-12-10');
+  // O dia programado so' muda se a pessoa mudar a regra/o dia fixo.
+  eq('mudar o dia fixo muda a proxima',
+    S.proximoVencimentoRecorrente({ id: 'x', vencimento: '2026-11-10', vencimentoBase: '2026-11-10', regra: 'diaFixo', diaFixo: 20 }), '2026-12-20');
+
+  // A projecao usa a MESMA base: nao pula dezembro.
+  eq('projecao da prorrogada nao pula mes',
+    S.projetarInternos([prorrogada], '2027-02-28').map(q => q.vencimento), ['2026-12-30', '2027-01-30', '2027-02-28']);
+  eq('projecao do "ultimo dia" prorrogado nao pula mes',
+    S.projetarInternos([ultimoDia], '2027-02-28').map(q => q.vencimento), ['2026-12-31', '2027-01-31', '2027-02-28']);
+
+  // Sucessor: pelo id OU por quem aponta para a parcela como origem —
+  // sem comparar vencimento (o sucessor pode ter sido prorrogado).
+  const A = { id: 'a', valor: 10, vencimento: '2026-08-05', recorrente: true, regra: 'diaFixo', diaFixo: 5, pago: true };
+  const porId = { id: 'a_2026-09-05', vencimento: '2026-09-20', recorrente: true, pago: false };
+  const legado = { id: 'XyZ123', vencimento: '2026-09-18', recorrente: true, pago: false, origemId: 'a' };
+  eq('sucessor pelo id (mesmo prorrogado)', S.temSucessorRecorrente(A, [A, porId]), true);
+  eq('sucessor legado, de id automatico, pela origem (mesmo prorrogado)', S.temSucessorRecorrente(A, [A, legado]), true);
+  eq('sem sucessor', S.temSucessorRecorrente(A, [A, { id: 'outro', origemId: 'b' }]), false);
+  eq('ultima parcela: 12/12 e; 3/12 nao; parcelaAtual ausente conta como 1',
+    [S.ultimaParcelaRecorrente({ parcelaAtual: 12, parcelasTotal: 12 }), S.ultimaParcelaRecorrente({ parcelaAtual: 3, parcelasTotal: 12 }),
+     S.ultimaParcelaRecorrente({ parcelasTotal: 1 }), S.ultimaParcelaRecorrente({})], [true, false, true, false]);
+
+  // Corrente que morreu calada: pago, recorrente, nao e a ultima, sem sucessor.
+  const ultima = { id: 'u', vencimento: '2026-08-05', recorrente: true, pago: true, parcelaAtual: 2, parcelasTotal: 2 };
+  const aberto = { id: 'o', vencimento: '2026-08-05', recorrente: true, pago: false };
+  const avulso = { id: 'v', vencimento: '2026-08-05', recorrente: false, pago: true };
+  eq('detector: so o pago sem sucessor que nao e a ultima',
+    S.recorrentesSemSucessor([A, ultima, aberto, avulso]).map(p => p.id), ['a']);
+  eq('detector: com o sucessor carregado nao acusa nada', S.recorrentesSemSucessor([A, porId]), []);
+  eq('detector: proxima anterior a janela carregada nao e afirmada como faltando',
+    S.recorrentesSemSucessor([A], '2026-10-01'), []);
+  eq('  ...dentro da janela, sim', S.recorrentesSemSucessor([A], '2026-09-01').map(p => p.id), ['a']);
+}
+
 // ── 8. "Ja contratado": pagas entram, nota cancelada sai ─────
 
 {

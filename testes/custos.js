@@ -225,5 +225,102 @@ eq('sem faturamento: null, nunca zero nem infinito', [C.percentualDoFaturamento(
 // Todo grupo aponta para um tipo que existe (a tela monta as secoes por tipo).
 eq('todo grupo tem tipo valido', Object.keys(C.GRUPOS).filter(k => !C.TIPOS[C.GRUPOS[k].tipo]), []);
 
+// ── Reimportacao: o que saiu ou mudou nas planilhas ──────────
+// A gravacao e' por id e nunca apagava nada: linha que o contador
+// corrigia entrava de novo e a antiga ficava, contando em dobro — com a
+// tela dizendo "nada duplica" (auditoria de 11/11/2026).
+{
+  const ler = (linhas, arquivo) => {
+    const r = C.lerLayoutContador(linhas, arquivo);
+    r.arquivo = arquivo;
+    return r;
+  };
+  // Como a tela guarda um importado ja' gravado (cuDoDoc).
+  const gravado = (l, extra) => Object.assign({
+    id: C.idImportado(l), arquivo: l.arquivo, data: l.data, valorCentavos: l.valorCentavos,
+    contaDebito: l.contaDebito, contaCredito: l.contaCredito, historico: l.historico, grupoCusto: null
+  }, extra || {});
+
+  const antes = C.juntarLeituras([
+    ler([].concat(
+      par('00000001', new Date(2026, 7, 3), 500, '4.2.1.1.0034', BRADESCO, 'VALOR REF A ENERGIA', 1),
+      par('00000002', new Date(2026, 7, 4), 300, '1.1.2.4.0001', BRADESCO, 'VALORES A REGULARIZAR BELTRANO', 3),
+      par('00000003', new Date(2026, 7, 5), 80, '4.2.4.1.0001', BRADESCO, 'TARIFA', 5)
+    ), 'BANCO BRADESCO AGOSTO.xls'),
+    ler(par('00000001', new Date(2026, 7, 6), 900, '4.2.1.1.0024', ITAU, 'COMBUSTIVEL', 1), 'BANCO ITAU AGOSTO.xls')
+  ]).lancamentos;
+  const existentes = antes.map(l => gravado(l));
+  existentes[1].grupoCusto = 'servicos'; // o "a regularizar" foi classificado a mao
+
+  const igual = C.compararImportacao(existentes, antes);
+  eq('reimportar as MESMAS planilhas: tudo igual, nada novo, nada sumido',
+    [igual.iguais, igual.novos.length, igual.sumidos.length, igual.outrosQtd], [4, 0, 0, 0]);
+
+  // O contador corrigiu o valor da linha 2 (300 -> 350) e TIROU a tarifa;
+  // so' o arquivo do Bradesco voltou.
+  const depois = C.juntarLeituras([ler([].concat(
+    par('00000001', new Date(2026, 7, 3), 500, '4.2.1.1.0034', BRADESCO, 'VALOR REF A ENERGIA', 1),
+    par('00000002', new Date(2026, 7, 4), 350, '1.1.2.4.0001', BRADESCO, 'VALORES A REGULARIZAR BELTRANO', 3)
+  ), 'BANCO BRADESCO AGOSTO.xls')]).lancamentos;
+  const cmp = C.compararImportacao(existentes, depois);
+  eq('linha corrigida e linha retirada: as duas versoes antigas aparecem como SUMIDAS (nunca ficam caladas)',
+    [cmp.iguais, cmp.novos.length, cmp.sumidos.map(s => s.valorCentavos).sort((a, b) => a - b), cmp.sumidosCentavos],
+    [1, 1, [8000, 30000], 38000]);
+  eq('arquivo que NAO veio no lote (Itau) nao e\' condenado: so\' avisado, com o nome',
+    [cmp.outrosQtd, cmp.outros], [1, [{ arquivo: 'BANCO ITAU AGOSTO.xls', qtd: 1 }]]);
+  eq('a classificacao feita a mao passa para a versao corrigida (substituto obvio)',
+    cmp.herdar, [{ de: existentes[1].id, para: C.idImportado(depois[1]), grupoCusto: 'servicos' }]);
+
+  // Nome do arquivo com caixa/acento diferente continua sendo o mesmo arquivo.
+  const outroNome = depois.map(l => Object.assign({}, l, { arquivo: 'banco bradesco agosto.XLS' }));
+  eq('o mesmo arquivo com outra caixa no nome ainda e\' "o mesmo arquivo"',
+    C.compararImportacao(existentes, outroNome).sumidos.length, 2);
+
+  // Duas linhas identicas de cada lado: nao ha' substituto OBVIO — nao herda.
+  const tarifas = C.juntarLeituras([ler([].concat(
+    par('00000001', new Date(2026, 7, 5), 10, '1.1.2.4.0001', BRADESCO, 'TARIFA AVULSA', 1),
+    par('00000002', new Date(2026, 7, 5), 10, '1.1.2.4.0001', BRADESCO, 'TARIFA AVULSA', 3)
+  ), 'B.xls')]).lancamentos;
+  const renumeradas = C.juntarLeituras([ler([].concat(
+    par('00000007', new Date(2026, 7, 5), 10, '1.1.2.4.0001', BRADESCO, 'TARIFA AVULSA', 13),
+    par('00000008', new Date(2026, 7, 5), 10, '1.1.2.4.0001', BRADESCO, 'TARIFA AVULSA', 15)
+  ), 'B.xls')]).lancamentos;
+  const amb = C.compararImportacao(tarifas.map(l => gravado(l, { grupoCusto: 'financeiras' })), renumeradas);
+  eq('planilha renumerada: tudo sumido + tudo novo (e\' o caso que DOBRAVA o mes); par ambiguo nao herda',
+    [amb.iguais, amb.sumidos.length, amb.novos.length, amb.herdar.length], [0, 2, 2, 0]);
+
+  eq('mes sem importacao anterior: tudo novo, nada a apagar',
+    [C.compararImportacao([], depois).novos.length, C.compararImportacao([], depois).sumidos.length], [2, 0]);
+}
+
+// ── Regras da configuracao: funcoes puras para a transacao ───
+{
+  const regras = [{ contem: 'Fulano', grupo: 'servicos' }, { contem: 'Posto', grupo: 'combustivel' }];
+  eq('adicionar: entra no fim, sem mexer na lista recebida',
+    [C.adicionarRegra(regras, 'Grafica', 'consumo').map(r => r.contem), regras.length], [['Fulano', 'Posto', 'Grafica'], 2]);
+  eq('adicionar com o mesmo texto (sem caixa/acento): substitui, nao duplica',
+    C.adicionarRegra(regras, 'FULANO', 'extras'), [{ contem: 'Posto', grupo: 'combustivel' }, { contem: 'FULANO', grupo: 'extras' }]);
+  eq('remover pelo TEXTO, nao pela posicao',
+    C.removerRegra(regras, 'posto'), [{ contem: 'Fulano', grupo: 'servicos' }]);
+  eq('remover o que ja\' nao existe (outra maquina tirou): lista igual, sem erro',
+    [C.removerRegra(regras, 'nao existe').length, C.removerRegra(null, 'x')], [2, []]);
+}
+
+// ── A tela usa as funcoes acima (controle-notas.html) ────────
+{
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'controle-notas.html'), 'utf8');
+  eq('a previa compara o lote com o que ja\' esta\' gravado, e gravar oferece apagar o que saiu (com confirmacao)',
+    [/CustosNucleo\.compararImportacao\(cu\.importados, p\.lancamentos\)/.test(html),
+     /titulo: 'Lançamentos que saíram das planilhas'/.test(html),
+     /return cuApagarSumidos\(cmp\)/.test(html)], [true, true, true]);
+  eq('nenhum texto da tela promete mais "nada duplica"', /nada duplica/.test(html), false);
+  eq('regras: gravadas por transacao em cima do que esta\' no banco, nunca o documento inteiro da copia local',
+    [/cuSalvarConfig\(function\(regras\)\{ return CustosNucleo\.adicionarRegra\(regras, txt, grupo\); \}\)/.test(html),
+     /cuSalvarConfig\(function\(regras\)\{ return CustosNucleo\.removerRegra\(regras, r\.contem\); \}\)/.test(html),
+     /\.doc\('custos'\)\.set\(/.test(html), /cu\.config\.regras\.(push|splice)\(/.test(html)], [true, true, false, false]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

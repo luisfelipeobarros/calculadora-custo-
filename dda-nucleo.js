@@ -802,10 +802,13 @@
       return d.vencimento === r.vencimento && valorBate(centavosDe(d.valor), r.valorCentavos);
     });
     if (!cands.length) return null;
-    if (cands.length === 1) return resultado(rotulo, { duplicata: cands[0], como: ['valor+vencimento únicos na base'], motivo: motivo });
+    // ultimoRecurso: o casamento NAO passou pelo numero da nota. A
+    // conferencia usa a marca para nao por o boleto no lote quando o
+    // nome do cedente tambem nao confirma (ver `baixaveis`).
+    if (cands.length === 1) return resultado(rotulo, { duplicata: cands[0], como: ['valor+vencimento únicos na base'], motivo: motivo, ultimoRecurso: true });
     var abertas = cands.filter(function (d) { return d.pago !== true; });
     if (abertas.length === 1) {
-      return resultado(rotulo, { duplicata: abertas[0], como: ['valor+vencimento', 'desempate: única em aberto'], motivo: motivo });
+      return resultado(rotulo, { duplicata: abertas[0], como: ['valor+vencimento', 'desempate: única em aberto'], motivo: motivo, ultimoRecurso: true });
     }
     return resultado(rotulo, {
       ambiguo: true, candidatas: cands,
@@ -832,6 +835,32 @@
     // dizendo por onde.
     if (!res.duplicata && !res.ambiguo && !res.candidatas.length) {
       return casarValorEVencimentoGeral(r, base, res.estrategia, res.motivo) || res;
+    }
+    // A nota existe, mas nada nela tem esse valor (passos 3 e 4 do
+    // casarNaNota). Antes de acusar valor divergente: o numero de nota
+    // e' uma sequencia POR EMITENTE, e o "documento" de um fornecedor
+    // pode coincidir com a nota de OUTRO (auditoria de 11/11/2026: o
+    // boleto de A caia na nota de B como "valor divergente", com a
+    // duplicata certa de A — valor e vencimento exatos — na base).
+    // So' troca de eixo com prova POSITIVA: o cedente do boleto NAO e'
+    // o emitente dessa nota e E' o emitente de uma unica duplicata com
+    // valor e vencimento iguais. Boleto adulterado do proprio
+    // fornecedor (ou cobrado por fundo, cujo nome nao bate com ninguem)
+    // nao passa por aqui: continua vermelho.
+    if (res.ambiguo || (res.duplicata && valorBate(centavosDe(res.duplicata.valor), r.valorCentavos))) return res;
+    var daNota = base.porNota[doc.nota] || [];
+    var cedenteDaNota = daNota.some(function (d) { return nomesCompativeis(d.nomeEmitente, r.beneficiario); });
+    if (!cedenteDaNota && r.vencimento && r.valorCentavos != null) {
+      var doCedente = base.duplicatas.filter(function (d) {
+        return d.vencimento === r.vencimento && valorBate(centavosDe(d.valor), r.valorCentavos) &&
+          semZeros(d.numeroNota) !== doc.nota && nomesCompativeis(d.nomeEmitente, r.beneficiario);
+      });
+      if (doCedente.length === 1) {
+        return resultado(ESTRATEGIA_PADRAO, {
+          duplicata: doCedente[0],
+          como: ['cedente', 'valor', 'vencimento', 'o número do documento coincide com nota de outro fornecedor']
+        });
+      }
     }
     return res;
   }
@@ -1114,6 +1143,17 @@
       if (situacaoPaga(r.situacao) && d.pago !== true) {
         problemas.push({ tipo: 'bancoBaixouNosNao', gravidade: GRAVIDADE.AMARELO,
           texto: 'o banco dá o boleto como "' + r.situacao + '", mas a duplicata não está baixada aqui' });
+        // Casou SO' por valor+vencimento (o documento nao levou a nota
+        // nenhuma) e o cedente nao e' o fornecedor da duplicata: pode
+        // ser coincidencia com o titulo de outro fornecedor (auditoria
+        // de 11/11/2026: R$ 2.199,90 x R$ 2.199,86 no mesmo dia). Nao
+        // e' erro — fundo cobrando e' assim mesmo —, mas baixar no
+        // automatico marcaria o titulo errado: fica para o botao da linha.
+        if (casamento.ultimoRecurso && !nomesCompativeis(d.nomeEmitente, r.beneficiario)) {
+          problemas.push({ tipo: 'ultimoRecursoForaDoLote', gravidade: GRAVIDADE.BRANCO,
+            texto: 'casou só por valor e vencimento, e o cedente do boleto não é o fornecedor da duplicata — ' +
+              'confira e baixe pelo botão da linha (não entra no lote)' });
+        }
       } else if (situacaoBaixada(r.situacao) && d.pago !== true) {
         // BAIXADO sem pagamento registrado aqui: o cedente tirou o
         // boleto do DDA. Ou foi pago por outro canal, ou cancelado, ou
@@ -1207,7 +1247,8 @@
     // cobranca dobrada... nada disso se marca pago no automatico).
     var baixaveis = linhas.filter(function (l) {
       return l.casamento.duplicata && gravidadeDa(l) < GRAVIDADE.VERMELHO &&
-        l.problemas.some(function (p) { return p.tipo === 'bancoBaixouNosNao'; });
+        l.problemas.some(function (p) { return p.tipo === 'bancoBaixouNosNao'; }) &&
+        !l.problemas.some(function (p) { return p.tipo === 'ultimoRecursoForaDoLote'; });
     });
 
     var resumo = { vermelhos: 0, amarelos: 0, brancos: 0, ok: 0, totalCentavos: 0 };

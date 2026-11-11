@@ -466,15 +466,53 @@
   }
   function codigoNorm(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
 
-  // cotacao: { fornecedor, data, itens, chavesNfe }; itensDocs: notas com itens
+  // O item da nota que corresponde ao item da cotacao, pelas tres chaves
+  // (codigo do fornecedor, barras, nome unico). `i` e' a posicao dele na
+  // nota: e' o que identifica a linha no controle de consumo entre cotacoes.
+  function itemDaNota(it, doc, eanPorCodigo) {
+    var lista = (doc && doc.itens) || [];
+    var codForn = codigoNorm(it.codigoRecebido);
+    var ean = soDigitos(eanPorCodigo && eanPorCodigo[String(it.codigo == null ? '' : it.codigo).trim()]);
+    var porCodigo = codForn ? lista.filter(function (x) { return codigoNorm(x && x.codigo) === codForn; }) : [];
+    var porEan = (!porCodigo.length && ean) ? lista.filter(function (x) { return soDigitos(x && x.ean) === ean; }) : [];
+    var porNome = (!porCodigo.length && !porEan.length) ? lista.filter(function (x) { return semelhancaNomes(it.produto, x && x.descricao) >= 0.75; }) : [];
+    var item = porCodigo[0] || porEan[0] || (porNome.length === 1 ? porNome[0] : null);
+    if (!item) return null;
+    return { item: item, i: lista.indexOf(item), por: porCodigo.length ? 'código do fornecedor' : porEan.length ? 'código de barras' : 'nome' };
+  }
+  function qtdPedidaDoItem(it) {
+    return it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
+  }
+  // Reparte entre as notas o que o item PRECISA (a quantidade pedida): o
+  // que sobra de uma linha de nota fica livre para outra cotacao (o
+  // fornecedor que junta dois pedidos numa linha so'). Sem quantidade
+  // pedida, o item fica com a linha inteira. notas: [{ chave, i, qtd, em }].
+  function repartirUsos(notas, qtdPedida) {
+    var falta = qtdPedida > 0 ? qtdPedida : Infinity;
+    return notas.slice().sort(function (a, b) { return String(a.em || '').localeCompare(String(b.em || '')); }).map(function (n) {
+      var usa = Math.min(falta, n.qtd);
+      falta -= usa;
+      return { chave: n.chave, i: n.i, qtd: usa, nova: !!n.nova };
+    }).filter(function (u) { return u.qtd > 0; });
+  }
+
+  // cotacao: { fornecedor, data, itens, chavesNfe, chavesNfeRecusadas }; itensDocs: notas com itens
   // (chave, numero, dataEmissao, nomeEmitente, itens [{codigo, ean, descricao, qtd}]);
   // notasPorChave: estado (noSistema, noSistemaEm, alteradoEm, status);
-  // eanPorCodigo: codigo interno -> barras. Devolve { itens, chavesNfe, mudou }.
-  function casarCotacaoComNotas(cotacao, itensDocs, notasPorChave, eanPorCodigo, hoje) {
+  // eanPorCodigo: codigo interno -> barras;
+  // consumo (opcional): { 'chave|i': quantidade daquela linha de nota que
+  //   OUTRAS cotacoes ja' usaram } — ver casarCotacoesComNotas.
+  // Devolve { itens, chavesNfe, mudou, usos } (usos = o que esta cotacao
+  // passou a consumir de notas que ainda nao tinha).
+  function casarCotacaoComNotas(cotacao, itensDocs, notasPorChave, eanPorCodigo, hoje, consumo) {
     var d = cotacao || {};
     var itens = (d.itens || []).map(function (it) { return Object.assign({}, it); });
     var chaves = (d.chavesNfe || []).slice();
     var vinculadas = new Set(chaves);
+    // Nota que alguem DESVINCULOU na mao: nunca mais e' oferecida a esta
+    // cotacao (senao o desvinculo era desfeito na sincronizacao seguinte).
+    var recusadas = new Set(d.chavesNfeRecusadas || []);
+    var usos = [];
     var dataCot = dataISO(d.data);
     var mudou = false;
     var desde = null; // notas emitidas a partir do pedido (com folga de 3 dias)
@@ -484,6 +522,7 @@
 
     var candidatas = (itensDocs || []).filter(function (doc) {
       if (!doc || !doc.chave) return false;
+      if (recusadas.has(doc.chave)) return false;
       var nota = (notasPorChave || {})[doc.chave] || null;
       if (nota && (nota.status || 'ativa') === 'cancelada') return false;
       if (vinculadas.has(doc.chave)) return true;
@@ -496,30 +535,37 @@
 
     itens.forEach(function (it, idx) {
       if ((it.status || 'negociacao') === 'recebido' && it.chaveNfe && !it.parcial) return; // ja' fechado
-      var codForn = codigoNorm(it.codigoRecebido);
-      var ean = soDigitos(eanPorCodigo && eanPorCodigo[String(it.codigo == null ? '' : it.codigo).trim()]);
       // TODAS as notas que casam: o pedido pode vir em mais de uma
       // (faturamento parcial), e so' fecha quando a soma cobre a quantidade.
       var achados = [];
       candidatas.forEach(function (doc) {
-        var lista = doc.itens || [];
-        var porCodigo = codForn ? lista.filter(function (x) { return codigoNorm(x && x.codigo) === codForn; }) : [];
-        var porEan = (!porCodigo.length && ean) ? lista.filter(function (x) { return soDigitos(x && x.ean) === ean; }) : [];
-        var porNome = (!porCodigo.length && !porEan.length) ? lista.filter(function (x) { return semelhancaNomes(it.produto, x && x.descricao) >= 0.75; }) : [];
-        var item = porCodigo[0] || porEan[0] || (porNome.length === 1 ? porNome[0] : null);
-        if (!item) return;
+        var m = itemDaNota(it, doc, eanPorCodigo);
+        if (!m) return;
+        var qtd = Number(m.item.qtd) || 0;
+        // Nota que o item JA' tinha fica como estava (a quantidade gravada
+        // vale). Nota NOVA so' entra com o que as outras cotacoes ainda nao
+        // usaram daquela linha — consumida por inteiro, nao e' desta.
+        var ja = (it.notasNfe || []).filter(function (n) { return n && n.chave === doc.chave; })[0] || null;
+        if (ja) qtd = Number(ja.qtd) || qtd;
+        else if (consumo) {
+          var usado = Number(consumo[doc.chave + '|' + m.i]) || 0;
+          if (usado > 0 && qtd - usado <= 0.001) return;
+          qtd = Math.max(0, qtd - usado);
+        }
         var nota = (notasPorChave || {})[doc.chave] || null;
         var recebida = !!(nota && nota.noSistema === true);
         achados.push({
-          doc: doc, item: item, por: porCodigo.length ? 'código do fornecedor' : porEan.length ? 'código de barras' : 'nome',
+          doc: doc, item: m.item, i: m.i, qtd: qtd, nova: !ja, por: m.por,
           recebida: recebida,
           recebidaEm: recebida ? (nota.noSistemaEm || dataISO(nota.alteradoEm) || doc.dataEmissao || hoje || null) : null
         });
       });
       if (!achados.length) return;
       var ultimo = achados[0]; // candidatas ja' vem da mais recente para a mais antiga
-      var qtdNfe = achados.reduce(function (s, a) { return s + (Number(a.item.qtd) || 0); }, 0);
-      var qtdPedida = it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
+      var qtdNfe = achados.reduce(function (s, a) { return s + a.qtd; }, 0);
+      var qtdPedida = qtdPedidaDoItem(it);
+      repartirUsos(achados.map(function (a) { return { chave: a.doc.chave, i: a.i, qtd: a.qtd, em: a.doc.dataEmissao, nova: a.nova }; }), qtdPedida)
+        .forEach(function (u) { if (u.nova) usos.push({ chave: u.chave, i: u.i, qtd: u.qtd }); });
       var parcial = (qtdPedida > 0 && qtdNfe > 0 && qtdNfe < qtdPedida - 0.001) ? { faturado: qtdNfe, pedido: qtdPedida } : null;
       var todasRecebidas = achados.every(function (a) { return a.recebida; });
       var novoStatus = (todasRecebidas && !parcial) ? 'recebido' : 'transito';
@@ -530,7 +576,7 @@
       var campos = {
         chaveNfe: ultimo.doc.chave,
         numeroNfe: ultimo.doc.numero == null ? '' : String(ultimo.doc.numero),
-        notasNfe: achados.map(function (a) { return { chave: a.doc.chave, numero: a.doc.numero == null ? '' : String(a.doc.numero), em: a.doc.dataEmissao || null, qtd: Number(a.item.qtd) || 0, recebida: a.recebida }; }),
+        notasNfe: achados.map(function (a) { return { chave: a.doc.chave, numero: a.doc.numero == null ? '' : String(a.doc.numero), em: a.doc.dataEmissao || null, qtd: a.qtd, recebida: a.recebida }; }),
         qtdNfe: qtdNfe || null,
         parcial: parcial,
         precoNfe: precoNfe != null && isFinite(precoNfe) ? precoNfe : null,
@@ -548,7 +594,180 @@
         if (!vinculadas.has(a.doc.chave)) { vinculadas.add(a.doc.chave); chaves.push(a.doc.chave); mudou = true; }
       });
     });
-    return { itens: itens, chavesNfe: chaves, mudou: mudou };
+    return { itens: itens, chavesNfe: chaves, mudou: mudou, usos: usos };
+  }
+
+  // O que a cotacao JA' consome das notas (itens com nota casada, abertos
+  // ou fechados): [{ chave, i, qtd }]. Nota fora da lista carregada nao
+  // entra — ninguem mais a enxerga tambem.
+  function usosJaCasados(cotacao, docsPorChave, eanPorCodigo) {
+    var usos = [];
+    ((cotacao && cotacao.itens) || []).forEach(function (it) {
+      if (!it) return;
+      var notas = (it.notasNfe && it.notasNfe.length) ? it.notasNfe : (it.chaveNfe ? [{ chave: it.chaveNfe }] : []);
+      var linhas = [];
+      notas.forEach(function (n) {
+        var doc = n && docsPorChave[n.chave];
+        var m = doc ? itemDaNota(it, doc, eanPorCodigo) : null;
+        if (m) linhas.push({ chave: n.chave, i: m.i, qtd: Number(n.qtd) || Number(m.item.qtd) || 0, em: doc.dataEmissao });
+      });
+      repartirUsos(linhas, qtdPedidaDoItem(it)).forEach(function (u) { usos.push({ chave: u.chave, i: u.i, qtd: u.qtd }); });
+    });
+    return usos;
+  }
+  function somarUsos(consumo, usos) {
+    (usos || []).forEach(function (u) { var k = u.chave + '|' + u.i; consumo[k] = (Number(consumo[k]) || 0) + u.qtd; });
+    return consumo;
+  }
+  // Ordem em que as cotacoes disputam uma nota NOVA: primeiro as que tem
+  // pedido de verdade (algum item fora de "negociacao"), e entre elas a
+  // de pedido mais RECENTE — pedido velho sem nota costuma ser cotacao
+  // que ninguem atualizou (a aba "Pedido antigo"), e nao pode tomar a
+  // nota do pedido novo. Cotacao so' em negociacao fica por ultimo.
+  function ordemParaCasar(cotacoes) {
+    function ref(d) {
+      var dataCot = dataISO(d && d.data) || '', maior = '', real = false;
+      ((d && d.itens) || []).forEach(function (it) {
+        if (!it) return;
+        if ((it.status || 'negociacao') !== 'negociacao') real = true;
+        if (it.pedidoEm && it.pedidoEm > maior) maior = it.pedidoEm;
+      });
+      return { real: real, em: maior || dataCot };
+    }
+    return (cotacoes || []).map(function (d, i) { return { d: d, r: ref(d), i: i }; }).sort(function (a, b) {
+      return (b.r.real - a.r.real) || b.r.em.localeCompare(a.r.em) || (a.i - b.i);
+    }).map(function (x) { return x.d; });
+  }
+  // Todas as cotacoes de uma vez, para a MESMA linha de nota nao fechar
+  // duas cotacoes: o que cada uma ja' tem casado fica com ela, e nota nova
+  // so' e' oferecida com o que as outras ainda nao usaram.
+  // Devolve [{ cotacao, resultado, consumo }] — `consumo` e' o retrato usado
+  // naquela cotacao (a tela refaz o casamento com ele sobre o documento
+  // fresco, dentro da transacao de gravacao).
+  function casarCotacoesComNotas(cotacoes, itensDocs, notasPorChave, eanPorCodigo, hoje) {
+    var docsPorChave = {};
+    (itensDocs || []).forEach(function (doc) { if (doc && doc.chave) docsPorChave[doc.chave] = doc; });
+    var consumo = {};
+    (cotacoes || []).forEach(function (d) { somarUsos(consumo, usosJaCasados(d, docsPorChave, eanPorCodigo)); });
+    return ordemParaCasar(cotacoes).map(function (d) {
+      var retrato = Object.assign({}, consumo);
+      var r = casarCotacaoComNotas(d, itensDocs, notasPorChave, eanPorCodigo, hoje, retrato);
+      somarUsos(consumo, r.usos);
+      return { cotacao: d, resultado: r, consumo: retrato };
+    });
+  }
+
+  // Desvinculo MANUAL de uma nota: ela sai dos vinculos, entra nas
+  // recusadas (a sincronizacao nao a oferece de novo) e os itens que
+  // estavam casados com ela esquecem o casamento — voltam a "pedido" e a
+  // proxima sincronizacao recasa do zero com as notas que sobraram.
+  var CAMPOS_NFE = ['chaveNfe', 'numeroNfe', 'notasNfe', 'qtdNfe', 'parcial', 'precoNfe', 'casadoPor', 'faturadoEm', 'recebidoEm'];
+  function desvincularNota(cotacao, chave) {
+    var d = cotacao || {};
+    var itens = (d.itens || []).map(function (it) {
+      var c = Object.assign({}, it);
+      var usa = c.chaveNfe === chave || (c.notasNfe || []).some(function (n) { return n && n.chave === chave; });
+      if (!usa) return c;
+      CAMPOS_NFE.forEach(function (k) { c[k] = null; });
+      if (ORDEM_STATUS[c.status || 'negociacao'] > ORDEM_STATUS.pedido) c.status = 'pedido';
+      return c;
+    });
+    var recusadas = (d.chavesNfeRecusadas || []).slice();
+    if (recusadas.indexOf(chave) === -1) recusadas.push(chave);
+    return { itens: itens, chavesNfe: (d.chavesNfe || []).filter(function (c) { return c !== chave; }), chavesNfeRecusadas: recusadas };
+  }
+  // Vinculo manual: quem vincula de novo uma nota recusada desfaz a recusa.
+  function vincularNota(cotacao, chave) {
+    var d = cotacao || {};
+    var chaves = (d.chavesNfe || []).slice();
+    if (chaves.indexOf(chave) === -1) chaves.push(chave);
+    return { chavesNfe: chaves, chavesNfeRecusadas: (d.chavesNfeRecusadas || []).filter(function (c) { return c !== chave; }) };
+  }
+
+  /* ------------------------------------------------------------
+     3c. Status do item e gravacao sem perder a edicao dos outros
+     ------------------------------------------------------------ */
+  // UM lugar para mudar o status de um item (tela de cotacao, Comparar,
+  // "Pedido feito", "todos faturado"). A regra do pedidoEm morava em
+  // quatro pontos, cada um de um jeito: item que voltava a negociacao e
+  // era pedido de novo ficava com a data do pedido antigo e caia direto
+  // em "Pedido antigo".
+  //   - virou pedido vindo de negociacao: a data e' a de hoje, sempre;
+  //   - pedido sem data ganha a de hoje;
+  //   - voltou a negociacao: o pedido foi desfeito, a data dele sai;
+  //   - opcoes.soAvancar: nunca rebaixa (recebido continua recebido).
+  function mudarStatusItem(item, novo, hoje, opcoes) {
+    var c = Object.assign({}, item);
+    var atual = c.status || 'negociacao';
+    if (ORDEM_STATUS[novo] == null) return c;
+    if (opcoes && opcoes.soAvancar && ORDEM_STATUS[novo] < ORDEM_STATUS[atual]) return c;
+    if (novo === 'pedido' && (atual === 'negociacao' || !c.pedidoEm)) c.pedidoEm = hoje || c.pedidoEm || null;
+    if (novo === 'negociacao' && c.pedidoEm) c.pedidoEm = null;
+    c.status = novo;
+    return c;
+  }
+
+  // Posicao, em `itens`, do item `ref` ({codigo, produto}) que estava na
+  // posicao `idx` de outra copia da mesma cotacao: a propria posicao se
+  // ainda e' o mesmo item; senao o primeiro igual (codigo + nome), e por
+  // fim o de mesmo codigo. -1 = nao existe mais. `usados` (Set) evita
+  // casar duas vezes a mesma linha quando ha' item repetido.
+  function indiceDoItem(itens, ref, idx, usados) {
+    var lista = itens || [];
+    if (!ref) return -1;
+    var cod = codigoNorm(ref.codigo), nome = norm(ref.produto).trim();
+    var livre = function (i) { return !!lista[i] && !(usados && usados.has(i)); };
+    var igual = function (x) { return codigoNorm(x.codigo) === cod && norm(x.produto).trim() === nome; };
+    var i;
+    if (idx != null && idx >= 0 && livre(idx) && igual(lista[idx])) return idx;
+    for (i = 0; i < lista.length; i++) if (livre(i) && igual(lista[i])) return i;
+    if (cod) for (i = 0; i < lista.length; i++) if (livre(i) && codigoNorm(lista[i].codigo) === cod) return i;
+    return -1;
+  }
+
+  // Salvar a edicao de uma cotacao sem apagar o que mudou no banco desde
+  // que ela foi aberta. Tres copias: `base` (os itens como foram lidos
+  // para editar), `editados` (como estao na tela; origens[n] = posicao do
+  // item na base, -1 se foi criado na tela) e `frescos` (o documento lido
+  // agora, dentro da transacao). Campo a campo: o que a pessoa MEXEU vale
+  // o da tela; o que ela nao tocou vale o do banco (o status que a nota
+  // avancou, o preco que outro computador corrigiu). Item removido na
+  // tela sai; item que surgiu no banco no meio fica.
+  function mesclarEdicao(base, editados, origens, frescos) {
+    var B = base || [], F = frescos || [];
+    var json = function (v) { return JSON.stringify(v == null ? null : v); };
+    var usadosF = new Set(), usadosB = new Set();
+    var saida = (editados || []).map(function (e, n) {
+      var o = origens ? origens[n] : null;
+      var b = (o != null && o >= 0) ? B[o] : null;
+      if (!b) return Object.assign({}, e);
+      usadosB.add(o);
+      var fi = indiceDoItem(F, b, o, usadosF);
+      if (fi === -1) return Object.assign({}, e);
+      usadosF.add(fi);
+      var out = Object.assign({}, F[fi]);
+      Object.keys(e).forEach(function (k) { if (json(e[k]) !== json(b[k])) out[k] = e[k]; });
+      return out;
+    });
+    F.forEach(function (f, i) {
+      if (usadosF.has(i) || !f) return;
+      var bi = indiceDoItem(B, f, i, usadosB);
+      if (bi === -1) saida.push(Object.assign({}, f)); // nasceu no banco depois da leitura
+      else usadosB.add(bi);                             // estava na base e a tela removeu
+    });
+    return saida;
+  }
+
+  // Periodo (em dias) das vendas do resumo. O relatorio completo traz as
+  // datas e manda; o relatorio simples nao traz, e ai' vale o campo
+  // "Periodo do relatorio" da tela — inclusive corrigido DEPOIS de
+  // importar (antes o numero gravado na importacao ganhava para sempre).
+  function periodoDoRadar(doc, parametros) {
+    var doRelatorio = !!(doc && doc.periodoIni && doc.periodoFim && Number(doc.periodoDias) > 0);
+    if (doRelatorio) return { dias: Number(doc.periodoDias), doRelatorio: true };
+    var campo = Number(parametros && parametros.periodoDias);
+    var gravado = Number(doc && doc.periodoDias);
+    return { dias: campo > 0 ? campo : (gravado > 0 ? gravado : PARAMETROS_PADRAO.periodoDias), doRelatorio: false };
   }
 
   // Diferenca do preco da nota contra o cotado (recebido na cotacao, ou o
@@ -586,9 +805,10 @@
   function pedidoFeitoNaCotacao(cotacao, hoje) {
     var mudou = false;
     var itens = ((cotacao && cotacao.itens) || []).map(function (it) {
-      var c = Object.assign({}, it);
-      if ((c.status || 'negociacao') === 'negociacao') { c.status = 'pedido'; c.pedidoEm = hoje; mudou = true; }
-      else if (c.status === 'pedido' && !c.pedidoEm) { c.pedidoEm = hoje; mudou = true; }
+      var st = (it && it.status) || 'negociacao';
+      if (st !== 'negociacao' && st !== 'pedido') return Object.assign({}, it);
+      var c = mudarStatusItem(it, 'pedido', hoje);
+      if (c.status !== (it && it.status) || c.pedidoEm !== (it && it.pedidoEm)) mudou = true;
       return c;
     });
     return mudou ? itens : null;
@@ -601,8 +821,22 @@
   // Estoque-Grade, sem amostras/lojinha) OU se aparece em nota com NCM
   // 6907, casado pelo codigo de barras. Devolve o catalogo novo.
   // ... OU se a classe do relatorio e' uma das de piso (CLASSES_PISOS).
+  //
+  // O catalogo e' gravado como TEXTO JSON (porCodigoJson), nao como mapa:
+  // ver etiquetas-nucleo.js (mapaDoCatalogo) — este arquivo nao o
+  // carrega, entao a leitura dos dois formatos se repete aqui, e um
+  // teste confere que os dois nucleos leem e gravam igual.
+  function mapaDoCatalogoEtq(doc) {
+    if (doc && typeof doc.porCodigoJson === 'string') {
+      try {
+        var m = JSON.parse(doc.porCodigoJson);
+        if (m && typeof m === 'object' && !Array.isArray(m)) return m;
+      } catch (e) { /* cai no formato antigo, se houver */ }
+    }
+    return (doc && doc.porCodigo) || {};
+  }
   function pisosParaEtiquetas(itensVendas, catalogoDoc, eansNcm6907, hoje) {
-    var porCodigo = Object.assign({}, (catalogoDoc && catalogoDoc.porCodigo) || {});
+    var porCodigo = Object.assign({}, mapaDoCatalogoEtq(catalogoDoc));
     var eans = eansNcm6907 instanceof Set ? eansNcm6907 : new Set(eansNcm6907 || []);
     var atualizados = 0, novos = 0;
     (itensVendas || []).forEach(function (it) {
@@ -615,7 +849,7 @@
         novos++;
       }
     });
-    return { doc: { porCodigo: porCodigo, geradoEm: hoje, qtd: Object.keys(porCodigo).length }, atualizados: atualizados, novos: novos };
+    return { doc: { porCodigoJson: JSON.stringify(porCodigo), geradoEm: hoje, qtd: Object.keys(porCodigo).length }, atualizados: atualizados, novos: novos };
   }
   function eansComNcm(itensDocs, prefixos) {
     var set = new Set();
@@ -648,7 +882,15 @@
     linhasExcel: linhasExcel,
     pisosParaEtiquetas: pisosParaEtiquetas,
     nomesCompativeis: nomesCompativeis,
+    ORDEM_STATUS: ORDEM_STATUS,
     casarCotacaoComNotas: casarCotacaoComNotas,
+    casarCotacoesComNotas: casarCotacoesComNotas,
+    desvincularNota: desvincularNota,
+    vincularNota: vincularNota,
+    mudarStatusItem: mudarStatusItem,
+    indiceDoItem: indiceDoItem,
+    mesclarEdicao: mesclarEdicao,
+    periodoDoRadar: periodoDoRadar,
     diferencaPrecoNfe: diferencaPrecoNfe,
     alertasDaCotacao: alertasDaCotacao,
     pedidoFeitoNaCotacao: pedidoFeitoNaCotacao,

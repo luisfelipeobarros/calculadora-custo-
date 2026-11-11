@@ -226,6 +226,33 @@
       precoParaMargem(valoresParaCalculo(custoNFe, cfg, 0), MARGEM_SUGERIDA));
   }
 
+  // O que ha' de estranho numa ficha ANTES de salvar: custo NF-e vazio
+  // ou zero, e qualquer valor negativo. Nada disso da' erro na conta —
+  // a ficha sai com uma margem irreal, que entra na "margem media" do
+  // fornecedor e vira a referencia das cotacoes. Devolve a lista de
+  // avisos em texto (vazia = nada a perguntar); quem decide se salva
+  // mesmo assim e' a tela.
+  //
+  // v: os numeros do formulario (o que getFormValues/dadosParaCalculo
+  // entregam). Campo vazio chega como 0 — "vazio" e "zero" sao o mesmo
+  // aviso. Venda zerada NAO e' aviso: produto sem preco de venda e'
+  // um estado normal.
+  var CAMPOS_FICHA = [
+    ['custoNFe', 'Custo NF-e'], ['frete', 'Frete'], ['pctCredFrete', '% do crédito sobre o frete'],
+    ['valorST', 'Valor ST'], ['icmsCredito', 'ICMS Crédito'], ['ipi', 'IPI'],
+    ['custoFinanceiroPct', 'Custo financeiro'], ['avariasPct', 'Avarias'],
+    ['bonificacao', 'Bonificação'], ['venda', 'Venda']
+  ];
+  function avisosDaFicha(v){
+    v = v || {};
+    var avisos = [];
+    if(!(toNum(v.custoNFe) > 0) && !(toNum(v.custoNFe) < 0)) avisos.push('Custo NF-e vazio ou zero');
+    CAMPOS_FICHA.forEach(function (c) {
+      if(toNum(v[c[0]]) < 0) avisos.push(c[1] + ' negativo');
+    });
+    return avisos;
+  }
+
   var api = {
     TRIBUTOS: TRIBUTOS,
     METAS: METAS,
@@ -236,7 +263,8 @@
     precoParaMargem: precoParaMargem,
     arredondarNovanta: arredondarNovanta,
     valoresParaCalculo: valoresParaCalculo,
-    precoSugerido: precoSugerido
+    precoSugerido: precoSugerido,
+    avisosDaFicha: avisosDaFicha
   };
 
   global.Calculo = api;

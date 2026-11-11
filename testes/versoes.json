@@ -1,0 +1,62 @@
+{
+  "app-shared.css": {
+    "v": 18,
+    "hash": "0b487952f9d26585"
+  },
+  "app-shared.js": {
+    "v": 32,
+    "hash": "3103c9271931e26f"
+  },
+  "assistencias-nucleo.js": {
+    "v": 8,
+    "hash": "ace29bdba784c859"
+  },
+  "calculo-nucleo.js": {
+    "v": 9,
+    "hash": "690631e18ca339ec"
+  },
+  "concorrentes-nucleo.js": {
+    "v": 6,
+    "hash": "aa2cf9a62e262d92"
+  },
+  "custos-nucleo.js": {
+    "v": 4,
+    "hash": "1e6e0550443d1e6a"
+  },
+  "dda-nucleo.js": {
+    "v": 7,
+    "hash": "48e09fa24bfb5039"
+  },
+  "etiquetas-nucleo.js": {
+    "v": 15,
+    "hash": "ee78e7092329a88e"
+  },
+  "exposicao-nucleo.js": {
+    "v": 4,
+    "hash": "7dcee00ae6a10716"
+  },
+  "fiscal-nucleo.js": {
+    "v": 4,
+    "hash": "5777f6bca6f42cc9"
+  },
+  "lancamentos-nucleo.js": {
+    "v": 7,
+    "hash": "422514cfaf86c043"
+  },
+  "pagamentos-nucleo.js": {
+    "v": 1,
+    "hash": "68846ad9b8e574e7"
+  },
+  "painel-nucleo.js": {
+    "v": 6,
+    "hash": "371eb5374cdfe048"
+  },
+  "radar-nucleo.js": {
+    "v": 11,
+    "hash": "06a0ea967b1c11fb"
+  },
+  "simulador-nucleo.js": {
+    "v": 6,
+    "hash": "a35e68a9a98f9175"
+  }
+}

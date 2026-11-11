@@ -226,5 +226,49 @@ const ultimas = {
     null);
 }
 
+// A tela (lote, comparacoes salvas, pesquisas do pedido) deixou de ter
+// copia desta regra: os casos que as copias erravam ficam travados aqui.
+{
+  eq('resultado com erro:true E preco preenchido nao e o menor (o formatador pode devolver os dois)',
+    C.menorConcorrente([{ loja: 'A', preco: 10, erro: true }, { loja: 'B', preco: 25 }]).preco, 25);
+  eq('preco zerado nao e preco achado',
+    C.menorConcorrente([{ loja: 'A', preco: 0 }, { loja: 'B', preco: 25 }]).preco, 25);
+  eq('lista com buracos (loja sem resposta ainda) nao derruba', C.menorConcorrente([undefined, null, { loja: 'B', preco: 25 }]).loja, 'B');
+  eq('sem preco de referencia: so o menor, sem comparar', C.menorConcorrente([{ loja: 'B', preco: 25 }]).somosMaisBaratos, null);
+}
+
+// ── Varredura em lote: produto pesquisado ────────────────────
+
+{
+  const feito = { porLoja: { 0: { preco: 10 }, 1: { erro: true, mensagemErro: 'x' } } };
+  const meio = { porLoja: { 0: { preco: 10 }, 1: { pendente: true } } };
+  const falta = { porLoja: { 0: { preco: 10 } } };
+  eq('todas as lojas responderam (achou OU deu erro) -> pesquisado', C.produtoPesquisado(feito, 2), true);
+  eq('loja ainda pendente -> nao pesquisado', C.produtoPesquisado(meio, 2), false);
+  eq('loja sem resposta nenhuma -> nao pesquisado', C.produtoPesquisado(falta, 2), false);
+  eq('produto que nem comecou -> nao pesquisado', C.produtoPesquisado({ porLoja: {} }, 2), false);
+  eq('sem lista de lojas nao da para afirmar "concluido"', C.produtoPesquisado(feito, 0), false);
+  eq('item sem porLoja (progresso corrompido) nao derruba', C.produtoPesquisado({}, 2), false);
+  // O progresso anti-F5 volta do localStorage com chaves em texto.
+  eq('sobrevive a ida e volta pelo JSON', C.produtoPesquisado(JSON.parse(JSON.stringify(feito)), 2), true);
+}
+
+// ── Preco de referencia da pesquisa salva ────────────────────
+
+{
+  // "Nosso preco" editado na tabela (47,90) x catalogo (49,90): o painel
+  // compara com o catalogo — senao "Atualizar painel" marcava "preco
+  // mudou" em quem tinha acabado de ser pesquisado.
+  const doc = { meuPreco: 47.9, precoCatalogoCent: 4990 };
+  eq('pesquisa de planilha: vale o preco do CATALOGO gravado no documento', C.precoReferenciaCent(doc, true), 4990);
+  eq('  ...e com ele o produto fica em dia (nao "preco mudou")',
+    C.statusProduto({ codigo: '1', precoCent: 4990 },
+      { data: '2026-09-09', meuPrecoCent: C.precoReferenciaCent(doc, true) }, '2026-09-10', 30).motivo, null);
+  eq('documento antigo, sem o campo: continua pelo meuPreco', C.precoReferenciaCent({ meuPreco: 36.9 }, true), 3690);
+  eq('sujeira de float no meuPreco vira centavo inteiro', C.precoReferenciaCent({ meuPreco: 64.900000000000006 }, true), 6490);
+  eq('pesquisa de pedido nao tem referencia (so o prazo decide)', C.precoReferenciaCent(doc, false), null);
+  eq('sem preco nenhum -> null', C.precoReferenciaCent({ meuPreco: null, precoCatalogoCent: null }, true), null);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

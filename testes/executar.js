@@ -4,12 +4,14 @@
 
       node testes/executar.js
 
-  Nao precisa instalar nada — so' o Node. Sao trinta etapas,
-  em vinte e uma frentes (a lista canonica, com o que cada uma cobre,
+  Nao precisa instalar nada — so' o Node. Sao trinta e duas etapas,
+  em vinte e duas frentes (a lista canonica, com o que cada uma cobre,
   esta' no README, secao "Rodando os testes"):
 
   - calculo.js         — nucleo de calculo vs formula original (200 mil
                          casos) + a ligacao index.html <-> nucleo.
+  - versoes.js         — o ?v= de cada arquivo compartilhado: o mesmo em
+                         todos os HTML, e subiu quando o arquivo mudou.
   - validar-html.js    — estrutura dos seis HTML: sintaxe dos <script>,
                          tags, ids, labels, arquivos referenciados, ?v=.
   - carregar-em-dom.js — executa os scripts de cada pagina num DOM
@@ -59,6 +61,7 @@ const aqui = __dirname;
 
 const etapas = [
   ['Nucleo de calculo (200k casos)', 'calculo.js', ['index.html']],
+  ['Versoes dos arquivos compartilhados (?v=)', 'versoes.js', []],
   ['Estrutura: index.html', 'validar-html.js', ['index.html']],
   ['Estrutura: controle-notas.html', 'validar-html.js', ['controle-notas.html']],
   ['Estrutura: assistencias.html', 'validar-html.js', ['assistencias.html']],

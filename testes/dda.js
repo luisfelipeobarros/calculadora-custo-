@@ -850,5 +850,44 @@ eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'SECURITIZADORA'), f
   eq('pago aqui + BAIXADO no banco = nada a apontar', tipos(rel2.linhas[0]), []);
 }
 
+// Auditoria de 11/11/2026 — numero de nota e' sequencia POR EMITENTE.
+// O "documento" do boleto de A pode coincidir com a nota de B: so' troca
+// de eixo com prova positiva (o cedente e' A, e A tem UMA duplicata com
+// esse valor e vencimento). Boleto adulterado do proprio B, ou cobrado
+// por fundo, continua vermelho — a nota segue sendo o eixo.
+{
+  const base = [
+    dup({ id: 'B_1', numeroNota: '12345', parcela: '1', valor: 1000, vencimento: '2026-11-20', nomeEmitente: 'CERAMICA B LTDA', chaveAcesso: 'chave-ok' }),
+    dup({ id: 'A_1', numeroNota: '777', parcela: '1', valor: 500, vencimento: '2026-11-25', nomeEmitente: 'ARGAMASSA A SA', chaveAcesso: 'chave-ok' })
+  ];
+  const um = (o) => Dda.conferir([reg(Object.assign({ documento: '12345/1', valorCentavos: 50000, vencimento: '2026-11-25' }, o))], ctx(base)).linhas[0];
+  const colisao = um({ beneficiario: 'ARGAMASSA A SA' });
+  eq('colisao de numero de nota: casa com a duplicata do proprio cedente, sem vermelho',
+    [colisao.casamento.duplicata.id, tipos(colisao).includes('valorDivergente')], ['A_1', false]);
+  eq('colisao: o `como` diz por onde casou',
+    colisao.casamento.como.indexOf('o número do documento coincide com nota de outro fornecedor') !== -1, true);
+  const adulterado = um({ beneficiario: 'CERAMICA B LTDA' });
+  eq('boleto do PROPRIO emitente da nota com outro valor continua vermelho (valor divergente)',
+    [adulterado.casamento.duplicata.id, tipos(adulterado).includes('valorDivergente')], ['B_1', true]);
+  const fundo = um({ beneficiario: 'CSMJ SECURITIZADORA S.A.' });
+  eq('cobrado por fundo (nome nao bate com ninguem): a nota continua sendo o eixo, vermelho',
+    [fundo.casamento.duplicata.id, tipos(fundo).includes('valorDivergente')], ['B_1', true]);
+}
+
+// Ultimo recurso (valor+vencimento, sem passar pela nota) so' entra no
+// LOTE quando o cedente e' o fornecedor da duplicata. Com outro nome,
+// pode ser o titulo de outro fornecedor que coincidiu (10 centavos de
+// tolerancia, mesmo dia): fica o aviso e a baixa pelo botao da linha.
+{
+  const base = [dup({ id: 'C_1', numeroNota: '999', parcela: '1', valor: 2199.86, vencimento: '2026-11-10', nomeEmitente: 'FORNECEDOR C LTDA', chaveAcesso: 'chave-ok' })];
+  const outro = Dda.conferir([reg({ documento: '55555/2', beneficiario: 'OUTRA EMPRESA D SA', valorCentavos: 219990, vencimento: '2026-11-10', situacao: 'PAGO' })], ctx(base));
+  eq('ultimo recurso com cedente diferente: casa, avisa e NAO entra no lote',
+    [outro.linhas[0].casamento.duplicata.id, tipos(outro.linhas[0]), outro.baixaveis.length],
+    ['C_1', ['bancoBaixouNosNao', 'ultimoRecursoForaDoLote'], 0]);
+  const mesmo = Dda.conferir([reg({ documento: '55555/2', beneficiario: 'FORNECEDOR C', valorCentavos: 219986, vencimento: '2026-11-10', situacao: 'PAGO' })], ctx(base));
+  eq('ultimo recurso com o cedente conferido: entra no lote como antes',
+    [tipos(mesmo.linhas[0]), mesmo.baixaveis.length], [['bancoBaixouNosNao'], 1]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

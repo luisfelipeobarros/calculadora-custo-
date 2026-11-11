@@ -174,7 +174,7 @@ eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido
   eq('ultima compra na linha', pc['200'].ultimaCompra, { em: '2026-09-15', qtd: 100, preco: 25 });
   eq('contagem separa comprar de conferir', (c => [c.comprar, c.conferir])(N.contar(lin)), [2, 1]);
   eq('pisos pela classe do relatorio entram no catalogo do Etiquetas (10000/10016/10002), tinta nao',
-    (r => [r.novos, Object.keys(r.doc.porCodigo).sort()])(N.pisosParaEtiquetas(lC.itens, null, new Set(), '2026-10-23')), [2, ['200', '700']]);
+    (r => [r.novos, Object.keys(JSON.parse(r.doc.porCodigoJson)).sort()])(N.pisosParaEtiquetas(lC.itens, null, new Set(), '2026-10-23')), [2, ['200', '700']]);
 }
 
 // ── Cotacao x NF-e: status automatico ────────────────────────
@@ -232,14 +232,130 @@ eq('planilha: uma linha por produto com as datas', (r => [r.length, r[0]['Pedido
   eq('pedido feito sem nada a mudar devolve null', N.pedidoFeitoNaCotacao({ itens: [{ status: 'transito' }] }, '2026-10-23'), null);
 }
 
+// ── Desvincular que "pega" e a nota que nao fecha duas cotacoes ──
+{
+  const notaX = (chave, numero, em, qtd) => ({ chave, numero, dataEmissao: em, nomeEmitente: 'CERAMICA X LTDA', itens: [{ codigo: 'FX-1', qtd, vUnit: 10 }] });
+  const cotX = (id, em, status) => ({ id, fornecedor: 'CERAMICA X', data: em, chavesNfe: [], itens: [
+    { codigo: '1', codigoRecebido: 'FX-1', produto: 'PISO A 60X60', quantidadeEsperada: 100, status, pedidoEm: status === 'negociacao' ? null : em }] });
+  const aplicar = (rs) => rs.map(x => Object.assign({}, x.cotacao, { itens: x.resultado.itens, chavesNfe: x.resultado.chavesNfe }));
+  const resumo = (rs, id) => (x => (x.resultado.itens[0].status || '') + ':' + (x.resultado.itens[0].numeroNfe || '-') + ':' + (x.resultado.itens[0].qtdNfe || 0))(rs.filter(x => x.cotacao.id === id)[0]);
+
+  // Desvinculo manual: a nota vai para as recusadas e o item esquece o casamento.
+  const cot = cotX('c1', '2026-10-01', 'pedido');
+  const n1 = [notaX('N1', '10', '2026-10-05', 100)];
+  const estadoN1 = { N1: { noSistema: true, noSistemaEm: '2026-10-08' } };
+  const r1 = N.casarCotacaoComNotas(cot, n1, estadoN1, {}, '2026-10-10');
+  const desv = N.desvincularNota(Object.assign({}, cot, { itens: r1.itens, chavesNfe: r1.chavesNfe }), 'N1');
+  eq('desvincular: sai dos vinculos, entra nas recusadas, o item volta a pedido sem nenhum campo da nota',
+    [r1.itens[0].status, desv.chavesNfe, desv.chavesNfeRecusadas, desv.itens[0].status, desv.itens[0].chaveNfe, desv.itens[0].notasNfe, desv.itens[0].recebidoEm, desv.itens[0].pedidoEm],
+    ['recebido', [], ['N1'], 'pedido', null, null, null, '2026-10-01']);
+  const r2 = N.casarCotacaoComNotas(Object.assign({}, cot, desv), n1, estadoN1, {}, '2026-10-11');
+  eq('nota recusada nao e oferecida de novo: a sincronizacao seguinte nao recasa nem regrava',
+    [r2.itens[0].status, r2.chavesNfe, r2.mudou], ['pedido', [], false]);
+  eq('item que nao usava a nota fica intacto no desvinculo',
+    N.desvincularNota({ itens: [{ codigo: '9', status: 'recebido', chaveNfe: 'OUTRA' }], chavesNfe: ['OUTRA', 'N1'] }, 'N1'),
+    { itens: [{ codigo: '9', status: 'recebido', chaveNfe: 'OUTRA' }], chavesNfe: ['OUTRA'], chavesNfeRecusadas: ['N1'] });
+  eq('vincular na mao uma nota recusada desfaz a recusa', N.vincularNota(Object.assign({}, cot, desv), 'N1'), { chavesNfe: ['N1'], chavesNfeRecusadas: [] });
+
+  // Recompra: duas cotacoes abertas do mesmo produto e UMA nota de 100.
+  const A = cotX('A', '2026-09-01', 'pedido'), B = cotX('B', '2026-10-20', 'pedido');
+  const n2 = [notaX('N2', '20', '2026-10-25', 100)];
+  const rs = N.casarCotacoesComNotas([A, B], n2, {}, {}, '2026-10-26');
+  eq('uma nota de 100 nao fecha duas cotacoes: fica com o pedido mais recente, o antigo segue em carteira',
+    [resumo(rs, 'A'), resumo(rs, 'B')], ['pedido:-:0', 'transito:20:100']);
+  const rsDepois = N.casarCotacoesComNotas(aplicar(rs), n2, {}, {}, '2026-10-27');
+  eq('rodar de novo nao muda nada (quem ja tem a nota continua com ela)', rsDepois.map(x => x.resultado.mudou), [false, false]);
+  // Cotacao mais nova que aparece depois nao toma a nota de quem ja' a tinha.
+  const Cnova = cotX('C', '2026-10-24', 'pedido');
+  const rs3 = N.casarCotacoesComNotas(aplicar(rs).concat([Cnova]), n2, {}, {}, '2026-10-27');
+  eq('quem chega depois nao tira a nota de quem ja estava casado', [resumo(rs3, 'B'), resumo(rs3, 'C')], ['transito:20:100', 'pedido:-:0']);
+  // Cotacao que e' so' orcamento (negociacao) nao passa na frente de pedido de verdade.
+  const orc = cotX('O', '2026-10-22', 'negociacao');
+  const rs4 = N.casarCotacoesComNotas([orc, B], n2, {}, {}, '2026-10-26');
+  eq('orcamento mais novo nao toma a nota do pedido de verdade', [resumo(rs4, 'O'), resumo(rs4, 'B')], ['negociacao:-:0', 'transito:20:100']);
+  // O fornecedor juntou dois pedidos numa linha de 200: cada cotacao leva os seus 100.
+  const rs5 = N.casarCotacoesComNotas([A, B], [notaX('N3', '30', '2026-10-25', 200)], {}, {}, '2026-10-26');
+  eq('linha de nota que cobre dois pedidos atende os dois (100 para cada), sem parcial',
+    [resumo(rs5, 'A'), resumo(rs5, 'B'), rs5.map(x => x.resultado.itens[0].parcial)], ['transito:30:100', 'transito:30:200', [null, null]]);
+  // Sobrou so' parte da linha: a segunda cotacao fica com faturamento parcial.
+  const rs6 = N.casarCotacoesComNotas([A, B], [notaX('N4', '40', '2026-10-25', 160)], {}, {}, '2026-10-26');
+  eq('sobra de 60 numa linha de 160: a cotacao seguinte fica parcial (60 de 100), nao fechada',
+    rs6.filter(x => x.cotacao.id === 'A')[0].resultado.itens[0].parcial, { faturado: 60, pedido: 100 });
+  eq('sem o controle de consumo (uma cotacao sozinha) nada muda: usos so descreve o que ela passou a usar',
+    N.casarCotacaoComNotas(B, n2, {}, {}, '2026-10-26').usos, [{ chave: 'N2', i: 0, qtd: 100 }]);
+}
+
+// ── Status do item: a regra do pedidoEm num lugar so' ────────
+{
+  const st = (it) => it.status + ':' + (it.pedidoEm || '-');
+  eq('negociacao -> pedido: data de hoje, mesmo com data de pedido antigo sobrando',
+    st(N.mudarStatusItem({ status: 'negociacao', pedidoEm: '2026-08-01' }, 'pedido', '2026-11-11')), 'pedido:2026-11-11');
+  eq('pedido sem data ganha a de hoje; pedido com data mantem',
+    [st(N.mudarStatusItem({ status: 'pedido' }, 'pedido', '2026-11-11')), st(N.mudarStatusItem({ status: 'pedido', pedidoEm: '2026-10-01' }, 'pedido', '2026-11-11'))],
+    ['pedido:2026-11-11', 'pedido:2026-10-01']);
+  eq('transito -> pedido (rebaixado na mao) mantem a data do pedido; voltar a negociacao apaga a data',
+    [st(N.mudarStatusItem({ status: 'transito', pedidoEm: '2026-10-01' }, 'pedido', '2026-11-11')), st(N.mudarStatusItem({ status: 'pedido', pedidoEm: '2026-10-01' }, 'negociacao', '2026-11-11'))],
+    ['pedido:2026-10-01', 'negociacao:-']);
+  eq('"todos faturado" so avanca: recebido continua recebido, negociacao e pedido viram transito',
+    ['recebido', 'pedido', 'negociacao', undefined].map(s => N.mudarStatusItem({ status: s }, 'transito', '2026-11-11', { soAvancar: true }).status),
+    ['recebido', 'transito', 'transito', 'transito']);
+  eq('status desconhecido nao muda nada; o item original nao e alterado',
+    (orig => [N.mudarStatusItem(orig, 'banana', '2026-11-11').status, N.mudarStatusItem(orig, 'recebido', '2026-11-11').status, orig.status])({ status: 'pedido', pedidoEm: '2026-10-01' }),
+    ['pedido', 'recebido', 'pedido']);
+}
+
+// ── Gravar sem apagar a edicao dos outros ────────────────────
+{
+  const base = [
+    { codigo: '1', produto: 'PISO A', precoRecebido: 10, status: 'pedido', pedidoEm: '2026-10-01', chaveNfe: null },
+    { codigo: '2', produto: 'PISO B', precoRecebido: 20, status: 'negociacao' },
+    { codigo: '3', produto: 'PISO C', precoRecebido: 30, status: 'negociacao' }];
+  eq('acha o item pela posicao, e pelo codigo+nome quando a lista mudou de ordem; item que saiu = -1',
+    [N.indiceDoItem(base, base[1], 1), N.indiceDoItem([base[2], base[1]], base[1], 1), N.indiceDoItem([base[0]], base[2], 2), N.indiceDoItem(base, { codigo: '2', produto: 'OUTRO NOME' }, 0)],
+    [1, 1, -1, 1]);
+  // Na tela: mudou o preco do item 2 e removeu o item 3. No banco, no meio
+  // tempo: a nota avancou o item 1 e outro computador acrescentou o item 4.
+  const editados = [Object.assign({}, base[0]), Object.assign({}, base[1], { precoRecebido: 22 })];
+  const frescos = [
+    Object.assign({}, base[0], { status: 'transito', chaveNfe: 'N1', numeroNfe: '10' }),
+    Object.assign({}, base[1], { precoEsperado: 19 }),
+    base[2],
+    { codigo: '4', produto: 'PISO D', precoRecebido: 40, status: 'negociacao' }];
+  const m = N.mesclarEdicao(base, editados, [0, 1], frescos);
+  eq('edicao x banco: o que a tela nao tocou vale o do banco (status da nota), o que tocou vale o da tela, removido sai, item novo do banco fica',
+    m.map(i => [i.codigo, i.status, i.precoRecebido, i.chaveNfe || null, i.precoEsperado || null]),
+    [['1', 'transito', 10, 'N1', null], ['2', 'negociacao', 22, null, 19], ['4', 'negociacao', 40, null, null]]);
+  eq('item criado na tela (sem origem) entra como esta; status mexido na tela vence o do banco',
+    N.mesclarEdicao(base, [Object.assign({}, base[0], { status: 'recebido' }), { codigo: '9', produto: 'NOVO', status: 'negociacao' }], [0, -1], frescos.slice(0, 1)).map(i => i.codigo + ':' + i.status),
+    ['1:recebido', '9:negociacao']);
+}
+
+// ── Periodo das vendas: do relatorio quando ele traz, do campo quando nao ──
+eq('relatorio completo (com datas) manda no periodo; o simples usa o campo, mesmo mudado depois de importar',
+  [N.periodoDoRadar({ periodoDias: 62, periodoIni: '2026-08-22', periodoFim: '2026-10-22' }, { periodoDias: 30 }),
+   N.periodoDoRadar({ periodoDias: 60, periodoIni: null, periodoFim: null }, { periodoDias: 30 }),
+   N.periodoDoRadar({ periodoDias: 45 }, {}), N.periodoDoRadar(null, null)],
+  [{ dias: 62, doRelatorio: true }, { dias: 30, doRelatorio: false }, { dias: 45, doRelatorio: false }, { dias: 60, doRelatorio: false }]);
+
 // ── Etiquetas de carona ──────────────────────────────────────
-const catalogo = { porCodigo: { '200': { n: 'PISO X 60X60', e: '7899000000011', q: 20 }, '999': { n: 'OUTRO', e: '', q: 3 } }, geradoEm: '2026-10-09', qtd: 2 };
+const catalogo ={ porCodigo: { '200': { n: 'PISO X 60X60', e: '7899000000011', q: 20 }, '999': { n: 'OUTRO', e: '', q: 3 } }, geradoEm: '2026-10-09', qtd: 2 };
 const eans = N.eansComNcm(itensDocs, ['6907']);
 eq('eans com NCM 6907 nas notas', [...eans].sort(), ['7899000000011', '7899000000035']);
 const novo = N.pisosParaEtiquetas(lido.itens, catalogo, eans, '2026-10-23');
 eq('catalogo: quem ja esta ganha o estoque do dia; piso novo entra pela nota; argamassa e sem-barras ficam de fora',
-  [novo.atualizados, novo.novos, novo.doc.qtd, novo.doc.porCodigo['200'].q, novo.doc.porCodigo['400'], novo.doc.porCodigo['100'], novo.doc.porCodigo['999'].q, novo.doc.geradoEm],
+  (m => [novo.atualizados, novo.novos, novo.doc.qtd, m['200'].q, m['400'], m['100'], m['999'].q, novo.doc.geradoEm])(JSON.parse(novo.doc.porCodigoJson)),
   [1, 1, 3, 20, { n: 'PISO NOVO 80X80', e: '7899000000035', q: 0 }, undefined, 3, '2026-10-23']);
+// O catalogo sai como TEXTO JSON (porCodigoJson) — ver etiquetas-nucleo.js.
+eq('catalogo gravado sem o mapa solto (um campo de texto so)', [typeof novo.doc.porCodigoJson, novo.doc.porCodigo], ['string', undefined]);
+// Os dois nucleos leem e gravam o MESMO formato: o que o Radar grava o
+// Etiquetas le, e o que o Etiquetas grava o Radar atualiza.
+{
+  const E = require('../etiquetas-nucleo.js');
+  eq('o Etiquetas le o catalogo que o Radar gravou', E.expandirCatalogo(novo.doc).porCodigo['400'], { n: 'PISO NOVO 80X80', e: '7899000000035', q: 0 });
+  const doEtq = E.montarCatalogo([{ codigo: '200', nome: 'PISO X 60X60', ean: '7899000000011', quantidade: 5, classe: 'Piso' }], '2026-10-20');
+  eq('o Radar atualiza o catalogo que o Etiquetas gravou (formato novo)',
+    (r => [r.atualizados, JSON.parse(r.doc.porCodigoJson)['200'].q])(N.pisosParaEtiquetas(lido.itens, doEtq, new Set(), '2026-10-23')), [1, 20]);
+}
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

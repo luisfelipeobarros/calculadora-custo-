@@ -134,12 +134,25 @@
   function parseNumeroBR(v) {
     if (v === '' || v == null) return null;
     if (typeof v === 'number') return v;
-    var s = String(v).trim().replace(/^R\$\s*/i, '').trim();
+    var s = String(v).trim();
+    // Sinal fora do lugar (auditoria de 11/11/2026): relatorio de banco
+    // e de ERP escreve o negativo a' direita ("1.234,56-") ou antes do
+    // R$ ("-R$ 5,00"). Sem isto o primeiro virava 1,23456 e o segundo
+    // null — errado em silencio.
+    var negativo = false;
+    if (/\d\s*-$/.test(s)) { negativo = true; s = s.replace(/\s*-$/, ''); }
+    else if (/^-\s*R\$/i.test(s)) { negativo = true; s = s.replace(/^-\s*/, ''); }
+    s = s.replace(/^R\$\s*/i, '').trim();
     if (s === '') return null;
+    // Dois ou mais pontos e nenhuma virgula ("1.234.567") so' pode ser
+    // milhar: nao ha' numero com dois separadores decimais. A
+    // ambiguidade historica de UM ponto ("1.234" = 1,234) continua.
+    if (s.indexOf(',') === -1 && /^-?\d{1,3}(\.\d{3}){2,}$/.test(s)) s = s.replace(/\./g, '');
     var umaVirgula = s.indexOf(',') !== -1 && s.indexOf(',') === s.lastIndexOf(',');
     s = (umaVirgula && /,\d+$/.test(s)) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
     var n = parseFloat(s);
-    return isNaN(n) ? null : n;
+    if (isNaN(n)) return null;
+    return negativo ? -n : n;
   }
 
   function iso(d) {
@@ -1124,7 +1137,11 @@
       return '<p class="empty-note" style="display:block;">Esta nota nao tem duplicatas registradas.</p>';
     }
 
-    var hoje = hojeISO();
+    // inicioHoje (opcional): a "janela de hoje" de quem chama. O
+    // Controle de Notas trata o que venceu no fim de semana como de
+    // hoje ate' a segunda; sem passar a mesma data aqui, este quadro
+    // dizia ATRASADO onde a tela de Pagamentos dizia A VENCER.
+    var hoje = o.inicioHoje || hojeISO();
     var emissao = o.dataEmissao || '';
     var total = 0, somaPonderada = 0, comPrazo = 0;
     var prazos = [];
@@ -2180,6 +2197,77 @@
   }
 
   /* ============================================================
+     9f. Vendas no Firestore (11/11/2026)
+     ============================================================
+
+     A planilha de vendas era lida direto do Google Sheets (gviz), o
+     que obriga a planilha a ser PUBLICA — e o endereco dela esta' no
+     HTML, que tambem e' publico: faturamento e lucro por fornecedor
+     ficavam legiveis sem login. Aqui as vendas passam a vir do
+     Firestore, atras das regras.
+
+     Colecao `vendas`: um documento por ano (id 'aaaa'), gravado pelo
+     Apps Script da propria planilha (o navegador so' le):
+       { linhasJson: '[[mes, fornecedor, categoria, quantidade,
+                        faturamento, lucro], ...]', qtd, atualizadoEm }
+     O texto JSON (em vez de um array de mapas) e' de proposito: um
+     campo so' nao gera milhares de entradas de indice — a mesma licao
+     do resumo do Radar.
+
+     Enquanto a colecao nao existir (ou as regras novas nao estiverem
+     publicadas), lerVendas devolve null e cada tela continua lendo a
+     planilha como antes. Com a colecao no ar, a planilha pode — e
+     deve — voltar a ser privada.
+  */
+
+  // docs: [{ id: 'aaaa', dados }]. Devolve as linhas no formato das
+  // telas ({ano, mes, fornecedor, categoria, quantidade, faturamento,
+  // lucro}); documento ilegivel ou linha fora do padrao fica de fora,
+  // contado em `descartadas` (nunca vira zero mudo).
+  function vendasDosDocs(docs) {
+    var linhas = [], descartadas = 0, atualizadoEm = null;
+    (docs || []).forEach(function (doc) {
+      var ano = Number(doc && doc.id);
+      var dados = (doc && doc.dados) || {};
+      if (!(ano >= 2000)) return;
+      var lista;
+      try { lista = JSON.parse(dados.linhasJson || '[]'); } catch (e) { lista = null; }
+      if (!Array.isArray(lista)) { descartadas++; return; }
+      lista.forEach(function (l) {
+        var mes = Array.isArray(l) ? Number(l[0]) : NaN;
+        if (!(mes >= 1 && mes <= 12)) { descartadas++; return; }
+        linhas.push({
+          ano: ano, mes: mes,
+          fornecedor: String(l[1] == null ? '' : l[1]).trim(),
+          categoria: String(l[2] == null ? '' : l[2]).trim(),
+          quantidade: Number(l[3]) || 0,
+          faturamento: Number(l[4]) || 0,
+          lucro: Number(l[5]) || 0
+        });
+      });
+      var quando = dados.atualizadoEm && dados.atualizadoEm.toMillis ? dados.atualizadoEm.toMillis() : 0;
+      if (quando && (!atualizadoEm || quando > atualizadoEm)) atualizadoEm = quando;
+    });
+    return { linhas: linhas, descartadas: descartadas, atualizadoEm: atualizadoEm };
+  }
+
+  // Devolve { linhas, descartadas, atualizadoEm } ou null quando nao ha'
+  // vendas no Firestore (colecao vazia, regra ainda nao publicada, sem
+  // rede) — quem chama cai na leitura da planilha.
+  function lerVendas(db) {
+    if (!db) return Promise.resolve(null);
+    return db.collection('vendas').get().then(function (snap) {
+      var docs = [];
+      snap.forEach(function (d) { docs.push({ id: d.id, dados: d.data() }); });
+      var r = vendasDosDocs(docs);
+      return r.linhas.length ? r : null;
+    }).catch(function (e) {
+      console.warn('Vendas no Firestore indisponiveis (lendo a planilha):', e && (e.code || e.message));
+      return null;
+    });
+  }
+
+  /* ============================================================
      10. Rede de seguranca
      ============================================================ */
 
@@ -2343,6 +2431,8 @@
     chaveMarca: chaveMarca,
     marcaDoVinculo: marcaDoVinculo,
     cruzarVendasCompras: cruzarVendasCompras,
+    vendasDosDocs: vendasDosDocs,
+    lerVendas: lerVendas,
     lerComDelta: lerComDelta,
     lerFaixaComCache: lerFaixaComCache,
     esquecerLeitura: esquecerLeitura,

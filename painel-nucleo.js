@@ -16,8 +16,8 @@
      projeta sobre os dias uteis que FALTAM. Sem dias decorridos nao
      ha' media — e a previsao fica em branco em vez de inventada.
 
-   Precisa vir DEPOIS de app-shared.js — usa App.centavos e
-   App.somarDias.
+   Precisa vir DEPOIS de app-shared.js — usa App.centavos,
+   App.somarDias e App.parseDinheiroBR.
    ============================================================ */
 (function (global) {
   'use strict';
@@ -67,6 +67,33 @@
     return diasUteis(mes + '-01', ultimoDiaDoMes(mes), feriados);
   }
 
+  // Lancamento que para ANTES do fim do mes: o card de previsao grava o
+  // acumulado "ate' o dia D", e quando o mes vira esse numero ficava
+  // valendo como total do mes sem ninguem avisar. Devolve { ate } quando
+  // ainda ha' dia util depois de D, senao null (D no ultimo dia, ou so'
+  // domingo/feriado depois dele). Lancamento sem data (documento antigo)
+  // vale como mes inteiro — nao ha' como afirmar que e' parcial.
+  function lancamentoParcial(mes, faturamento, feriados) {
+    var fat = faturamento && faturamento.acumulado != null ? faturamento : null;
+    if (!fat || !fat.ate) return null;
+    var fim = ultimoDiaDoMes(mes);
+    if (fat.ate >= fim) return null;
+    var ini = fat.ate < mes + '-01' ? mes + '-01' : somarDias(fat.ate, 1);
+    return diasUteis(ini, fim, feriados) > 0 ? { ate: fat.ate } : null;
+  }
+
+  // O que foi digitado num campo de dinheiro da tabela: { vazio } (apagar
+  // o valor e' resposta valida), { valor } ou { invalido }. Antes "abc"
+  // virava null e APAGAVA o valor salvo, e "6,47mi" virava 647 — numero
+  // por aproximacao e' pior que recusar.
+  function valorDigitado(texto) {
+    var t = String(texto == null ? '' : texto).trim();
+    if (t === '') return { vazio: true };
+    if (!/^(R\$)?\s*-?[\d.,\s]*\d[\d.,\s]*$/i.test(t)) return { invalido: true };
+    var v = App.parseDinheiroBR(t);
+    return (v == null || !isFinite(v)) ? { invalido: true } : { valor: v };
+  }
+
   // Tudo que a linha do mes mostra, a partir do que foi digitado
   // (objetivo, feriados, faturamento {acumulado, ate}) e do que veio
   // do Firestore (aPagar, em reais). Campo sem dado sai null — a tela
@@ -96,7 +123,11 @@
     // fim (mes completo); abaixo do inicio nao ha' dia decorrido.
     var ate = fat && fat.ate ? (fat.ate > fimMes ? fimMes : fat.ate) : null;
     var decorridos = (ate && ate >= iniMes) ? diasUteis(iniMes, ate, feriados) : 0;
-    var mesCompleto = estado === 'fechado' || ate === fimMes;
+    // Mes que ja' fechou mas cujo lancamento parou no meio: NAO e' o total
+    // do mes. A linha avisa (parcialAte), compara com o objetivo
+    // proporcional ate' a data lancada e fica fora dos totais.
+    var parcial = estado === 'fechado' ? lancamentoParcial(mes, fat, feriados) : null;
+    var mesCompleto = (estado === 'fechado' && !parcial) || ate === fimMes;
 
     // No mes andando, comparar as vendas parciais com o objetivo do
     // MES INTEIRO diria "estamos 90% abaixo" todo dia 04. O objetivo
@@ -150,6 +181,7 @@
       limite: limite,
       disponivel: disponivel,
       vendas: vendas,
+      parcialAte: parcial ? parcial.ate : null,
       objetivoComparavel: objetivoComparavel,
       difPct: difPct,
       diarioPrevisto: diarioPrevisto,
@@ -178,13 +210,25 @@
       ? d.faturamento.acumulado : null;
   }
 
+  // Vendas de um mes que conta como MES INTEIRO: lancamento parcial
+  // (parou antes do ultimo dia util) vale como "sem lancamento" — e'
+  // o que os totais, o crescimento e a sazonalidade usam. Comparar
+  // 19 dias de outubro com o outubro cheio do ano anterior diria a
+  // coisa errada sem aviso nenhum.
+  function vendasFechadasDoMes(metas, mes) {
+    var d = (metas || {})[mes];
+    var v = vendasDoMes(metas, mes);
+    if (v == null) return null;
+    return lancamentoParcial(mes, d.faturamento, d.feriados || []) ? null : v;
+  }
+
   // Total vendido de um ano. So' vale com os DOZE meses lancados —
   // total parcial rotulado de "faturamento do ano" seria mentira
   // silenciosa. Faltou mes, devolve null e a tela diz o que falta.
   function totalAnualVendas(metas, ano) {
     var total = 0;
     for (var m = 1; m <= 12; m++) {
-      var v = vendasDoMes(metas, ano + '-' + pad2(m));
+      var v = vendasFechadasDoMes(metas, ano + '-' + pad2(m));
       if (v == null) return null;
       total += v;
     }
@@ -202,8 +246,8 @@
     for (var m = 1; m <= 12; m++) {
       var mes = ano + '-' + pad2(m);
       if (mes >= mesDeHoje) break;
-      var v = vendasDoMes(metas, mes);
-      var va = vendasDoMes(metas, (ano - 1) + '-' + pad2(m));
+      var v = vendasFechadasDoMes(metas, mes);
+      var va = vendasFechadasDoMes(metas, (ano - 1) + '-' + pad2(m));
       if (v == null || va == null) continue;
       atual += v; anterior += va; meses.push(m);
     }
@@ -239,9 +283,9 @@
     for (var m2 = 1; m2 <= 12; m2++) {
       var mes = ano + '-' + pad2(m2);
       if (mes >= mesDeHoje) break;
-      var v = vendasDoMes(metas, mes);
-      // Mes fechado sem lancamento sai da conta INTEIRO (do vendido e
-      // do peso): a proporcao continua honesta.
+      var v = vendasFechadasDoMes(metas, mes);
+      // Mes fechado sem lancamento (ou com lancamento parcial) sai da
+      // conta INTEIRO (do vendido e do peso): a proporcao continua honesta.
       if (v == null) continue;
       vendido += v; pesoAcum += pesos[m2 - 1]; mesesUsados++;
     }
@@ -267,12 +311,14 @@
   function projecaoAnual(entradas, hoje) {
     var realizado = 0, futuros = 0;
     var corrente = null;
-    var fechadosSemVendas = [], futurosSemObjetivo = [];
+    var fechadosSemVendas = [], futurosSemObjetivo = [], fechadosParciais = [];
 
     (entradas || []).forEach(function (e) {
       var r = resumoDoMes(e, hoje);
       if (r.estado === 'fechado') {
         if (r.vendas == null) fechadosSemVendas.push(e.mes);
+        // Lancamento que parou no meio do mes: avisado, fora da soma.
+        else if (r.parcialAte) fechadosParciais.push(e.mes);
         else realizado += r.vendas;
       } else if (r.estado === 'corrente') {
         var prevista = (r.previsao && r.previsao.prevista != null) ? r.previsao.prevista : null;
@@ -292,6 +338,7 @@
       futuros: centavos(futuros),
       total: centavos(realizado + (corrente ? corrente.valor : 0) + futuros),
       fechadosSemVendas: fechadosSemVendas,
+      fechadosParciais: fechadosParciais,
       futurosSemObjetivo: futurosSemObjetivo
     };
   }
@@ -342,6 +389,9 @@
     projecaoAnual: projecaoAnual,
     crescimentoAnual: crescimentoAnual,
     vendasDoMes: vendasDoMes,
+    vendasFechadasDoMes: vendasFechadasDoMes,
+    lancamentoParcial: lancamentoParcial,
+    valorDigitado: valorDigitado,
     totalAnualVendas: totalAnualVendas,
     crescimentoAteAgora: crescimentoAteAgora,
     projecaoSazonal: projecaoSazonal,

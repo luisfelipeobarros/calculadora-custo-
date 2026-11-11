@@ -319,11 +319,169 @@ if(/App\.lerFaixaComCache\(\{ col: firestoreDb\.collection\('itensNotas'\)/.test
 } else {
   erro('os itens das notas voltaram a ser lidos inteiros do servidor a cada abertura');
 }
+// Recarregar com uma carga em voo entra numa fila de UMA vaga e a trava
+// so' e' solta por quem a pos. Antes o .then da 1a carga zerava a
+// variavel com a recarga ja' encadeada nela: durante a recarga nao havia
+// trava, e um terceiro pedido abria outra carga (duas escutas vivas).
 if(/if\(notasEmitidasCache && pararEscutaNotas && !forcar\)/.test(ix) &&
-   /if\(cargaNotasEmAndamento\)\{[^}]*if\(forcar\) cargaNotasEmAndamento = cargaNotasEmAndamento\.then\(\(\) => baixarNotasEmitidas\(true\)\)/.test(ix)){
-  ok('reabrir a aba so reaproveita a memoria com a escuta viva; cargas simultaneas viram uma');
+   /if\(cargaNotasEmAndamento\)\{[^}]*if\(forcar && !cargaAtualForcada\) recargaNaFila = true; return cargaNotasEmAndamento; \}/.test(ix) &&
+   /while\(recargaNaFila\)\{ recargaNaFila = false; cargaAtualForcada = true; await baixarNotasEmitidas\(true\); \}/.test(ix) &&
+   /if\(cargaNotasEmAndamento === carga\) cargaNotasEmAndamento = null;/.test(ix) &&
+   !/\.then\(\(\) => \{ cargaNotasEmAndamento = null; \}\)/.test(ix)){
+  ok('reabrir a aba so reaproveita a memoria com a escuta viva; cargas simultaneas viram uma, e a recarga pedida no meio roda depois (uma vez)');
 } else {
-  erro('carregarNotasEmitidas sem as guardas de escuta viva / carga unica');
+  erro('carregarNotasEmitidas sem as guardas de escuta viva / carga unica / fila de recarga');
+}
+
+// ============================================================
+// Cotacao: UM ponto de gravacao, por transacao
+// ============================================================
+// Toda mudanca numa cotacao existente passa por gravarCotacao (le o
+// documento fresco, aplica, grava). Um update/set direto com o array
+// `itens` tirado da copia em memoria apaga o que outra maquina — ou a
+// sincronizacao com as notas — gravou no meio tempo.
+if(/async function gravarCotacao\(id, mudar\)\{/.test(ix) && /db\.runTransaction\(async tx => \{ const snap = await tx\.get\(ref\);/.test(ix) &&
+   /const campos = mudar\(fresco\); if\(!campos\) return \{ gravou: false, doc: fresco \}; tx\.update\(ref, campos\);/.test(ix)){
+  ok('gravarCotacao le o documento fresco dentro da transacao antes de gravar');
+} else {
+  erro('gravarCotacao nao esta mais no formato transacao: ler fresco -> mudar -> gravar');
+}
+{
+  const diretas = ix.match(/collection\('cotacoes'\)\.doc\([^)]*\)\.(update|set)\(/g) || [];
+  if(diretas.length === 0) ok('nenhuma tela grava cotacao por update/set direto (so por gravarCotacao; criar e excluir a parte)');
+  else erro(diretas.length + ' gravacao(oes) direta(s) em cotacoes escapando de gravarCotacao: ' + diretas.join(' | '));
+  const usos = (ix.match(/gravarCotacao\(/g) || []).length;
+  if(usos >= 6) ok('gravarCotacao e usado pelos pontos de gravacao (Pedido feito, Comparar, vinculo, edicao, sincronizacao)');
+  else erro('gravarCotacao so aparece ' + usos + ' vez(es) — algum ponto de gravacao saiu dele');
+}
+// A regra do status (e da data do pedido) mora no radar-nucleo: a tela
+// nao escreve `.status =` na mao em item de cotacao.
+if(!/\]\.status = /.test(ix) && !/it\.status = 'transito'/.test(ix) && /R\.mudarStatusItem\(/.test(ix)){
+  ok('o status do item muda por R.mudarStatusItem (nenhuma atribuicao direta sobrou)');
+} else {
+  erro('ha atribuicao direta de status de item no index.html — a regra do pedidoEm volta a ter copia');
+}
+// "Marcar todos como faturado" so' avanca: recebido continua recebido.
+if(/R\.mudarStatusItem\(it, 'transito', App\.hojeISO\(\), \{ soAvancar: true \}\)/.test(ix)){
+  ok('"todos como faturado" usa soAvancar (nunca rebaixa item recebido)');
+} else {
+  erro('"todos como faturado" perdeu o soAvancar — volta a rebaixar item recebido');
+}
+// O Radar nao calcula com carga que falhou.
+if(/if\(historicoOk === false\) throw new Error\(/.test(ix) && /if\(!notasEmitidasCache \|\| notasEmitidasErro\)\{ throw new Error\(/.test(ix)){
+  ok('o Radar para com erro quando as cotacoes ou as notas nao carregam (nao calcula com zero)');
+} else {
+  erro('o Radar voltou a calcular sem conferir se cotacoes e notas carregaram');
+}
+// PDF de fornecedor e' arquivo de fora: sem eval no pdf.js (CVE-2024-4367).
+if(/pdfjsLib\.getDocument\(\{ data: buf, isEvalSupported: false \}\)/.test(ix) && !/getDocument\(\{data: buf\}\)/.test(ix)){
+  ok('pdf.js abre o PDF com isEvalSupported: false');
+} else {
+  erro('pdfjsLib.getDocument sem isEvalSupported: false');
+}
+
+// ============================================================
+// Auditoria de 11/11/2026 (index.html, parte 1): travas de origem
+// ============================================================
+const corpo = (nome) => extrair(nome).replace(/\s+/g, ' ');
+
+// Erro de LEITURA da ficha nao e' "produto novo": a leitura fica fora do
+// try, e produto que a lista conhece sem ficha lida aborta a gravacao.
+{
+  const g = corpo('gravarPrecoVenda');
+  if(!/try\{ const res = await storageGet/.test(g) && /const res = await storageGet\(key\);/.test(g) &&
+     /if\(salvo && !\(res && res\.value\)\)\{ throw new Error\(/.test(g)){
+    ok('gravarPrecoVenda: falha de leitura sobe; produto existente sem ficha lida nao e recriado por cima');
+  } else {
+    erro('gravarPrecoVenda voltou a engolir o erro de leitura (a ficha seria sobrescrita com a config do lote)');
+  }
+}
+// Com o Firestore configurado, o teste de conexao que falha NAO rebaixa
+// para o armazenamento local.
+{
+  const t = corpo('testarConexaoFirebase');
+  if(/if\(firestoreDb\)\{ storageBackend = 'firebase'; atualizarStatusArmazenamento\(\); \} else \{ rebaixarBackend\(\); \}/.test(t)){
+    ok('testarConexaoFirebase: falha com banco configurado mantem o backend firebase');
+  } else {
+    erro('testarConexaoFirebase voltou a rebaixar para o navegador com o banco configurado');
+  }
+}
+// Desconectar pergunta antes e tem caminho de volta.
+if(/\$\('firebaseClearBtn'\)\.addEventListener\('click', async \(\)=>\{ const ok = await App\.confirmar\(/.test(ix) &&
+   /\$\('geminiClearBtn'\)\.addEventListener\('click', async \(\)=>\{[^}]*const ok = await App\.confirmar\(/.test(ix) &&
+   /localStorage\.removeItem\(FIREBASE_CONFIG_KEY\)/.test(ix) && /localStorage\.removeItem\(RECAPTCHA_KEY\)/.test(ix) &&
+   /id="firebasePadraoBtn"/.test(html) && /id="geminiPadraoBtn"/.test(html)){
+  ok('Desconectar (Firebase e Gemini) confirma antes, e "usar padrao" apaga a escolha gravada');
+} else {
+  erro('Desconectar sem confirmacao ou sem o caminho de volta para a configuracao padrao');
+}
+// O texto nao afirma o que nao foi testado.
+if(!/Gemini conectado/.test(html)) ok('a tela nao diz "Gemini conectado" sem ter testado a chave');
+else erro('voltou o "✓ Gemini conectado": a Site Key so e testada na primeira chamada');
+// Campo ausente na ficha limpa o formulario (nao herda o do produto anterior).
+if(!/if\(data\[id\] !== undefined\) \$\(id\)\.value = data\[id\];/.test(ix) &&
+   /\$\(id\)\.value = \(data\[id\] !== undefined && data\[id\] !== null\) \? data\[id\] : '';/.test(corpo('preencherForm'))){
+  ok('preencherForm limpa o campo que a ficha nao tem');
+} else {
+  erro('preencherForm voltou a pular campo ausente (ficha antiga herda o codigo do produto anterior)');
+}
+// Pesquisa em lote: salvar nunca duplica; sair da tela para; resposta
+// atrasada do "refazer" nao cai em outro pedido.
+if((ix.match(/collection\('concorrentes'\)\.add\(/g) || []).length === 1 &&
+   /if\(!it\.docId\) it\.docId = col\.doc\(\)\.id; const ref = col\.doc\(it\.docId\);/.test(ix) && /ref\.set\(dados\)/.test(ix)){
+  ok('"Salvar estas pesquisas" regrava o documento do item (docId) — so a busca individual usa add()');
+} else {
+  erro('"Salvar estas pesquisas" voltou a criar documento novo a cada clique');
+}
+if(/pararLoteAoSairDaTela\(nome\); \}/.test(ix) &&
+   /if\(nome !== 'PesquisaLote' && loteRodando\) loteParar = true;/.test(corpo('pararLoteAoSairDaTela')) &&
+   /id="continuarLoteBtn"/.test(html) && /ConcorrentesNucleo\.produtoPesquisado\(/.test(corpo('atualizarBotaoContinuar'))){
+  ok('sair da tela do lote para a varredura; "Continuar" pesquisa so o que falta');
+} else {
+  erro('a varredura em lote voltou a rodar fora da tela, ou perdeu o "Continuar"');
+}
+if(!/loteItens\[f\.idx\]\.porLoja\[f\.lojaIdx\] = /.test(ix) &&
+   /const itemF = loteItens\[f\.idx\]; if\(!itemF\) continue;/.test(ix) &&
+   /itemF\.porLoja\[f\.lojaIdx\] = resultado; if\(meuToken !== loteExecToken\) break;/.test(ix)){
+  ok('"Refazer as sem resultado" grava no item capturado antes do await e confere o token depois');
+} else {
+  erro('"Refazer as sem resultado" voltou a gravar por indice em loteItens depois do await');
+}
+// O menor preco e' o do nucleo, nos tres pontos que tinham copia.
+if(!/r\.preco < menorPreco/.test(ix) && !/r\.preco < menor\)/.test(ix) && !/r\.preco < m\)/.test(ix) &&
+   (ix.match(/ConcorrentesNucleo\.menorConcorrente\(/g) || []).length >= 6){
+  ok('menor preco: lote, comparacoes salvas e pesquisas do pedido usam ConcorrentesNucleo.menorConcorrente');
+} else {
+  erro('ha copia da regra do menor preco no index.html (o nucleo ignora erro e preco zerado; a copia nao)');
+}
+// Painel por fabricante hidrata pelo preco do catalogo gravado no documento.
+if(/precoCatalogoCent: \(loteOrigemPlanilha && it\.codigo && precoCatalogo\[it\.codigo\] != null\) \? precoCatalogo\[it\.codigo\] : null/.test(ix) &&
+   /const refCent = ConcorrentesNucleo\.precoReferenciaCent\(d, daPlanilha\);/.test(ix)){
+  ok('a pesquisa de planilha grava precoCatalogoCent e o painel se reidrata por ele');
+} else {
+  erro('o painel por fabricante voltou a hidratar pelo "Nosso preco" editavel (gera "preco mudou" falso)');
+}
+// Aba Concorrentes: a lista salva e a consulta por fabricante nao sao
+// relidas a cada entrada / clique.
+if(/if\(!forcar && concorrentesDocsCache && concorrentesDocsDb === firestoreDb\)\{ renderHistoricoConcorrentes\(\); return; \}/.test(ix) &&
+   /let docsFab = pesquisasPorFabricante\.get\(fabricanteAberto\); if\(!docsFab\)\{/.test(ix)){
+  ok('comparacoes salvas e "ultima pesquisa" do fabricante reaproveitam o que ja foi lido na sessao');
+} else {
+  erro('a aba Concorrentes voltou a reler o Firestore a cada entrada/clique');
+}
+// Previsao de entrega: digitar o ano nao grava 0002-...
+{
+  const previsaoPlausivel = new Function(extrair('previsaoPlausivel') + '\nreturn previsaoPlausivel;')();
+  const casos = [['2026-11-20', true], ['2020-01-01', true], ['0002-11-20', false], ['0202-11-20', false],
+                 ['2019-12-31', false], ['20266-01-01', false], ['', false], [null, false], ['20/11/2026', false]];
+  const errados = casos.filter(c => previsaoPlausivel(c[0]) !== c[1]);
+  if(!errados.length) ok('previsaoPlausivel: so data aaaa-mm-dd com ano de 2020 a 2099 (0002/0202 sao digitacao em andamento)');
+  else erro('previsaoPlausivel errou em: ' + errados.map(c => JSON.stringify(c[0])).join(', '));
+  if(/if\(valor !== null && !previsaoPlausivel\(valor\)\) return; const antes = notasInfoPorChave\[chave\] \|\| \{\}; inp\.disabled = true;/.test(ix)){
+    ok('a previsao de entrega so e gravada (e o campo travado) com data plausivel ou campo limpo');
+  } else {
+    erro('a previsao de entrega voltou a ser gravada no primeiro change (digitar o ano grava 0002-...)');
+  }
 }
 
 // ============================================================

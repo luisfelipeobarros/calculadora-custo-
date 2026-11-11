@@ -280,6 +280,208 @@ eq('Água, Salários e 13º corrigidos',
   eq('40 categorias no seed', Object.keys(L.SEED_CATEGORIAS).length, 40);
   eq('12 bancos no seed', Object.keys(L.SEED_BANCOS).length, 12);
 }
+// O seed so' entra com a colecao vazia NO SERVIDOR. Vazio vindo do cache
+// (navegador novo, sem rede no boot) nao autoriza: o seed ficava na fila
+// offline e regravava os cadastros reais quando a rede voltava
+// (auditoria de 11/11/2026).
+{
+  const fs = require('fs');
+  const path = require('path');
+  const htmlControle = fs.readFileSync(path.resolve(__dirname, '..', 'controle-notas.html'), 'utf8');
+  eq('o seed de bancos e de categorias exige resposta do servidor (nao do cache)',
+    [/if\(bSnap\.empty && !bSnap\.metadata\.fromCache\)\{/.test(htmlControle),
+     /if\(cSnap\.empty && !cSnap\.metadata\.fromCache\)\{/.test(htmlControle),
+     /if\((b|c)Snap\.empty\)\{/.test(htmlControle)], [true, true, false]);
+}
 
-console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
-process.exitCode = problemas ? 1 : 0;
+// ── Registro da exportacao: baixar de novo com a MESMA numeracao ──
+// A numeracao avanca antes do download; sem registro, arquivo que nao
+// desceu so' se recuperava voltando os contadores a mao (auditoria de
+// 11/11/2026).
+{
+  const bancosExp = { bradesco: { nome: 'Bradesco C/C', tipo: 'movimento' }, itau: { nome: 'Itaú C/C', tipo: 'movimento' } };
+  const doMes = [
+    { id: 'a', mes: '2026-08', data: '2026-08-10', valor: 100, historico: 'Itaú dez', bancoId: 'itau', tipo: 'saida',
+      contaDebito: '4.2.1.1.0036', contaCredito: '1.1.1.2.0002' },
+    { id: 'b', mes: '2026-08', data: '2026-08-05', valor: 50.5, historico: 'Bradesco cinco', bancoId: 'bradesco', tipo: 'saida',
+      contaDebito: '4.2.1.1.0024', contaCredito: '1.1.1.2.0001' },
+    { id: 'c', mes: '2026-08', data: '2026-08-02', valor: 30, historico: 'Bradesco dois', bancoId: 'bradesco', tipo: 'saida',
+      contaDebito: '4.2.1.1.0024', contaCredito: '1.1.1.2.0001' }
+  ];
+  const exp = L.montarExportacao(L.agruparPorArquivo(doMes, bancosExp), bancosExp, '2026-08', { lancamento: 500, linha: 9000 });
+
+  eq('um arquivo por banco, em ordem alfabetica do nome',
+    exp.arquivos.map(a => a.nome), ['BANCO BRADESCO AGOSTO 2026.xlsx', 'BANCO ITAÚ AGOSTO 2026.xlsx']);
+  eq('a numeracao continua de um arquivo para o outro',
+    [exp.arquivos[0].linhas[0][0], exp.arquivos[1].linhas[0][0], exp.arquivos[1].linhas[1][18]],
+    ['00000500', '00000502', 9005]);
+  eq('devolve os proximos contadores', [exp.proximoLancamento, exp.proximaLinha, exp.totalLinhas], [503, 9006, 6]);
+  eq('o registro guarda o intervalo usado (lancamento de/ate, linha de/ate)',
+    [exp.registro.lancDe, exp.registro.lancAte, exp.registro.linhaDe, exp.registro.linhaAte, exp.registro.qtd],
+    [500, 502, 9000, 9005, 3]);
+  eq('...e os ids NA ORDEM em que sairam (por data dentro do arquivo)',
+    exp.registro.arquivos.map(a => a.itens.map(i => i[0]).join('')), ['cb', 'a']);
+  eq('resumo para mesesExportados: pequeno, sem a copia dos lancamentos',
+    L.resumoDoRegistro(exp.registro, '2026-09-03'),
+    { em: '2026-09-03', linhas: 6, qtd: 3, lancDe: 500, lancAte: 502, linhaDe: 9000, linhaAte: 9005 });
+
+  // Ida e volta pelo documento do Firestore (a copia vai como texto).
+  const doc = L.docDoRegistro(exp.registro, '2026-09-03');
+  eq('o documento leva o intervalo e a copia em texto',
+    [doc.mes, doc.em, doc.lancDe, typeof doc.registroJson], ['2026-08', '2026-09-03', 500, 'string']);
+  const volta = L.registroDoDoc(doc);
+  eq('baixar de novo: os MESMOS arquivos, linha por linha, com a mesma numeracao',
+    L.arquivosDoRegistro(volta), exp.arquivos);
+  eq('documento sem a copia (exportacao antiga) ou corrompido: null, nunca arquivo inventado',
+    [L.registroDoDoc(null), L.registroDoDoc({ em: '2026-09-03', linhas: 6 }), L.registroDoDoc({ registroJson: '{quebrado' }),
+     L.registroDoDoc({ registroJson: '{"arquivos":[]}' })], [null, null, null, null]);
+
+  // Mes grande demais para um documento: nao trava a exportacao.
+  const muitos = [];
+  for(let i = 0; i < 6000; i++){
+    muitos.push({ id: 'dup_' + String(i).padStart(48, '0'), mes: '2026-08', data: '2026-08-10', valor: 1, bancoId: 'itau',
+      tipo: 'saida', historico: 'PAGTO FORNECEDOR COM NOME COMPRIDO LTDA NF ' + i, contaDebito: '2.1.1.1.0001', contaCredito: '1.1.1.2.0002' });
+  }
+  const grande = L.montarExportacao(L.agruparPorArquivo(muitos, bancosExp), bancosExp, '2026-08', { lancamento: 1, linha: 1 });
+  const docGrande = L.docDoRegistro(grande.registro, '2026-09-03');
+  eq('registro grande demais: sai so com o intervalo (sem a copia), e a exportacao segue',
+    [docGrande.registroJson, docGrande.lancAte, L.registroDoDoc(docGrande)], [null, 6000, null]);
+
+  // O que mudou no mes depois de exportar.
+  const hoje = [
+    doMes[0],                                         // igual
+    Object.assign({}, doMes[1], { valor: 60 }),      // alterado
+    { id: 'novo', data: '2026-08-20', valor: 10, historico: 'pagamento marcado depois', contaDebito: 'x', contaCredito: 'y' }
+  ];                                                  // 'c' foi excluido
+  eq('diferencas desde a exportacao: novos, alterados e excluidos',
+    L.diferencasDaExportacao(volta, hoje), { novos: 1, removidos: 1, alterados: 1 });
+  eq('nada mudou: tudo zero (caixa do historico nao conta — sai em maiusculas)',
+    L.diferencasDaExportacao(volta, doMes.map(l => Object.assign({}, l, { historico: l.historico.toUpperCase() }))),
+    { novos: 0, removidos: 0, alterados: 0 });
+}
+
+// ── A tela (controle-notas.html): correcoes da auditoria de 11/11/2026 ──
+// Guardas textuais e, onde a funcao e' pequena, a propria funcao
+// extraida do HTML e executada.
+const assincronos = [];
+{
+  const fs = require('fs');
+  const path = require('path');
+  const html = fs.readFileSync(path.resolve(__dirname, '..', 'controle-notas.html'), 'utf8');
+  const extrair = (nome) => {
+    const i = html.indexOf('function ' + nome + '(');
+    if(i === -1) throw new Error('nao achei ' + nome + ' em controle-notas.html');
+    let d = 0, j = html.indexOf('{', i);
+    for(; j < html.length; j++){
+      if(html[j] === '{') d++;
+      else if(html[j] === '}'){ d--; if(d === 0) break; }
+    }
+    return html.slice(i, j + 1);
+  };
+  const trecho = (de, ate) => html.slice(html.indexOf(de), html.indexOf(ate, html.indexOf(de)));
+
+  // Exportacao: registro + baixar de novo.
+  const exportar = trecho("$('lcExportarBtn').addEventListener", '// ─── Baixar de novo ───');
+  eq('exportar: numeracao e registro saem do nucleo, na MESMA transacao (contadores + config/exportacao_<mes>)',
+    [/db\.runTransaction\(async \(tx\) => \{/.test(exportar), /N\.montarExportacao\(grupos, bancos, mes,/.test(exportar),
+     /db\.collection\('config'\)\.doc\('exportacao_' \+ mes\)/.test(exportar), /tx\.set\(refRegistro, docRegistro\);/.test(exportar)],
+    [true, true, true, true]);
+  eq('exportar: "mes ja exportado" e\' rechecado DENTRO da transacao',
+    /chaveExportacaoLc\(meses\[mes\] \|\| null\) !== chaveExportacaoLc\(leuExportados \? jaExportado : null\)/.test(exportar), true);
+  eq('exportar: toda falha depois da transacao diz que os contadores JA avancaram e aponta o "Baixar de novo"',
+    [(exportar.match(/Os contadores JÁ avançaram/g) || []).length, /use "Baixar de novo" para gerar os mesmos arquivos/.test(exportar),
+     /ajuste-os em Cadastros de volta ao valor anterior/.test(html)], [2, true, false]);
+  const baixar = trecho("$('lcBaixarDeNovoBtn').addEventListener", '// ─── Cadastros ───');
+  eq('baixar de novo: existe o botao, sai da copia registrada e NAO toca nos contadores',
+    [/id="lcBaixarDeNovoBtn"/.test(html), /N\.registroDoDoc\(dados\)/.test(baixar), /N\.arquivosDoRegistro\(registro\)/.test(baixar),
+     /runTransaction|proxLancamento|\.set\(/.test(baixar)], [true, true, true, false]);
+
+  // Mes ja' exportado: criar, editar, excluir e pagar.
+  eq('mes exportado: gravar (destino e origem) e excluir pedem confirmacao; pagamento so\' avisa',
+    [/confirmarMesExportadoLc\(\[doc\.mes, originalLc && originalLc\.mes\], 'Gravar'\)/.test(extrair('salvarLancamento')),
+     /const exportadoLc = mesExportadoLc\(l\.mes\);/.test(html),
+     /avisoDeMesExportado\(itens, paresAvulsos\)/.test(extrair('gravarPagamentos')),
+     /if\(avisoExportado\) App\.toast\(avisoExportado, 'info'\);/.test(extrair('gravarPagamentos'))], [true, true, true, true]);
+  {
+    // A propria funcao do aviso, com um mes exportado em memoria.
+    const aviso = new Function('duplicatas', 'pgtoInternoPorId', 'mesExportadoLc', 'rotuloMesLc',
+      extrair('avisoDeMesExportado') + '\nreturn avisoDeMesExportado;')(
+      [{ id: 'd1', dataPagamento: '2026-08-20' }], () => null,
+      (m) => (m === '2026-08' ? { em: '2026-09-03' } : null),
+      (m) => m.substring(5, 7) + '/' + m.substring(0, 4));
+    eq('aviso: pagamento com lançamento em mes exportado',
+      /^Atenção: 08\/2026 já foi exportado/.test(aviso([{ colecao: 'duplicatas', id: 'x', pares: [{ id: 'dup_x', doc: { mes: '2026-08' } }] }], null) || ''), true);
+    eq('aviso: DESFAZER um pagamento de mes exportado tambem avisa (pela data que esta\' em memoria)',
+      /08\/2026/.test(aviso([{ colecao: 'duplicatas', id: 'd1', dados: { pago: false }, apagar: ['dup_d1'] }], null) || ''), true);
+    eq('aviso: mes nao exportado nao gera aviso nenhum',
+      aviso([{ colecao: 'duplicatas', id: 'x', pares: [{ id: 'dup_x', doc: { mes: '2026-09' } }] }], [{ id: 'j', doc: { mes: '2026-10' } }]), null);
+  }
+
+  // Contadores em Cadastros.
+  eq('contadores: relidos ao entrar em Cadastros e gravados em transacao que recusa valor velho',
+    [/Cadastros: function\(\)\{ carregarContadoresLc\(\); renderCadastrosLc\(\); \}/.test(html),
+     /if\(plAgora !== lidos\.pl \|\| pnAgora !== lidos\.pn\)\{/.test(html),
+     /\.doc\('contadoresExportacao'\)\s*\.set\(/.test(html)], [true, true, false]);
+
+  // Lista e formulario.
+  eq('filtro de banco dos Lançamentos sobrevive ao snapshot de cadastro',
+    /const bf = \$\('lcBancoFiltro'\)\.value;\s*encherSelectBancos\(\$\('lcBancoFiltro'\), true\);\s*if\(bf\) \$\('lcBancoFiltro'\)\.value = bf;/.test(extrair('montarSelectsLc')), true);
+  eq('lançamento manual grava o valor arredondado a centavos', /App\.centavos\(digitado\)/.test(extrair('salvarLancamento')), true);
+
+  // Pagamentos/DDA: bancos e categorias ao vivo.
+  eq('pagamentos usam os cadastros AO VIVO (contabilDoPagamento), nao o cache da sessao',
+    [/if\(!carregouBancosLc \|\| !carregouCategoriasLc\) return carregarContabil\(\);/.test(extrair('contabilDoPagamento')),
+     (html.match(/contabilDoPagamento\(\)\.then\(/g) || []).length, /[^ ]carregarContabil\(\)\.then\(/.test(html)], [true, 4, false]);
+
+  // DDA.
+  eq('DDA: o botao da linha leva a POSICAO da linha, nao o id da duplicata',
+    [/data-baixar-dda="' \+ rel\.linhas\.indexOf\(l\) \+ '"/.test(html),
+     /\(ddaRelatorio \|\| \[\]\)\[Number\(btn\.dataset\.baixarDda\)\]/.test(html),
+     /l\.casamento\.duplicata\.id === id/.test(html)], [true, true, false]);
+  {
+    const dataDaBaixa = new Function(extrair('dataDaBaixaDda') + '\nreturn dataDaBaixaDda;')();
+    const linha = (venc, extrato) => ({ registro: { vencimento: venc }, extrato: extrato || null });
+    eq('DDA: data em branco usa o vencimento, mas NUNCA depois de hoje (boleto pago adiantado)',
+      [dataDaBaixa(linha('2026-11-05'), null, '2026-11-11'), dataDaBaixa(linha('2026-11-25'), null, '2026-11-11'),
+       dataDaBaixa(linha('2026-11-11'), null, '2026-11-11')], ['2026-11-05', '2026-11-11', '2026-11-11']);
+    eq('DDA: data do extrato e data escolhida continuam mandando',
+      [dataDaBaixa(linha('2026-11-25', { data: '2026-11-09' }), null, '2026-11-11'),
+       dataDaBaixa(linha('2026-11-25', { data: '2026-11-09' }), '2026-11-10', '2026-11-11')], ['2026-11-09', '2026-11-10']);
+    eq('DDA: a baixa usa essa funcao', /var dataPgto = dataDaBaixaDda\(l, r\.data, hojeBaixa\);/.test(extrair('baixarPelaDda')), true);
+  }
+  eq('DDA: extrato pode ser removido, sai ao trocar de DDA e as linhas ilegiveis dele sao listadas',
+    [/id="btnRemoverExtrato"/.test(html), /if\(ddaLido && extratoLido\)\{\s*removerExtrato\(\);/.test(html),
+     /extratoLido\.ilegiveis\.map\(function\(il\)\{/.test(extrair('renderDda'))], [true, true, true]);
+
+  // Simulador.
+  eq('Simulador: a guarda de foco so\' vale para CAMPO (botao "✕"/"usar" redesenha o formulario)',
+    [/ativoSim\.tagName === 'INPUT'/.test(extrair('renderSimulador')),
+     /if\(!\$\('linhasSim'\)\.contains\(document\.activeElement\)\) renderLinhasSim\(\);/.test(html)], [true, false]);
+
+  // Vendas x Compras: primeiro o Firestore, depois a planilha.
+  {
+    const montar = (lerVendas, fetchFalso) => new Function('fetch', 'router', '$', 'App', 'URL_GVIZ_VENDAS', 'linhasVendasDaResposta', 'parseGvizTexto', 'db',
+      'var vendasLinhas = null, vendasErro = null, buscandoVendas = false, vendasOrigem = null;\n' +
+      'function renderVendas(){}\n' + extrair('carregarVendas') +
+      '\nreturn { carregar: carregarVendas, ver: function(){ return [vendasLinhas && vendasLinhas.length, vendasOrigem && vendasOrigem.fonte, vendasErro]; } };'
+    )(fetchFalso, { atual: () => 'Vendas' }, () => ({}), { erroDe: (e) => e.message, lerVendas: lerVendas }, 'url',
+      () => [{ ano: 2026, mes: 1 }, { ano: 2026, mes: 2 }], () => ({}), {});
+    let buscas = 0;
+    const doBanco = montar(() => Promise.resolve({ linhas: [{ ano: 2026, mes: 1 }], descartadas: 0, atualizadoEm: 1 }),
+      () => { buscas++; return Promise.reject(new Error('nao devia buscar')); });
+    doBanco.carregar(false);
+    const daPlanilha = montar(() => Promise.resolve(null), () => Promise.resolve({ ok: true, text: () => Promise.resolve('x') }));
+    daPlanilha.carregar(false);
+    assincronos.push(new Promise(r => setTimeout(r, 30)).then(() => {
+      eq('vendas: com a colecao no Firestore, vem do banco e a planilha nem e\' buscada',
+        [doBanco.ver(), buscas], [[1, 'banco', null], 0]);
+      eq('vendas: sem vendas no Firestore (null), cai na planilha como antes',
+        daPlanilha.ver(), [2, 'planilha', null]);
+    }));
+  }
+}
+
+Promise.all(assincronos).then(() => {
+  console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
+  process.exitCode = problemas ? 1 : 0;
+});

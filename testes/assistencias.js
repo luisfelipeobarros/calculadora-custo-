@@ -241,5 +241,26 @@ eq('round-trip do render com 2 casas fecha',
     [/null|undefined/.test(N.htmlOrdemEntrega({})), N.htmlOrdemEntrega({}).indexOf('ORDEM DE ENTREGA') !== -1], [false, true]);
 }
 
+// Fotos fora do documento principal (11/11/2026): a lista e a planilha
+// contam pelos contadores, sem as imagens; ficha antiga (fotos dentro)
+// continua valendo; e os dois lados somam / se juntam sem repetir.
+{
+  const antiga = { fotos: ['data:a', 'data:b', { termo: true, img: 'data:t' }] };
+  const nova = { fotosFora: true, fotosQtd: 3, termoQtd: 2 };
+  const mista = { fotosFora: true, fotosQtd: 1, termoQtd: 0, fotos: ['data:x'] };
+  eq('anexos: ficha antiga conta pelo campo fotos', N.contagemAnexos(antiga), { fotos: 2, termo: 1 });
+  eq('anexos: ficha nova conta pelos contadores, sem as imagens', N.contagemAnexos(nova), { fotos: 3, termo: 2 });
+  eq('anexos: foto gravada por aba antiga numa ficha nova SOMA', N.contagemAnexos(mista), { fotos: 2, termo: 0 });
+  eq('anexos: contador sem a marca fotosFora nao conta (nunca inventa foto)', N.contagemAnexos({ fotosQtd: 5 }), { fotos: 0, termo: 0 });
+  eq('anexos: ficha sem nada', N.contagemAnexos({}), { fotos: 0, termo: 0 });
+  eq('exportacao usa os contadores da ficha nova',
+    [N.linhasExcel([nova])[0]['Fotos'], N.linhasExcel([nova])[0]['Termo de acordo']], [3, 'sim']);
+  const u = N.unirAnexos(['data:a', { termo: true, img: 'data:t' }, { outro: 1 }], ['data:a', 'data:n', { termo: true, img: 'data:t' }]);
+  eq('unir: a mesma imagem nos dois lados aparece uma vez; a nova entra; o desconhecido e preservado',
+    u, { problema: ['data:a', 'data:n'], termo: ['data:t'], outros: [{ outro: 1 }] });
+  eq('unir e juntar fecham o ciclo', N.separarFotos(N.juntarFotos(u.problema, u.termo, u.outros)), u);
+  eq('unir: sem nada dos dois lados', N.unirAnexos(undefined, null), { problema: [], termo: [], outros: [] });
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

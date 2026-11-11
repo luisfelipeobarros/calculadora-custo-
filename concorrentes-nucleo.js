@@ -264,6 +264,43 @@
   }
 
   /* ============================================================
+     4. Varredura em lote: o que falta e o preco de referencia
+     ============================================================ */
+
+  // Um produto da varredura esta' PESQUISADO quando todas as lojas da
+  // execucao ja' responderam (achou, nao achou ou deu erro — o que nao
+  // pode e' estar pendente ou sem resposta). E' a regra que decide o
+  // que "Continuar"/"Retomar" pula e quando o progresso anti-F5 pode
+  // morrer; estava escrita na mao em tres pontos da tela.
+  // Sem lista de lojas nao da' para afirmar nada: false, nunca
+  // "concluido" sobre coisa nenhuma ([].every() e' true).
+  function produtoPesquisado(item, qtdLojas) {
+    if (!item || !(qtdLojas > 0)) return false;
+    var porLoja = item.porLoja || {};
+    for (var i = 0; i < qtdLojas; i++) {
+      if (!porLoja[i] || porLoja[i].pendente) return false;
+    }
+    return true;
+  }
+
+  // Preco de referencia (em centavos) de uma pesquisa SALVA, para o
+  // motivo "preco mudou" do painel: o do CATALOGO no dia da pesquisa.
+  // O documento guarda dois precos — `meuPreco` (o "Nosso preco" da
+  // tabela, que a pessoa pode editar so' para aquela pesquisa) e
+  // `precoCatalogoCent` (o da planilha). Hidratar o indice pelo
+  // editado marcava "preco mudou" em quem tinha acabado de ser
+  // pesquisado. Documento antigo, de antes do campo, continua como
+  // era: vale o meuPreco. Pesquisa que nao veio da planilha (pedido do
+  // historico) nao tem referencia — null, e so' o prazo decide.
+  function precoReferenciaCent(doc, daPlanilha) {
+    if (!doc || !daPlanilha) return null;
+    if (doc.precoCatalogoCent != null && isFinite(doc.precoCatalogoCent) && doc.precoCatalogoCent > 0) {
+      return Math.round(doc.precoCatalogoCent);
+    }
+    return (doc.meuPreco != null && doc.meuPreco > 0) ? App.emCentavos(doc.meuPreco) : null;
+  }
+
+  /* ============================================================
      Exporta
      ============================================================ */
 
@@ -276,7 +313,9 @@
     statusProduto: statusProduto,
     painelFabricantes: painelFabricantes,
     contarBuscas: contarBuscas,
-    menorConcorrente: menorConcorrente
+    menorConcorrente: menorConcorrente,
+    produtoPesquisado: produtoPesquisado,
+    precoReferenciaCent: precoReferenciaCent
   };
 
   global.ConcorrentesNucleo = ConcorrentesNucleo;

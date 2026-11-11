@@ -261,12 +261,12 @@
 <!-- Relatorio: so' existe no papel (N.htmlRelatorio). -->
 <div id="relatorioImpressao" aria-hidden="true"></div>
 
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="app-shared.js?v=31"></script>
-<script src="etiquetas-nucleo.js?v=14"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js" integrity="sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
+<script src="app-shared.js?v=32"></script>
+<script src="etiquetas-nucleo.js?v=15"></script>
 <!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
 <script src="exposicao-nucleo.js?v=4"></script>
 <script>
@@ -736,7 +736,7 @@
   }));
 
   const htmlItemEstoque = (it) => '<span class="prod">' + escapeHtml(it.nome) + '</span>' +
-    '<div class="mono">' + escapeHtml(it.codigo) + (it.ean ? ' · ' + it.ean : '') + (it.fabricante ? ' · ' + escapeHtml(it.fabricante) : '') +
+    '<div class="mono">' + escapeHtml(it.codigo) + (it.ean ? ' · ' + escapeHtml(it.ean) : '') + (it.fabricante ? ' · ' + escapeHtml(it.fabricante) : '') +
     ' · estoque ' + escapeHtml(String(it.quantidade == null ? '?' : it.quantidade)) + (it.un ? ' ' + escapeHtml(it.un) : '') +
     (it.ultData ? ' · últ. mov. ' + escapeHtml(App.fmtData(it.ultData)) : '') + '</div>';
 
@@ -1129,21 +1129,37 @@
     $('exAddBtn').addEventListener('click', async () => {
       const produto = X.produtoDoTexto(novo.value, catalogo);
       if(!produto){ novo.focus(); return; }
-      const r = X.adicionar(doc, produto, App.hojeISO());
-      if(!r.mudou){ App.toast('Esse produto já está neste expositor.', 'info'); novo.value = ''; return; }
-      await gravarExpositor(id, r.produtos, $('exAddBtn'));
+      const mudou = await gravarExpositor(id, (atual) => X.adicionar(atual, produto, App.hojeISO()), $('exAddBtn'));
+      if(mudou === false){ App.toast('Esse produto já está neste expositor.', 'info'); if($('exNovo')) $('exNovo').value = ''; }
       $('exNovo') && $('exNovo').focus();
     });
   }
-  async function gravarExpositor(id, produtos, btn){
+  // A lista do expositor e' lida uma vez (na abertura) e era regravada
+  // INTEIRA a partir dessa copia: com dois celulares cadastrando o
+  // mesmo expositor, o segundo a salvar apagava o que o primeiro tinha
+  // acabado de adicionar (auditoria de 11/11/2026). Agora a mudanca e'
+  // aplicada sobre o documento relido na hora, dentro de uma transacao.
+  // mutar(docAtual) devolve { produtos, mudou } (X.adicionar / X.remover).
+  // Devolve true (gravou), false (nada a mudar) ou null (erro, ja' avisado).
+  async function gravarExpositor(id, mutar, btn){
     if(btn) btn.disabled = true;
     try{
-      await App.comAuth(() => db.collection('exposicao').doc(id).set({ produtos, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }));
-      exposicao = Object.assign({}, exposicao); exposicao[id] = Object.assign({}, exposicao[id] || {}, { produtos });
+      const ref = db.collection('exposicao').doc(id);
+      const r = await App.comAuth(() => db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const res = mutar(snap.exists ? (snap.data() || {}) : { produtos: [] });
+        if(res.mudou) tx.set(ref, { produtos: res.produtos, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+        return res;
+      }));
+      // Mesmo sem mudanca a lista local passa a ser a do servidor: e' o
+      // que mostra aqui o que o outro celular acabou de cadastrar.
+      exposicao = Object.assign({}, exposicao); exposicao[id] = Object.assign({}, exposicao[id] || {}, { produtos: r.produtos });
       exposicaoOnde = X.ondeEsta(exposicao);
       renderExposicao();
+      return r.mudou;
     }catch(e){
-      App.toastErro('Erro ao gravar', e);
+      App.toastErro('Erro ao gravar (a exposição precisa de internet para salvar)', e);
+      return null;
     }finally{
       if(btn) btn.disabled = false;
     }
@@ -1231,8 +1247,8 @@
   App.delegar($('exMapa'), 'keydown', '[data-ex]', (g, ev) => { if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); g.click(); } });
   App.delegar($('exDetalhe'), 'click', '[data-ex-rm]', async (b) => {
     if(!exSelecionado) return;
-    const r = X.remover(exposicao[exSelecionado], b.dataset.exRm);
-    if(r.mudou) await gravarExpositor(exSelecionado, r.produtos, b);
+    const chave = b.dataset.exRm;
+    await gravarExpositor(exSelecionado, (atual) => X.remover(atual, chave), b);
   });
   $('exBusca').addEventListener('input', App.debounce(renderExposicao, 250));
   $('etqExposicaoBtn').addEventListener('click', () => { irParaGrupo('exposicao'); $('exBusca').focus(); });

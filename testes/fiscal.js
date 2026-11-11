@@ -82,6 +82,24 @@ eq('6102 conta como sem ST', sp.observado.semSt, 1);
   eq('chave fora do padrao agrupa em UF "??"', g[0].id, '11112222_??');
 }
 
+// ── Nota cancelada fica fora do observado ────────────────────
+// Os itensNotas nao tem status: quem sabe do cancelamento e' a colecao
+// "notas". Com o estado em maos, a cancelada nao soma valor nem ST.
+{
+  const comEstado = F.agruparFiscal(docs, { [chavePE2]: { status: 'cancelada' }, [chavePE1]: { status: 'ativa' } });
+  const peAtiva = comEstado.find(g => g.id === '69072300_PE');
+  eq('nota cancelada nao entra: PE fica com 1 nota, 2 itens, sem a "retida" dela',
+    [peAtiva.qtdNotas, peAtiva.qtdItens, peAtiva.somaValorCent, peAtiva.observado.retida, peAtiva.fornecedores], [1, 2, 150000, 0, ['FORN A']]);
+  eq('nota sem estado carregado (ou sem o mapa) continua contando', [F.agruparFiscal(docs, {}).find(g => g.id === '69072300_PE').qtdNotas, pe.qtdNotas], [2, 2]);
+  eq('grupo que so tinha nota cancelada some', F.agruparFiscal(docs, { [chaveSP]: { status: 'cancelada' } }).map(g => g.id), ['69072300_PE']);
+}
+
+// ── O "% ST" digitado ────────────────────────────────────────
+eq('percentual: vazio e valido (sem %), numero com virgula/ponto/% vira valor, texto e invalido (nao apaga o salvo)',
+  ['', '18', '18,5', '18.5 %', '0', 'abc', '18a', '-5', '1.234,5'].map(t => F.percentualDigitado(t)),
+  [{ vazio: true }, { valor: 18 }, { valor: 18.5 }, { valor: 18.5 }, { valor: 0 },
+   { invalido: true }, { invalido: true }, { invalido: true }, { invalido: true }]);
+
 // ── Divergencia cadastro x observado (so categorica) ────────
 
 eq('sem cadastro -> null (ausencia nao e divergencia)',

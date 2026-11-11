@@ -208,8 +208,88 @@
   }
 
   /* ============================================================
-     4. Projecao dos pagamentos internos recorrentes
+     4. Recorrencia dos pagamentos internos: base, proxima e projecao
      ============================================================ */
+
+  // As regras da corrente moram AQUI, e a tela de Pagamentos (criar a
+  // proxima parcela) usa as mesmas funcoes da projecao — as duas nao
+  // podem discordar sobre qual e' o proximo mes.
+
+  var ISO_DATA = /^\d{4}-\d{2}-\d{2}$/;
+  var SUFIXO_DATAS = /(_\d{4}-\d{2}-\d{2})+$/;
+
+  // A data PROGRAMADA da parcela — a base de onde a proxima e' contada.
+  // Nao e' o vencimento: "Prorrogar" e a edicao mudam o vencimento, e
+  // contar a partir dele fazia a parcela de 30/11 prorrogada para
+  // 05/12 gerar a proxima em 30/01, pulando dezembro.
+  //   1. vencimentoBase — gravado na criacao, nunca alterado depois;
+  //   2. o sufixo _aaaa-mm-dd do id — os sucessores criados antes de
+  //      existir o campo nasceram com a data programada no proprio id;
+  //   3. o vencimento — primeira parcela antiga, sem um nem outro.
+  function baseRecorrencia(p) {
+    if (!p) return null;
+    if (typeof p.vencimentoBase === 'string' && ISO_DATA.test(p.vencimentoBase)) return p.vencimentoBase;
+    var m = String(p.id == null ? '' : p.id).match(/_(\d{4}-\d{2}-\d{2})$/);
+    if (m) return m[1];
+    return p.vencimento || null;
+  }
+
+  function opcoesDaRegra(p) {
+    return p.regra === 'ultimoDia' ? { ultimoDia: true } : { diaFixo: p.diaFixo };
+  }
+
+  // Um mes depois da base, no dia da regra. O dia programado so' muda
+  // se a pessoa mudar a regra ou o dia fixo.
+  function proximoVencimentoRecorrente(p) {
+    var base = baseRecorrencia(p);
+    return base ? somarMeses(base, 1, opcoesDaRegra(p)) : null;
+  }
+
+  // O id da PRIMEIRA parcela: sem tirar as datas ja' penduradas, o id
+  // crescia 11 letras por mes (id_2026-03-15_2026-04-15_...).
+  function idBaseRecorrencia(p) {
+    return String(p.id == null ? '' : p.id).replace(SUFIXO_DATAS, '');
+  }
+
+  // Id deterministico da proxima parcela (primeira + data programada):
+  // duas maquinas pagando a mesma parcela miram o MESMO documento.
+  function idProximoRecorrente(p) {
+    var prox = proximoVencimentoRecorrente(p);
+    return prox ? idBaseRecorrencia(p) + '_' + prox : null;
+  }
+
+  // parcelaAtual ausente conta como 1 — `undefined >= 12` e' falso e a
+  // corrente nunca terminaria.
+  function ultimaParcelaRecorrente(p) {
+    var atual = Number(p.parcelaAtual) || 1;
+    var total = Number(p.parcelasTotal) || 0;
+    return !!total && atual >= total;
+  }
+
+  // A proxima parcela ja' existe entre os carregados? Pelo id OU por
+  // quem aponta para esta como origem — sem comparar o vencimento, que
+  // o sucessor pode ter tido prorrogado.
+  function temSucessorRecorrente(p, pagamentos) {
+    var idProx = idProximoRecorrente(p);
+    return (pagamentos || []).some(function (x) {
+      return x !== p && x.id !== p.id &&
+        ((p.id != null && x.origemId === p.id) || (idProx && x.id === idProx));
+    });
+  }
+
+  // Corrente que morreu calada: recorrente PAGO, que nao e' a ultima
+  // parcela, e sem sucessor (a criacao da proxima falhou depois de o
+  // pagamento ser gravado). `corte` (opcional): com a carga limitada a
+  // uma janela, um sucessor pago e mais antigo que ela nao esta'
+  // carregado — nao da' para afirmar que falta.
+  function recorrentesSemSucessor(pagamentos, corte) {
+    return (pagamentos || []).filter(function (p) {
+      if (p.recorrente !== true || p.pago !== true || ultimaParcelaRecorrente(p)) return false;
+      var prox = proximoVencimentoRecorrente(p);
+      if (!prox || (corte && prox < corte)) return false;
+      return !temSucessorRecorrente(p, pagamentos);
+    });
+  }
 
   // Recorrente so' ganha documento quando o anterior e' pago — os
   // meses futuros estao VAZIOS no banco, e sem projetar a tela
@@ -222,6 +302,10 @@
   // origemId: comparar tambem o vencimento deixava passar o sucessor
   // prorrogado (vencimento diferente do calculado) e a corrente saia
   // em dobro — a partir do original e a partir do prorrogado.
+  //
+  // A rolagem parte da DATA PROGRAMADA da parcela (baseRecorrencia),
+  // nao do vencimento: parcela prorrogada para o mes seguinte fazia a
+  // projecao (e a criacao da proxima) pular um mes inteiro.
   function projetarInternos(pagamentos, ateIso) {
     var projecoes = [];
     (pagamentos || []).forEach(function (p) {
@@ -231,14 +315,14 @@
       // e a corrente nunca terminaria (mesma guarda da recorrencia).
       var atual = Number(p.parcelaAtual) || 1;
       var total = Number(p.parcelasTotal) || 0;
-      var venc = p.vencimento;
+      var venc = baseRecorrencia(p);
+      var idBase = idBaseRecorrencia(p);
 
       while (true) {
         if (total && atual >= total) break; // ultima parcela nao gera proxima
-        var prox = somarMeses(venc, 1,
-          p.regra === 'ultimoDia' ? { ultimoDia: true } : { diaFixo: p.diaFixo });
+        var prox = somarMeses(venc, 1, opcoesDaRegra(p));
         var jaExiste = pagamentos.some(function (x) {
-          return x !== p && (x.origemId === p.id || x.id === String(p.id).replace(/(_\d{4}-\d{2}-\d{2})+$/, '') + '_' + prox);
+          return x !== p && (x.origemId === p.id || x.id === idBase + '_' + prox);
         });
         if (jaExiste) break;
         if (prox > ateIso) break;
@@ -323,6 +407,12 @@
     dividirParcelas: dividirParcelas,
     gerarCompras: gerarCompras,
     mediaCompraMensal: mediaCompraMensal,
+    baseRecorrencia: baseRecorrencia,
+    proximoVencimentoRecorrente: proximoVencimentoRecorrente,
+    idProximoRecorrente: idProximoRecorrente,
+    ultimaParcelaRecorrente: ultimaParcelaRecorrente,
+    temSucessorRecorrente: temSucessorRecorrente,
+    recorrentesSemSucessor: recorrentesSemSucessor,
     projetarInternos: projetarInternos,
     resumoMensal: resumoMensal
   };

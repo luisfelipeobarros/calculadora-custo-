@@ -100,6 +100,24 @@
      quando ela chega).
      ------------------------------------------------------------ */
 
+  // O mapa codigo -> { n, e, q } de um documento do catalogo, nos dois
+  // formatos. O novo (11/11/2026) guarda o mapa como TEXTO JSON em
+  // porCodigoJson: como mapa de verdade, cada produto gerava ~6 entradas
+  // de indice no Firestore, e o documento batia no teto (40 mil
+  // entradas / 1 MiB) por volta de 6.500 produtos — o mesmo limite que
+  // ja' tinha obrigado o resumo do Radar a virar texto. O formato antigo
+  // (porCodigo) continua sendo lido: e' o que esta' gravado ate' a
+  // proxima importacao do estoque ou das vendas.
+  function mapaDoCatalogo(doc) {
+    if (doc && typeof doc.porCodigoJson === 'string') {
+      try {
+        var m = JSON.parse(doc.porCodigoJson);
+        if (m && typeof m === 'object' && !Array.isArray(m)) return m;
+      } catch (e) { /* texto corrompido: cai no formato antigo, se houver */ }
+    }
+    return (doc && doc.porCodigo) || {};
+  }
+
   // itens da planilha -> documento compacto (so' o que e' vendavel).
   function montarCatalogo(estoque, hoje) {
     var porCodigo = {};
@@ -107,11 +125,11 @@
       if (!it || !it.codigo || foraDoControle(it)) return;
       porCodigo[it.codigo] = { n: it.nome || '', e: it.ean || '', q: it.quantidade == null ? null : Number(it.quantidade) };
     });
-    return { porCodigo: porCodigo, geradoEm: hoje || null, qtd: Object.keys(porCodigo).length };
+    return { porCodigoJson: JSON.stringify(porCodigo), geradoEm: hoje || null, qtd: Object.keys(porCodigo).length };
   }
   // documento -> indices de consulta.
   function expandirCatalogo(doc) {
-    var porCodigo = (doc && doc.porCodigo) || {};
+    var porCodigo = mapaDoCatalogo(doc);
     var porEan = {};
     Object.keys(porCodigo).forEach(function (c) {
       var p = porCodigo[c] || {};
@@ -697,6 +715,7 @@
     textoNotas: textoNotas,
     textoEmissao: textoEmissao,
     montarCatalogo: montarCatalogo,
+    mapaDoCatalogo: mapaDoCatalogo,
     expandirCatalogo: expandirCatalogo,
     produtoDoCatalogo: produtoDoCatalogo,
     dicaDeFaturamento: dicaDeFaturamento,

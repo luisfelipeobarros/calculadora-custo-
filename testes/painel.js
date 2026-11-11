@@ -340,6 +340,54 @@ eq('sem meses comparaveis -> null, nunca 0%',
     P.projecaoSazonal(metasDe(base2025), 2026, '2026-01-10'), null);
 }
 
+// ── Mes fechado com lancamento PARCIAL ───────────────────────
+// O card de previsao grava "acumulado ate' o dia D". Virou o mes e o
+// ultimo lancamento foi ate' 19/10: 200.000 nao e' o outubro inteiro.
+// A linha avisa, compara com o objetivo proporcional e o mes fica fora
+// dos totais, do crescimento e da sazonalidade (como mes sem lancamento).
+{
+  // Outubro/2026: 27 dias uteis; ate' 19/10 sao 16. Objetivo 270.000
+  // -> comparavel 270.000 x 16/27 = 160.000; 200.000 / 160.000 = +25%.
+  const parcial = { mes: '2026-10', objetivo: 270000, feriados: [],
+    faturamento: { acumulado: 200000, ate: '2026-10-19' }, aPagar: 0 };
+  const r = P.resumoDoMes(parcial, '2026-11-11');
+  eq('mes fechado com lancamento ate 19/10: avisa a data e compara com o objetivo proporcional',
+    [r.estado, r.parcialAte, r.objetivoComparavel, r.difPct, r.diarioRealizado],
+    ['fechado', '2026-10-19', 160000, 0.25, 12500]);
+  eq('lancado ate o ultimo dia: mes inteiro, sem aviso',
+    P.resumoDoMes(Object.assign({}, parcial, { faturamento: { acumulado: 200000, ate: '2026-10-31' } }), '2026-11-11').parcialAte, null);
+  eq('mes corrente nunca e "parcial" (ele ESTA andando)',
+    P.resumoDoMes(parcial, '2026-10-20').parcialAte, null);
+  // So' domingo ou feriado depois da data lancada: nao falta dia de venda.
+  eq('faltou so um domingo (31/05/2026) ou um feriado no fim: nao e parcial; sem data (documento antigo) tambem nao',
+    [P.lancamentoParcial('2026-05', { acumulado: 1, ate: '2026-05-30' }, []),
+     P.lancamentoParcial('2026-04', { acumulado: 1, ate: '2026-04-29' }, ['2026-04-30']),
+     P.lancamentoParcial('2026-04', { acumulado: 1, ate: '2026-04-29' }, []),
+     P.lancamentoParcial('2026-04', { acumulado: 1 }, [])],
+    [null, null, { ate: '2026-04-29' }, null]);
+
+  const metas = metasDe(anoCheio(2025, [100,100,100,100,100,100,100,100,100,100,100,100]));
+  metas['2025-10'] = { faturamento: { acumulado: 60, ate: '2025-10-19' } };
+  eq('vendasDoMes segue devolvendo o lancado; vendasFechadasDoMes nao conta o parcial',
+    [P.vendasDoMes(metas, '2025-10'), P.vendasFechadasDoMes(metas, '2025-10'), P.vendasFechadasDoMes(metas, '2025-09')], [60, null, 100]);
+  eq('ano com um mes parcial nao tem "total do ano"', P.totalAnualVendas(metas, 2025), null);
+  const doisAnos = Object.assign({}, metas, metasDe({ '2026-09': 110, '2026-10': 110 }));
+  const g = P.crescimentoAteAgora(doisAnos, 2026, '2026-11-11');
+  eq('crescimento ate agora deixa de fora o mes parcial (dos dois lados)', [g.atual, g.anterior, g.deMes, g.ateMes], [110, 100, 9, 9]);
+  const p = P.projecaoAnual([
+    { mes: '2026-09', objetivo: 100000, feriados: [], faturamento: { acumulado: 90000, ate: '2026-09-30' } },
+    parcial
+  ], '2026-11-11');
+  eq('projecao anual: o mes parcial e avisado e nao entra na soma',
+    [p.realizado, p.fechadosParciais, p.fechadosSemVendas], [90000, ['2026-10'], []]);
+}
+
+// ── O que foi digitado num campo de dinheiro ─────────────────
+eq('campo vazio = apagar; numero a brasileira = valor; texto que nao e numero = invalido (nunca apaga nem aproxima)',
+  ['', '  ', '6.470.000', 'R$ 1.234,56', ' 0 ', 'abc', '6,47mi', '-', '12a'].map(t => P.valorDigitado(t)),
+  [{ vazio: true }, { vazio: true }, { valor: 6470000 }, { valor: 1234.56 }, { valor: 0 },
+   { invalido: true }, { invalido: true }, { invalido: true }, { invalido: true }]);
+
 // ── A pagar por semana de pagamento (sab-sex) dentro do mes ──
 // A regra combinada em 30/08/2026: cada semana soma SO os vencimentos
 // do proprio mes (a soma das semanas fecha com o "A pagar real"), e a

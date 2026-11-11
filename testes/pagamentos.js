@@ -36,12 +36,14 @@ const somarDias = (iso, n) => {
   return d.toISOString().slice(0, 10);
 };
 
-// calcularProximoVencimento virou involucro do App.somarMeses — o App
-// de verdade entra na sandbox para o teste medir a conta real.
+// calcularProximoVencimento virou involucro do nucleo
+// (SimuladorNucleo.proximoVencimentoRecorrente, que usa o App.somarMeses)
+// — os dois de verdade entram na sandbox para o teste medir a conta real.
 const App = require('../app-shared.js');
+const SimuladorNucleo = require('../simulador-nucleo.js');
 
 const estado = { filtroPag: 'pendentes' };
-const m = new Function('estado', 'somarDias', 'App',
+const m = new Function('estado', 'somarDias', 'App', 'SimuladorNucleo',
   'var filtroPag;\n' +
   bloco(/var CATEGORIAS = \[[\s\S]*?\n  \];/, 'CATEGORIAS') + '\n' +
   bloco(/var CAT_FORNECEDOR = \{[^}]*\};/, 'CAT_FORNECEDOR') + '\n' +
@@ -53,7 +55,7 @@ const m = new Function('estado', 'somarDias', 'App',
   ' categoriaPorValor: categoriaPorValor,' +
   ' calcularProximoVencimento: calcularProximoVencimento,' +
   ' passaFiltroPag: function(p, v, h, i){ filtroPag = estado.filtroPag; return passaFiltroPag(p, v, h, i); } };'
-)(estado, somarDias, App);
+)(estado, somarDias, App, SimuladorNucleo);
 
 let problemas = 0;
 const ok = (t) => console.log('  [ok] ' + t);
@@ -220,21 +222,32 @@ eq('controle-notas.html nao chama parseNumeroBR em lugar nenhum (dinheiro digita
   eq('parseDinheiroBR: "1.500" = 1500, "1.500,50" = 1500.5, "1500" = 1500, "15,5" = 15.5',
     [App.parseDinheiroBR('1.500'), App.parseDinheiroBR('1.500,50'), App.parseDinheiroBR('1500'), App.parseDinheiroBR('15,5')].join(' | '), '1500 | 1500.5 | 1500 | 15.5');
 }
-// O proximo recorrente nasce com o id da PRIMEIRA parcela + a data:
-// sem isso o id crescia 11 letras por mes.
-eq('id do proximo recorrente tira as datas ja penduradas',
-  html.indexOf("var base = String(pgto.id).replace(") !== -1 && html.indexOf("var idProximo = base + '_' + proxVenc;") !== -1 &&
-  html.indexOf(".doc(idProximo).set(novo)") !== -1, true);
-// O proximo mes so' e' criado se o documento com esse ID nao existe —
-// comparar pelo vencimento deixava sobrescrever um proximo prorrogado (e pago).
-eq('o proximo recorrente e checado pelo ID, antes de gravar',
-  /if\(pagamentosInternos\.some\(function\(p\)\{ return p\.id === idProximo; \}\)\) return Promise\.resolve\(null\);/.test(html), true);
-eq('  ...e a regra da certo nos dois casos',
-  ['abc123_2026-03-15_2026-04-15', 'abc123'].map(id => id.replace(/(_\d{4}-\d{2}-\d{2})+$/, '')).join(' | '), 'abc123 | abc123');
-// A expressao que esta' na pagina e' a MESMA do teste acima (com as
-// barras — sem elas, "\d" virava a letra d e nada era removido).
-eq('  ...com a regex escrita com as barras na pagina',
-  html.indexOf("replace(/(_\\d{4}-\\d{2}-\\d{2})+$/, '')") !== -1, true);
+// O proximo recorrente nasce com o id da PRIMEIRA parcela + a data
+// programada: sem isso o id crescia 11 letras por mes. A regra mudou
+// de casa (simulador-nucleo.js, secao 4) e a tela so' chama.
+const nucleoSim = fs.readFileSync(path.join(raiz, 'simulador-nucleo.js'), 'utf8');
+eq('id do proximo recorrente vem do nucleo (primeira parcela + data programada)',
+  html.indexOf('var idProximo = SimuladorNucleo.idProximoRecorrente(pgto);') !== -1, true);
+eq('  ...que tira as datas ja penduradas',
+  ['abc123_2026-03-15_2026-04-15', 'abc123'].map(id => SimuladorNucleo.idProximoRecorrente(
+    { id, vencimento: '2026-04-15', regra: 'diaFixo', diaFixo: 15 })).join(' | '),
+  'abc123_2026-05-15 | abc123_2026-05-15');
+// A expressao escrita com as barras (sem elas, "\d" virava a letra d e
+// nada era removido).
+eq('  ...com a regex escrita com as barras no nucleo',
+  nucleoSim.indexOf("var SUFIXO_DATAS = /(_\\d{4}-\\d{2}-\\d{2})+$/;") !== -1, true);
+// O sucessor e' reconhecido pelo id OU por quem aponta para a parcela
+// como origem — comparar pelo vencimento deixava passar o sucessor
+// prorrogado.
+eq('o proximo recorrente e checado em memoria pelo nucleo (id ou origem, sem vencimento)',
+  /if\(SimuladorNucleo\.temSucessorRecorrente\(pgto, pagamentosInternos\)\)\{\s*return Promise\.resolve\(\{ motivo: 'jaExistia'/.test(html), true);
+eq('  ...e a comparacao por vencimento nao voltou',
+  /p\.origemId === pgto\.id && p\.vencimento === proxVenc/.test(html), false);
+// Nunca mais set() cego: a maquina com a tela atrasada regravava como
+// "nao pago" um sucessor que outra ja' tinha criado e pago.
+eq('o sucessor nasce por transacao, nunca por set() cego',
+  html.indexOf('.doc(idProximo).set(novo)') === -1 &&
+  /db\.runTransaction\(function\(tx\)\{\s*return tx\.get\(ref\)\.then\(function\(doc\)\{\s*if\(doc\.exists\) return false;\s*tx\.set\(ref, novo\);/.test(html), true);
 
 // --- Carga sob demanda (05/10/2026) ---
 // As seis escutas so' abrem quando uma tela que usa notas/pagamentos
@@ -326,6 +339,230 @@ eq('  ...com a regex escrita com as barras na pagina',
     /App\.aoRecusarCarimbo\(function\(\)\{ if\(db && escutasAbertas\) escutarColecoes\(\); \}\);/.test(html), true);
 })();
 
+// ── Auditoria de 11/11/2026 ───────────────────────────────────
+// As verificacoes assincronas daqui terminam antes do resumo final
+// (ver o Promise.all no fim do arquivo).
+const assincronos = [];
+
+// 1) Recorrencia com base fixa. A conta em si esta' em
+//    testes/simulador.js (secao 7b); aqui, que a TELA grava e respeita
+//    o campo.
+eq('pagamento novo nasce com a data programada (vencimentoBase)',
+  /vencimento: vencimento,\s*vencimentoBase: vencimentoBase,/.test(extrair('salvarPgtoInterno')), true);
+eq('o sucessor nasce com a propria data programada',
+  /vencimento: proxVenc,[\s\S]{0,300}vencimentoBase: proxVenc,/.test(extrair('criarProximoRecorrente')), true);
+eq('prorrogar grava o vencimento novo e, no maximo, FIXA a base antiga — nunca a desloca',
+  /var dados = \{ vencimento: novaData \};\s*if\(item\._tipo === 'interno' && basesAntigas\[id\]\) dados\.vencimentoBase = basesAntigas\[id\];/.test(html) &&
+  /if\(doc && !doc\.vencimentoBase\) basesAntigas\[id\] = SimuladorNucleo\.baseRecorrencia\(doc\);/.test(html), true);
+eq('a tela calcula a proxima pelo nucleo (base fixa), nao pelo vencimento',
+  /function calcularProximoVencimento\(pgto\)\{\s*return SimuladorNucleo\.proximoVencimentoRecorrente\(pgto\);\s*\}/.test(html), true);
+eq('prorrogada de 30/11 para 05/12 gera 30/12 na tela tambem',
+  m.calcularProximoVencimento({ id: 'p', vencimento: '2026-12-05', vencimentoBase: '2026-11-30', regra: 'diaFixo', diaFixo: 30 }), '2026-12-30');
+
+// criarProximoRecorrente contra um Firestore de mentira: transacao que
+// so' grava se o documento nao existe, e o motivo certo em cada caso.
+(function(){
+  function cenario(o){
+    const gravados = [], log = [];
+    const db = {
+      collection(){ return {
+        doc(id){ return { id }; },
+        where(campo, op, valor){ log.push('consulta:' + campo + op + valor);
+          return { limit(){ return { get(){ return Promise.resolve({ empty: !(o.origens || {})[valor] }); } }; } }; }
+      }; },
+      runTransaction(fn){ log.push('transacao');
+        return Promise.resolve(fn({
+          get(ref){ return Promise.resolve({ exists: !!(o.existentes || {})[ref.id] }); },
+          set(ref, dados){ gravados.push({ id: ref.id, dados }); }
+        })); }
+    };
+    const AppFalso = { comAuth: (op) => Promise.resolve().then(op) };
+    const criar = new Function('db', 'App', 'SimuladorNucleo', 'pagamentosInternos',
+      extrair('calcularProximoVencimento') + '\n' + extrair('criarProximoRecorrente') + '\nreturn criarProximoRecorrente;'
+    )(db, AppFalso, SimuladorNucleo, o.carregados || []);
+    return criar(o.pgto).then(res => ({ res, gravados, log }));
+  }
+  const A = { id: 'alug', descricao: 'Aluguel', categoria: 'outro', valor: 900, vencimento: '2026-12-05', vencimentoBase: '2026-11-30',
+              recorrente: true, regra: 'diaFixo', diaFixo: 30, parcelaAtual: 3, parcelasTotal: 12, pago: true };
+  const j = (x) => JSON.stringify(x);
+
+  assincronos.push(cenario({ pgto: A }).then(r => {
+    eq('sucessor: nasce com id deterministico, na data programada (30/12) e apontando a origem',
+      j([r.res, r.gravados.map(g => [g.id, g.dados.vencimento, g.dados.vencimentoBase, g.dados.origemId, g.dados.parcelaAtual, g.dados.pago])]),
+      j([{ motivo: 'criado', vencimento: '2026-12-30' }, [['alug_2026-12-30', '2026-12-30', '2026-12-30', 'alug', 4, false]]]));
+    eq('  ...consultando a origem e gravando por transacao', r.log.join(' > '), 'consulta:origemId==alug > transacao');
+  }));
+  assincronos.push(cenario({ pgto: A, existentes: { 'alug_2026-12-30': true } }).then(r => {
+    eq('sucessor ja criado por outra maquina (talvez pago): a transacao NAO grava por cima',
+      j([r.res.motivo, r.gravados.length]), j(['jaExistia', 0]));
+  }));
+  assincronos.push(cenario({ pgto: A, origens: { alug: true } }).then(r => {
+    eq('sucessor antigo fora da janela, achado pela origem: nem abre transacao',
+      j([r.res.motivo, r.gravados.length, r.log.indexOf('transacao')]), j(['jaExistia', 0, -1]));
+  }));
+  assincronos.push(cenario({ pgto: A, carregados: [A, { id: 'XyZ', origemId: 'alug', vencimento: '2027-01-07' }] }).then(r => {
+    eq('sucessor em memoria (prorrogado): responde "ja existia" sem ir ao banco',
+      j([r.res.motivo, r.log.length]), j(['jaExistia', 0]));
+  }));
+  assincronos.push(cenario({ pgto: Object.assign({}, A, { parcelaAtual: 12 }) }).then(r => {
+    eq('ultima parcela: motivo proprio, nada gravado', j([r.res.motivo, r.gravados.length, r.log.length]), j(['ultima', 0, 0]));
+  }));
+})();
+// O toast separa "ja existia" de "era a ultima parcela" (antes os dois
+// vinham como null e a tela afirmava "ultima" para ambos).
+eq('o toast do pagamento distingue "ja existia" de "ultima parcela"',
+  /res\.motivo === 'jaExistia'[\s\S]{0,200}já existia[\s\S]{0,120}era a última parcela/.test(html), true);
+
+// 2) Pagar e desfazer atomicos: UMA funcao, UM batch.
+eq('nao sobrou gravacao encadeada do lancamento (as duas funcoes antigas sairam)',
+  /gravarLancamentosDePagamento|apagarLancamentosDePagamento/.test(html), false);
+eq('gravarPagamentos monta o batch DENTRO do gravarCarimbado (a funcao pode rodar duas vezes) e faz um commit so',
+  /App\.gravarCarimbado\(function\(carimbar\)\{\s*var batch = db\.batch\(\);/.test(extrair('gravarPagamentos')) &&
+  extrair('gravarPagamentos').split('batch.commit()').length - 1 === 1, true);
+eq('lote (gravarSelecionados) e baixa do DDA gravam pela mesma funcao',
+  /return gravarPagamentos\(itens, ultimo \? paresDoFim : null\)/.test(extrair('gravarSelecionados')) &&
+  /return gravarPagamentos\(pedaco\.map\(/.test(extrair('baixarPelaDda')), true);
+eq('nenhum batch.commit de pagamento fora dela na baixa do DDA', /batch\.commit\(\)/.test(extrair('baixarPelaDda')), false);
+eq('pagar e desfazer (duplicata e interno) passam por ela: 4 chamadas nos botoes da linha',
+  (html.match(/return gravarPagamentos\(\[\{ colecao: '(duplicatas|pagamentosInternos)', id: id,/g) || []).length, 4);
+eq('a mensagem do lote nao manda mais "repetir" o que o filtro de ja-pagos impede',
+  /Confira e repita se necessário/.test(html), false);
+
+(function(){
+  function dbFalso(){
+    const lotes = [];
+    return { lotes,
+      collection(c){ return { doc(id){ return { caminho: c + '/' + id }; } }; },
+      batch(){ const ops = []; return {
+        set(ref, dados, opc){ ops.push('set ' + ref.caminho + (dados.alteradoEm ? ' +carimbo' : '') + (opc && opc.merge ? ' merge' : '')); },
+        delete(ref){ ops.push('delete ' + ref.caminho); },
+        commit(){ lotes.push(ops); return Promise.resolve(); } }; } };
+  }
+  const carimbar = (c) => Object.assign({}, c, { alteradoEm: 'AGORA' });
+  const AppUma = { comAuth: (op) => Promise.resolve().then(op), gravarCarimbado: (fn) => fn(carimbar) };
+  // As regras recusaram o carimbo: a funcao roda de novo, sem ele.
+  const AppDuas = { comAuth: AppUma.comAuth, gravarCarimbado: (fn) => fn(carimbar).then(() => fn((c) => c)) };
+  const montar = (db, AppFalso) => new Function('db', 'App', 'firebase',
+    extrair('lancamentosNoBatch') + '\n' + extrair('gravarPagamentos') + '\nreturn gravarPagamentos;'
+  )(db, AppFalso, { firestore: { FieldValue: { serverTimestamp: () => 'AGORA' } } });
+  const L = require('../lancamentos-nucleo.js');
+  const pares = (tipo, id, valor, valorPago) => L.lancamentosDePagamento(
+    { tipo, id, data: '2026-11-11', valor, valorPago, bancoId: 'b', historico: 'PAGTO X' }, {}, {}, {});
+  const j = (x) => JSON.stringify(x);
+
+  const db1 = dbFalso();
+  assincronos.push(montar(db1, AppUma)([
+    { colecao: 'duplicatas', id: 'd1', dados: { pago: true }, pares: pares('fornecedor', 'd1', 100, 100) },
+    { colecao: 'duplicatas', id: 'd2', dados: { pago: true }, pares: pares('fornecedor', 'd2', 100, 110) },
+    { colecao: 'pagamentosInternos', id: 'p1', dados: { pago: true }, pares: pares('interno', 'p1', 50, 60) }
+  ], [{ id: 'juroslote_x', doc: { valor: 1 } }]).then(() => {
+    eq('pagar: pagamentos e lancamentos em UM batch', db1.lotes.length, 1);
+    eq('  ...so a duplicata carimbada; juros gravado quando ha, apagado quando nao se aplica', j(db1.lotes[0]), j([
+      'set duplicatas/d1 +carimbo merge', 'set duplicatas/d2 +carimbo merge', 'set pagamentosInternos/p1 merge',
+      'set lancamentos/juroslote_x',
+      'set lancamentos/dup_d1', 'delete lancamentos/jurosdup_d1',
+      'set lancamentos/dup_d2', 'set lancamentos/jurosdup_d2',
+      'set lancamentos/int_p1', 'delete lancamentos/jurosint_p1']));
+  }));
+
+  const db2 = dbFalso();
+  assincronos.push(montar(db2, AppUma)([
+    { colecao: 'duplicatas', id: 'd1', dados: { pago: false }, apagar: ['dup_d1'] }
+  ]).then(() => {
+    eq('desfazer: despagar e apagar os lancamentos (principal e juros) no MESMO batch', j(db2.lotes), j([[
+      'set duplicatas/d1 +carimbo merge', 'delete lancamentos/dup_d1', 'delete lancamentos/jurosdup_d1']]));
+  }));
+
+  const db3 = dbFalso();
+  assincronos.push(montar(db3, AppDuas)([
+    { colecao: 'duplicatas', id: 'd1', dados: { pago: true }, pares: pares('fornecedor', 'd1', 100, 100) }
+  ]).then(() => {
+    eq('funcao rodando duas vezes: o batch e remontado do zero (nada acumulado), a 2a sem carimbo', j(db3.lotes), j([
+      ['set duplicatas/d1 +carimbo merge', 'set lancamentos/dup_d1', 'delete lancamentos/jurosdup_d1'],
+      ['set duplicatas/d1 merge', 'set lancamentos/dup_d1', 'delete lancamentos/jurosdup_d1']]));
+  }));
+
+  const db4 = dbFalso();
+  assincronos.push(Promise.resolve(montar(db4, AppUma)([])).then(() => {
+    eq('nada a gravar: nenhum commit vazio', db4.lotes.length, 0);
+  }));
+})();
+
+// Corrente que morreu no meio (pago sem a parcela seguinte): a tela
+// acusa e deixa criar — pela mesma funcao, que e' idempotente.
+eq('Pagamentos acusa recorrente pago sem sucessor e oferece criar',
+  /id="avisoRecorrentes"/.test(html) && /renderAvisoRecorrentes\(\);/.test(extrair('renderPagamentos')) &&
+  /SimuladorNucleo\.recorrentesSemSucessor\(pagamentosInternos,/.test(extrair('recorrentesInterrompidos')) &&
+  /'#btnCriarProximas'[\s\S]{0,700}criarProximoRecorrente\(p\)/.test(html), true);
+eq('  ...sem acusar o que ainda esta sendo criado', /return !aguardandoSucessor\[p\.id\];/.test(extrair('recorrentesInterrompidos')), true);
+
+// 3) Trava de pagamento com aviso (antes o clique morria calado).
+eq('nenhum "if(pagandoId) return;" mudo sobrou', /if\(pagandoId\) return;/.test(html), false);
+eq('  ...as cinco entradas avisam', (html.match(/if\(pagamentoOcupado\(\)\) return;/g) || []).length, 5);
+
+// 4) Fim de semana: no domingo o sabado conta como "hoje" (so' a
+//    segunda recuava, e o boleto de sabado ficava ATRASADO um dia).
+(function(){
+  const com = (dow) => new Function('hojeISO', 'somarDias', 'Date',
+    extrair('inicioJanelaHoje') + '\nreturn inicioJanelaHoje();'
+  )(() => '2026-11-16', somarDias, function(){ this.getDay = () => dow; });
+  eq('janela de hoje: segunda recua 2, domingo recua 1, os outros dias nao recuam',
+    [com(1), com(0), com(2), com(6)].join(' | '), '2026-11-14 | 2026-11-15 | 2026-11-16 | 2026-11-16');
+  eq('os vencimentos de "A importar" usam a mesma janela',
+    /App\.tabelaVencimentos\(dups, \{[^}]*inicioHoje: inicioJanelaHoje\(\) \}\)/.test(html), true);
+})();
+
+// 5) "Zero e' afirmacao" tambem em A importar e no Painel.
+eq('A importar espera as notas antes de dizer "nenhuma nota pendente"',
+  /if\(!carregouNotas\)\{/.test(extrair('renderImportar')) && /if\(!carregouNotas\)\{/.test(extrair('renderCanceladas')), true);
+eq('Painel: os cartoes esperam tambem as notas, e "NF-e a receber" nao afirma zero',
+  /var painelPronto = carregouDuplicatas && carregouPgtosInternos && carregouNotas;/.test(extrair('renderPainel')) &&
+  /if\(!carregouNotas\)\{[\s\S]{0,200}\$\('kReceberValor'\)\.textContent = '--';/.test(extrair('renderPainel')), true);
+eq('Painel: "Proximo mes" e "Proximos 5 meses" somam os recorrentes projetados, marcados',
+  /SimuladorNucleo\.projetarInternos\(pagamentosInternos, fimProx5\)/.test(extrair('renderPainel')) &&
+  /_projetado: true/.test(extrair('renderPainel')) && /🔄 projetado/.test(extrair('renderPainel')), true);
+
+// 6) Fornecedores: nota emitida antes do corte das duplicatas tem
+//    parcelas que nem foram baixadas — entrava como "a vista".
+eq('Fornecedores ignora nota anterior ao corte das duplicatas (fora do historico completo)',
+  /var corteDuplicatas = carregarTudo \? '' : cortePorMeses\(MESES_HISTORICO\);/.test(extrair('mapaFornecedores')) &&
+  /if\(corteDuplicatas && n\.dataEmissao && n\.dataEmissao < corteDuplicatas\) return;/.test(extrair('mapaFornecedores')), true);
+
+// 7) Vendas x Compras: falha nao vira laco, e salvar nao apaga vinculo.
+(function(){
+  let buscas = 0;
+  const tela = new Function('fetch', 'router', '$', 'App', 'URL_GVIZ_VENDAS', 'linhasVendasDaResposta', 'parseGvizTexto',
+    'var vendasLinhas = null, vendasErro = null, buscandoVendas = false, renders = 0;\n' +
+    'function renderVendas(){ renders++; carregarVendas(false); }\n' + // como a tela: todo render pede a carga
+    extrair('carregarVendas') +
+    '\nreturn { carregar: carregarVendas, ver: function(){ return [vendasErro, renders]; } };'
+  )(() => { buscas++; return Promise.reject(new Error('sem rede')); },
+    { atual: () => 'Vendas' }, () => ({}), { erroDe: (e) => e.message }, 'url', null, null);
+  tela.carregar(false);
+  assincronos.push(new Promise(r => setTimeout(r, 30)).then(() => {
+    eq('planilha fora do ar: UMA busca, o erro fica na tela (antes: laco de fetch sem pausa)',
+      JSON.stringify([buscas, tela.ver()]), JSON.stringify([1, ['sem rede', 1]]));
+    tela.carregar(true);
+    return new Promise(r => setTimeout(r, 30));
+  }).then(() => {
+    eq('  ...e so o botao Recarregar (forcar) tenta de novo', buscas, 2);
+  }));
+})();
+eq('vinculos: erro de leitura tambem so tenta de novo pelo botao',
+  /\|\| \(erroVinculos && !forcar\)\) return;/.test(extrair('carregarVinculos')) &&
+  /carregarVendas\(true\); carregarVinculos\(true\);/.test(html), true);
+eq('salvar vinculos: barrado sem a leitura do banco, e gravado por transacao relendo o documento',
+  /if\(!db \|\| !carregouVinculos\)\{/.test(extrair('salvarVinculos')) &&
+  /db\.runTransaction\(function\(tx\)\{\s*return tx\.get\(ref\)/.test(extrair('salvarVinculos')) &&
+  /\.doc\('vendasCompras'\)\.set\(novo\)/.test(html) === false, true);
+eq('busca de vinculo nao trava mais com edicao pendente',
+  /if\(Object\.keys\(vinculosEdicao\)\.length\) return;/.test(html), false);
+
+// 8) PDF do DDA lido sem eval (CVE-2024-4367, pdf.js 3.x).
+eq('pdf.js: getDocument com isEvalSupported:false',
+  /pdfjsLib\.getDocument\(\{ data: buf, isEvalSupported: false \}\)/.test(html) &&
+  /getDocument\(\{ data: buf \}\)/.test(html) === false, true);
+
 // ── Relatorio impresso (pagamentos-nucleo.js) ─────────────────
 (function(){
   const P = require('../pagamentos-nucleo.js');
@@ -350,5 +587,8 @@ eq('  ...com a regex escrita com as barras na pagina',
   eq('a tela guarda a lista inteira do render para o relatorio', /listaPagRelatorio = lista;/.test(html) && /PagamentosNucleo\.htmlRelatorio\(listaPagRelatorio/.test(html), true);
 })();
 
-console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
-process.exitCode = problemas ? 1 : 0;
+// O resumo espera as verificacoes assincronas (gravacoes de mentira).
+Promise.all(assincronos).catch((e) => { erro('verificacao assincrona estourou: ' + (e && e.stack || e)); }).then(() => {
+  console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
+  process.exitCode = problemas ? 1 : 0;
+});
