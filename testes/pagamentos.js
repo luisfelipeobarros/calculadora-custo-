@@ -310,7 +310,7 @@ eq('o sucessor nasce por transacao, nunca por set() cego',
   });
   // Auditoria de 29/10/2026: pagamento interno x lancamento contabil.
   eq('excluir interno apaga o lancamento contabil dele no mesmo lote',
-    /\.excluir-pgto'[\s\S]{0,1500}batch\.delete\(db\.collection\('lancamentos'\)\.doc\('int_' \+ id\)\)/.test(html), true);
+    /\.excluir-pgto'[\s\S]{0,4500}batch\.delete\(db\.collection\('lancamentos'\)\.doc\('int_' \+ id\)\)/.test(html), true);
   eq('editar interno ja pago e barrado (o lancamento nasceu dos dados antigos)',
     /\.editar-pgto'[\s\S]{0,400}if\(pgto\.pago\)/.test(html), true);
   eq('o lote Pagar deixa de fora o que ja esta pago',
@@ -586,6 +586,64 @@ eq('pdf.js: getDocument com isEvalSupported:false',
   eq('relatorio: escapa HTML', P.htmlRelatorio([{ descricao: '<b>x</b>', valor: 1, vencimento: '2026-01-01' }], {}).includes('&lt;b&gt;x&lt;/b&gt;'), true);
   eq('a tela guarda a lista inteira do render para o relatorio', /listaPagRelatorio = lista;/.test(html) && /PagamentosNucleo\.htmlRelatorio\(listaPagRelatorio/.test(html), true);
 })();
+
+// ── Auditoria externa de 11/11/2026 ──────────────────────────
+{
+  // Listas e objetos comparados pelo CONTEUDO (o eq deste arquivo compara por identidade).
+  const eqJ = (t, a, b) => eq(t, JSON.stringify(a), JSON.stringify(b));
+  const excluir = html.slice(html.indexOf("'.excluir-pgto'"), html.indexOf("'.excluir-pgto'") + 4500);
+  eqJ('excluir interno PAGO confere o mes exportado e o juros do lote antes de apagar',
+    [/mesExportadoLc\(m\)/.test(excluir), /jurosDeLoteDe\('int_' \+ id\)/.test(excluir), /apagarJuros\.forEach/.test(excluir)], [true, true, true]);
+  eqJ('o juros do lote grava a lista de quem entrou nele (itensDoLote), e o desfazer consulta por ela',
+    [/itensDoLote: itensDoLote/.test(html), /where\('itensDoLote', 'array-contains', prefixo\)/.test(extrair('jurosDeLoteDe')),
+     /confirmarDesfazer\([\s\S]{0,200}'dup_' \+ id/.test(html), /confirmarDesfazer\([\s\S]{0,200}'int_' \+ id/.test(html)], [true, true, true, true]);
+  eqJ('prorrogar em lote tira os ja pagos', /selProrrogarBtn'\)\.addEventListener[\s\S]{0,1500}pago/.test(html), true);
+  eqJ('desfazer recorrente oferece tratar a parcela seguinte', /oferecerApagarSucessor\(pgto\)/.test(html), true);
+
+  // Funcoes puras extraidas da tela.
+  const Dda = require('../dda-nucleo.js');
+  const Lanc = require('../lancamentos-nucleo.js');
+  const f = new Function('App', 'DdaNucleo', 'N',
+    extrair('valorPagoNaBaixaDda') + '\n' + extrair('jurosDaBaixaDda') + '\n' + extrair('cuNativosFora') + '\n' + extrair('lancamentosQueOMapaResolve') + '\n' +
+    'return { valorPagoNaBaixaDda, jurosDaBaixaDda, cuNativosFora, lancamentosQueOMapaResolve };')(App, Dda, Lanc);
+
+  // DDA: o juros anunciado e' o que sera' gravado (pago - DUPLICATA), nao pago - boleto.
+  const linha = (dup, boletoCent, pagoCent) => ({ casamento: { duplicata: { valor: dup } }, registro: { valorCentavos: boletoCent },
+    extrato: pagoCent == null ? null : { lancamento: {}, valorPagoCentavos: pagoCent } });
+  eqJ('DDA: debito igual a duplicata (dentro da tolerancia) = paga a duplicata, sem juros',
+    [f.valorPagoNaBaixaDda(linha(100, 10003, 10003)), f.jurosDaBaixaDda(linha(100, 10003, 10003))], [100, 0]);
+  eqJ('DDA: boleto 3 centavos acima da duplicata e debito com R$ 5 de juros: juros = pago - duplicata (5,03), o mesmo do lancamento',
+    [f.valorPagoNaBaixaDda(linha(100, 10003, 10503)), f.jurosDaBaixaDda(linha(100, 10003, 10503)),
+     Lanc.lancamentosDePagamento({ tipo: 'fornecedor', id: 'x', data: '2026-11-11', valor: 100, valorPago: 105.03, bancoId: 'b' }, {}, {}, {})[1].doc.valor], [105.03, 5.03, 5.03]);
+  eqJ('DDA sem extrato: boleto diferente da duplicata vale o boleto; pago a menor nao gera juros',
+    [f.valorPagoNaBaixaDda(linha(100, 9000, null)), f.jurosDaBaixaDda(linha(100, 9000, null))], [90, 0]);
+
+  // Custos no modo "do app": o que fica de fora e' contado.
+  eqJ('custos: lancamentos do app sem conta (e sem valor) sao contados, com o total em centavos',
+    f.cuNativosFora([{ contaDebito: 'a', contaCredito: 'b', valorCentavos: 100 }, { contaDebito: null, contaCredito: 'b', valorCentavos: 5000 },
+      { contaDebito: null, contaCredito: null, valorCentavos: 2500 }, { contaDebito: 'a', contaCredito: 'b', valorCentavos: 0 }]),
+    { semConta: { qtd: 2, centavos: 7500 }, semValor: 1 });
+
+  // Mapa de contas: o que o mapa novo resolve entre os pendentes.
+  const bancos = { b1: { conta: '1.1.1.2.0001' } };
+  const cats = { c1: { conta: '2.1.1.1.0001' }, cj: { conta: '4.2.4.1.0002' }, cf: { conta: '2.1.4.1.0001' } };
+  const pend = [
+    { id: 'dup_A', origemId: 'dup_A', bancoId: 'b1', mes: '2026-10' },
+    { id: 'jurosdup_A', origemId: 'dup_A', bancoId: 'b1', mes: '2026-10' },
+    { id: 'int_F', origemId: 'int_F', bancoId: 'b1', mes: '2026-10' },
+    { id: 'int_SEM', origemId: 'int_SEM', bancoId: 'b1', mes: '2026-10' },
+    { id: 'dup_SEMBANCO', origemId: 'dup_SEMBANCO', bancoId: null, mes: '2026-10' },
+    { id: 'manual', origemId: null, bancoId: 'b1' },
+    { id: 'dup_OK', origemId: 'dup_OK', bancoId: 'b1', contaDebito: 'x', contaCredito: 'y' }
+  ];
+  const r = f.lancamentosQueOMapaResolve(pend, { fornecedor: 'c1', juros: 'cj', internas: { folha: 'cf' } }, bancos, cats,
+    (id) => id === 'F' ? 'folha' : (id === 'SEM' ? 'outro' : null));
+  eqJ('mapa de contas: resolve os pendentes de pagamento que passaram a ter conta (principal, juros e interno)',
+    r.resolvidos.map(x => [x.id, x.campos.contaDebito, x.campos.contaCredito]),
+    [['dup_A', '2.1.1.1.0001', '1.1.1.2.0001'], ['jurosdup_A', '4.2.4.1.0002', '1.1.1.2.0001'], ['int_F', '2.1.4.1.0001', '1.1.1.2.0001']]);
+  eqJ('mapa de contas: o que continua sem conta e CONTADO (categoria sem mapa, pagamento sem banco); manual e ja resolvido ficam de fora',
+    r.restantes, 2);
+}
 
 // O resumo espera as verificacoes assincronas (gravacoes de mentira).
 Promise.all(assincronos).catch((e) => { erro('verificacao assincrona estourou: ' + (e && e.stack || e)); }).then(() => {

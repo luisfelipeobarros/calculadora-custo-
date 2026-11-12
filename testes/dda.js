@@ -889,5 +889,17 @@ eq('nomes: vazio nunca confere', Dda.nomesCompativeis(null, 'SECURITIZADORA'), f
     [tipos(mesmo.linhas[0]), mesmo.baixaveis.length], [['bancoBaixouNosNao'], 1]);
 }
 
+// Auditoria externa de 11/11/2026: vencimento do boleto posterior ao nosso.
+{
+  const d = dup({ id: 'vp', numeroNota: '70', parcela: '1', valor: 100, vencimento: '2026-07-31', chaveAcesso: 'chave-ok' });
+  const depois = Dda.conferir([reg({ documento: '70/1', vencimento: '2026-08-15' })], ctx([d])).linhas[0];
+  eq('boleto que vence DEPOIS da duplicata: aviso branco (antes passava como OK calado)',
+    [tipos(depois), depois.problemas.filter(p => p.tipo === 'vencimentoPosterior')[0].gravidade], [['vencimentoPosterior'], Dda.GRAVIDADE.BRANCO]);
+  eq('mesma data: nada a apontar', tipos(Dda.conferir([reg({ documento: '70/1', vencimento: '2026-07-31' })], ctx([d])).linhas[0]), []);
+  const paga = dup({ id: 'vp2', numeroNota: '71', parcela: '1', valor: 100, vencimento: '2026-07-31', pago: true, chaveAcesso: 'chave-ok' });
+  eq('duplicata ja paga e banco tambem: a data nao interessa mais',
+    tipos(Dda.conferir([reg({ documento: '71/1', vencimento: '2026-08-15', situacao: 'PAGO' })], ctx([paga])).linhas[0]), []);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

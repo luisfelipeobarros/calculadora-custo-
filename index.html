@@ -903,7 +903,7 @@ Tupan</textarea>
           </div>
         </div>
         <div class="field" style="margin-top:14px;">
-          <label for="bonificacao">Bonificação por unidade <span class="hint">valor que volta pra você a cada unidade vendida, sem entrar na base de cálculo dos impostos</span></label>
+          <label for="bonificacao">Bonificação por unidade <span class="hint">valor que volta pra você a cada unidade vendida — abate o custo; o lucro a mais paga IRPJ e CSLL</span></label>
           <div class="toggle" data-toggle="tipoBonificacao" style="margin-bottom:8px;">
             <button type="button" data-val="0" class="active">R$</button>
             <button type="button" data-val="1">%</button>
@@ -1002,16 +1002,16 @@ Tupan</textarea>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
-<script src="app-shared.js?v=32"></script>
+<script src="app-shared.js?v=33"></script>
 <!-- A formula de custo/margem/preco. Depende do app-shared.js acima. -->
-<script src="calculo-nucleo.js?v=9"></script>
+<script src="calculo-nucleo.js?v=10"></script>
 <!-- As contas do Painel de metas (dias uteis, previsao, limite 60%). -->
 <script src="painel-nucleo.js?v=6"></script>
 <!-- O banco fiscal por NCM+UF (aba "NCM & ST"). Depende do app-shared.js. -->
-<script src="fiscal-nucleo.js?v=4"></script>
+<script src="fiscal-nucleo.js?v=5"></script>
 <!-- O catalogo da pesquisa em lote por planilha (aba Concorrentes). -->
-<script src="concorrentes-nucleo.js?v=6"></script>
-<script src="radar-nucleo.js?v=11"></script>
+<script src="concorrentes-nucleo.js?v=7"></script>
+<script src="radar-nucleo.js?v=12"></script>
 <script>
   if (window['pdfjsLib']) {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
@@ -1898,21 +1898,86 @@ Tupan</textarea>
     return it.precoVenda != null ? it.precoVenda : null;
   }
 
-  // Ficha de produto montada com a configuração do modo em lote —
-  // usada tanto por "Salvar todos os produtos" quanto para criar o
-  // produto que ainda não existe quando a cotação é salva.
+  // Ficha de produto montada com uma configuração de custo da cotação —
+  // usada por "Salvar todos os produtos", por "Salvar este produto" do
+  // Modo Individual e para criar o produto que ainda não existe quando a
+  // cotação é salva.
+  //
+  // A cfg chega JÁ normalizada (coletarConfigLote / configIndividual): o
+  // campo cujo toggle está desligado vem zerado. É a mesma cfg da prévia
+  // de margem — a ficha gravada e o número que a pessoa viu saem do mesmo
+  // lugar. Campo em branco vira '0', como o lote sempre gravou.
   function registroProdutoLote(r, cfg, fornecedor, venda){
+    const txt = (v) => (v == null || v === '') ? '0' : String(v);
     return {
       produto: r.produtoEsperado,
       fornecedor: fornecedor,
       codigo: r.codigo || '',                      // interno, da nossa planilha
       codigoFornecedor: r.codigoRecebido || '',    // o que o fornecedor usa no PDF dele
       custoNFe: String(r.precoRecebido),
-      frete: cfg.frete, pctCredFrete: cfg.pctCredFrete, valorST: cfg.valorST, icmsCredito: cfg.icmsCredito,
-      ipi: cfg.ipi, custoFinanceiroPct: cfg.custoFinanceiroPct, avariasPct: cfg.avariasPct, bonificacao: cfg.bonificacao,
+      frete: txt(cfg.frete), pctCredFrete: txt(cfg.pctCredFrete), valorST: txt(cfg.valorST), icmsCredito: txt(cfg.icmsCredito),
+      ipi: txt(cfg.ipi), custoFinanceiroPct: txt(cfg.custoFinanceiroPct), avariasPct: txt(cfg.avariasPct), bonificacao: txt(cfg.bonificacao),
       venda: String(venda),
+      // prejuizoContabil 0 = produto NOVO. Em produto que já existe quem
+      // decide é a ficha (fichaSobreExistente): a cotação não tem o campo.
       toggles: { credIcmsFrete: cfg.credIcmsFrete, comST: cfg.comST, prejuizoContabil: 0, tipoBonificacao: cfg.tipoBonificacao }
     };
+  }
+
+  // A ficha montada pela cotação (registroProdutoLote) por cima da que
+  // JÁ está gravada. Os dois salvamentos do card "3. Adicionar produtos"
+  // regravavam o documento inteiro só com o que a cotação sabe, e o que
+  // ela NÃO sabe sumia calado:
+  //  - código interno e do fornecedor: a linha que casou pelo nome vem
+  //    sem código, e a ficha perdia o dela — na cotação seguinte o
+  //    produto voltava a ser palpite por nome. Código já preenchido nunca
+  //    é apagado nem trocado: quem manda é a ficha (a mesma regra de
+  //    gravarPrecoVenda);
+  //  - "prejuízo contábil": a cotação não tem o campo e gravava Não;
+  //  - fornecedor: campo em branco na tela mandava o produto para "Sem
+  //    fornecedor";
+  //  - qualquer campo que a ficha tenha e este formulário não.
+  // O resto (custo, frete, ST, IPI, avarias, venda) é o que a pessoa
+  // acabou de configurar na cotação, e vale.
+  function fichaSobreExistente(nova, existente){
+    if(!existente) return nova;
+    const dados = Object.assign({}, existente, nova);
+    const antes = existente.toggles || {};
+    dados.toggles = Object.assign({}, antes, nova.toggles, { prejuizoContabil: antes.prejuizoContabil ? 1 : 0 });
+    if(normalizarCodigo(existente.codigo)) dados.codigo = existente.codigo;
+    if(normalizarCodigo(existente.codigoFornecedor)) dados.codigoFornecedor = existente.codigoFornecedor;
+    if(!nova.fornecedor && existente.fornecedor) dados.fornecedor = existente.fornecedor;
+    return dados;
+  }
+
+  // A ficha como está gravada AGORA, lida antes de regravar por cima
+  // (null = produto novo). Mesmas duas travas de gravarPrecoVenda:
+  //  - erro de LEITURA sobe (rede, cota): não é "produto novo", e quem
+  //    chamou aborta com aviso em vez de gravar por cima do que não leu;
+  //  - a lista diz que o produto existe (`salvo`) e a ficha não veio:
+  //    idem — criar por cima seria o mesmo estrago.
+  // Lê pelo nome mesmo sem `salvo`: a lista pode estar velha (produto
+  // criado em outra máquina) e a ficha existir assim mesmo.
+  async function lerFichaParaRegravar(nomeDestino, salvo){
+    const res = await storageGet(chaveDoProduto(nomeDestino));
+    if(salvo && !(res && res.value)){
+      throw new Error('a ficha de "' + nomeDestino + '" não pôde ser lida — recarregue os Produtos salvos e tente de novo');
+    }
+    if(!(res && res.value)) return null;
+    try{ return JSON.parse(res.value); }
+    catch(e){ return null; } // registro corrompido (so' no armazenamento local): nasce um novo
+  }
+
+  // A lista de Produtos salvos é quem responde "este produto já existe?"
+  // (pelo código, pelo nome) para todos os salvamentos. Quando a carga
+  // dela FALHA a lista fica vazia — e vazia quer dizer "tudo é produto
+  // novo": nada de confirmação de substituir, nada de casar por código,
+  // um segundo cadastro com o nome da planilha. Quem vai gravar tenta
+  // carregar de novo e, sem lista, não grava.
+  let produtosListaOk = false;
+  async function exigirListaDeProdutos(){
+    if(!produtosListaOk) await atualizarListaSalvos();
+    if(!produtosListaOk) throw new Error('a lista de Produtos salvos não carregou — recarregue a página antes de salvar');
   }
 
   // Acha a ficha do produto pela mesma regra do preço: código interno
@@ -2043,9 +2108,11 @@ Tupan</textarea>
         }
         vendaPorCodigo.set(cod, { venda: p.r.venda, cfg: p.cfg });
       });
+      produtosListaOk = true;
       renderListaSalvos();
     }catch(e){
       console.error('Erro ao listar produtos salvos:', e);
+      produtosListaOk = false; // lista vazia por ERRO: ver exigirListaDeProdutos
       produtosCache = [];
       vendaPorProduto = new Map();
       vendaPorCodigo = new Map();
@@ -2962,9 +3029,16 @@ Tupan</textarea>
   // preço > 0): a cópia que havia aqui aceitava resultado marcado com
   // erro, e o 🏆 ia para uma célula que a própria tabela mostra como
   // "não encontrado".
+  //
+  // Os parâmetros de menorConcorrente(resultados, meuPreco, nomeNossaLoja):
+  // o 2º (nosso preço) é passado em toda chamada em que a tela o tem — é
+  // dele que sai o somosMaisBaratos. O 3º (nome da NOSSA loja, para pular
+  // o nosso próprio anúncio) fica de fora nas seis chamadas de propósito:
+  // não existe configuração com o nome da loja — "Lojas onde pesquisar"
+  // lista só concorrentes. Quando existir, é passá-lo aqui e nas outras.
   function menorPrecoDaLinha(item){
     const m = ConcorrentesNucleo.menorConcorrente(
-      lojasAtuais().map((_, lojaIdx) => item.porLoja[lojaIdx]));
+      lojasAtuais().map((_, lojaIdx) => item.porLoja[lojaIdx]), item.nossoPreco);
     return m ? m.preco : null;
   }
 
@@ -3497,6 +3571,12 @@ Tupan</textarea>
       campo: 'data', chave: LEITURA_CONCORRENTES, hoje: App.hojeISO()
     }));
     const idx = {};
+    // Quem e' "a mais recente" se decide pelo INSTANTE em que foi salva,
+    // nao pelo dia: comparando so' aaaa-mm-dd, duas pesquisas do mesmo
+    // produto no mesmo dia empatavam e valia a primeira que o Firestore
+    // devolvesse — o painel podia mostrar o menor concorrente da pesquisa
+    // da manha depois de ela ter sido refeita a tarde.
+    const instante = {}; // codigo -> millis da pesquisa que esta' em idx
     leitura.docs.forEach(doc => {
       const d = doc.data();
       if(!d.codigo) return;
@@ -3507,9 +3587,11 @@ Tupan</textarea>
       // no painel inteiro. Só a pesquisa feita pela planilha carrega
       // meuPrecoCent.
       const daPlanilha = d.origemPedido === ROTULO_ORIGEM_PLANILHA;
-      const quando = (d.data && d.data.toDate) ? App.iso(d.data.toDate()) : null;
+      const ms = (d.data && d.data.toMillis) ? d.data.toMillis() : null;
+      const quando = ms != null ? App.iso(d.data.toDate()) : null;
       const atual = idx[d.codigo];
-      if(!atual || (quando && (!atual.data || quando > atual.data))){
+      if(!atual || (ms != null && (instante[d.codigo] == null || ms > instante[d.codigo]))){
+        instante[d.codigo] = ms;
         // O preço de referência é o do CATÁLOGO no dia da pesquisa
         // (precoCatalogoCent), o mesmo que registrarUltimaPesquisa guarda
         // ao salvar — não o meuPreco, que é o "Nosso preço" editável da
@@ -4585,26 +4667,40 @@ Tupan</textarea>
     if(!digitando){ alvo.innerHTML = html; return; }
     const novo = document.createElement(alvo.tagName);
     novo.innerHTML = html;
-    // false = a estrutura mudou justamente no caminho do campo: fica como
-    // esta' ate' o proximo desenho (que vem assim que o foco sair dali).
-    encaixarHtmlNovo(alvo, novo, ativo);
+    // false = o campo em foco nao tem lugar no desenho novo (o card/linha
+    // dele saiu da lista, ou a estrutura mudou no caminho): troca
+    // completa. Manter o campo ali seria deixa-lo dentro de OUTRO card.
+    // (encaixarHtmlNovo so' mexe no DOM depois de achar o caminho inteiro,
+    // entao nao ha' troca pela metade a desfazer.)
+    if(!encaixarHtmlNovo(alvo, novo, ativo)) alvo.innerHTML = html;
   }
   // Troca os filhos de `vivo` pelos de `novo`, menos o ramo que leva ao
   // campo em foco (esse e' percorrido para dentro).
+  //
+  // O par do ramo preservado e' achado pela CHAVE (data-chave: o NCM_UF
+  // do card, o mes da linha), nao pela posicao. Pela posicao, bastava a
+  // lista mudar com um campo em foco — a busca do Fiscal disparando com
+  // o cursor ja' num "% ST", uma nota cancelada tirando um grupo — para o
+  // card antigo receber o conteudo do vizinho: o campo (e o id que ele
+  // grava) de um NCM debaixo do cabecalho de outro. Sem chave no elemento
+  // (tabela, tbody, celulas: estrutura fixa dentro do card) vale a posicao.
   function encaixarHtmlNovo(vivo, novo, ativo){
     const vivos = Array.from(vivo.children);
     const k = vivos.findIndex(f => f === ativo || f.contains(ativo));
+    if(k < 0) return false;
     const novos = Array.from(novo.children);
-    const par = k >= 0 ? novos[k] : null;
-    if(!par || par.tagName !== vivos[k].tagName) return false;
+    const chave = vivos[k].getAttribute('data-chave');
+    const j = chave == null ? k : novos.findIndex(n => n.getAttribute('data-chave') === chave);
+    const par = j >= 0 ? novos[j] : null;
+    if(!par || par.tagName !== vivos[k].tagName || par.getAttribute('data-chave') !== chave) return false;
     if(vivos[k] !== ativo){
       if(!encaixarHtmlNovo(vivos[k], par, ativo)) return false;
       if(vivos[k].className !== par.className) vivos[k].className = par.className;
     }
     vivos.forEach((f, i) => { if(i !== k) f.remove(); });
     novos.forEach((n, i) => {
-      if(i < k) vivo.insertBefore(n, vivos[k]);
-      else if(i > k) vivo.appendChild(n);
+      if(i < j) vivo.insertBefore(n, vivos[k]);
+      else if(i > j) vivo.appendChild(n);
     });
     return true;
   }
@@ -4691,7 +4787,9 @@ Tupan</textarea>
       const cadastravel = FiscalNucleo.grupoCadastravel(g);
       const semUf = g.uf === '??';
 
-      html += '<div class="fiscal-linha' + (divergencias ? ' divergente' : '') + '">' +
+      // data-chave: e' por ele que trocarHtmlMantendoFoco reencontra ESTE
+      // card no desenho novo (a posicao muda com a busca e com as notas).
+      html += '<div class="fiscal-linha' + (divergencias ? ' divergente' : '') + '" data-chave="' + escapeHtml(g.id) + '">' +
         '<div class="fiscal-cab">' +
           '<span class="fiscal-ncm">NCM ' + escapeHtml(g.ncm) + ' · ' + escapeHtml(g.uf) + '</span>' +
           '<span class="fiscal-valor">' + brl(g.somaValorCent / 100) +
@@ -4811,7 +4909,7 @@ Tupan</textarea>
       if(inp.value !== '') valoresDigitados[inp.dataset.idx] = inp.value;
     });
     const meuPreco = toNum($('meuPrecoConcorrente').value);
-    const menorAchado = ConcorrentesNucleo.menorConcorrente(ultimosConcorrentes);
+    const menorAchado = ConcorrentesNucleo.menorConcorrente(ultimosConcorrentes, meuPreco);
     const menorPreco = menorAchado ? menorAchado.preco : null;
 
     let html = '<table class="quote-table"><thead><tr><th>Loja</th><th>Produto encontrado</th><th>Marca</th><th>Preço</th>'+(meuPreco>0?'<th>Dif. vs seu preço</th>':'')+'</tr></thead><tbody>';
@@ -5104,7 +5202,7 @@ Tupan</textarea>
       const resultados = d.resultados || [];
       // Mesma regra do painel e da tabela do lote (nucleo): resultado
       // com erro ou preco zerado nao e' "o menor".
-      const menorAchado = ConcorrentesNucleo.menorConcorrente(resultados);
+      const menorAchado = ConcorrentesNucleo.menorConcorrente(resultados, d.meuPreco);
       const menorPreco = menorAchado ? menorAchado.preco : null;
 
       const aberto = concorrentesHistAbertos.has(d.id);
@@ -5345,11 +5443,14 @@ Tupan</textarea>
         // do nosso preço para o produto entrar na conta.
         // O menor é o do núcleo (sem erro, sem pendente, preço > 0) —
         // o mesmo critério da tabela do lote e do painel por fabricante.
-        const menorAchado = ConcorrentesNucleo.menorConcorrente(p.resultados);
-        const menor = menorAchado ? menorAchado.preco : null;
-        if(menor != null && p.meuPreco != null && p.meuPreco > 0){
+        // somosMaisBaratos vem null quando não há nosso preço para
+        // comparar — a mesma condição que estava escrita aqui à mão.
+        // "Mais caro" continua sendo preço ACIMA do concorrente: empate
+        // não conta (por isso a comparação fica aqui, e não no núcleo).
+        const menorAchado = ConcorrentesNucleo.menorConcorrente(p.resultados, p.meuPreco);
+        if(menorAchado && menorAchado.somosMaisBaratos != null){
           comparados++;
-          if(p.meuPreco > menor) maisCaros++;
+          if(p.meuPreco > menorAchado.preco) maisCaros++;
         }
       });
 
@@ -5769,9 +5870,14 @@ Tupan</textarea>
             // custo 100, frete 10 e ST 20% vendido a 173,90 aparecia
             // aqui com 25,45% enquanto a tela da cotação mostrava 13,18%
             // — o mesmo produto, dois números, nada dizendo qual valia.
+            //
+            // "Prejuízo contábil" também vem da ficha (sem ficha, CFG_SO_PRODUTO
+            // não tem o campo e vale Não). Forçar 0 aqui descontava IRPJ e
+            // CSLL de um produto que a Calculadora mostra sem eles: a mesma
+            // peça, uma margem no Histórico e outra em Produtos salvos.
             const ficha = fichaDoProduto(it.produto, it.codigo);
             const calc = computeCalc(Object.assign({}, ficha ? ficha.cfg : CFG_SO_PRODUTO, {
-              custoNFe: it.precoRecebido, venda: precoVenda, prejuizoContabil: 0
+              custoNFe: it.precoRecebido, venda: precoVenda
             }));
             if(isFinite(calc.margem)){
               // Sem ficha não há como saber frete/ST/IPI: o número sai
@@ -6759,6 +6865,17 @@ Tupan</textarea>
     let gravados = 0;
     let escreveu = false;
     const falhas = [];
+    // Sem a lista de Produtos salvos não há como saber qual ficha é de
+    // qual linha (o casamento por código sai dela): nenhum preço é
+    // gravado, e o aviso diz isso. A cotação é salva assim mesmo.
+    if(ultimosResultados.some(r => r.precoVenda > 0)){
+      try{ await exigirListaDeProdutos(); }
+      catch(e){
+        console.error(e);
+        App.toastErro('Os preços de venda digitados NÃO foram gravados em Produtos salvos', e);
+        return 0;
+      }
+    }
     for(const r of ultimosResultados){
       if(!(r.precoVenda > 0)) continue;
       const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
@@ -6909,10 +7026,22 @@ Tupan</textarea>
   // precisa olhar para a mesma lista que gerou o HTML — e não refiltrar
   // ultimosResultados, que pode ter mudado no meio.
   let linhasLote = [];
+  // Por linha: o produto JÁ cadastrado está com "prejuízo contábil"? A
+  // cotação não tem esse campo e o salvamento preserva o da ficha
+  // (fichaSobreExistente) — então a prévia de margem da linha calcula com
+  // ele, para mostrar o mesmo número que Produtos salvos vai mostrar.
+  // Resolvido uma vez por desenho: a busca na lista é por linha, e
+  // refazê-la a cada tecla nos campos do lote seria o custo quadrático
+  // que atualizarMargemLote evita.
+  let prejuizoLote = [];
 
   function renderListaLote(){
     const container = $('loteListaProdutos');
     const itens = linhasLote = itensValidosParaSalvar();
+    prejuizoLote = itens.map(r => {
+      const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+      return !!(salvo && salvo.cfg && salvo.cfg.prejuizoContabil);
+    });
     if(itens.length === 0){
       container.innerHTML = '<div class="empty-note" style="display:block;">Nenhum produto com preço reconhecido pra adicionar.</div>';
       return;
@@ -6960,7 +7089,8 @@ Tupan</textarea>
   // lê onze campos do DOM, e refazer isso por linha tornava a
   // atualização quadrática numa cotação grande.
   function atualizarMargemLote(idx, cfgPronta){
-    const cfg = cfgPronta || coletarConfigLote();
+    const cfgLote = cfgPronta || coletarConfigLote();
+    const cfg = prejuizoLote[idx] ? Object.assign({}, cfgLote, { prejuizoContabil: 1 }) : cfgLote;
     const r = linhasLote[idx];
     const seletor = '[data-idx="'+idx+'"]';
     const container = $('loteListaProdutos');
@@ -7033,35 +7163,108 @@ Tupan</textarea>
     atualizarTodasMargensLote();
   });
 
-  $('salvarLoteBtn').addEventListener('click', async ()=>{
+  // Um clique por vez (App.umPorVez): entre as perguntas e as leituras
+  // abaixo, um segundo clique gravava a lista inteira de novo.
+  $('salvarLoteBtn').addEventListener('click', App.umPorVez(async ()=>{
     const cfg = coletarConfigLote();
     const fornecedor = $('fornecedorProdutos').value.trim();
-    let salvos = 0;
+    // Quem responde "já existe?" é a lista de Produtos salvos: sem ela,
+    // tudo viraria produto novo (ver exigirListaDeProdutos).
+    try{ await exigirListaDeProdutos(); }
+    catch(e){ $('loteMsg').textContent = 'Nada foi salvo: ' + App.erroDe(e) + '.'; App.toastErro('Nada foi salvo', e); return; }
+
+    // As linhas com preço de venda, com o destino de cada uma resolvido
+    // ANTES de perguntar qualquer coisa: é sobre esta lista que as duas
+    // confirmações falam, e é ela que é gravada.
+    const aSalvar = [];
     for(let idx = 0; idx < linhasLote.length; idx++){
       const r = linhasLote[idx];
       const vendaInput = $('loteListaProdutos').querySelector('.lote-venda-input[data-idx="'+idx+'"]');
       const venda = vendaInput ? vendaInput.value : '';
       if(!venda || toNum(venda) <= 0) continue;
-      const dados = registroProdutoLote(r, cfg, fornecedor, venda);
       // Produto que já existe com esse código é atualizado onde está,
       // mesmo que o nome na planilha esteja diferente do nome da ficha.
       // Sem isto, "TELHA 2,44M" e "Telha 2.44m" viravam dois produtos.
       const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
-      const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
-      dados.produto = nomeDestino;
+      aSalvar.push({ r, venda, salvo, nomeDestino: salvo ? salvo.nome : r.produtoEsperado });
+    }
+    if(!aSalvar.length){
+      $('loteMsg').textContent = 'Nenhum produto salvo — preencha o preço de venda de pelo menos um produto.';
+      return;
+    }
+
+    // Custo vazio/zero ou valor negativo não dá erro na conta: a ficha
+    // sai com margem irreal. Mesma pergunta de "Salvar este produto" da
+    // Calculadora (a regra é do núcleo), uma vez para a lista toda.
+    const avisos = new Map(); // aviso -> produtos
+    aSalvar.forEach(l => {
+      Calculo.avisosDaFicha(valoresParaCalculo(l.r.precoRecebido, cfg, toNum(l.venda))).forEach(a => {
+        if(!avisos.has(a)) avisos.set(a, []);
+        avisos.get(a).push(l.r.produtoEsperado);
+      });
+    });
+    if(avisos.size){
+      const linhas = Array.from(avisos.entries()).map(([a, nomes]) =>
+        a + ((aSalvar.length > 1 && nomes.length === aSalvar.length) ? ' (em todos)' : ': ' + nomes.slice(0, 5).join(', ') + (nomes.length > 5 ? ' e mais ' + (nomes.length - 5) : '')));
+      const ok = await App.confirmar({
+        titulo: 'Confira os valores antes de salvar',
+        mensagem: linhas.join('\n') + '\n\nCom isso a margem desses produtos não vai refletir a realidade. Salvar assim mesmo?',
+        confirmar: 'Salvar mesmo assim',
+        perigo: true
+      });
+      if(!ok) return;
+    }
+
+    // A configuração do lote vale para todos — é para isso que a tela
+    // serve. Mas em produto JÁ cadastrado ela entra no lugar do frete,
+    // ST, IPI e avarias que a ficha tinha: a pessoa decide sabendo quantos.
+    const jaCadastrados = aSalvar.filter(l => l.salvo);
+    if(jaCadastrados.length){
+      const n = jaCadastrados.length;
+      const ok = await App.confirmar({
+        titulo: n === 1 ? '1 produto já está cadastrado' : n + ' produtos já estão cadastrados',
+        mensagem: (n === 1 ? 'Ele terá' : 'Eles terão') + ' o frete, o ST / ICMS, o IPI, o custo financeiro, as avarias e a bonificação ' +
+          'SUBSTITUÍDOS pela configuração deste lote (além do custo NF-e e do preço de venda desta cotação):\n' +
+          jaCadastrados.slice(0, 8).map(l => l.nomeDestino).join(', ') + (n > 8 ? ', ...' : '') +
+          '\n\nO código e o "prejuízo contábil" de cada ficha ficam como estão. ' +
+          'Para manter a configuração de um produto, salve-o pelo Modo Individual, que parte da ficha dele.',
+        confirmar: 'Substituir e salvar',
+        perigo: true
+      });
+      if(!ok) return;
+    }
+
+    let salvos = 0;
+    const falhas = [];
+    for(const l of aSalvar){
       try{
-        await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
-        produtosCotacaoSalvos.add(r.produtoEsperado);
+        // A ficha é lida ANTES de gravar: o que a cotação não sabe
+        // (código, prejuízo contábil...) vem dela. Erro de leitura pula
+        // este produto com aviso — nunca vira "produto novo".
+        const existente = await lerFichaParaRegravar(l.nomeDestino, l.salvo);
+        const dados = fichaSobreExistente(registroProdutoLote(l.r, cfg, fornecedor, l.venda), existente);
+        dados.produto = l.nomeDestino;
+        await storageSet(chaveDoProduto(l.nomeDestino), JSON.stringify(dados));
+        produtosCotacaoSalvos.add(l.r.produtoEsperado);
         salvos++;
-      }catch(e){ console.error('Erro ao salvar '+r.produtoEsperado, e); }
+      }catch(e){
+        console.error('Erro ao salvar '+l.r.produtoEsperado, e);
+        falhas.push({ produto: l.r.produtoEsperado, erro: e });
+      }
     }
     if(salvos) await atualizarListaSalvos(); // reindexa os preços de venda
     renderListaLote();
     popularSelectIndividual();
-    $('loteMsg').textContent = salvos > 0
+    // Falha alto: antes o produto que não gravou só aparecia no console.
+    const textoFalhas = falhas.length
+      ? ' ⚠ ' + falhas.length + ' NÃO ' + (falhas.length === 1 ? 'foi salvo' : 'foram salvos') + ' (' +
+        falhas.slice(0, 3).map(f => f.produto).join(', ') + (falhas.length > 3 ? '…' : '') + '): ' + App.erroDe(falhas[0].erro) + '.'
+      : '';
+    $('loteMsg').textContent = (salvos > 0
       ? ('✓ ' + salvos + ' produto(s) salvo(s) em Produtos Salvos.')
-      : 'Nenhum produto salvo — preencha o preço de venda de pelo menos um produto.';
-  });
+      : 'Nenhum produto salvo.') + textoFalhas;
+    if(falhas.length) App.toastErro(falhas.length + (falhas.length === 1 ? ' produto não foi salvo' : ' produtos não foram salvos'), falhas[0].erro);
+  }, $('salvarLoteBtn')));
 
   // ---- Modo individual ----
   // Item removido ou preco alterado na tabela: a lista do modo
@@ -7084,6 +7287,14 @@ Tupan</textarea>
     });
   }
 
+  // "Prejuízo contábil" da ficha que o Modo Individual carregou (0 em
+  // produto novo). O formulário não tem esse campo e o salvamento
+  // preserva o da ficha — a prévia calcula com ele para mostrar a margem
+  // que Produtos salvos vai mostrar depois de salvar.
+  let indPrejuizoContabil = 0;
+
+  // É daqui que saem a prévia de margem E a ficha gravada por "Salvar
+  // este produto": os dois têm de usar a mesma configuração normalizada.
   function configIndividual(){
     return normalizarCfg({
       frete: $('indFrete').value, pctCredFrete: $('indPctCredFrete').value,
@@ -7092,7 +7303,8 @@ Tupan</textarea>
       avariasPct: $('indAvariasPct').value, bonificacao: $('indBonificacao').value,
       tipoBonificacao: parseInt($('indTipoBonificacao').value,10),
       comST: parseInt($('indComST').value,10),
-      credIcmsFrete: parseInt($('indCredIcmsFrete').value,10)
+      credIcmsFrete: parseInt($('indCredIcmsFrete').value,10),
+      prejuizoContabil: indPrejuizoContabil
     });
   }
 
@@ -7127,13 +7339,15 @@ Tupan</textarea>
 
   // Lê a ficha gravada do produto (o registro cru, como o formulário
   // guarda) para o Modo Individual partir dela em vez de zerar tudo.
+  //
+  // Erro de LEITURA sobe (não vira null): com null o formulário abria com
+  // os padrões de produto novo, sem aviso nenhum, e "Salvar este produto"
+  // punha IPI 0,65 / avarias 1,5 / frete zero por cima da ficha que não
+  // foi lida. Quem chama mostra o erro e não abre o formulário.
   async function fichaGravadaDe(r){
     const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
     if(!salvo) return null;
-    try{
-      const res = await storageGet(chaveDoProduto(salvo.nome));
-      return res && res.value ? JSON.parse(res.value) : null;
-    }catch(e){ return null; }
+    return lerFichaParaRegravar(salvo.nome, salvo);
   }
 
   $('individualSelect').addEventListener('change', async ()=>{
@@ -7147,9 +7361,24 @@ Tupan</textarea>
     // Produto que já tem ficha: frete, ST, crédito, IPI e avarias vêm
     // dela — salvar sem mexer em nada mantém a ficha como estava. Sem
     // ficha, os padrões de sempre.
-    const ficha = await fichaGravadaDe(r);
+    let ficha;
+    try{
+      // A lista é quem diz se o produto já tem ficha: sem ela todo
+      // produto abriria aqui como novo (ver exigirListaDeProdutos).
+      await exigirListaDeProdutos();
+      ficha = await fichaGravadaDe(r);
+    }catch(e){
+      console.error(e);
+      if($('individualSelect').value !== idx) return; // trocou de item enquanto lia
+      $('individualForm').style.display = 'none';
+      $('individualSelect').value = '';
+      $('individualMsg').textContent = 'Não foi possível abrir "' + r.produtoEsperado + '": ' + App.erroDe(e) + '. Escolha o produto de novo.';
+      return;
+    }
     if($('individualSelect').value !== idx) return; // trocou de item enquanto lia
+    $('individualMsg').textContent = '';
     const t = (ficha && ficha.toggles) || {};
+    indPrejuizoContabil = t.prejuizoContabil ? 1 : 0;
     const campo = (id, chave, padrao) => { $(id).value = ficha && ficha[chave] != null && ficha[chave] !== '' ? String(ficha[chave]) : padrao; };
     campo('indFrete', 'frete', ''); campo('indPctCredFrete', 'pctCredFrete', ''); campo('indValorST', 'valorST', ''); campo('indIcmsCredito', 'icmsCredito', '');
     campo('indIpi', 'ipi', '0.65'); campo('indCustoFinanceiroPct', 'custoFinanceiroPct', ''); campo('indAvariasPct', 'avariasPct', '1.5'); campo('indBonificacao', 'bonificacao', '');
@@ -7188,7 +7417,9 @@ Tupan</textarea>
     atualizarMargemIndividual();
   });
 
-  $('salvarIndividualBtn').addEventListener('click', async ()=>{
+  // Um clique por vez (App.umPorVez): com a pergunta e a leitura da ficha
+  // no meio, o segundo clique gravava de novo.
+  $('salvarIndividualBtn').addEventListener('click', App.umPorVez(async ()=>{
     const idx = $('individualSelect').value;
     if(idx === ''){ App.toast('Escolha um produto primeiro.', 'info'); return; }
     const r = itensValidosParaSalvar()[parseInt(idx,10)];
@@ -7196,28 +7427,39 @@ Tupan</textarea>
     const venda = $('indVenda').value;
     if(!venda || toNum(venda) <= 0){ App.toast('Preencha o preço de venda.', 'info'); $('indVenda').focus(); return; }
     const fornecedor = $('fornecedorProdutos').value.trim();
-    // Mesma regra do lote: atualiza o produto que já tem esse código,
-    // em vez de criar um segundo registro com o nome da planilha.
-    const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
-    const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
-    const dados = {
-      produto: nomeDestino,
-      fornecedor,
-      codigo: r.codigo || '',
-      codigoFornecedor: r.codigoRecebido || '',
-      custoNFe: String(r.precoRecebido),
-      frete: $('indFrete').value || '0',
-      pctCredFrete: $('indPctCredFrete').value || '0',
-      valorST: $('indValorST').value || '0',
-      icmsCredito: $('indIcmsCredito').value || '0',
-      ipi: $('indIpi').value || '0',
-      custoFinanceiroPct: $('indCustoFinanceiroPct').value || '0',
-      avariasPct: $('indAvariasPct').value || '0',
-      bonificacao: $('indBonificacao').value || '0',
-      venda,
-      toggles: { credIcmsFrete: parseInt($('indCredIcmsFrete').value,10), comST: parseInt($('indComST').value,10), prejuizoContabil: 0, tipoBonificacao: parseInt($('indTipoBonificacao').value,10) }
-    };
+    // A MESMA configuração da prévia de margem, já normalizada: o campo
+    // cujo toggle está desligado vai zerado. Antes a ficha era montada
+    // com o .value cru dos campos — inclusive os escondidos —, e a margem
+    // que a pessoa viu aqui não era a que a Calculadora mostrava depois.
+    const cfg = configIndividual();
+
+    // Custo vazio/zero ou valor negativo: mesma pergunta de "Salvar este
+    // produto" da Calculadora (a regra é do núcleo).
+    const avisos = Calculo.avisosDaFicha(valoresParaCalculo(r.precoRecebido, cfg, toNum(venda)));
+    if(avisos.length){
+      const ok = await App.confirmar({
+        titulo: 'Confira os valores antes de salvar',
+        mensagem: avisos.join('\n') + '\n\nCom isso a margem de "' + r.produtoEsperado + '" não vai refletir a realidade. Salvar assim mesmo?',
+        confirmar: 'Salvar mesmo assim',
+        perigo: true
+      });
+      if(!ok) return;
+    }
+
     try{
+      // Quem responde "já existe?" é a lista de Produtos salvos (ver
+      // exigirListaDeProdutos).
+      await exigirListaDeProdutos();
+      // Mesma regra do lote: atualiza o produto que já tem esse código,
+      // em vez de criar um segundo registro com o nome da planilha.
+      const salvo = produtoSalvoDe(r.produtoEsperado, r.codigo);
+      const nomeDestino = salvo ? salvo.nome : r.produtoEsperado;
+      // A ficha é lida ANTES de gravar: o que a cotação não sabe (código,
+      // prejuízo contábil...) vem dela. Erro de leitura aborta com aviso
+      // — nunca vira "produto novo".
+      const existente = await lerFichaParaRegravar(nomeDestino, salvo);
+      const dados = fichaSobreExistente(registroProdutoLote(r, cfg, fornecedor, venda), existente);
+      dados.produto = nomeDestino;
       await storageSet(chaveDoProduto(nomeDestino), JSON.stringify(dados));
       produtosCotacaoSalvos.add(r.produtoEsperado);
       await atualizarListaSalvos(); // reindexa preço de venda e códigos
@@ -7229,7 +7471,7 @@ Tupan</textarea>
       console.error(e);
       $('individualMsg').textContent = 'Erro ao salvar: ' + (e && e.message ? e.message : 'erro desconhecido');
     }
-  });
+  }, $('salvarIndividualBtn')));
 
   function calcularFrete(){
     const precoTon = toNum($('freteTonelada').value);
@@ -7603,7 +7845,9 @@ Tupan</textarea>
 
       const feriados = (meta.feriados || []).slice().sort();
       const nomeMes = NOMES_MES_PAINEL[m - 1];
-      html += '<tr' + (mes === mesCorrente ? ' class="mes-corrente"' : '') + '>' +
+      // data-chave: a linha do mes e' reencontrada por ele, nao pela
+      // posicao (as linhas de "semanas" entram e saem no meio da tabela).
+      html += '<tr data-chave="' + mes + '"' + (mes === mesCorrente ? ' class="mes-corrente"' : '') + '>' +
         '<td>' + nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1) + '</td>' +
         '<td><input class="painel-num" type="text" inputmode="decimal" data-objetivo="' + mes + '"' +
           ' value="' + numBR(meta.objetivo != null ? meta.objetivo : null) + '"' +
@@ -8176,11 +8420,15 @@ Tupan</textarea>
     const pedidos = Object.assign({}, radarParametros.pedidos);
     if(b.dataset.rd === 'desfazer'){
       b.disabled = true;
-      const campos = {}; campos['pedidos.' + codigo] = firebase.firestore.FieldValue.delete();
+      // set + merge com o mapa aninhado, igual ao caminho que grava a
+      // marca. Com update('pedidos.' + codigo) o ponto do codigo virava
+      // separador de caminho: "AB.10" apagava pedidos.AB.10 (que nao
+      // existe) e a marca de verdade ficava no banco, voltando no F5.
+      const campos = { pedidos: { [codigo]: firebase.firestore.FieldValue.delete() } };
       // Erro de gravacao PARA aqui: antes a marca saia da tela mesmo sem
       // ter saido do banco, e voltava no F5.
       try{
-        await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).update(campos));
+        await App.comAuth(() => exigirDb().collection('config').doc(RADAR_PARAMETROS).set(campos, { merge: true }));
       }catch(e){ App.toastErro('Erro ao gravar', e); b.disabled = false; return; }
       delete pedidos[codigo];
       radarParametros.pedidos = pedidos;
@@ -8237,7 +8485,9 @@ Tupan</textarea>
       let resumoEtq = '';
       try{
         const cat = await App.comAuth(() => exigirDb().collection('config').doc(CATALOGO_ETQ).get());
-        const r = R.pisosParaEtiquetas(lido.itens, cat.exists ? cat.data() : null, R.eansComNcm(notasEmitidasCache || [], ['6907']), hoje);
+        // Com o estado das notas junto: nota CANCELADA nao prova que o
+        // produto e' piso (o nucleo pula a nota cancelada).
+        const r = R.pisosParaEtiquetas(lido.itens, cat.exists ? cat.data() : null, R.eansComNcm(notasEmitidasCache || [], ['6907'], notasInfoPorChave), hoje);
         if(r.doc.qtd){
           await App.comAuth(() => exigirDb().collection('config').doc(CATALOGO_ETQ).set(r.doc));
           resumoEtq = ' · Etiquetas: ' + r.atualizados + ' piso(s) com estoque atualizado' + (r.novos ? ', ' + r.novos + ' novo(s) pela nota' : '');

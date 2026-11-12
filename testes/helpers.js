@@ -119,6 +119,17 @@ conferir('parseDinheiroBR com R$', App.parseDinheiroBR('R$ 2.500.000'), 2500000)
 conferir('parseDinheiroBR com centavos nao muda', App.parseDinheiroBR('1.234,56'), 1234.56);
 conferir('parseDinheiroBR decimal simples nao muda', App.parseDinheiroBR('64.9'), 64.9);
 conferir('parseDinheiroBR nulo', App.parseDinheiroBR(null), null);
+// Auditoria externa de 11/11/2026: o sinal fora do lugar tirava o texto do
+// padrao de milhar e "-R$ 25.000" era lido como -25.
+conferir('parseDinheiroBR -R$ com milhar', App.parseDinheiroBR('-R$ 25.000'), -25000);
+conferir('parseDinheiroBR R$ - com milhar', App.parseDinheiroBR('R$ -25.000'), -25000);
+conferir('parseDinheiroBR sinal a direita com milhar', App.parseDinheiroBR('25.000-'), -25000);
+conferir('parseDinheiroBR sinal a direita com centavos', App.parseDinheiroBR('1.234,56-'), -1234.56);
+conferir('parseDinheiroBR milhoes negativos', App.parseDinheiroBR('-2.500.000'), -2500000);
+conferir('parseDinheiroBR positivo com milhar nao muda', App.parseDinheiroBR('R$ 25.000'), 25000);
+conferir('parseNumeroBR NaN e nulo', App.parseNumeroBR(NaN), null);
+conferir('parseNumeroBR Infinity e nulo', App.parseNumeroBR(Infinity), null);
+conferir('parseDinheiroBR NaN e nulo', App.parseDinheiroBR(NaN), null);
 conferir('somarDias vira o mes', App.somarDias('2026-01-31', 1), '2026-02-01');
 conferir('somarDias ano bissexto', App.somarDias('2028-02-28', 1), '2028-02-29');
 conferir('somarDias nao bissexto', App.somarDias('2026-02-28', 1), '2026-03-01');

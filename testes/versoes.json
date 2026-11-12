@@ -4,28 +4,28 @@
     "hash": "0b487952f9d26585"
   },
   "app-shared.js": {
-    "v": 32,
-    "hash": "3103c9271931e26f"
+    "v": 33,
+    "hash": "0f9908c43beb0a23"
   },
   "assistencias-nucleo.js": {
     "v": 8,
     "hash": "ace29bdba784c859"
   },
   "calculo-nucleo.js": {
-    "v": 9,
-    "hash": "690631e18ca339ec"
+    "v": 10,
+    "hash": "4c8788a483e8a656"
   },
   "concorrentes-nucleo.js": {
-    "v": 6,
-    "hash": "aa2cf9a62e262d92"
+    "v": 7,
+    "hash": "73a3303c997f2d21"
   },
   "custos-nucleo.js": {
-    "v": 4,
-    "hash": "1e6e0550443d1e6a"
+    "v": 5,
+    "hash": "4a23597ec43ee027"
   },
   "dda-nucleo.js": {
-    "v": 7,
-    "hash": "48e09fa24bfb5039"
+    "v": 8,
+    "hash": "7c6a1fb523ff8d88"
   },
   "etiquetas-nucleo.js": {
     "v": 15,
@@ -36,8 +36,8 @@
     "hash": "7dcee00ae6a10716"
   },
   "fiscal-nucleo.js": {
-    "v": 4,
-    "hash": "5777f6bca6f42cc9"
+    "v": 5,
+    "hash": "a028a79e3108628a"
   },
   "lancamentos-nucleo.js": {
     "v": 7,
@@ -52,11 +52,11 @@
     "hash": "371eb5374cdfe048"
   },
   "radar-nucleo.js": {
-    "v": 11,
-    "hash": "06a0ea967b1c11fb"
+    "v": 12,
+    "hash": "e6fec33ad2a9fa48"
   },
   "simulador-nucleo.js": {
-    "v": 6,
-    "hash": "a35e68a9a98f9175"
+    "v": 7,
+    "hash": "3ddb93fd35e54361"
   }
 }

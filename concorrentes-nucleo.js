@@ -64,7 +64,8 @@
         // virava a chave do catalogo e "Preço de Custo" virava o preco
         // de venda. As duas exclusoes fecham os casos reais.
         if (campo === 'codigo' && (texto.indexOf('barra') !== -1 || texto.indexOf('ncm') !== -1)) continue;
-        if (campo === 'preco' && texto.indexOf('custo') !== -1) continue;
+        // ...e "Valor Compra" / "Vlr Compra" tambem nao e' preco de venda.
+        if (campo === 'preco' && (texto.indexOf('custo') !== -1 || texto.indexOf('compra') !== -1)) continue;
         // "Preco Un." e' preco, nao unidade.
         if (campo === 'unidade' && /preco|valor|vlr/.test(texto)) continue;
         var bate = CAMPOS_CATALOGO[i][1].some(function (p) { return texto.indexOf(p) !== -1; });

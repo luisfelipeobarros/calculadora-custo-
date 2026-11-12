@@ -423,5 +423,19 @@ eq('parsePrazo com letra -> null', S.parsePrazo('abc'), null);
     soma(meses.map(m => m.simuladoCent)), 0);
 }
 
+// Auditoria externa de 11/11/2026.
+{
+  const paga = { id: 'x_2026-10-10', recorrente: true, pago: true, vencimento: '2026-10-10', diaFixo: 10, valor: 100 };
+  eq('parcela PAGA sem a seguinte nao projeta (a seguinte foi excluida, ou a criacao falhou e o aviso cobre)',
+    S.projetarInternos([paga], '2027-01-31'), []);
+  eq('...mas continua aparecendo no aviso de recorrente interrompido', S.recorrentesSemSucessor([paga]).length, 1);
+  const aberta = { id: 'x_2026-11-10', recorrente: true, pago: false, vencimento: '2026-11-10', diaFixo: 10, valor: 100, origemId: 'x_2026-10-10' };
+  eq('com a seguinte em aberto, a projecao sai dela (uma serie so, sem dobra)',
+    S.projetarInternos([paga, aberta], '2027-01-31').map(p => p.vencimento), ['2026-12-10', '2027-01-10']);
+  const zerado = S.gerarCompras({ prazoDias: [30, 60], valorCent: 10000, stCent: 500, dataPrimeira: '2026-11-10', ateData: '2026-12-31', ajustes: { '2026-11': -100 } });
+  eq('mes zerado pelo ajuste de -100% nao gera parcela de R$ 0,00 (nem ST); o mes seguinte sai normal',
+    zerado.map(p => [p.compra, p.cent, !!p.st]), [['2026-12-10', 5000, false], ['2026-12-10', 5000, false], ['2026-12-10', 500, true]]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

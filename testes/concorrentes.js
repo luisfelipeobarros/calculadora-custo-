@@ -270,5 +270,11 @@ const ultimas = {
   eq('sem preco nenhum -> null', C.precoReferenciaCent({ meuPreco: null, precoCatalogoCent: null }, true), null);
 }
 
+// Auditoria externa de 11/11/2026.
+{
+  const r = C.lerCatalogo([['Código', 'Descrição', 'Un', 'Valor Compra', 'Preço Venda', 'Fabricante'], ['840', 'PISO A', 'M²', '20', '36.9', 'CERAL']]);
+  eq('coluna de COMPRA nao e preco de venda: o preco lido e o da coluna de venda', r.itens && r.itens[0] && r.itens[0].precoCent, 3690);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

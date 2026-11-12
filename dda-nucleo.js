@@ -1198,6 +1198,14 @@
       } else if (r.vencimento && r.vencimento < d.vencimento) {
         problemas.push({ tipo: 'vencimentoAntecipado', gravidade: GRAVIDADE.AMARELO,
           texto: 'o boleto vence ' + App.fmtData(r.vencimento) + ', antes do nosso ' + App.fmtData(d.vencimento) });
+      } else if (r.vencimento && r.vencimento > d.vencimento && d.pago !== true) {
+        // O inverso nao e' problema de dinheiro (vence depois), mas a data
+        // daqui esta' errada: o titulo aparece como atrasado sem estar.
+        // Informativo — antes passava como OK calado (auditoria externa
+        // de 11/11/2026).
+        problemas.push({ tipo: 'vencimentoPosterior', gravidade: GRAVIDADE.BRANCO,
+          texto: 'o boleto vence ' + App.fmtData(r.vencimento) + ', depois do nosso ' + App.fmtData(d.vencimento) +
+            ' — se foi prorrogado, atualize o vencimento aqui' });
       }
     });
 

@@ -159,7 +159,9 @@
       var stMes = Math.round(stCentBase * fator);
       var parcelas = dividirParcelas(valorMes, prazo.length, primeiraMes);
 
-      for (var i = 0; i < prazo.length; i++) {
+      // Mes zerado pelo ajuste (-100%) nao gera parcela: parcelas de
+      // R$ 0,00 so' inflavam a contagem no detalhe do mes.
+      for (var i = 0; valorMes > 0 && i < prazo.length; i++) {
         saida.push({
           compra: dataCompra,
           vencimento: somarDias(dataCompra, prazo[i]),
@@ -310,6 +312,13 @@
     var projecoes = [];
     (pagamentos || []).forEach(function (p) {
       if (p.recorrente !== true || !p.vencimento) return;
+      // Parcela PAGA nao projeta. No fluxo normal ela ja' tem a seguinte
+      // (criada ao pagar) e pararia na primeira volta; sem a seguinte, ou
+      // a pessoa a EXCLUIU de proposito, ou a criacao falhou — e projetar
+      // a partir dela ressuscitava a serie inteira no Painel e no
+      // Simulador (auditoria externa de 11/11/2026). O segundo caso tem
+      // dono: o aviso de recorrente interrompido (recorrentesSemSucessor).
+      if (p.pago === true) return;
 
       // parcelaAtual ausente conta como 1 — `undefined >= 12` e' falso
       // e a corrente nunca terminaria (mesma guarda da recorrencia).

@@ -361,5 +361,26 @@ eq('sem filtro passa tudo', m.filtrarLinhas(linhas, {}).length, 4);
     m.destaquesAutomaticos(dados, 2026).filter(d => d.tipo === 'precoVolume').map(d => d.nome), ['F', 'G']);
 }
 
+// Auditoria externa de 11/11/2026: o periodo comparavel de um recorte e' o
+// da LOJA. Fornecedor que nao vendeu num mes em que a loja funcionou
+// caiu 100% naquele mes — antes o mes saia da conta e a queda sumia.
+{
+  const l = (ano, mes, fat, qtd) => ({ ano, mes, fornecedor: 'F', categoria: 'C', quantidade: qtd || 1, faturamento: fat, lucro: 1 });
+  // F vendeu jan e mai/2025 (100 + 50); em 2026 so' jan (100). A loja esta' aberta de jan a mai/2026.
+  const dados = [l(2025, 1, 100), l(2025, 5, 50), l(2026, 1, 100)];
+  const loja = [1, 2, 3, 4, 5];
+  eq('acumulado com os meses da LOJA: maio entra na conta (100 x 150 = -33,3%), nao some',
+    Math.round(m.crescimentoAcumulado(dados, 2026, loja).faturamento.cresc * 1000), -333);
+  eq('sem os meses da loja, vale a regra antiga (so os meses do proprio recorte: 100 x 100 = 0%)',
+    m.crescimentoAcumulado(dados, 2026).faturamento.cresc, 0);
+  const mensal = m.crescimentoMensalComparado(dados, 2026, loja);
+  eq('mes a mes: maio (loja aberta, recorte sem venda, havia base) e -100%; fevereiro (sem base) continua null',
+    [mensal.valores[4], mensal.valores[1], mensal.valores[0]], [-1, null, 0]);
+  eq('mes que a loja ainda nao teve (junho) continua null — nada de -100% inventado',
+    m.crescimentoMensalComparado([l(2025, 6, 80), l(2026, 1, 10), l(2025, 1, 10)], 2026, loja).valores[5], null);
+  eq('recorte sem venda nenhuma no ano, com a loja aberta: -100% no acumulado (antes: null)',
+    m.crescimentoAcumulado([l(2025, 1, 100)], 2026, [1]).faturamento.cresc, -1);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

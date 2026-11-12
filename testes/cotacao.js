@@ -525,5 +525,35 @@ eqRec('nota vinculada sem documento carregado nao vira "recebida"',
   statusRecebimentoCotacao(['chave-que-nao-veio'], estado),
   { total: 1, recebidas: 0, completa: false });
 
+// ── Auditoria externa de 11/11/2026 — salvar pelo Modo Lote / Individual ──
+// A ficha gravada parte da que JA' existe: o que a cotacao nao sabe
+// (codigo, prejuizo contabil, campos extras) nao pode sumir.
+{
+  const f = new Function(extrair('normalizarCodigo') + '\n' + extrair('fichaSobreExistente') + '\nreturn fichaSobreExistente;')();
+  const existente = { produto: 'TELHA', codigo: 'A10', codigoFornecedor: 'F-9', fornecedor: 'Forn', frete: '5', campoExtra: 'x',
+    toggles: { comST: 1, credIcmsFrete: 0, prejuizoContabil: 1, tipoBonificacao: 0 } };
+  const nova = { produto: 'TELHA', codigo: '', codigoFornecedor: '', fornecedor: '', frete: '8', venda: '99',
+    toggles: { comST: 0, credIcmsFrete: 1, prejuizoContabil: 0, tipoBonificacao: 1 } };
+  const r = f(nova, existente);
+  eqRec('linha sem codigo (casou pelo nome) NAO apaga o codigo nem o do fornecedor da ficha', [r.codigo, r.codigoFornecedor], ['A10', 'F-9']);
+  eqRec('o prejuizo contabil da ficha e preservado; os outros toggles sao os da cotacao',
+    r.toggles, { comST: 0, credIcmsFrete: 1, prejuizoContabil: 1, tipoBonificacao: 1 });
+  eqRec('o que a cotacao configurou vale (frete, venda); campo que so a ficha tem continua; fornecedor em branco nao apaga',
+    [r.frete, r.venda, r.campoExtra, r.fornecedor], ['8', '99', 'x', 'Forn']);
+  eqRec('codigo ja preenchido nao e trocado pelo da planilha (quem manda e a ficha)', f(Object.assign({}, nova, { codigo: 'B20' }), existente).codigo, 'A10');
+  eqRec('ficha sem codigo ganha o da cotacao', f(Object.assign({}, nova, { codigo: 'B20' }), Object.assign({}, existente, { codigo: '' })).codigo, 'B20');
+  eqRec('produto novo: a ficha e a da cotacao, sem mexer', f(nova, null), nova);
+
+  const trecho = (id, n) => { const i = html.indexOf("$('" + id + "').addEventListener"); return i === -1 ? '' : html.slice(i, i + n); };
+  const ind = trecho('salvarIndividualBtn', 5000), lote = trecho('salvarLoteBtn', 7000);
+  eqRec('Modo Individual: grava a configuracao NORMALIZADA (a mesma da previa), le a ficha antes e nao le campo oculto direto',
+    [/configIndividual\(\)/.test(ind), /lerFichaParaRegravar\(/.test(ind), /fichaSobreExistente\(/.test(ind), /\$\('indValorST'\)\.value/.test(ind)], [true, true, true, false]);
+  eqRec('Modo Lote: le a ficha antes de regravar, preserva pelo fichaSobreExistente e avisa dos ja cadastrados',
+    [/lerFichaParaRegravar\(/.test(lote), /fichaSobreExistente\(/.test(lote), /jaCadastrados/.test(lote)], [true, true, true]);
+  eqRec('Radar "Desfazer": nada de caminho com ponto montado a partir do codigo do produto', /\['pedidos\.' \+/.test(html), false);
+  eqRec('Historico: a margem nao forca mais prejuizoContabil: 0 por cima da ficha',
+    /venda: precoVenda, prejuizoContabil: 0/.test(html), false);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

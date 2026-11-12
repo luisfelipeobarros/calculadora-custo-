@@ -322,5 +322,40 @@ eq('todo grupo tem tipo valido', Object.keys(C.GRUPOS).filter(k => !C.TIPOS[C.GR
      /\.doc\('custos'\)\.set\(/.test(html), /cu\.config\.regras\.(push|splice)\(/.test(html)], [true, true, false, false]);
 }
 
+// Auditoria externa de 11/11/2026 — entrada nao classificada NAO abate o custo.
+{
+  const energia = L('4.2.1.1.0034', '1.1.1.2.0001', 'ENERGIA', 1000000);
+  const deposito = L('1.1.1.2.0001', '1.1.2.4.0001', 'DEPOSITO NAO IDENTIFICADO', 3000000);
+  const r = C.resumoDoMes([energia, deposito], {});
+  eq('deposito a regularizar (entrada) fica FORA do custo: 10.000 de energia continuam 10.000',
+    [r.custoTotalCentavos, r.pendenteCentavos], [1000000, 0]);
+  eq('a entrada sai contada a parte, para a tela avisar (nunca some calada)',
+    [r.entradasAClassificar.qtd, r.entradasAClassificar.centavos, r.entradasCentavos], [1, 3000000, 3000000]);
+  eq('SAIDA em valores a regularizar continua no "a classificar" e continua no custo total',
+    (x => [x.custoTotalCentavos, x.pendenteCentavos, x.entradasAClassificar.qtd])(C.resumoDoMes([L('1.1.2.4.0001', '1.1.1.2.0001', 'SEM PADRAO NENHUM', 500000)], {})),
+    [500000, 500000, 0]);
+  // Regra de texto so' vale para saida: a entrada de cliente com a palavra no historico nao vira custo negativo.
+  const grupoOp = Object.keys(C.GRUPOS).filter(g => C.GRUPOS[g].tipo === 'operacional')[0];
+  const pix = L('1.1.1.2.0001', '1.1.2.1.0001', 'PIX JOAO ALUGUEL', 500000);
+  const rr = C.resumoDoMes([pix], { regras: [{ contem: 'aluguel', grupo: grupoOp }] });
+  eq('regra de texto NAO pega entrada de cliente: custo operacional zero, entrada na receita',
+    [rr.custoOperacionalCentavos, rr.custoTotalCentavos, C.classificar(pix, { regras: [{ contem: 'aluguel', grupo: grupoOp }] }).tipo], [0, 0, 'receita']);
+  eq('a mesma regra continua valendo para a SAIDA',
+    C.classificar(L('1.1.2.4.0001', '1.1.1.2.0001', 'ALUGUEL GALPAO', 100000), { regras: [{ contem: 'aluguel', grupo: grupoOp }] }).grupo, grupoOp);
+  // Estorno de verdade continua abatendo: entrada numa conta de custo, ou escolhida a mao.
+  eq('entrada em conta de despesa (estorno) continua abatendo o grupo',
+    C.resumoDoMes([energia, L('1.1.1.2.0001', '4.2.1.1.0034', 'ESTORNO ENERGIA', 200000)], {}).custoTotalCentavos, 800000);
+  eq('entrada a regularizar com grupo escolhido A MAO vale como estorno daquele grupo',
+    C.resumoDoMes([energia, Object.assign({}, deposito, { grupoCusto: grupoOp })], {}).custoTotalCentavos, 1000000 - 3000000);
+}
+
+// Linhas de modelo SEM numero (varios pares no rodape) sao contadas, nao viram erro de pernas.
+{
+  const linha = (num, conta, dc) => { const r = new Array(19).fill(''); r[0] = num; r[5] = conta; r[6] = dc; return r; };
+  const lido = C.lerLayoutContador([linha('', '4.2.1.1.0034', 'D'), linha('', '1.1.1.2.0001', 'C'), linha('', '4.2.1.1.0034', 'D'), linha('', '1.1.1.2.0001', 'C')], 'x.xlsx');
+  eq('modelo sem numero no rodape: 4 linhas contadas como modelo, nenhum problema de pernas',
+    [lido.lancamentos.length, lido.problemas.length, lido.linhasDeModelo], [0, 0, 4]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

@@ -73,7 +73,10 @@ const cotacoes = [
 ];
 const cart = N.carteira(cotacoes);
 eq('carteira: soma os pedidos do codigo; data = pedidoEm (ou a da cotacao); fornecedor do mais recente',
-  [cart['200'], cart['100'].em, cart['400']], [{ qtd: 120, restante: 0, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2, ids: [] }, '2026-10-01', undefined]);
+  [(c => ({ qtd: c.qtd, restante: c.restante, em: c.em, fornecedor: c.fornecedor, cotacoes: c.cotacoes, ids: c.ids }))(cart['200']), cart['100'].em, cart['400']],
+  [{ qtd: 120, restante: 0, em: '2026-10-15', fornecedor: 'F1', cotacoes: 2, ids: [] }, '2026-10-01', undefined]);
+eq('carteira guarda UM registro por pedido (nao um so com a data do mais novo)',
+  cart['200'].pedidos.map(p => [p.qtd, p.em, p.parcial]), [[90, '2026-10-15', false], [30, '2026-09-01', false]]);
 eq('carteira guarda os ids das cotacoes de origem', N.carteira([{ id: 'c1', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }, { id: 'c2', itens: [{ codigo: '9', status: 'pedido', quantidadeEsperada: 1 }] }])['9'].ids, ['c1', 'c2']);
 
 const itensDocs = [
@@ -355,6 +358,70 @@ eq('catalogo gravado sem o mapa solto (um campo de texto so)', [typeof novo.doc.
   const doEtq = E.montarCatalogo([{ codigo: '200', nome: 'PISO X 60X60', ean: '7899000000011', quantidade: 5, classe: 'Piso' }], '2026-10-20');
   eq('o Radar atualiza o catalogo que o Etiquetas gravou (formato novo)',
     (r => [r.atualizados, JSON.parse(r.doc.porCodigoJson)['200'].q])(N.pisosParaEtiquetas(lido.itens, doEtq, new Set(), '2026-10-23')), [1, 20]);
+}
+
+// ── Auditoria externa de 11/11/2026 ──────────────────────────
+{
+  const prod = { p1: { n: 'PISO P1', e: '7890000000017', v: 300, q: 0 } };
+  const base = { produtos: prod, periodoDias: 30, parametros: { coberturaDias: 30, pedidoVelhoDias: 60, compraMinima: 0, minVendasFeitas: 0 }, movimentos: {}, hoje: '2026-11-11' };
+  // codigo com letra minuscula: fichas vem em MAIUSCULAS do index.html, a carteira agora tambem
+  const cotMin = [{ id: 'c1', fornecedor: 'F', itens: [{ codigo: 'p1', status: 'pedido', quantidadeEsperada: 100, pedidoEm: '2026-11-01' }] }];
+  const lin = N.calcularRadar(Object.assign({}, base, { fichas: { P1: { fornecedor: 'F', custo: 10, venda: 20 } }, carteira: N.carteira(cotMin) }))[0];
+  eq('codigo com minuscula acha a ficha (chave em maiusculas) e a propria carteira',
+    [lin.venda, lin.carteira && lin.carteira.qtd, lin.flags.carteira], [20, 100, true]);
+  eq('cotacao x NF-e: barras do produto achadas mesmo com a caixa do codigo diferente',
+    N.casarCotacaoComNotas({ fornecedor: 'FORN X', itens: [{ codigo: 'AB1', produto: 'NOME QUE NAO CASA', status: 'pedido', pedidoEm: '2026-11-01', quantidadeEsperada: 5 }] },
+      [{ chave: 'K1', numero: '1', dataEmissao: '2026-11-05', nomeEmitente: 'FORN X LTDA', itens: [{ codigo: 'zzz', ean: '7890000000024', descricao: 'OUTRA COISA', qtd: 5 }] }],
+      {}, { ab1: '7890000000024' }, '2026-11-11').itens[0].status, 'transito');
+
+  // restante de pedido parcial ENVELHECE (contado da ultima nota)
+  const parcial = (faturadoEm) => N.calcularRadar(Object.assign({}, base, { fichas: {}, carteira: N.carteira([{ id: 'c2', fornecedor: 'F',
+    itens: [{ codigo: 'p1', status: 'transito', pedidoEm: '2026-06-01', faturadoEm: faturadoEm, parcial: { pedido: 100, faturado: 40 } }] }]) }))[0];
+  eq('restante de parcial com nota recente continua em carteira', [parcial('2026-10-20').flags.carteira, parcial('2026-10-20').flags.pedidoAntigo], [true, false]);
+  eq('restante de parcial parado ha mais que o prazo sai da carteira e cai em Pedido antigo',
+    [parcial('2026-07-01').flags.carteira, parcial('2026-07-01').flags.pedidoAntigo, parcial('2026-07-01').sugestao > 0], [false, true, true]);
+
+  // dois pedidos do mesmo produto: a nota do antigo nao vale para o novo
+  const dois = N.carteira([
+    { id: 'velho', fornecedor: 'F', itens: [{ codigo: 'p1', status: 'pedido', quantidadeEsperada: 50, pedidoEm: '2026-10-01' }] },
+    { id: 'novo', fornecedor: 'F', itens: [{ codigo: 'p1', status: 'pedido', quantidadeEsperada: 70, pedidoEm: '2026-11-05' }] }]);
+  const movs = { '7890000000017': { faturado: { qtd: 50, em: '2026-10-20', fornecedor: 'F', numero: '9' }, recebido: null } };
+  const l2 = N.calcularRadar(Object.assign({}, base, { fichas: {}, carteira: dois, movimentos: movs }))[0];
+  eq('dois pedidos: o antigo virou a nota (sai da carteira), o novo continua pedido vivo — a sugestao desconta os 70 e os 50 faturados',
+    [l2.flags.carteira, l2.flags.faturado, l2.sugestao], [true, true, 300 - 70 - 50]);
+
+  // status rebaixado a' mao larga a nota e a sincronizacao nao a devolve
+  const docs = [{ chave: 'N9', numero: '9', dataEmissao: '2026-11-03', nomeEmitente: 'FORN X LTDA', itens: [{ codigo: 'FX', ean: '', descricao: 'PISO Y', qtd: 10 }] }];
+  const cot = { fornecedor: 'FORN X', itens: [{ codigo: '7', codigoRecebido: 'FX', produto: 'PISO Y', status: 'pedido', pedidoEm: '2026-11-01', quantidadeEsperada: 10 },
+                                              { codigo: '8', codigoRecebido: 'FX', produto: 'PISO Y', status: 'pedido', pedidoEm: '2026-11-01', quantidadeEsperada: 10 }] };
+  const casado = N.casarCotacaoComNotas(cot, docs, {}, {}, '2026-11-11');
+  const rebaixado = N.mudarStatusItem(casado.itens[0], 'pedido', '2026-11-11');
+  eq('rebaixar a mao: o item larga a nota (campos da NF limpos) e guarda a recusa',
+    [rebaixado.status, rebaixado.chaveNfe, rebaixado.notasNfe, rebaixado.nfeRecusadas], ['pedido', null, null, ['N9']]);
+  const depois = N.casarCotacaoComNotas({ fornecedor: 'FORN X', chavesNfe: casado.chavesNfe, itens: [rebaixado, casado.itens[1]] }, docs, {}, {}, '2026-11-11');
+  eq('a sincronizacao seguinte NAO devolve o item rebaixado; o outro item da mesma nota continua casado',
+    [depois.itens[0].status, depois.itens[1].status], ['pedido', 'transito']);
+  eq('subir o status a mao nao larga nota nenhuma', N.mudarStatusItem(casado.itens[0], 'recebido', '2026-11-11').chaveNfe, 'N9');
+  const revinc = N.vincularNota({ itens: [rebaixado], chavesNfe: [] }, 'N9');
+  eq('vincular a nota de novo desfaz a recusa do item', [revinc.itens[0].nfeRecusadas, revinc.chavesNfe], [null, ['N9']]);
+
+  // nota antiga (fora das carregadas) nao e' apagada pela 2a nota do parcial
+  const itemParcial = { codigo: '7', codigoRecebido: 'FX', produto: 'PISO Y', status: 'transito', pedidoEm: '2026-05-01', quantidadeEsperada: 100,
+    chaveNfe: 'VELHA', notasNfe: [{ chave: 'VELHA', numero: '1', em: '2026-05-10', qtd: 40, recebida: true }], qtdNfe: 40, parcial: { faturado: 40, pedido: 100 } };
+  const r2 = N.casarCotacaoComNotas({ fornecedor: 'FORN X', chavesNfe: ['VELHA'], itens: [itemParcial] },
+    [{ chave: 'NOVA', numero: '2', dataEmissao: '2026-11-03', nomeEmitente: 'FORN X LTDA', itens: [{ codigo: 'FX', descricao: 'PISO Y', qtd: 60 }] }],
+    { NOVA: { noSistema: true, noSistemaEm: '2026-11-08' } }, {}, '2026-11-11').itens[0];
+  eq('2a nota de um parcial soma com a 1a (que saiu da janela): 40 + 60 fecha o pedido como recebido',
+    [r2.qtdNfe, r2.notasNfe.map(n => n.chave).sort(), r2.parcial, r2.status], [100, ['NOVA', 'VELHA'], null, 'recebido']);
+
+  // catalogo do Etiquetas: o que veio agora corrige nome e barras; nota cancelada nao conta
+  const cat0 = { porCodigoJson: JSON.stringify({ '5': { n: 'NOME VELHO', e: '111', q: 1 } }) };
+  eq('catalogo: nome e barras corrigidos na planilha chegam ao catalogo',
+    JSON.parse(N.pisosParaEtiquetas([{ codigo: '5', nome: 'NOME NOVO', ean: '222', estoque: 9 }], cat0, new Set(), '2026-11-11').doc.porCodigoJson)['5'], { n: 'NOME NOVO', e: '222', q: 9 });
+  eq('catalogo: planilha sem barras nao apaga as que ja estavam',
+    JSON.parse(N.pisosParaEtiquetas([{ codigo: '5', nome: '', ean: '', estoque: 9 }], cat0, new Set(), '2026-11-11').doc.porCodigoJson)['5'], { n: 'NOME VELHO', e: '111', q: 9 });
+  const dN = [{ chave: 'C1', itens: [{ ncm: '69072300', ean: '333' }] }, { chave: 'C2', itens: [{ ncm: '69072300', ean: '444' }] }];
+  eq('eans com NCM 6907: nota cancelada fica de fora', [...N.eansComNcm(dN, ['6907'], { C1: { status: 'cancelada' } })], ['444']);
 }
 
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');

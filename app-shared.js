@@ -133,7 +133,9 @@
   // "1,500"); virgula em qualquer outra posicao e' milhar e sai.
   function parseNumeroBR(v) {
     if (v === '' || v == null) return null;
-    if (typeof v === 'number') return v;
+    // NaN e Infinity (celula com erro de formula, divisao por zero) nao
+    // sao valor: null, como qualquer outra coisa ilegivel.
+    if (typeof v === 'number') return isFinite(v) ? v : null;
     var s = String(v).trim();
     // Sinal fora do lugar (auditoria de 11/11/2026): relatorio de banco
     // e de ERP escreve o negativo a' direita ("1.234,56-") ou antes do
@@ -181,8 +183,19 @@
   // assistencia), "25.000" sem virgula e' vinte e cinco mil — use
   // ESTE nos campos assim.
   function parseDinheiroBR(v) {
-    if (typeof v === 'string' && /^\s*(R\$\s*)?-?\d{1,3}(\.\d{3})+\s*$/.test(v)) {
-      return parseNumeroBR(v.replace(/\./g, ''));
+    if (typeof v === 'string') {
+      // O sinal sai ANTES de olhar o milhar, onde quer que esteja
+      // ("-25.000", "-R$ 25.000", "R$ -25.000", "25.000-"): com ele
+      // no caminho o texto nao casava com o padrao de milhar e caia no
+      // leitor de planilha, que lia vinte e cinco mil como -25
+      // (auditoria externa de 11/11/2026).
+      var s = v.trim();
+      var negativo = /^-/.test(s) || /^R\$\s*-/i.test(s) || /\d\s*-$/.test(s);
+      var corpo = s.replace(/^-\s*/, '').replace(/^R\$\s*/i, '').replace(/^-\s*/, '').replace(/\s*-$/, '').trim();
+      if (/^\d{1,3}(\.\d{3})+$/.test(corpo)) {
+        var n = parseNumeroBR(corpo.replace(/\./g, ''));
+        return n == null ? null : (negativo ? -n : n);
+      }
     }
     return parseNumeroBR(v);
   }
@@ -407,7 +420,12 @@
         if (ev.key === 'Escape' && !op.obrigatorio) { ev.preventDefault(); fechar(null); return; }
         if (ev.key !== 'Tab') return;
         // Prende o Tab dentro do modal.
-        var focaveis = caixa.querySelectorAll('button, input, select, textarea, a[href]');
+        // Desabilitado ou oculto nao recebe foco: se o ULTIMO da lista
+        // estivesse desabilitado, o Tab nunca "chegava" nele e escapava
+        // do modal para a pagina de tras.
+        var focaveis = Array.prototype.filter.call(
+          caixa.querySelectorAll('button, input, select, textarea, a[href]'),
+          function (el) { return !el.disabled && !el.hidden && el.type !== 'hidden'; });
         if (!focaveis.length) return;
         var primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1];
         if (ev.shiftKey && document.activeElement === primeiro) { ev.preventDefault(); ultimo.focus(); }
@@ -1729,13 +1747,23 @@
         var porId = new Map();
         emCache.forEach(function (d) { porId.set(d.id, d); });
         var novos = listaDeDocs(delta);
-        var aceitos = o.aceita ? novos.filter(o.aceita) : novos;
-        aceitos.forEach(function (d) { porId.set(d.id, d); });
+        // O que veio no delta e NAO e' mais aceito sai da resposta: a
+        // versao que esta' no cache e' a velha (antes ele so' deixava de
+        // entrar em `aceitos` e a copia antiga continuava na lista).
+        novos.forEach(function (d) {
+          if (!o.aceita || o.aceita(d)) porId.set(d.id, d);
+          else porId.delete(d.id);
+        });
         var docs = Array.from(porId.values());
-        gravarMetaLeitura(o.chave, {
-          dia: meta.dia, versao: versao,
-          ultima: Math.max(meta.ultima || 0, carimboMaximo(novos, o.campo)), qtd: docs.length
-        }, arm);
+        // So' resposta do SERVIDOR avanca o controle: sem rede o delta
+        // vem do cache, e marcar "ja' vi ate' aqui" esconderia o que
+        // mudou nesse intervalo.
+        if (!veioDoCache(delta)) {
+          gravarMetaLeitura(o.chave, {
+            dia: meta.dia, versao: versao,
+            ultima: Math.max(meta.ultima || 0, carimboMaximo(novos, o.campo)), qtd: docs.length
+          }, arm);
+        }
         return { docs: docs, modo: 'delta', motivo: null, lidasNoServidor: novos.length };
       });
     }, function () { return completa('cache do navegador indisponível'); });
@@ -1793,6 +1821,12 @@
         });
         doServidor.forEach(function (d) { porId.set(d.id, d); });
         if (porId.size < meta.qtd) return completa('cache do navegador incompleto');
+        // O total guardado acompanha o que a leitura parcial viu: sem
+        // isto ele ficava o da ultima leitura completa, e o documento
+        // que entrou na janela nesse meio nao contava na conferencia.
+        if (porId.size !== meta.qtd) {
+          gravarMetaLeitura(o.chave, { dia: meta.dia, ini: meta.ini, fim: meta.fim, qtd: porId.size }, arm);
+        }
         return { docs: Array.from(porId.values()), modo: 'parcial', motivo: null, lidasNoServidor: doServidor.length };
       }, function () { return completa('cache do navegador indisponível'); });
     });

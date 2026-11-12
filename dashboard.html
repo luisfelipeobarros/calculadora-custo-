@@ -462,15 +462,22 @@
   // uma categoria): cada mês do ano × o MESMO mês do ano anterior.
   // Mês sem venda no ano, ou sem base no ano anterior, é null — nunca
   // 0% nem −100% inventado (o ano em curso ainda não acabou).
-  function crescimentoMensalComparado(linhas, ano){
+  //
+  // mesesAbertos (opcional): os meses em que a LOJA INTEIRA vendeu no ano.
+  // Com ele, mês sem venda do recorte num mês em que a loja funcionou é
+  // queda de 100% de verdade — não "mês que ainda não aconteceu". Sem
+  // ele vale a regra antiga (o próprio recorte diz quais meses existem).
+  function crescimentoMensalComparado(linhas, ano, mesesAbertos){
     const atual = new Array(12).fill(0);
     const anterior = new Array(12).fill(0);
     linhas.forEach(l => {
       if(l.ano === ano) atual[l.mes - 1] += l.faturamento;
       else if(l.ano === ano - 1) anterior[l.mes - 1] += l.faturamento;
     });
+    const aberto = mesesAbertos ? new Set(mesesAbertos) : null;
     let temBase = false;
     const valores = atual.map((v, i) => {
+      if(aberto && aberto.has(i + 1) && !(v > 0) && anterior[i] > 0){ temBase = true; return -1; }
       if(!(v > 0) || !(anterior[i] > 0)) return null;
       temBase = true;
       return v / anterior[i] - 1;
@@ -484,15 +491,22 @@
   // contra os MESMOS meses do ano anterior — o ano em curso so' se
   // compara com o pedaco equivalente do anterior. Sem base no ano
   // anterior o crescimento e' null (nunca infinito).
-  function crescimentoAcumulado(linhas, ano){
+  //
+  // mesesAbertos (opcional): os meses em que a LOJA INTEIRA vendeu no ano.
+  // O período comparável de um recorte é o da loja, não o dele: um
+  // fornecedor que vendeu R$ 50 mil em maio do ano passado e nada em
+  // maio deste ano (com a loja aberta) tinha maio EXCLUÍDO da conta, e
+  // a queda sumia do acumulado (auditoria externa de 11/11/2026).
+  function crescimentoAcumulado(linhas, ano, mesesAbertos){
     const fa = new Array(12).fill(0), fn = new Array(12).fill(0);
     const qa = new Array(12).fill(0), qn = new Array(12).fill(0);
     linhas.forEach(l => {
       if(l.ano === ano){ fa[l.mes - 1] += l.faturamento; qa[l.mes - 1] += (l.quantidade || 0); }
       else if(l.ano === ano - 1){ fn[l.mes - 1] += l.faturamento; qn[l.mes - 1] += (l.quantidade || 0); }
     });
-    const meses = [];
-    fa.forEach((v, i) => { if(v > 0) meses.push(i); });
+    let meses = [];
+    if(mesesAbertos && mesesAbertos.length) meses = [...new Set(mesesAbertos)].map(m => m - 1).filter(i => i >= 0 && i < 12).sort((a, b) => a - b);
+    else fa.forEach((v, i) => { if(v > 0) meses.push(i); });
     if(!meses.length) return null;
     const soma = (arr) => meses.reduce((s, i) => s + arr[i], 0);
     const par = (atual, anterior) => ({ atual, anterior, cresc: (atual != null && anterior > 0) ? atual / anterior - 1 : null });
@@ -814,7 +828,9 @@
       // Acumulado do ano, na grandeza do modo aberto: % e R$ falam de
       // faturamento; Qtd, de quantidade; Preco medio, do preco medio do
       // periodo inteiro (faturamento ÷ quantidade, nao a media dos meses).
-      const ac = crescimentoAcumulado(base, anoSel);
+      // Os meses que existem no ano são os da LOJA (sem filtro).
+      const mesesDaLoja = [...new Set(linhasTodas.filter(l => l.ano === anoSel && l.faturamento > 0).map(l => l.mes))];
+      const ac = crescimentoAcumulado(base, anoSel, mesesDaLoja);
       if(ac){
         const campo = linhaModo === 'qtd' ? 'quantidade' : (linhaModo === 'preco' ? 'preco' : 'faturamento');
         const p = ac[campo];
@@ -901,7 +917,7 @@
         return;
       }
 
-      const m = crescimentoMensalComparado(base, anoSel);
+      const m = crescimentoMensalComparado(base, anoSel, mesesDaLoja);
       if(!m.temBase){
         caixa.style.display = 'none';
         vazio.style.display = '';
@@ -1361,8 +1377,10 @@
       console.error(e);
       $('estadoCarga').className = 'estado erro';
       $('estadoCarga').textContent = 'Não consegui ler a planilha (' + (e.message || e) + '). ' +
-        'Confira se a Sheet está compartilhada como "qualquer pessoa com o link — leitor", ' +
-        'se a aba se chama "dados" e se o SHEET_ID no topo do arquivo está certo. ' +
+        // Não se manda mais "tornar a planilha pública": o caminho certo
+        // é o banco (coleção `vendas`, enviada pelo script da planilha).
+        'As vendas vêm do banco, enviadas pelo script da planilha (função enviarVendas). ' +
+        'Se elas ainda não foram enviadas, rode o script; se a planilha já é privada, é o único caminho. ' +
         'Depois toque em Recarregar.';
       $('rodapeDash').style.display = '';
     }
@@ -1382,7 +1400,7 @@
     ['https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js', 'sha384-ZaR6mWzmJtrRibZ1Vm7SoHFr8OXjyAuGAXalGDKqbxFT18oi/z+oZLIRFkpeNor1'],
     ['https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js', 'sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj'],
     ['https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js', 'sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3'],
-    ['app-shared.js?v=32', null]
+    ['app-shared.js?v=33', null]
   ];
   const vxp = { fase: 'fora', erro: null, db: null, auth: null,
     notas: [], duplicatas: [], vinculos: { porRotulo: {}, porCnpj: {} } };
@@ -1423,7 +1441,7 @@
         // Como nos outros apps: desmarcado, a sessão morre ao fechar o
         // navegador (celular ou computador emprestado).
         '<label class="sub-periodo" for="loginLembrar" style="text-align:left; margin:0; display:flex; align-items:center; gap:8px; cursor:pointer;">' +
-        '<input id="loginLembrar" type="checkbox" checked style="width:16px; height:16px;"> Manter conectado neste aparelho</label>' +
+        '<input id="loginLembrar" type="checkbox"' + (lembrarPadrao() ? ' checked' : '') + ' style="width:16px; height:16px;"> Manter conectado neste aparelho</label>' +
         '<button type="submit">Entrar</button></form>';
       const u = $('loginUser');
       if(u) u.focus();
@@ -1451,7 +1469,13 @@
       .catch((e) => renderLogin('erro', (e && e.message) || String(e)));
   }
 
+  // A mesma preferência dos outros apps (chave app_manter_conectado do
+  // app-shared.js): quem desmarcou lá encontra desmarcado aqui.
+  function lembrarPadrao(){
+    try{ return localStorage.getItem('app_manter_conectado') !== '0'; }catch(e){ return true; }
+  }
   function entrar(usuario, senha, lembrar){
+    try{ localStorage.setItem('app_manter_conectado', lembrar === false ? '0' : '1'); }catch(e){}
     renderLogin('carregando');
     const P = window.firebase.auth.Auth.Persistence;
     vxp.auth.setPersistence(lembrar === false ? P.SESSION : P.LOCAL)

@@ -144,7 +144,10 @@ for(let i = 0; i < N; i++){
     // 'total' agora e' a soma das parcelas JA' arredondadas, entao pode
     // ficar ate' ~2,5 centavos do total antigo (5 parcelas x meio centavo).
     // Isso e' a correcao, nao um desvio: e' o que faz a coluna fechar.
-    const limite = campo === 'total' ? 0.03 : 0.011;
+    // 'lucro' (auditoria externa de 11/11/2026) passou a ser a venda menos
+    // esse total exibido — herda a mesma folga, pelo mesmo motivo: e' o
+    // que faz "venda - total = lucro" fechar na tela, centavo por centavo.
+    const limite = (campo === 'total' || campo === 'lucro') ? 0.03 : 0.011;
     if(campo !== 'total' && d > piorAbs){ piorAbs = d; piorCampo = campo; }
     if(d > limite){ falhas++; if(falhas < 4) console.log('DIVERGE', campo, a[campo], b[campo], JSON.stringify(v)); }
   });
@@ -178,13 +181,13 @@ for(let i = 0; i < 20000; i++){
     icmsCredito: rnd(0,20), ipi: rnd(0,10), custoFinanceiroPct: rnd(0,6), avariasPct: rnd(0,4),
     bonificacao: 0, tipoBonificacao: 0, venda: rnd(100,4000), comST: 1, prejuizoContabil: 0 };
   const r = novo.computeCalc(v);
-  piorFecha = Math.max(piorFecha, Math.abs(r.total - (v.venda - r.lucro)));
+  piorFecha = Math.max(piorFecha, Math.abs(App.centavos(r.total + r.lucro) - App.centavos(v.venda)));
 }
-// Cada parcela e' arredondada em centavos antes de somar: ate' meio
-// centavo por parcela, 4 centavos no total, e' arredondamento; acima
-// disso a identidade quebrou.
-if(piorFecha > 0.04){ falhas++; console.log('>>> identidade total == venda - lucro FALHOU (pior erro ' + piorFecha.toFixed(6) + ')'); }
-console.log('identidade total == venda - lucro, pior erro:', piorFecha.toFixed(6), '(limite 0.04)');
+// O lucro exibido e' a venda (em centavos) menos o total exibido: a
+// identidade fecha EXATA. Antes o lucro era arredondado a' parte e a
+// folga era de ate' 4 centavos — em ~40% dos casos a tabela nao fechava.
+if(piorFecha > 0.000001){ falhas++; console.log('>>> identidade total + lucro == venda FALHOU (pior erro ' + piorFecha.toFixed(6) + ')'); }
+console.log('identidade total + lucro == venda, pior erro:', piorFecha.toFixed(6), '(tem de ser zero)');
 
 // A margem-alvo realmente sai o que foi pedido?
 let piorAlvo = 0;

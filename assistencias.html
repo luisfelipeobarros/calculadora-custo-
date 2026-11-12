@@ -293,7 +293,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
-<script src="app-shared.js?v=32"></script>
+<script src="app-shared.js?v=33"></script>
 <script src="assistencias-nucleo.js?v=8"></script>
 <script>
 (() => {
@@ -575,7 +575,9 @@
   }
 
   $('asstNovaBtn').addEventListener('click', () => abrirFicha(null));
-  $('asstVoltarBtn').addEventListener('click', () => router.ir('Lista'));
+  // Sair da ficha invalida o que ainda estiver chegando para ela (foto em
+  // compressao, anexos em leitura): nao podem cair na proxima que abrir.
+  $('asstVoltarBtn').addEventListener('click', () => { fichaToken++; router.ir('Lista'); });
 
   // ─── Excluir (ficha ou avaria lancada por engano) ───
   // Apaga o documento e os anexos dele. Sem as regras novas publicadas
@@ -933,7 +935,10 @@
         if(anexos.length) batch.set(refFotos, { fotos: anexos, atualizadoEm: FV.serverTimestamp() });
         else batch.delete(refFotos);
         batch.set(ref, Object.assign({}, dados, {
-          fotos: FV.delete(), fotosFora: true,
+          // Sem anexo nenhum a marca cai: com ela ligada, toda abertura
+          // mostrava "Carregando as fotos..." e consultava um documento
+          // que nao existe (auditoria externa de 11/11/2026).
+          fotos: FV.delete(), fotosFora: anexos.length > 0,
           fotosQtd: fotosAtuais.length, termoQtd: termoAtuais.length,
           // muda a cada gravação de anexos: é o que faz o detector de
           // conflito acima enxergar foto trocada por outra pessoa

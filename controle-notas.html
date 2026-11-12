@@ -794,6 +794,7 @@
         contábil dos Lançamentos. Pagamento sem mapa chega como pendência amarela na lista.
       </p>
       <div class="tabela-rolavel" id="lcMapaContas"></div>
+      <div id="lcMapaPendentes" role="status" aria-live="polite"></div>
     </div>
 
     <div class="card" style="margin-top:16px;">
@@ -832,15 +833,15 @@
 <!-- MESMA versao do index.html (3.11.174, a ultima UMD; v4+ e' ESM-only).
      Duas copias em versoes diferentes seria fonte garantida de bug. -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e" crossorigin="anonymous"></script>
-<script src="app-shared.js?v=32"></script>
+<script src="app-shared.js?v=33"></script>
 <!-- As regras de leitura e casamento do DDA. Depende do app-shared.js acima. -->
-<script src="dda-nucleo.js?v=7"></script>
+<script src="dda-nucleo.js?v=8"></script>
 <!-- As contas do Simulador de compra (parcelas, rampa, projecao). -->
-<script src="simulador-nucleo.js?v=6"></script>
+<script src="simulador-nucleo.js?v=7"></script>
 <!-- O pagamento gera o lançamento contábil (partidas dobradas): a
      regra mora no mesmo núcleo que a tela Lançamentos usa. -->
 <script src="lancamentos-nucleo.js?v=7"></script>
-<script src="custos-nucleo.js?v=4"></script>
+<script src="custos-nucleo.js?v=5"></script>
 <!-- Relatorio impresso da tela de Pagamentos. -->
 <script src="pagamentos-nucleo.js?v=1"></script>
 <!-- Excel da exportação para o contador (tela Lançamentos). -->
@@ -1819,6 +1820,8 @@
           ? duplicatas.find(d => d.id === c.id) : pgtoInternoPorId(c.id);
         if(atual && atual.dataPagamento) meses[String(atual.dataPagamento).substring(0, 7)] = true;
       }
+      // O juros do lote apagado junto no desfazer: vale o mês dele.
+      (c.apagarAvulsos || []).forEach(a => { if(a && a.mes) meses[a.mes] = true; });
     });
     const exportados = Object.keys(meses).filter(mesExportadoLc).sort();
     if(!exportados.length) return null;
@@ -2470,8 +2473,128 @@
       : { [chave]: valor };
     mapaContas = Object.assign({}, mapaContas, campos);
     App.comAuth(() => db.collection('config').doc('contasContabeis').set(campos, { merge: true }))
-      .then(() => App.toast('Mapa salvo.', 'ok'))
+      .then(() => {
+        App.toast('Mapa salvo.', 'ok');
+        // O mapa novo so' valia para os pagamentos SEGUINTES: confere
+        // o que ja' esta' gravado como pendente e oferece aplicar.
+        conferirPendentesDoMapa();
+      })
       .catch(e => App.toastErro('Erro ao salvar o mapa', e));
+  });
+
+  // ─── Mapa novo × lançamentos que já nasceram pendentes ───
+  // Pagamento sem conta mapeada grava o lançamento SEM partida (a
+  // pendência amarela). Mapear a categoria depois não consertava esses:
+  // ficavam travando a exportação do mês até alguém abrir um por um.
+  // Depois de salvar o mapa, a tela conta os pendentes vindos de
+  // pagamento que o mapa atual resolve e oferece regravar as contas.
+
+  // Regra pura. pendentes: lançamentos sem partida; categoriaInternaDe(id)
+  // devolve a categoria do pagamento interno (null se não achou).
+  // Devolve { resolvidos: [{ id, mes, campos }], restantes } — restantes
+  // são os de pagamento que CONTINUAM sem conta (categoria sem mapa,
+  // pagamento feito sem banco): contados para a tela não os esconder.
+  function lancamentosQueOMapaResolve(pendentes, mapa, bancosPorId, categoriasPorId, categoriaInternaDe){
+    const m = mapa || {};
+    const resolvidos = [];
+    let restantes = 0;
+    (pendentes || []).forEach(l => {
+      if((l.contaDebito && l.contaCredito) || l.origem === 'importado') return;
+      const origem = String(l.origemId || '');
+      let catId;
+      // Os de juros primeiro: o juros de um pagamento também leva o
+      // origemId 'dup_…', e o do lote não tem origem — só o id.
+      if(/^juros(dup_|int_|lote_)/.test(String(l.id))) catId = m.juros || null;
+      else if(origem.indexOf('dup_') === 0) catId = m.fornecedor || null;
+      else if(origem.indexOf('int_') === 0) catId = (m.internas || {})[categoriaInternaDe(origem.substring(4))] || null;
+      else return; // não veio de pagamento: resolve-se na tela Lançamentos
+      const partida = N.montarPartidas('saida', (bancosPorId || {})[l.bancoId] || null,
+        catId ? (categoriasPorId || {})[catId] : null, null);
+      if(!partida){ restantes++; return; }
+      resolvidos.push({ id: l.id, mes: l.mes || null,
+        campos: { contaDebito: partida.debito, contaCredito: partida.credito, categoriaId: catId } });
+    });
+    return { resolvidos, restantes };
+  }
+
+  // Lê os pendentes (contaDebito null — é assim que o pagamento sem mapa
+  // grava) e, para os de pagamento interno, a categoria de cada
+  // pagamento: direto do banco, porque a tela Cadastros não abre as
+  // escutas de pagamentos.
+  async function lerPendentesDoMapa(){
+    const snap = await App.comAuth(() => db.collection('lancamentos').where('contaDebito', '==', null).get());
+    const pendentes = [];
+    snap.forEach(doc => pendentes.push({ id: doc.id, ...doc.data() }));
+    const idsInternos = pendentes.map(l => String(l.origemId || ''))
+      .filter((o, i, todos) => o.indexOf('int_') === 0 && todos.indexOf(o) === i).map(o => o.substring(4));
+    const categoriaDe = Object.create(null);
+    await Promise.all(idsInternos.map(async (id) => {
+      const doc = await App.comAuth(() => db.collection('pagamentosInternos').doc(id).get());
+      // O mesmo padrão do pagamento: sem categoria gravada é 'outro'.
+      categoriaDe[id] = doc.exists ? (doc.data().categoria || 'outro') : null;
+    }));
+    return lancamentosQueOMapaResolve(pendentes, mapaContas, bancos, categorias, (id) => categoriaDe[id] || null);
+  }
+
+  let pendentesDoMapa = null;   // { resolvidos, restantes } | { erro } da última conferência
+  let aplicandoMapa = false;
+
+  async function conferirPendentesDoMapa(){
+    try{ pendentesDoMapa = await lerPendentesDoMapa(); }
+    catch(e){ console.error(e); pendentesDoMapa = { erro: App.erroDe(e) }; }
+    renderPendentesDoMapa();
+  }
+
+  function renderPendentesDoMapa(){
+    const el = $('lcMapaPendentes'), r = pendentesDoMapa;
+    if(!r){ el.innerHTML = ''; return; }
+    if(r.erro){
+      el.innerHTML = '<p class="nota-explicativa">⚠ Não consegui conferir os lançamentos pendentes de pagamento: ' + escapeHtml(r.erro) + '</p>';
+      return;
+    }
+    const n = r.resolvidos.length;
+    el.innerHTML = (n || r.restantes)
+      ? '<p class="nota-explicativa">' +
+        (n ? '<strong>' + n + ' lançamento(s) de pagamento já gravado(s) estão pendentes (sem conta) e o mapa atual resolve.</strong> ' +
+          '<button type="button" class="acao-mini" id="lcAplicarMapaBtn">Aplicar aos ' + n + ' lançamentos pendentes</button> ' : '') +
+        (r.restantes ? r.restantes + ' lançamento(s) de pagamento continuam sem conta: a categoria deles ainda não está no mapa, ' +
+          'ou o pagamento foi feito sem banco (esses se completam na tela Lançamentos).' : '') +
+        '</p>'
+      : '';
+  }
+
+  App.delegar($('lcMapaPendentes'), 'click', '#lcAplicarMapaBtn', async (btn) => {
+    if(aplicandoMapa) return;
+    aplicandoMapa = true;
+    btn.disabled = true;
+    let feitos = 0, total = 0;
+    try{
+      // Relido AGORA: a contagem da tela pode estar velha (pagamento
+      // desfeito, mapa alterado de novo, outra máquina).
+      const r = await lerPendentesDoMapa();
+      total = r.resolvidos.length;
+      if(!total){ App.toast('Nenhum lançamento pendente para aplicar.', 'info'); return; }
+      // Mês que o contador já recebeu: confirma antes de regravar.
+      if(!(await confirmarMesExportadoLc(r.resolvidos.map(x => x.mes), 'Aplicar'))) return;
+      for(let i = 0; i < total; i += LOTE_FIRESTORE){
+        const pedaco = r.resolvidos.slice(i, i + LOTE_FIRESTORE);
+        btn.textContent = 'Aplicando... ' + Math.min(i + LOTE_FIRESTORE, total) + '/' + total;
+        await App.comAuth(() => {
+          const batch = db.batch();
+          // update, não set-merge: um lançamento apagado nesse meio (o
+          // pagamento foi desfeito) não pode renascer só com as contas.
+          pedaco.forEach(x => batch.update(db.collection('lancamentos').doc(x.id), x.campos));
+          return batch.commit();
+        });
+        feitos += pedaco.length;
+      }
+      App.toast(feitos + ' lançamento(s) pendente(s) receberam a conta do mapa.', 'ok');
+    }catch(e){
+      App.toastErro('Erro ao aplicar o mapa — ' + feitos + ' de ' + total + ' gravados. Pode aplicar de novo: só os que faltam entram', e);
+    }finally{
+      aplicandoMapa = false;
+      conferirPendentesDoMapa();
+    }
   });
 
   function renderCadastrosLc(){
@@ -2792,7 +2915,13 @@
 
     var ultimoDiaMes = new Date(Number(hoje.substring(0,4)), Number(hoje.substring(5,7)), 0).getDate();
     var fimMes = hoje.substring(0,8) + String(ultimoDiaMes).padStart(2,'0');
-    var ateFimMes = pendentes.filter(function(d){ return d.vencimento >= inicioHoje && d.vencimento <= fimMes; });
+    var inicioMes = hoje.substring(0,8) + '01';
+    // Nunca antes do dia 1: na segunda (ou domingo) que cai no dia 1 ou
+    // 2, a janela de hoje recua para o fim de semana do mes ANTERIOR, e
+    // este cartao somava vencimentos de outubro que o "mes inteiro" (ao
+    // lado) nao tem. Eles continuam em "Vencendo hoje" e na semana.
+    var inicioFimMes = inicioHoje > inicioMes ? inicioHoje : inicioMes;
+    var ateFimMes = pendentes.filter(function(d){ return d.vencimento >= inicioFimMes && d.vencimento <= fimMes; });
 
     // Enquanto as duplicatas nao chegaram, estes quatro cartoes mostram
     // "--" em vez de R$ 0,00. Zero e' uma AFIRMACAO — em conexao lenta,
@@ -2861,7 +2990,6 @@
     var todasValidas = duplicatas.filter(function(d){ return !dupDaNotaCancelada(d); })
       .concat(internosDoPainel());
 
-    var inicioMes = hoje.substring(0,8) + '01';
     var doMes = todasValidas.filter(function(d){
       return d.vencimento && d.vencimento >= inicioMes && d.vencimento <= fimMes;
     });
@@ -3597,10 +3725,16 @@
         '</div>' +
       '</div>';
 
-    // Auto-preencher dia fixo com o dia da data de vencimento
+    // O dia fixo ACOMPANHA a data de vencimento ate' alguem digitar nele.
+    // Antes so' era preenchido quando vazio: escolher 10/11 e corrigir
+    // para 15/11 deixava o dia fixo em 10, e a parcela seguinte nascia
+    // no dia 10. Recorrente ja' gravado nao acompanha: la' o dia fixo e'
+    // a programacao, e editar o vencimento nao pode desloca'-la.
+    var diaSegueVencimento = !(p.recorrente && diaFixo);
+    $('pgtoDiaFixo').addEventListener('input', function(){ diaSegueVencimento = false; });
     $('pgtoVencimento').addEventListener('change', function(){
       var v = this.value;
-      if(v && $('pgtoDiaFixo') && !$('pgtoDiaFixo').value){
+      if(v && $('pgtoDiaFixo') && (diaSegueVencimento || !$('pgtoDiaFixo').value)){
         $('pgtoDiaFixo').value = Number(v.substring(8,10));
       }
     });
@@ -3630,7 +3764,7 @@
     var vencimentoBase = null;
 
     if(!descricao){ App.toast('Preencha a descrição.', 'erro'); return; }
-    if(!valorStr || Number(valorStr) <= 0){ App.toast('Preencha o valor.', 'erro'); return; }
+    if(!valorStr || !(App.centavos(Number(valorStr)) > 0)){ App.toast('Preencha o valor.', 'erro'); return; }
     if(!vencimento){ App.toast('Preencha a data de vencimento.', 'erro'); return; }
 
     if(recorrente){
@@ -3663,7 +3797,9 @@
     var dados = {
       descricao: descricao,
       categoria: categoria,
-      valor: Number(valorStr),
+      // Em centavos: "10.555" ia cru para o banco, e o lançamento
+      // contabil do pagamento herdava as tres casas.
+      valor: App.centavos(Number(valorStr)),
       vencimento: vencimento,
       vencimentoBase: vencimentoBase,
       recorrente: recorrente,
@@ -3873,9 +4009,10 @@
 
   // Bloco das gravacoes de PAGAMENTO. Cada item leva ate' tres operacoes
   // no mesmo batch (o pagamento, o lancamento contabil e o delete do
-  // juros que nao se aplica): 150 itens mantem o batch na casa das 450
-  // operacoes de sempre.
-  var LOTE_PAGAMENTOS = 150;
+  // juros que nao se aplica). 149, e nao 150: o ULTIMO bloco do lote
+  // leva mais uma operacao (o juros do lote) e com 150 itens passava
+  // para 451 — assim nenhum batch sai acima das 450 de sempre.
+  var LOTE_PAGAMENTOS = 149;
 
   // Grava os selecionados em blocos, com o progresso no proprio botao.
   // "Pagar" e "Prorrogar" faziam esta mesma dança duas vezes, com a
@@ -3945,6 +4082,13 @@
     if(pagamentoOcupado()) return;
     pagandoId = 'lote';
     var somaLote = somaSelecionada(ids);
+    // Quem faz parte do lote, pelo prefixo do lançamento de cada item
+    // ('dup_<id>' / 'int_<id>'). Montado AGORA, com a lista da tela
+    // ainda inteira (depois do dialogo o pagPorId pode ter mudado).
+    var itensDoLote = ids.map(function(id){
+      var it = pagPorId.get(id);
+      return (it && it._tipo === 'interno' ? 'int_' : 'dup_') + id;
+    });
     contabilDoPagamento().then(function(contabil){
       return pedirPagamento({
         titulo: 'Marcar como pagas',
@@ -3962,8 +4106,11 @@
         // Juros do lote: a diferenca entre o total pago e a soma, em
         // UM lançamento so', gravado junto do ULTIMO bloco. Id com
         // data+hora, montado AQUI (uma vez): a gravacao pode ser
-        // refeita e tem de mirar o mesmo documento. O desfazer desse
-        // juros (raro) e' pelo proprio app de Lançamentos.
+        // refeita e tem de mirar o mesmo documento.
+        // itensDoLote fica no PROPRIO lançamento de juros (duplicata nao
+        // aceita campo novo): e' por essa lista que o desfazer de um
+        // item acha o juros do lote e pergunta se apaga junto — antes
+        // ele ficava orfao, e so' saia pela tela de Lançamentos.
         var dif = r.valorPago != null ? App.centavos(r.valorPago - somaLote) : 0;
         var paresJuros = null;
         if(dif > 0){
@@ -3980,7 +4127,8 @@
               fornecedor: null, numeroDoc: null,
               contaDebito: partidaJuros ? partidaJuros.debito : null,
               contaCredito: partidaJuros ? partidaJuros.credito : null,
-              mes: dataPgto.substring(0, 7), origemId: null
+              mes: dataPgto.substring(0, 7), origemId: null,
+              itensDoLote: itensDoLote
             }
           }];
         }
@@ -4008,15 +4156,18 @@
 
         var t = gravarSelecionados(ids, btn, 'Gravando', function(item, id){
           if(!item) return null;
+          // Em centavos: o valor do pagamento e o do lançamento contabil
+          // saem do mesmo numero arredondado.
+          var valorItem = App.centavos(item.valor || 0);
           var base = { pago:true, dataPagamento:dataPgto, obsPagamento:obs,
-            bancoPagamento:r.bancoId, valorPago:item.valor };
+            bancoPagamento:r.bancoId, valorPago:valorItem };
           // O lançamento contabil de cada pagamento (id deterministico:
           // repetir nao duplica) vai no MESMO batch do pagamento — nao
           // existe mais "pago sem lançamento" se a segunda gravacao
           // falhar. O item vem do mapa CONGELADO.
           var pares = LancamentosNucleo.lancamentosDePagamento({
             tipo: item._tipo === 'interno' ? 'interno' : 'fornecedor',
-            id: id, data: dataPgto, valor: item.valor || 0, valorPago: item.valor || 0,
+            id: id, data: dataPgto, valor: valorItem, valorPago: valorItem,
             bancoId: r.bancoId,
             historico: 'PAGTO ' + item.descricao + (item.numeroNota ? ' NF ' + item.numeroNota : ''),
             fornecedor: item.nomeEmitente || null, numeroDoc: item.numeroNota || null,
@@ -4088,7 +4239,12 @@
 
   // Prorrogar vencimento
   $('selProrrogarBtn').addEventListener('click', function(){
-    var ids = Object.keys(selecionados);
+    var todos = Object.keys(selecionados);
+    // Ja' pago fica de fora, como no pagar: prorrogar um pago mudava o
+    // vencimento de uma divida ja' quitada — e com ele o mes em que ela
+    // aparece em tudo o que soma por vencimento (Painel, Vendas x Compras).
+    var ids = todos.filter(function(id){ var it = pagPorId.get(id); return !(it && it.pago); });
+    if(todos.length !== ids.length) App.toast((todos.length - ids.length) + ' já pago(s) ficaram de fora da prorrogação.', 'info');
     if(!ids.length) return;
     // Mesma trava do pagar: prorrogar e pagar os mesmos ids ao mesmo
     // tempo gravaria por cima um do outro.
@@ -4123,7 +4279,9 @@
       });
 
       var t = gravarSelecionados(ids, btn, 'Prorrogando', function(item, id){
-        if(!item) return null;
+        // Pago enquanto o dialogo da data estava aberto (outra maquina):
+        // tambem fica de fora.
+        if(!item || item.pago) return null;
         var dados = { vencimento: novaData };
         if(item._tipo === 'interno' && basesAntigas[id]) dados.vencimentoBase = basesAntigas[id];
         return {
@@ -4176,7 +4334,10 @@
     }
     // O mesmo recorte do cartao "Vencendo ate o fim do mes" do Painel.
     // "-31" na comparacao de texto cobre qualquer ultimo dia do mes.
-    if(filtroPag === 'fimmes')    return !pago && vencimento >= inicioHoje && vencimento <= hoje.substring(0, 7) + '-31';
+    // E nunca antes do dia 1: a janela de hoje recua para o fim de
+    // semana do mes anterior quando a segunda cai no dia 1 ou 2.
+    if(filtroPag === 'fimmes')    return !pago && vencimento >= inicioHoje && vencimento >= hoje.substring(0, 7) + '-01' &&
+      vencimento <= hoje.substring(0, 7) + '-31';
     if(filtroPag === 'pagas')     return pago;
     return true; // 'todas'
   }
@@ -4525,11 +4686,13 @@
   // apagado e duplicata ainda paga", e nada consertava depois
   // (auditoria de 11/11/2026). No batch, ou entra tudo, ou nada.
   //
-  // itens: [{ colecao, id, dados, pares?, apagar? }]
+  // itens: [{ colecao, id, dados, pares?, apagar?, apagarAvulsos? }]
   //   dados  — os campos do pagamento (merge);
   //   pares  — lançamentos a gravar (LancamentosNucleo.lancamentosDePagamento);
   //   apagar — prefixos ('dup_<id>' / 'int_<id>') dos lançamentos a
-  //            apagar no desfazer (o principal e o de juros).
+  //            apagar no desfazer (o principal e o de juros);
+  //   apagarAvulsos — [{ id, mes }] de lançamentos avulsos a apagar junto
+  //            (o juros do LOTE de que o pagamento desfeito fez parte).
   // paresAvulsos: lançamentos sem pagamento proprio (o juros do lote).
   //
   // So' o que e' duplicata leva o carimbo (alteradoEm). A funcao
@@ -4554,6 +4717,9 @@
           (c.apagar || []).forEach(function(pfx){
             batch.delete(db.collection('lancamentos').doc(pfx));
             batch.delete(db.collection('lancamentos').doc('juros' + pfx));
+          });
+          (c.apagarAvulsos || []).forEach(function(a){
+            batch.delete(db.collection('lancamentos').doc(a.id));
           });
         });
         lancamentosNoBatch(batch, pares);
@@ -4658,6 +4824,9 @@
           erro.textContent = 'Escolha a data do pagamento.'; erro.style.display = ''; data.focus(); return;
         }
         var v = o.semValor ? null : App.parseDinheiroBR(valor.value);
+        // Em centavos: e' este numero que vira valorPago no pagamento e
+        // o valor do lançamento contabil ("10,555" saia com tres casas).
+        if(v != null) v = App.centavos(v);
         if(!o.semValor && !o.valorOpcional && (v == null || !(v > 0))){
           erro.textContent = 'Informe o valor pago.'; erro.style.display = ''; valor.focus(); return;
         }
@@ -4707,6 +4876,162 @@
   // a caminho.
   var aguardandoSucessor = Object.create(null);
 
+  // ─── Desfazer: o juros do LOTE ───────────────────────────────
+  //
+  // O pagamento em lote com "total pago" acima da soma grava UM
+  // lançamento de juros para o lote inteiro (juroslote_<data>_<hora>),
+  // sem dono. Desfazer um item do lote deixava esse lançamento orfao.
+  // O lote agora grava nele a lista de quem entrou (itensDoLote), e o
+  // desfazer consulta por ela.
+
+  // Os lançamentos de juros de LOTE de que este pagamento fez parte:
+  // [{ id, valor, data, mes, qtdItens }]. Lote antigo, sem a lista, nao
+  // aparece — continua como sempre foi. null = a consulta falhou: o
+  // desfazer NAO trava por isso, mas o dialogo diz que nao deu para
+  // conferir.
+  function jurosDeLoteDe(prefixo){
+    return App.comAuth(function(){
+      return db.collection('lancamentos').where('itensDoLote', 'array-contains', prefixo).get();
+    }).then(function(snap){
+      var lista = [];
+      snap.forEach(function(doc){
+        var d = doc.data();
+        lista.push({ id: doc.id, valor: d.valor || 0, data: d.data || null, mes: d.mes || null,
+          qtdItens: (d.itensDoLote || []).length });
+      });
+      return lista;
+    }).catch(function(e){
+      console.error('juros do lote de ' + prefixo + ':', e);
+      return null;
+    });
+  }
+
+  function textoJurosDoLote(lotes){
+    return 'Este pagamento fez parte de ' + lotes.map(function(l){
+      return 'um lote' + (l.qtdItens ? ' de ' + l.qtdItens + ' item(ns)' : '') + ' com juros de ' + brl(l.valor) +
+        ' lançados em ' + fmtData(l.data);
+    }).join(' e de ') + '.';
+  }
+
+  // Avisa e pergunta. Devolve (Promise) os lançamentos de juros a apagar
+  // junto — lista vazia = manter (ou nao havia lote).
+  function perguntarJurosDoLote(lotes){
+    if(!lotes || !lotes.length) return Promise.resolve([]);
+    return App.confirmar({
+      titulo: 'Juros do lote',
+      mensagem: textoJurosDoLote(lotes) +
+        '\n\nEsse lançamento de juros é do lote inteiro, não só deste item. Apagar o lançamento de juros do lote junto?',
+      confirmar: 'Apagar os juros junto',
+      cancelar: 'Manter os juros',
+      perigo: true
+    }).then(function(sim){ return sim ? lotes : []; });
+  }
+
+  // A confirmacao do desfazer (duplicata e interno). Desfazer tambem
+  // APAGA o lançamento contabil (e qualquer ajuste feito nele na tela
+  // Lançamentos) — nao pode acontecer num clique acidental. Devolve
+  // (Promise) null se a pessoa desistiu, ou { apagarAvulsos } com os
+  // juros de lote que vao embora no MESMO batch.
+  function confirmarDesfazer(rotulo, prefixo, consultarLote){
+    return (consultarLote ? jurosDeLoteDe(prefixo) : Promise.resolve([])).then(function(lotes){
+      return perguntarJurosDoLote(lotes).then(function(apagar){
+        var somaJuros = (lotes || []).reduce(function(s, l){ return s + (l.valor || 0); }, 0);
+        return App.confirmar({
+          titulo: 'Desfazer o pagamento',
+          mensagem: rotulo +
+            '\n\nIsso apaga também o lançamento contábil gerado por este pagamento (e qualquer ajuste feito nele).' +
+            (lotes === null
+              ? '\n\n⚠ Não consegui conferir se este pagamento fez parte de um lote com juros — se fez, o lançamento de juros do lote continua na tela Lançamentos.'
+              : '') +
+            (lotes && lotes.length
+              ? '\n\nO lançamento de juros do lote (' + brl(somaJuros) + ') ' +
+                (apagar.length ? 'também será apagado.' : 'será MANTIDO: continua na tela Lançamentos.')
+              : ''),
+          confirmar: 'Desfazer',
+          perigo: true
+        }).then(function(ok){ return ok ? { apagarAvulsos: apagar } : null; });
+      });
+    });
+  }
+
+  // ─── Desfazer: a parcela seguinte do recorrente ──────────────
+  //
+  // Pagar um recorrente cria a parcela seguinte. Desfazer o pagamento
+  // deixava essa parcela la' — a pessoa desfazia um engano e ficava com
+  // a conta do mes que vem lançada mesmo assim.
+
+  // A parcela seguinte entre os carregados: pelo id deterministico ou
+  // por quem aponta para esta como origem (a mesma regra do nucleo).
+  function sucessorRecorrenteDe(pgto){
+    var idProx = SimuladorNucleo.idProximoRecorrente(pgto);
+    return pagamentosInternos.find(function(x){
+      return x.id !== pgto.id && ((pgto.id != null && x.origemId === pgto.id) || (idProx && x.id === idProx));
+    }) || null;
+  }
+
+  // 'paga' | 'alterada' | 'intocada'. Intocada = em aberto, do jeito que
+  // criarProximoRecorrente a criou e sem parcela propria depois dela.
+  // So' a intocada pode ser apagada: o resto ja' tem trabalho de alguem.
+  function situacaoDoSucessor(pgto, suc){
+    if(suc.pago === true) return 'paga';
+    var prox = calcularProximoVencimento(pgto);
+    var atual = Number(pgto.parcelaAtual) || 1;
+    var total = Number(pgto.parcelasTotal) || 0;
+    var parcelaEsperada = (pgto.parcelaAtual || total) ? atual + 1 : null;
+    var igual = suc.vencimento === prox && (suc.vencimentoBase || prox) === prox &&
+      suc.descricao === pgto.descricao && suc.categoria === pgto.categoria &&
+      App.emCentavos(suc.valor) === App.emCentavos(pgto.valor) &&
+      (suc.regra || null) === (pgto.regra || null) && (suc.diaFixo || null) === (pgto.diaFixo || null) &&
+      (suc.parcelaAtual || null) === parcelaEsperada && !suc.obsPagamento &&
+      !SimuladorNucleo.temSucessorRecorrente(suc, pagamentosInternos);
+    return igual ? 'intocada' : 'alterada';
+  }
+
+  // Depois de desfazer o pagamento de um recorrente. Parcela seguinte em
+  // aberto e intocada: oferece apagar (com confirmacao). Ja' paga ou
+  // alterada: so' avisa. Nunca rejeita — o desfazer ja' esta' gravado.
+  function oferecerApagarSucessor(pgto){
+    var suc = sucessorRecorrenteDe(pgto);
+    if(!suc) return Promise.resolve();
+    var rotulo = 'A parcela seguinte de "' + (pgto.descricao || 'Pagamento') + '" (vence ' + fmtData(suc.vencimento) +
+      ', ' + brl(suc.valor) + ')';
+    var situacao = situacaoDoSucessor(pgto, suc);
+    if(situacao !== 'intocada'){
+      App.toast('Pagamento desfeito. ' + rotulo + (situacao === 'paga' ? ' já foi paga' : ' foi alterada depois de criada') +
+        ' e continua lá — confira se ela ainda vale.', 'info');
+      return Promise.resolve();
+    }
+    return App.confirmar({
+      titulo: 'Parcela seguinte do recorrente',
+      mensagem: 'Pagamento desfeito.\n\n' + rotulo + ' foi criada quando este pagamento foi marcado como pago e continua em aberto.' +
+        '\n\nApagar a parcela seguinte? Ela nasce de novo quando este pagamento for pago outra vez.',
+      confirmar: 'Apagar a parcela seguinte',
+      cancelar: 'Manter',
+      perigo: true
+    }).then(function(ok){
+      if(!ok) return null;
+      var ref = db.collection('pagamentosInternos').doc(suc.id);
+      return App.comAuth(function(){
+        // TRANSACAO: so' apaga se CONTINUA em aberto — outra maquina pode
+        // te-la pago enquanto este dialogo estava aberto.
+        return db.runTransaction(function(tx){
+          return tx.get(ref).then(function(doc){
+            if(!doc.exists) return 'sumiu';
+            if(doc.data().pago === true) return 'paga';
+            tx.delete(ref);
+            return 'apagada';
+          });
+        });
+      }).then(function(r){
+        App.toast(r === 'apagada' ? 'Parcela seguinte apagada.'
+          : (r === 'paga' ? 'A parcela seguinte foi paga nesse meio-tempo e NÃO foi apagada.' : 'A parcela seguinte já não existia.'),
+          r === 'paga' ? 'info' : 'ok');
+      });
+    }).catch(function(e){
+      App.toastErro('O pagamento foi desfeito, mas não consegui apagar a parcela seguinte', e);
+    });
+  }
+
   App.delegar($('tabelaPag'), 'click', '.btn-pagar[data-dup]', function(b){
     var id = b.dataset.dup;
     if(pagamentoOcupado()) return;
@@ -4717,22 +5042,16 @@
 
     if(!marcado){
       pagandoId = id;
-      // Confirmacao: desfazer tambem APAGA o lancamento contabil (e
-      // qualquer ajuste feito nele na tela Lançamentos) — nao pode
-      // acontecer num clique acidental. Despagar e apagar os
-      // lançamentos vao no MESMO batch: nada fica pela metade.
-      App.confirmar({
-        titulo: 'Desfazer o pagamento',
-        mensagem: fornecedorDaDuplicata(d) + ' · ' + brl(d.valor) +
-          '\n\nIsso apaga também o lançamento contábil gerado por este pagamento (e qualquer ajuste feito nele).',
-        confirmar: 'Desfazer',
-        perigo: true
-      }).then(function(ok){
-        if(!ok) return null;
+      // Com confirmacao (confirmarDesfazer). Despagar e apagar os
+      // lançamentos vao no MESMO batch: nada fica pela metade. So'
+      // duplicata paga em lote (pagoEmLote) pode ter juros de lote —
+      // as outras nem consultam.
+      confirmarDesfazer(fornecedorDaDuplicata(d) + ' · ' + brl(d.valor), 'dup_' + id, d.pagoEmLote === true).then(function(c){
+        if(!c) return null;
         return gravarPagamentos([{ colecao: 'duplicatas', id: id,
           dados: { pago:false, dataPagamento:null, obsPagamento:null,
             bancoPagamento:null, valorPago:null, pagoEmLote:false },
-          apagar: ['dup_' + id] }]);
+          apagar: ['dup_' + id], apagarAvulsos: c.apagarAvulsos }]);
       }).catch(function(e){ App.toastErro('Erro ao desfazer', e); })
         .then(function(){ pagandoId = null; });
       return;
@@ -4750,7 +5069,7 @@
         if(!r) return;
         b.disabled = true;
         var pares = LancamentosNucleo.lancamentosDePagamento({
-          tipo: 'fornecedor', id: id, data: r.data, valor: d.valor || 0,
+          tipo: 'fornecedor', id: id, data: r.data, valor: App.centavos(d.valor || 0),
           valorPago: r.valorPago, bancoId: r.bancoId,
           historico: 'PAGTO ' + fornecedorDaDuplicata(d) + (d.numeroNota ? ' NF ' + d.numeroNota : ''),
           fornecedor: d.nomeEmitente || null, numeroDoc: d.numeroNota || null
@@ -4783,17 +5102,14 @@
 
     if(!marcado){
       pagandoId = id;
-      App.confirmar({
-        titulo: 'Desfazer o pagamento',
-        mensagem: (pgto.descricao || 'Pagamento interno') + ' · ' + brl(pgto.valor) +
-          '\n\nIsso apaga também o lançamento contábil gerado por este pagamento (e qualquer ajuste feito nele).',
-        confirmar: 'Desfazer',
-        perigo: true
-      }).then(function(ok){
-        if(!ok) return null;
+      // Interno nao tem a marca pagoEmLote: consulta sempre (1 leitura).
+      confirmarDesfazer((pgto.descricao || 'Pagamento interno') + ' · ' + brl(pgto.valor), 'int_' + id, true).then(function(c){
+        if(!c) return null;
         return gravarPagamentos([{ colecao: 'pagamentosInternos', id: id,
           dados: { pago:false, dataPagamento:null, obsPagamento:null, bancoPagamento:null, valorPago:null },
-          apagar: ['int_' + id] }]);
+          apagar: ['int_' + id], apagarAvulsos: c.apagarAvulsos }])
+          // Recorrente: a parcela seguinte, criada ao pagar, continua la'.
+          .then(function(){ return pgto.recorrente ? oferecerApagarSucessor(pgto) : null; });
       }).catch(function(e){ App.toastErro('Erro ao desfazer', e); })
         .then(function(){ pagandoId = null; });
       return;
@@ -4810,7 +5126,7 @@
       }).then(function(r){
         if(!r) return;
         var pares = LancamentosNucleo.lancamentosDePagamento({
-          tipo: 'interno', id: id, data: r.data, valor: pgto.valor || 0,
+          tipo: 'interno', id: id, data: r.data, valor: App.centavos(pgto.valor || 0),
           valorPago: r.valorPago, bancoId: r.bancoId,
           historico: 'PAGTO ' + (pgto.descricao || 'PAGAMENTO INTERNO'),
           categoriaInterna: pgto.categoria || 'outro'
@@ -4998,28 +5314,49 @@
     var pgto = pgtoInternoPorId(id);
     if(!pgto) return;
 
-    App.confirmar({
-      titulo: 'Excluir pagamento',
-      mensagem: 'Excluir "' + (pgto.descricao || '') + '"?\nValor: ' + brl(pgto.valor) +
-        (pgto.pago ? '\n\nEle está pago: o lançamento contábil gerado por ele também é apagado.' : '') +
-        '\n\nEssa ação não pode ser desfeita.',
-      confirmar: 'Excluir',
-      perigo: true
-    }).then(function(ok){
-      if(!ok) return;
-      App.comAuth(function(){
-        // Um lote so': o pagamento e o lancamento contabil dele (mais o
-        // de juros, se houver) somem juntos — ou nada some.
-        var batch = db.batch();
-        batch.delete(db.collection('pagamentosInternos').doc(id));
-        batch.delete(db.collection('lancamentos').doc('int_' + id));
-        batch.delete(db.collection('lancamentos').doc('jurosint_' + id));
-        return batch.commit();
-      }).then(function(){
-        App.toast('Pagamento excluído.', 'ok');
-      }).catch(function(e){
-        App.toastErro('Erro ao excluir', e);
+    // Pago em lote com juros: o juros do lote e' oferecido como no
+    // desfazer (excluir um pago e' desfazer e apagar).
+    (pgto.pago ? jurosDeLoteDe('int_' + id) : Promise.resolve([])).then(function(lotes){
+      return perguntarJurosDoLote(lotes).then(function(apagarJuros){
+        // Pago, a exclusao apaga o lançamento contabil dele. Se o mês
+        // desse lançamento já foi para o contador, a confirmacao diz —
+        // o mesmo aviso de excluir pela tela Lançamentos. Antes apagava
+        // de mês fechado sem uma palavra.
+        var meses = [pgto.pago && pgto.dataPagamento ? String(pgto.dataPagamento).substring(0, 7) : null]
+          .concat(apagarJuros.map(function(a){ return a.mes; }));
+        var exportados = meses.filter(function(m, i){ return m && meses.indexOf(m) === i && mesExportadoLc(m); });
+        return App.confirmar({
+          titulo: 'Excluir pagamento',
+          mensagem: 'Excluir "' + (pgto.descricao || '') + '"?\nValor: ' + brl(pgto.valor) +
+            (pgto.pago ? '\n\nEle está pago: o lançamento contábil gerado por ele também é apagado.' : '') +
+            (apagarJuros.length ? '\nO lançamento de juros do lote também é apagado.' : '') +
+            (lotes === null ? '\n\n⚠ Não consegui conferir se este pagamento fez parte de um lote com juros — se fez, o lançamento de juros do lote continua na tela Lançamentos.' : '') +
+            (exportados.length
+              ? '\n\n⚠ ' + exportados.map(function(m){
+                  return rotuloMesLc(m) + ' já foi exportado para o contador em ' + App.fmtData(mesExportadoLc(m).em);
+                }).join('; ') + ': o lançamento CONTINUA no arquivo que ele recebeu. Combine a correção com ele.'
+              : '') +
+            '\n\nEssa ação não pode ser desfeita.',
+          confirmar: 'Excluir',
+          perigo: true
+        }).then(function(ok){
+          if(!ok) return null;
+          return App.comAuth(function(){
+            // Um lote so': o pagamento e o lancamento contabil dele (mais o
+            // de juros, se houver) somem juntos — ou nada some.
+            var batch = db.batch();
+            batch.delete(db.collection('pagamentosInternos').doc(id));
+            batch.delete(db.collection('lancamentos').doc('int_' + id));
+            batch.delete(db.collection('lancamentos').doc('jurosint_' + id));
+            apagarJuros.forEach(function(a){ batch.delete(db.collection('lancamentos').doc(a.id)); });
+            return batch.commit();
+          }).then(function(){
+            App.toast('Pagamento excluído.', 'ok');
+          });
+        });
       });
+    }).catch(function(e){
+      App.toastErro('Erro ao excluir', e);
     });
   });
 
@@ -5956,32 +6293,49 @@
   // Um a um (botao da linha, inclusive linha vermelha de valor
   // divergente — quem clica esta' dizendo que aquele boleto E' aquela
   // duplicata) ou em lote (so' as linhas sem vermelho).
+  // (baixarPelaDda, logo abaixo das duas contas que ela usa.)
+
+  // O valor pago de UM boleto na baixa.
+  // Com extrato: o valor real de cada boleto que teve o debito achado;
+  // os outros ficam no valor da duplicata. Diferenca de ate' 10 centavos
+  // entre o que saiu da conta e a duplicata e' arredondamento
+  // (DdaNucleo.TOLERANCIA_CENTAVOS): grava o valor da duplicata, sem
+  // lancamento de juros de 3 centavos.
+  // Sem extrato e com o boleto valendo outra coisa que a duplicata (a
+  // linha vermelha, baixada pelo botao da linha): o que o banco cobrou
+  // e' o valor do boleto — a diferenca vira juros (ou fica como
+  // pagamento menor), nunca some.
+  function valorPagoNaBaixaDda(l){
+    var dup = App.centavos(l.casamento.duplicata.valor || 0);
+    var dupCent = Math.round(dup * 100);
+    if(l.extrato && l.extrato.lancamento){
+      return DdaNucleo.valorBate(l.extrato.valorPagoCentavos, dupCent) ? dup : l.extrato.valorPagoCentavos / 100;
+    }
+    if(l.registro.valorCentavos != null && !DdaNucleo.valorBate(l.registro.valorCentavos, dupCent)) return l.registro.valorCentavos / 100;
+    return dup;
+  }
+
+  // Os juros que a baixa GRAVA para um boleto, em reais: a mesma conta
+  // do LancamentosNucleo.lancamentosDePagamento (valor pago menos o
+  // valor da DUPLICATA). O dialogo mostrava o juros do extrato, que e'
+  // medido contra o BOLETO: com boleto e duplicata diferindo dentro dos
+  // 10 centavos de tolerancia, a tela anunciava um numero e o
+  // lançamento saia com outro (ou sem juros nenhum).
+  function jurosDaBaixaDda(l){
+    var j = App.centavos(valorPagoNaBaixaDda(l) - App.centavos(l.casamento.duplicata.valor || 0));
+    return j > 0 ? j : 0;
+  }
+
   function baixarPelaDda(btn, escolhidos){
     if(pagamentoOcupado()) return;
     var itens = (escolhidos || ddaBaixaveis).slice();
     if(!itens.length) return;
     pagandoId = 'dda';
     var soma = itens.reduce(function(s2, l){ return s2 + (l.casamento.duplicata.valor || 0); }, 0);
-    // Com extrato: valor e data reais de cada boleto que teve o debito
-    // achado; os outros ficam no valor da duplicata e no vencimento.
-    // Diferenca de ate' 10 centavos entre o que saiu da conta e a
-    // duplicata e' arredondamento (DdaNucleo.TOLERANCIA_CENTAVOS): grava
-    // o valor da duplicata, sem lancamento de juros de 3 centavos.
-    // Sem extrato e com o boleto valendo outra coisa que a duplicata
-    // (a linha vermelha, baixada pelo botao da linha): o que o banco
-    // cobrou e' o valor do boleto — a diferenca vira juros (ou fica
-    // como pagamento menor), nunca some.
-    var valorPagoDe = function(l){
-      var dup = l.casamento.duplicata.valor || 0;
-      var dupCent = Math.round(dup * 100);
-      if(l.extrato && l.extrato.lancamento){
-        return DdaNucleo.valorBate(l.extrato.valorPagoCentavos, dupCent) ? dup : l.extrato.valorPagoCentavos / 100;
-      }
-      if(l.registro.valorCentavos != null && !DdaNucleo.valorBate(l.registro.valorCentavos, dupCent)) return l.registro.valorCentavos / 100;
-      return dup;
-    };
+    var valorPagoDe = valorPagoNaBaixaDda;
     var comExtrato = itens.filter(function(l){ return l.extrato && l.extrato.lancamento; }).length;
-    var jurosTotal = itens.reduce(function(s2, l){ return s2 + ((l.extrato && l.extrato.jurosCentavos) || 0); }, 0);
+    // Em reais, e exatamente o que vai para os lançamentos de juros.
+    var jurosTotal = App.centavos(itens.reduce(function(s2, l){ return s2 + jurosDaBaixaDda(l); }, 0));
     // Pagos antes de vencer (e sem debito achado no extrato): com a
     // data em branco ficam com a data de HOJE, e o dialogo avisa.
     var hojeBaixa = hojeISO();
@@ -5997,8 +6351,11 @@
             (Math.round(valorPagoDe(itens[0]) * 100) !== Math.round(soma * 100) ? ' · pago ' + brl(valorPagoDe(itens[0])) + ' (o valor do boleto)' : '')
           : itens.length + ' boleto(s) · ' + brl(soma)) +
           (extratoLido
-            ? ' · ' + comExtrato + ' com data e valor do extrato' + (jurosTotal ? ' (juros ' + brl(jurosTotal / 100) + ')' : '')
+            ? ' · ' + comExtrato + ' com data e valor do extrato'
             : ' · cada um pelo valor da própria duplicata') +
+          // O MESMO numero que vai para os lançamentos de juros
+          // (jurosDaBaixaDda), com ou sem extrato.
+          (jurosTotal ? ' · juros a lançar: ' + brl(jurosTotal) : '') +
           (adiantados
             ? ' · ' + adiantados + ' ainda não venceu(ram): com a data em branco, fica(m) com a data de hoje'
             : ''),
@@ -6031,7 +6388,7 @@
                 bancoPagamento:r.bancoId, valorPago:valorPago, pagoEmLote:true
               },
               pares: LancamentosNucleo.lancamentosDePagamento({
-                tipo:'fornecedor', id:d.id, data:dataPgto, valor:d.valor || 0, valorPago:valorPago,
+                tipo:'fornecedor', id:d.id, data:dataPgto, valor:App.centavos(d.valor || 0), valorPago:valorPago,
                 bancoId:r.bancoId,
                 historico:'PAGTO ' + fornecedorDaDuplicata(d) + (d.numeroNota ? ' NF ' + d.numeroNota : ''),
                 fornecedor:d.nomeEmitente || null, numeroDoc:d.numeroNota || null
@@ -6045,7 +6402,7 @@
 
         return bloco(0).then(function(){
           App.toast(gravadas + ' boleto(s) marcado(s) como pago(s) — lançamentos contábeis criados' +
-            (jurosTotal ? ', juros de ' + brl(jurosTotal / 100) + ' lançados' : '') + '.', 'ok');
+            (jurosTotal ? ', juros de ' + brl(jurosTotal) + ' lançados' : '') + '.', 'ok');
         }).catch(function(e){
           // Cada bloco e' tudo-ou-nada: o que nao entrou continua em
           // aberto na conferencia, entao repetir e' possivel de verdade.
@@ -6080,7 +6437,7 @@
   // Resumo do ano em config/custosResumo_<ano>: um doc pequeno, para a
   // tabela anual nao reler milhares de lancamentos.
 
-  var cu = { mes: null, importados: [], nativos: [], config: { regras: [], porConta: {}, versao: 0 },
+  var cu = { mes: null, importados: [], nativos: [], nativosFora: null, config: { regras: [], porConta: {}, versao: 0 },
              faturamento: null, ano: {}, carregando: false, carregouMes: null, previa: null, abertos: {} };
 
   function cuMesPadrao(){ return App.somarMeses(hojeISO().substring(0, 7) + '-01', -1).substring(0, 7); }
@@ -6119,8 +6476,12 @@
     }).then(function(r){
       if($('cuMes').value !== mes) return; // trocou de mes no meio
       cu.importados = r[0].docs.map(cuDoDoc);
-      // Do app: so' o que tem partida montada (pendente nao tem conta para classificar).
-      cu.nativos = r[1].docs.map(cuDoDoc).filter(function(l){ return !l.importado && l.contaDebito && l.contaCredito && l.valorCentavos > 0; });
+      // Do app: so' o que tem partida montada (pendente nao tem conta
+      // para classificar). O que fica de fora e' CONTADO: o filtro
+      // omitia calado, e o custo do mes saia menor sem dizer por que.
+      var doApp = r[1].docs.map(cuDoDoc).filter(function(l){ return !l.importado; });
+      cu.nativos = doApp.filter(function(l){ return l.contaDebito && l.contaCredito && l.valorCentavos > 0; });
+      cu.nativosFora = cuNativosFora(doApp);
       var c = r[2].exists ? r[2].data() : {};
       cu.config = { regras: c.regras || [], porConta: c.porConta || {}, versao: c.versao || 0 };
       var m = r[3].exists ? r[3].data() : null;
@@ -6141,6 +6502,34 @@
   }
 
   function cuLancamentosDoMes(){ return cu.importados.length ? cu.importados : cu.nativos; }
+
+  // Os lançamentos do app que o custo NAO enxerga: sem conta contabil
+  // (pagamento de categoria sem mapa) e, com conta, sem valor.
+  function cuNativosFora(doApp){
+    var fora = { semConta: { qtd: 0, centavos: 0 }, semValor: 0 };
+    (doApp || []).forEach(function(l){
+      if(!(l.contaDebito && l.contaCredito)){
+        fora.semConta.qtd++;
+        fora.semConta.centavos += l.valorCentavos > 0 ? l.valorCentavos : 0;
+      } else if(!(l.valorCentavos > 0)) fora.semValor++;
+    });
+    return fora;
+  }
+
+  // O aviso so' vale no modo "do app": com importacao no mes, o custo
+  // sai das planilhas do contador e os lançamentos do app nem entram.
+  function cuAvisoNativosFora(){
+    var f = cu.nativosFora;
+    if(cu.importados.length || !f || !(f.semConta.qtd || f.semValor)) return '';
+    return '<p class="nota-explicativa" style="margin-top:12px;"><strong>⚠ ' +
+      (f.semConta.qtd
+        ? f.semConta.qtd + ' lançamento(s) sem conta contábil ficaram fora deste custo (' + brl(f.semConta.centavos / 100) + ') — mapeie em Cadastros.'
+        : '') +
+      (f.semValor
+        ? (f.semConta.qtd ? ' ' : '') + f.semValor + ' lançamento(s) sem valor também ficaram fora — complete na tela Lançamentos.'
+        : '') +
+      '</strong></p>';
+  }
 
   // O resumo do ano acompanha o mes aberto: gravado so' quando muda.
   function cuGravarResumoSeMudou(){
@@ -6198,7 +6587,8 @@
     $('cuApagarMes').style.display = cu.importados.length ? '' : 'none';
     if(!lista.length){
       alvo.innerHTML = '<p class="nota-explicativa" style="margin-top:14px;">Nenhum lançamento em ' + escapeHtml(cu.mes || '') +
-        '. Use "Importar planilhas do contador" e escolha todos os arquivos do mês de uma vez (bancos, caixa, devoluções).</p>';
+        '. Use "Importar planilhas do contador" e escolha todos os arquivos do mês de uma vez (bancos, caixa, devoluções).</p>' +
+        cuAvisoNativosFora(); // "nenhum" com pendentes de fora nao e' nenhum
       $('cuCardPendentes').style.display = 'none';
       renderCustosAno();
       return;
@@ -6211,6 +6601,7 @@
       html += '<p class="nota-explicativa" style="margin-top:12px;"><strong>⚠ Este mês tem ' + cu.importados.length + ' lançamentos importados e ' +
         cu.nativos.length + ' feitos no app.</strong> O relatório usa só os importados, para não contar o mesmo pagamento duas vezes.</p>';
     }
+    html += cuAvisoNativosFora();
     html += '<div class="cu-cards">' +
       c('Custo operacional', brl(res.custoOperacionalCentavos / 100),
         pct != null ? '<strong>' + App.pct(pct) + '</strong> do faturamento' : 'faturamento do mês não lançado no Painel de metas', true) +
@@ -6224,6 +6615,14 @@
       c('Financeiro', brl(res.tipos.financeiro / 100), 'tarifas, juros, IOF') +
       c('A classificar', brl(res.pendenteCentavos / 100), res.pendentes.length + ' lançamento(s)') +
       '</div>';
+    // Entrada em "valores a regularizar" nao abate mais o custo
+    // (CustosNucleo.resumoDoMes): fica de fora e a tela diz quanto. Com
+    // o nucleo antigo o campo nao existe e nada aparece.
+    var eac = res.entradasAClassificar;
+    if(eac && eac.qtd > 0){
+      html += '<p class="nota-explicativa" style="margin-top:10px;">⚠ ' + eac.qtd + ' entrada(s) em "valores a regularizar" (' +
+        brl(eac.centavos / 100) + ') ficaram FORA do custo — são depósitos a identificar, não estorno de despesa.</p>';
+    }
 
     html += '<div class="table-wrap" style="margin-top:14px;"><table class="quote-table"><thead><tr><th></th><th>Grupo</th><th class="cu-num">Lançamentos</th><th class="cu-num">Total</th><th class="cu-num">% do faturamento</th></tr></thead><tbody>';
     var fatCent = cu.faturamento > 0 ? App.emCentavos(cu.faturamento) : null;
@@ -6518,16 +6917,22 @@
 
   // Apaga os importados que sairam das planilhas e passa adiante a
   // classificacao feita a mao quando o substituto e' obvio (herdar).
+  //
+  // Uma fila so' de operacoes, cortada em blocos: as herancas iam TODAS
+  // no primeiro batch, por cima dos 450 deletes dele — reimportacao
+  // grande passava do tamanho de bloco que o resto do app respeita. As
+  // herancas vao na frente: a classificacao passa para a versao nova
+  // antes (ou junto) de a antiga ser apagada, nunca depois.
   function cuApagarSumidos(cmp){
-    var ids = cmp.sumidos.map(function(e){ return e.id; });
+    var ops = (cmp.herdar || []).map(function(h){ return { herdar: h }; })
+      .concat(cmp.sumidos.map(function(e){ return { apagar: e.id }; }));
     function bloco(i){
-      if(i >= ids.length) return Promise.resolve();
+      if(i >= ops.length) return Promise.resolve();
       return App.comAuth(function(){
         var batch = db.batch();
-        ids.slice(i, i + LOTE_FIRESTORE).forEach(function(id){ batch.delete(db.collection('lancamentos').doc(id)); });
-        // A heranca vai no primeiro bloco, junto dos primeiros deletes.
-        if(i === 0) cmp.herdar.forEach(function(h){
-          batch.set(db.collection('lancamentos').doc(h.para), { grupoCusto: h.grupoCusto }, { merge:true });
+        ops.slice(i, i + LOTE_FIRESTORE).forEach(function(op){
+          if(op.herdar) batch.set(db.collection('lancamentos').doc(op.herdar.para), { grupoCusto: op.herdar.grupoCusto }, { merge:true });
+          else batch.delete(db.collection('lancamentos').doc(op.apagar));
         });
         return batch.commit();
       }).then(function(){ return bloco(i + LOTE_FIRESTORE); });

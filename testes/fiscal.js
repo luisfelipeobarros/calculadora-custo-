@@ -139,5 +139,13 @@ eq('grupo normal pode ser cadastrado', F.grupoCadastravel(pe), true);
     F.grupoCadastravel({ id: '123456789_PE' }), false);
 }
 
+// Auditoria externa de 11/11/2026: devolucao nao e' compra.
+{
+  const ch = '26' + '1'.repeat(42);
+  const d = [{ chave: ch, itens: [{ ncm: '69072300', cfop: '6101', vTotal: 100, icmsStValor: 0 }] }];
+  eq('nota de devolucao fica fora do observado (como a cancelada); nota comum entra',
+    [F.agruparFiscal(d, { [ch]: { devolucao: true } }).length, F.agruparFiscal(d, { [ch]: { devolucao: false } }).length, F.agruparFiscal(d, {}).length], [0, 1, 1]);
+}
+
 console.log(problemas ? '  >>> ' + problemas + ' PROBLEMA(S)' : '  >>> tudo certo');
 process.exitCode = problemas ? 1 : 0;

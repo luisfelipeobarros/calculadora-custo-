@@ -137,7 +137,9 @@
     const csll = semTributo ? 0 : base * TRIBUTOS.csll;
 
     const lucro = base - irpj - csll;
-    const margem = venda !== 0 ? (lucro/venda) : NaN;
+    // venda > 0, e nao !== 0: com venda negativa (campo digitado errado)
+    // lucro e venda negativos davam uma margem POSITIVA.
+    const margem = venda > 0 ? (lucro/venda) : NaN;
 
     const vista = custoFinanceiroPct === 0 ? ' à vista' : ' cartão';
     const descricao = 'Custo NF-e R$ ' + v.custoNFe.toFixed(2) + ' | Frete R$ ' + v.frete.toFixed(2) + ' |\n' +
@@ -151,6 +153,9 @@
     const rCsll = centavos(csll);
     const rAvarias = centavos(avariasRS);
     const rCustoFin = centavos(custoFinanceiroRS);
+    // Soma das parcelas JA' arredondadas: a coluna TOTAL do razao
+    // sempre fecha com as linhas exibidas acima dela.
+    const rTotal = centavos(rCusto + rCustoFin + rIrpj + rCsll + rAvarias);
 
     return {
       custo: rCusto,
@@ -158,10 +163,13 @@
       csll: rCsll,
       avariasRS: rAvarias,
       custoFinanceiroRS: rCustoFin,
-      // Soma das parcelas JA' arredondadas: a coluna TOTAL do razao
-      // sempre fecha com as linhas exibidas acima dela.
-      total: centavos(rCusto + rCustoFin + rIrpj + rCsll + rAvarias),
-      lucro: centavos(lucro),
+      total: rTotal,
+      // O lucro EXIBIDO e' a venda menos o total exibido. Arredondado
+      // direto do valor cheio ele diferia de (venda - total) em 1 ou 2
+      // centavos em boa parte dos casos, e a tabela nao fechava
+      // (auditoria externa de 11/11/2026). A margem acima continua
+      // saindo do valor sem arredondar.
+      lucro: centavos(centavos(venda) - rTotal),
       margem,
       descricao,
       venda,
@@ -213,7 +221,10 @@
       ipi: toNum(cfg.ipi), custoFinanceiroPct: toNum(cfg.custoFinanceiroPct),
       avariasPct: toNum(cfg.avariasPct), bonificacao: toNum(cfg.bonificacao),
       tipoBonificacao: cfg.tipoBonificacao, venda: venda,
-      comST: cfg.comST, prejuizoContabil: 0
+      // O prejuizo contabil da FICHA vale (sem IRPJ/CSLL): fixado em 0, o
+      // Historico mostrava para o mesmo produto uma margem menor que a
+      // da Calculadora. A tela de cotacao nao tem esse campo e segue em 0.
+      comST: cfg.comST, prejuizoContabil: cfg.prejuizoContabil ? 1 : 0
     };
   }
 

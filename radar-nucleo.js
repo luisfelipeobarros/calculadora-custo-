@@ -197,13 +197,20 @@
         if (st === 'pedido') qtd = it.quantidadeRecebida != null ? Number(it.quantidadeRecebida) : Number(it.quantidadeEsperada);
         else if (st === 'transito' && it.parcial && it.parcial.pedido > it.parcial.faturado) qtd = it.parcial.pedido - it.parcial.faturado;
         else return;
-        var cod = String(it.codigo == null ? '' : it.codigo).trim();
+        // Chave em MAIUSCULAS (codigoNorm), como as fichas e o resto do
+        // app: com a chave crua, codigo com letra minuscula nao achava a
+        // propria carteira (auditoria externa de 11/11/2026).
+        var cod = codigoNorm(it.codigo);
         if (!cod) return;
         if (!isFinite(qtd)) qtd = 0;
         var em = it.pedidoEm || dataCot || null;
-        var c = mapa[cod] || (mapa[cod] = { qtd: 0, restante: 0, em: null, fornecedor: '', cotacoes: 0, ids: [] });
+        var c = mapa[cod] || (mapa[cod] = { qtd: 0, restante: 0, em: null, fornecedor: '', cotacoes: 0, ids: [], pedidos: [] });
         c.qtd += qtd;
         if (st === 'transito') c.restante += qtd;
+        // Um registro por PEDIDO: dois pedidos do mesmo produto nao sao
+        // um pedido so' com a data do mais novo. `ref` e' de quando o
+        // pedido esta' parado — no parcial, a ultima nota que veio.
+        c.pedidos.push({ qtd: qtd, em: em, parcial: st === 'transito', ref: (st === 'transito' && it.faturadoEm) || em, id: d.id || null });
         c.cotacoes++;
         if (d.id && c.ids.indexOf(d.id) < 0) c.ids.push(d.id);
         if (em && (!c.em || em > c.em)) { c.em = em; c.fornecedor = d.fornecedor || c.fornecedor; }
@@ -274,10 +281,10 @@
       var vendas = Number(p.v) || 0, estoque = Number(p.q) || 0;
       var mediaDia = vendas / periodo;
       var cobertura = mediaDia > 0 ? estoque / mediaDia : null; // null = sem venda no periodo
-      var ficha = fichas[codigo] || null;
+      var ficha = fichas[codigoNorm(codigo)] || fichas[codigo] || null;
       // Custo: o da ultima compra (relatorio) vale mais que o da ficha.
       var custo = p.c > 0 ? Number(p.c) : (ficha && ficha.custo > 0 ? ficha.custo : null);
-      var c = cart[codigo] || null;
+      var c = cart[codigoNorm(codigo)] || cart[codigo] || null;
       var m = (ean && !eanRepetido && mov[ean]) || null;
       var transacoes = p.t == null ? null : Number(p.t);
       // Venda concentrada: muita quantidade em poucas vendas (um pedido
@@ -291,15 +298,44 @@
       // Excecao: o que faltou vir de um pedido faturado em parte (restante)
       // continua em carteira — a nota parcial que existe ja' conta no
       // faturado, e e' justamente ela que faria o resto "sumir".
+      //
+      // A conta e' POR PEDIDO (auditoria externa de 11/11/2026): com um
+      // registro so' por produto e a data do pedido mais novo, a nota do
+      // pedido antigo nao valia para ninguem, ou valia para os dois. E o
+      // restante do parcial tambem ENVELHECE: se o fornecedor mandou 40
+      // de 100 e os 60 nunca vieram, depois de pedidoVelhoDias sem nota
+      // nova eles saem da carteira e caem em "Pedido antigo" — antes
+      // seguravam a compra para sempre.
+      var carteiraQtd = 0;
       if (c) {
         c = Object.assign({}, c);
-        c.entregue = !!(m && m.recebido && m.recebido.em && c.em && m.recebido.em >= c.em);
-        c.faturada = !c.entregue && !!(m && m.faturado && m.faturado.em && c.em && m.faturado.em >= c.em);
-        c.dias = c.em && o.hoje ? App.diasEntre(c.em, o.hoje) : null;
-        c.velho = !c.entregue && !c.faturada && c.dias != null && c.dias > par.pedidoVelhoDias;
+        var estadoDe = function (p) {
+          var dias = p.ref && o.hoje ? App.diasEntre(p.ref, o.hoje) : null;
+          if (p.parcial) return { entregue: false, faturada: false, dias: dias, velho: dias != null && dias > par.pedidoVelhoDias };
+          var entregue = !!(m && m.recebido && m.recebido.em && p.em && m.recebido.em >= p.em);
+          var faturada = !entregue && !!(m && m.faturado && m.faturado.em && p.em && m.faturado.em >= p.em);
+          return { entregue: entregue, faturada: faturada, dias: dias, velho: !entregue && !faturada && dias != null && dias > par.pedidoVelhoDias };
+        };
+        // Carteira montada por fora (sem a lista): um pedido so', como era.
+        var lista = (c.pedidos && c.pedidos.length) ? c.pedidos
+          : [{ qtd: (Number(c.qtd) || 0) - (Number(c.restante) || 0), em: c.em, parcial: false, ref: c.em }]
+              .concat(Number(c.restante) > 0 ? [{ qtd: Number(c.restante), em: c.em, parcial: true, ref: c.em }] : []);
+        var estados = lista.map(estadoDe);
+        lista.forEach(function (p, i) {
+          var e = estados[i];
+          if (!e.entregue && !e.faturada && !e.velho) carteiraQtd += Number(p.qtd) || 0;
+        });
+        // O que a tela mostra do produto: o estado do pedido MAIS NOVO;
+        // "velho" se QUALQUER pedido dele esta' parado alem do prazo (e'
+        // o que o poe na aba Pedido antigo), com os dias do mais parado.
+        var iNovo = 0;
+        lista.forEach(function (p, i) { if (!p.parcial && (lista[iNovo].parcial || String(p.em || '') > String(lista[iNovo].em || ''))) iNovo = i; });
+        var velhos = estados.filter(function (e) { return e.velho; });
+        c.entregue = estados[iNovo].entregue;
+        c.faturada = estados[iNovo].faturada;
+        c.velho = velhos.length > 0;
+        c.dias = velhos.length ? Math.max.apply(null, velhos.map(function (e) { return e.dias; })) : estados[iNovo].dias;
       }
-      var restante = c ? (Number(c.restante) || 0) : 0;
-      var carteiraQtd = restante + (c && !c.entregue && !c.faturada && !c.velho ? c.qtd - restante : 0);
       var faturadoQtd = m && m.faturado ? m.faturado.qtd : 0;
       var naoRepor = /^\*/.test(nome);
       var alvo = mediaDia * par.coberturaDias;
@@ -465,6 +501,22 @@
     return comum / Math.min(pa.length, pb.length);
   }
   function codigoNorm(v) { return String(v == null ? '' : v).trim().toUpperCase(); }
+  // Valor de um mapa { codigo: valor } sem depender de maiuscula/minuscula
+  // (a planilha de vendas e a cotacao nem sempre escrevem igual). O
+  // indice normalizado e' montado uma vez por mapa.
+  var _semCaixa = (typeof WeakMap === 'function') ? new WeakMap() : null;
+  function porCodigoSemCaixa(mapa, codigo) {
+    if (!mapa) return undefined;
+    var cru = String(codigo == null ? '' : codigo).trim();
+    if (mapa[cru] != null) return mapa[cru];
+    var idx = _semCaixa && _semCaixa.get(mapa);
+    if (!idx) {
+      idx = {};
+      Object.keys(mapa).forEach(function (k) { var n = codigoNorm(k); if (idx[n] == null) idx[n] = mapa[k]; });
+      if (_semCaixa) _semCaixa.set(mapa, idx);
+    }
+    return idx[codigoNorm(cru)];
+  }
 
   // O item da nota que corresponde ao item da cotacao, pelas tres chaves
   // (codigo do fornecedor, barras, nome unico). `i` e' a posicao dele na
@@ -472,7 +524,7 @@
   function itemDaNota(it, doc, eanPorCodigo) {
     var lista = (doc && doc.itens) || [];
     var codForn = codigoNorm(it.codigoRecebido);
-    var ean = soDigitos(eanPorCodigo && eanPorCodigo[String(it.codigo == null ? '' : it.codigo).trim()]);
+    var ean = soDigitos(porCodigoSemCaixa(eanPorCodigo, it.codigo));
     var porCodigo = codForn ? lista.filter(function (x) { return codigoNorm(x && x.codigo) === codForn; }) : [];
     var porEan = (!porCodigo.length && ean) ? lista.filter(function (x) { return soDigitos(x && x.ean) === ean; }) : [];
     var porNome = (!porCodigo.length && !porEan.length) ? lista.filter(function (x) { return semelhancaNomes(it.produto, x && x.descricao) >= 0.75; }) : [];
@@ -538,7 +590,11 @@
       // TODAS as notas que casam: o pedido pode vir em mais de uma
       // (faturamento parcial), e so' fecha quando a soma cobre a quantidade.
       var achados = [];
+      // Notas que ESTE item largou quando alguem rebaixou o status dele
+      // na mao (mudarStatusItem): nao voltam a casar com ele.
+      var largadas = new Set(it.nfeRecusadas || []);
       candidatas.forEach(function (doc) {
+        if (largadas.has(doc.chave)) return;
         var m = itemDaNota(it, doc, eanPorCodigo);
         if (!m) return;
         var qtd = Number(m.item.qtd) || 0;
@@ -561,13 +617,25 @@
         });
       });
       if (!achados.length) return;
+      // Nota que o item JA' tinha e que nao esta' mais entre as carregadas
+      // (a tela so' le os ultimos meses): continua valendo como foi
+      // gravada. Sem isto, a 2a nota de um pedido parcial apagava a 1a —
+      // a quantidade faturada encolhia e o pedido nunca fechava
+      // (auditoria externa de 11/11/2026).
+      var carregadas = {};
+      (itensDocs || []).forEach(function (doc) { if (doc && doc.chave) carregadas[doc.chave] = true; });
+      var antigas = (it.notasNfe || []).filter(function (n) {
+        return n && n.chave && !carregadas[n.chave] && !recusadas.has(n.chave) && !largadas.has(n.chave);
+      });
       var ultimo = achados[0]; // candidatas ja' vem da mais recente para a mais antiga
-      var qtdNfe = achados.reduce(function (s, a) { return s + a.qtd; }, 0);
+      var qtdNfe = achados.reduce(function (s, a) { return s + a.qtd; }, 0) +
+        antigas.reduce(function (s, n) { return s + (Number(n.qtd) || 0); }, 0);
       var qtdPedida = qtdPedidaDoItem(it);
       repartirUsos(achados.map(function (a) { return { chave: a.doc.chave, i: a.i, qtd: a.qtd, em: a.doc.dataEmissao, nova: a.nova }; }), qtdPedida)
         .forEach(function (u) { if (u.nova) usos.push({ chave: u.chave, i: u.i, qtd: u.qtd }); });
       var parcial = (qtdPedida > 0 && qtdNfe > 0 && qtdNfe < qtdPedida - 0.001) ? { faturado: qtdNfe, pedido: qtdPedida } : null;
-      var todasRecebidas = achados.every(function (a) { return a.recebida; });
+      var todasRecebidas = achados.every(function (a) { return a.recebida; }) &&
+        antigas.every(function (n) { return n.recebida === true; });
       var novoStatus = (todasRecebidas && !parcial) ? 'recebido' : 'transito';
       var atual = it.status || 'negociacao';
       var recebidas = achados.filter(function (a) { return a.recebida; });
@@ -576,7 +644,8 @@
       var campos = {
         chaveNfe: ultimo.doc.chave,
         numeroNfe: ultimo.doc.numero == null ? '' : String(ultimo.doc.numero),
-        notasNfe: achados.map(function (a) { return { chave: a.doc.chave, numero: a.doc.numero == null ? '' : String(a.doc.numero), em: a.doc.dataEmissao || null, qtd: a.qtd, recebida: a.recebida }; }),
+        notasNfe: achados.map(function (a) { return { chave: a.doc.chave, numero: a.doc.numero == null ? '' : String(a.doc.numero), em: a.doc.dataEmissao || null, qtd: a.qtd, recebida: a.recebida }; })
+          .concat(antigas.map(function (n) { return Object.assign({}, n); })),
         qtdNfe: qtdNfe || null,
         parcial: parcial,
         precoNfe: precoNfe != null && isFinite(precoNfe) ? precoNfe : null,
@@ -681,7 +750,19 @@
     var d = cotacao || {};
     var chaves = (d.chavesNfe || []).slice();
     if (chaves.indexOf(chave) === -1) chaves.push(chave);
-    return { chavesNfe: chaves, chavesNfeRecusadas: (d.chavesNfeRecusadas || []).filter(function (c) { return c !== chave; }) };
+    // ...e tambem a recusa por item (status rebaixado a' mao): quem vincula
+    // de novo esta' dizendo que a nota E' deste pedido.
+    var itens = (d.itens || []).map(function (it) {
+      if (!it || !it.nfeRecusadas || it.nfeRecusadas.indexOf(chave) === -1) return it;
+      var c = Object.assign({}, it);
+      c.nfeRecusadas = it.nfeRecusadas.filter(function (x) { return x !== chave; });
+      if (!c.nfeRecusadas.length) c.nfeRecusadas = null;
+      return c;
+    });
+    var r = { chavesNfe: chaves, chavesNfeRecusadas: (d.chavesNfeRecusadas || []).filter(function (c) { return c !== chave; }) };
+    // itens so' vai na resposta quando algum mudou (nada a regravar senao).
+    if (itens.some(function (it, i) { return it !== (d.itens || [])[i]; })) r.itens = itens;
+    return r;
   }
 
   /* ------------------------------------------------------------
@@ -701,6 +782,20 @@
     var atual = c.status || 'negociacao';
     if (ORDEM_STATUS[novo] == null) return c;
     if (opcoes && opcoes.soAvancar && ORDEM_STATUS[novo] < ORDEM_STATUS[atual]) return c;
+    // Rebaixado A' MAO para antes de "em transito": o item larga as notas
+    // que tinha. Sem isto os campos da NF ficavam nele, e a sincronizacao
+    // seguinte via a nota e empurrava o status de volta — nao havia como
+    // corrigir um casamento errado mexendo no status (auditoria externa
+    // de 11/11/2026). As chaves vao para nfeRecusadas DO ITEM: a mesma
+    // nota continua valendo para os outros itens da cotacao.
+    if (ORDEM_STATUS[novo] < ORDEM_STATUS.transito && ORDEM_STATUS[atual] >= ORDEM_STATUS.transito) {
+      var largadas = (c.nfeRecusadas || []).slice();
+      (c.notasNfe || []).concat(c.chaveNfe ? [{ chave: c.chaveNfe }] : []).forEach(function (n) {
+        if (n && n.chave && largadas.indexOf(n.chave) === -1) largadas.push(n.chave);
+      });
+      if (largadas.length) c.nfeRecusadas = largadas;
+      CAMPOS_NFE.forEach(function (k) { if (c[k] != null) c[k] = null; });
+    }
     if (novo === 'pedido' && (atual === 'negociacao' || !c.pedidoEm)) c.pedidoEm = hoje || c.pedidoEm || null;
     if (novo === 'negociacao' && c.pedidoEm) c.pedidoEm = null;
     c.status = novo;
@@ -842,7 +937,9 @@
     (itensVendas || []).forEach(function (it) {
       var atual = porCodigo[it.codigo];
       if (atual) {
-        porCodigo[it.codigo] = { n: atual.n || it.nome, e: atual.e || it.ean || '', q: it.estoque };
+        // O que veio AGORA vale mais que o guardado: nome e barras
+        // corrigidos no sistema tem de chegar ao catalogo.
+        porCodigo[it.codigo] = { n: it.nome || atual.n, e: it.ean || atual.e || '', q: it.estoque };
         atualizados++;
       } else if ((it.classe && CLASSES_PISOS.indexOf(it.classe) !== -1) || (it.ean && eans.has(it.ean))) {
         porCodigo[it.codigo] = { n: it.nome, e: it.ean || '', q: it.estoque };
@@ -851,10 +948,14 @@
     });
     return { doc: { porCodigoJson: JSON.stringify(porCodigo), geradoEm: hoje, qtd: Object.keys(porCodigo).length }, atualizados: atualizados, novos: novos };
   }
-  function eansComNcm(itensDocs, prefixos) {
+  // notasPorChave (opcional): estado das notas — nota CANCELADA nao prova
+  // que o produto e' piso de linha.
+  function eansComNcm(itensDocs, prefixos, notasPorChave) {
     var set = new Set();
     var pref = prefixos || ['6907'];
     (itensDocs || []).forEach(function (doc) {
+      var nota = doc && notasPorChave ? notasPorChave[doc.chave] : null;
+      if (nota && (nota.status || 'ativa') === 'cancelada') return;
       (doc && doc.itens || []).forEach(function (it) {
         var ncm = soDigitos(it && it.ncm), ean = soDigitos(it && it.ean);
         if (ean && pref.some(function (p) { return ncm.indexOf(p) === 0; })) set.add(ean);

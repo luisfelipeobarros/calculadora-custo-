@@ -32,8 +32,8 @@ Por isso os HTML referenciam os arquivos com um número de versão:
 
 ```html
 <link rel="stylesheet" href="app-shared.css?v=18">
-<script src="app-shared.js?v=32"></script>
-<script src="calculo-nucleo.js?v=9"></script>
+<script src="app-shared.js?v=33"></script>
+<script src="calculo-nucleo.js?v=10"></script>
 ```
 
 **Ao mexer nos arquivos compartilhados, aumente esse número em todos os
@@ -393,7 +393,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
 3. **Carga em DOM simulado** — executa os scripts de verdade (os que
    cada página carrega, na ordem em que ela carrega) e pega referência
    quebrada em tempo de carga.
-4. **Helpers** — 188 verificações em `app-shared.js` (escape de HTML,
+4. **Helpers** — 197 verificações em `app-shared.js` (escape de HTML,
    bloqueio de `javascript:`, aritmética de datas, arredondamento,
    busca sem acento). As
    últimas abrem os modais de verdade e **apertam o botão**, para
@@ -412,14 +412,14 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
    numa nota, nunca uma média. E trava que a regra da Vetrus continue
    morando num lugar só (`app-shared.js`, seção 9c) — as seis telas que
    mostram fornecedor têm de chamar o mesmo fornecedor pelo mesmo nome.
-8. **Pagamentos e recorrência** — 134 verificações: categorias (toda
+8. **Pagamentos e recorrência** — 144 verificações: categorias (toda
    categoria precisa ter cor no CSS), o cálculo do próximo vencimento
    (dia 31 em mês de 30, fevereiro bissexto, virada de ano) e o filtro
    de período. Trava também que a tela espere as três coleções antes de
    dizer "nenhum item" — zero é uma afirmação. E o relatório impresso
    da tela (`pagamentos-nucleo.js`): a lista como está na tela, por dia
    de vencimento, com resumo, subtotais e caixinha para marcar.
-9. **Conferência de DDA** — 186 verificações em `dda-nucleo.js`. O parser
+9. **Conferência de DDA** — 189 verificações em `dda-nucleo.js`. O parser
    do PDF roda contra a **camada de texto real** de um DDA do Bradesco
    (`testes/dda-fixture.js`, 36 boletos em 3 páginas), incluindo os dois
    registros que atravessam a quebra de página e a coluna "Situação" que
@@ -465,7 +465,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     filtro "Pgto semana"): a soma das semanas fecha com o total do mês,
     e a semana que cruza a virada aparece nos dois meses, cada um com
     a sua parte.
-11. **Simulador de compra** — 80 verificações em `simulador-nucleo.js`:
+11. **Simulador de compra** — 84 verificações em `simulador-nucleo.js`:
     a soma das parcelas **sempre bate** com o valor da compra (centavos
     inteiros, sobra na última), a **ST** como valor adicional cobrado
     junto da 1ª parcela (quando ela vence antes de 30 dias) ou em
@@ -486,7 +486,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     (interna/interestadual/exterior; venda com/sem ST; e 5405/6404 como
     "ST retida anteriormente", que legitimamente vem sem cobrança e não
     pode virar alarme falso na checagem cruzada com o valor de ST).
-13. **Fiscal (NCM & ST)** — 32 verificações em `fiscal-nucleo.js`: o
+13. **Fiscal (NCM & ST)** — 33 verificações em `fiscal-nucleo.js`: o
     agrupamento por **NCM + UF de origem** (da chave de acesso), o % de
     ST observado em centavos inteiros (null sem base, nunca zero
     inventado), a contagem por classe de CFOP (com "retida
@@ -496,7 +496,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     de cadastro (`grupoCadastravel`), que espelha o regex do
     `firestore.rules`: item sem NCM ou UF desconhecida não ganha
     formulário, senão o salvamento morreria em permission-denied.
-14. **Concorrentes em lote (planilha)** — 59 verificações em
+14. **Concorrentes em lote (planilha)** — 60 verificações em
     `concorrentes-nucleo.js`: leitura do catálogo (cabeçalho tolerante a
     ordem/acento/caixa, preço com sujeira de float → centavos inteiros,
     linha ruim **contada com motivo**, nunca engolida), a consulta de
@@ -556,7 +556,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     última importação), e o modo
     "Editar mapa" (arrastar, puxador de tamanho, setas e giro; o editado
     fica em `config/exposicaoMapa` por cima do desenho original).
-15c. **Radar de estoque e compras** — 82 verificações em
+15c. **Radar de estoque e compras** — 96 verificações em
     `radar-nucleo.js` (aba Radar da Calculadora): leitura do relatório de
     vendas do sistema, resumo compacto com o estoque anterior, carteira
     (itens "pedido" das cotações, com a data do pedido), faturado e
@@ -593,7 +593,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     pendente (nunca trava o pagamento), e o espelho das categorias
     internas é conferido **textualmente** contra o controle-notas.html.
 
-17. **Dashboard de vendas** — 68 verificações extraídas do próprio
+17. **Dashboard de vendas** — 74 verificações extraídas do próprio
     `dashboard.html` (o teste mede o código que roda na tela): o
     desembrulho do gviz do Google Sheets, colunas casadas pelo rótulo
     (ordem e acento não importam), a **regra de ouro** da margem
@@ -620,7 +620,7 @@ Não precisa instalar nada. São trinta e duas etapas, em vinte e duas frentes:
     direto de lá — o Controle de Notas e o Dashboard usam a mesma
     função, sem cópia; a leitura do gviz é extraída do
     `controle-notas.html`.
-19. **Custos da loja** — 88 verificações em `custos-nucleo.js`, com dados
+19. **Custos da loja** — 96 verificações em `custos-nucleo.js`, com dados
     fabricados na forma das planilhas do contador (layout de 19 colunas, uma
     por banco/caixa): leitura em pares D/C com o que não fecha indo para
     "problemas" (nunca lançamento pela metade), natureza pelo caminho do
@@ -853,6 +853,61 @@ abaixo. Só o que muda o que a pessoa vê ou como o dado é gravado.
   apagam). Precisa de internet para salvar.
 - **Catálogo do Etiquetas** (`config/etiquetasProdutos`) é gravado como
   texto JSON (`porCodigoJson`); o formato antigo continua sendo lido.
+
+### Segunda rodada: auditoria externa
+
+Um segundo relatório, de fora, foi conferido contra o código; o que se
+confirmou foi corrigido no mesmo dia.
+
+- **Custos — entrada não é estorno por padrão.** Depósito ou PIX ainda
+  não identificado, que o contador lança em "valores a regularizar",
+  entrava NEGATIVO no "a classificar" e derrubava o custo total da loja
+  (um depósito de R$ 30.000 tirava R$ 30.000 do custo). Agora a entrada
+  sem classificação fica fora do custo e aparece num aviso próprio; para
+  valer como estorno, escolhe-se o grupo no lançamento. Regra de texto
+  da configuração não vale para entrada em conta de receita.
+- **Salvar pelo Modo Lote e Individual não apaga a ficha.** Código
+  interno, código do fornecedor e a marca de prejuízo contábil de produto
+  já cadastrado são preservados; o Individual grava a mesma configuração
+  normalizada que a prévia de margem mostra; o Lote avisa quantos
+  produtos já cadastrados terão a configuração substituída.
+- **Prejuízo contábil vale no Histórico:** a margem lá é a mesma da
+  Calculadora (`Calculo.valoresParaCalculo` respeita a ficha).
+- **Lucro fecha com a tabela:** lucro exibido = venda − total exibido,
+  sempre (antes diferia em 1 ou 2 centavos em boa parte dos casos).
+- **Dinheiro negativo com milhar** ("-R$ 25.000", "25.000-") é lido
+  certo; `NaN` de planilha vira vazio.
+- **Radar:** o código interno casa sem depender de maiúscula; a conta da
+  carteira é **por pedido** (dois pedidos do mesmo produto não viram um);
+  o que faltou vir de um pedido parcial **envelhece** e cai em "Pedido
+  antigo" depois do prazo sem nota nova; a 2ª nota de um parcial soma com
+  a 1ª mesmo que a 1ª já tenha saído da janela de leitura.
+- **Rebaixar o status de um item à mão vale:** o item larga as notas que
+  tinha (`nfeRecusadas`, por item) e a sincronização não o empurra de
+  volta. Vincular a nota de novo desfaz.
+- **Fiscal** não soma nota de devolução. **Simulador/Painel** não
+  projetam recorrente a partir de parcela paga cuja seguinte foi
+  excluída. **DDA** avisa quando o boleto vence depois da duplicata.
+- **Controle de Notas:** excluir pagamento pago em mês já exportado
+  avisa; o juros do pagamento em lote guarda os itens do lote e é
+  oferecido para apagar ao desfazer; prorrogar em lote ignora o que já
+  está pago; desfazer um recorrente avisa da parcela seguinte; salvar o
+  mapa de contas oferece aplicar aos lançamentos pendentes; a aba Custos
+  avisa dos lançamentos sem conta que ficaram fora.
+- **Dashboard:** o período comparável de um fornecedor ou categoria é o
+  da loja — mês em que a loja vendeu e ele não é queda de 100%, não mês
+  ignorado.
+- **Regras:** documento de `config` não pode ser apagado pelo navegador
+  (precisa republicar o `firestore.rules`).
+
+Do relatório, **não procediam**: o recuo de um dia nas datas de planilha
+(vale para o SheetJS 0.20; a versão em uso gera a data no horário local),
+a releitura completa "em todas as aberturas" (acontece uma vez) e a
+projeção sazonal "sem o mês faltante" (ela extrapola o ano inteiro pela
+proporção). **Ficaram como estão, por decisão**: a fórmula da bonificação
+(só o texto da tela foi corrigido para dizer o que a conta faz — abate o
+custo, e o lucro a mais paga IRPJ/CSLL) e a deduplicação do extrato do
+Bradesco pelo número do documento.
 
 ### O que ficou de fora, e por quê
 

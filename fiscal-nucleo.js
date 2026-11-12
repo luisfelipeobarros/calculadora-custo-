@@ -48,6 +48,10 @@
     (docsItens || []).forEach(function (doc) {
       var nota = doc && notasPorChave ? notasPorChave[doc.chave] : null;
       if (!doc || (nota && (nota.status || 'ativa') === 'cancelada')) return;
+      // Devolucao tambem fica fora: nao e' compra, e somada ela inflava o
+      // volume do NCM e puxava a media de ST observada (auditoria externa
+      // de 11/11/2026).
+      if (nota && nota.devolucao === true) return;
       // 'PE (Pernambuco)' -> 'PE'; chave fora do padrao -> '??' (o
       // grupo aparece, mas a tela nao deixa cadastrar em cima dele).
       var ufRotulo = App.ufDaChave(doc.chave);

@@ -192,9 +192,14 @@ service cloud.firestore {
     // match que casa permite, a gravacao passa — o curinga liberava a
     // escrita em notasSync e o bloqueio nao valia (auditoria de
     // 11/11/2026).
+    //
+    // Sem DELETE: nenhuma tela apaga documento de config, e um apagao
+    // ali (contadores da exportacao, mapa de contas, catalogo, regras
+    // de custo) custaria caro. Criar e alterar continuam livres.
     match /config/{id} {
       allow read: if autenticado();
-      allow write: if autenticado() && id != 'notasSync';
+      allow create, update: if autenticado() && id != 'notasSync';
+      allow delete: if false;
     }
 
     // Vendas (dashboard.html e a tela Vendas do Controle de Notas): um

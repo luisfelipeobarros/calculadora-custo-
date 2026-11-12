@@ -265,7 +265,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js" integrity="sha384-I1LYojsZ5RM1cOda44Z2h42Qa6YfsQ1XkXxREnhp4ueYBR/4d1pG1K+NZM537Vsj" crossorigin="anonymous"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js" integrity="sha384-Ke0FJhH7LyRqDxZ0wt+/OXV38yfQVu7g9VPEEGjYmB4RVOY/ta04uecRhsMwT7V3" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
-<script src="app-shared.js?v=32"></script>
+<script src="app-shared.js?v=33"></script>
 <script src="etiquetas-nucleo.js?v=15"></script>
 <!-- Mapa dos expositores e o cadastro do que esta' em cada um (aba Exposicao). -->
 <script src="exposicao-nucleo.js?v=4"></script>
@@ -480,7 +480,10 @@
     b.disabled = true;
     const agora = firebase.firestore.FieldValue.serverTimestamp();
     // "Troquei pela azul": marca a azul E encerra a vermelha, de uma vez.
-    const vermelha = acao === 'trocar' ? N.vermelhasPorLinha([itens[0]], vermelhas)[itens[0].id] : null;
+    // A linha e' um GRUPO (um produto, varias notas): a vermelha pode ter
+    // casado com qualquer item dele, nao so' com o primeiro.
+    const porVermelha = acao === 'trocar' ? N.vermelhasPorLinha(itens, vermelhas) : {};
+    const vermelha = itens.map(l => porVermelha[l.id]).filter(Boolean)[0] || null;
     App.comAuth(() => {
       const batch = db.batch();
       itens.forEach(l => batch.set(db.collection('etiquetas').doc(l.id), Object.assign({ chaveAcesso: l.chave, n: l.n, atualizadoEm: agora }, monta()), { merge: true }));
@@ -531,6 +534,12 @@
   $('sdCodigo').addEventListener('change', completarSaldao);
   $('sdCodigo').addEventListener('input', App.debounce(completarSaldao, 300));
   function registrarSaldao(dados){
+    // O mesmo produto duas vezes no saldao ativo viraria duas linhas com
+    // o mesmo estoque (pelo codigo interno ou pelas barras).
+    const cod = String(dados.codigo || '').trim(), ean = String(dados.ean || '').replace(/\D/g, '');
+    const repetido = N.saldoesAtivos(saldoes).find(s =>
+      (cod && String(s.codigo || '').trim() === cod) || (ean && String(s.ean || '').replace(/\D/g, '') === ean));
+    if(repetido) return Promise.reject(new Error('"' + (repetido.produto || cod) + '" já está no saldão desde ' + App.fmtData(repetido.criadaEm) + '.'));
     return App.comAuth(() => db.collection('etiquetas').add(Object.assign({
       tipo: 'saldao', local: 'interno', obs: null, estoqueInicial: null, ean: null, codigo: null,
       criadaEm: App.hojeISO(), encerradaEm: null, atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
@@ -875,9 +884,12 @@
   });
 
   // ─── Carga ───
-  function escutarEstadoNotas(sinc){
+  function escutarEstadoNotas(sinc, forcar){
     if(pararNotas){ pararNotas(); pararNotas = null; }
-    if(sinc === null) App.esquecerLeitura(LEITURA_NOTAS); // undefined = "nao deu para saber": nao apaga
+    // "Recarregar" e' pedido explicito de dado fresco: o estado das notas
+    // tambem volta a ser lido inteiro (antes so' os itens eram relidos e
+    // as notas seguiam do cache + o que mudou).
+    if(sinc === null || forcar) App.esquecerLeitura(LEITURA_NOTAS); // undefined = "nao deu para saber": nao apaga
     return new Promise((resolve, reject) => {
       let primeiro = true;
       const mapa = {};
@@ -1011,7 +1023,7 @@
           ini: corteISO.slice(0, 8) + '01', corte: App.somarDias(hoje, -DIAS_ITENS_SERVIDOR),
           chave: LEITURA_ITENS, hoje, forcar
         })),
-        App.comAuth(() => escutarEstadoNotas(sinc)),
+        App.comAuth(() => escutarEstadoNotas(sinc, forcar)),
         App.comAuth(() => escutarEtiquetas()),
         lerCatalogo(),
         lerConfigEstoque() // o minimo decide quem, mesmo faturado, nao precisa de etiqueta
@@ -1236,7 +1248,15 @@
     const dx = pt.x - exArrasto.origem.x, dy = pt.y - exArrasto.origem.y;
     if(Math.abs(dx) < X.GRADE / 2 && Math.abs(dy) < X.GRADE / 2 && !exArrasto.moveu) return;
     exArrasto.moveu = true;
-    exLayout = X.ajustarPeca(exArrasto.base, exArrasto.chave, exArrasto.modo === 'mover' ? { dx, dy } : { dw: dx, dh: dy });
+    let delta = { dx, dy };
+    if(exArrasto.modo !== 'mover'){
+      // Peca GIRADA: largura e altura estao nos eixos dela, nao nos da
+      // tela — o arrasto e' girado de volta antes de virar tamanho.
+      const pc = X.pecaAtual(exArrasto.base, exArrasto.chave);
+      const r = ((pc && pc.rot) || 0) * Math.PI / 180;
+      delta = { dw: dx * Math.cos(r) + dy * Math.sin(r), dh: -dx * Math.sin(r) + dy * Math.cos(r) };
+    }
+    exLayout = X.ajustarPeca(exArrasto.base, exArrasto.chave, delta);
     renderExposicao();
   });
   const fimArrasto = () => { if(!exArrasto) return; if(exArrasto.moveu) gravarLayout(); exArrasto = null; };

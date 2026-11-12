@@ -188,6 +188,10 @@
       var cre = g.linhas.filter(function (l) { return l.dc === 'C'; });
       var ref = g.linhas[0];
       var onde = (arquivo ? arquivo + ', ' : '') + 'linha ' + ref.linha + ' (nº ' + g.numero + ')';
+      // Varias linhas de MODELO sem numero caem todas no mesmo grupo (numero
+      // vazio): sem data e sem valor em NENHUMA, sao modelo — contadas, e
+      // nao um erro de "pernas" (auditoria externa de 11/11/2026).
+      if (g.linhas.every(function (l) { return !l.data && l.valorCentavos == null; })) { linhasDeModelo += g.linhas.length; return; }
       if (deb.length !== 1 || cre.length !== 1) {
         problemas.push({ tipo: 'pernas', linha: ref.linha, texto: onde + ': esperava uma perna a débito e uma a crédito, veio ' + deb.length + ' D e ' + cre.length + ' C — "' + ref.historico + '"' });
         return;
@@ -430,7 +434,17 @@
 
     if (l.grupoCusto && GRUPOS[l.grupoCusto]) { grupo = l.grupoCusto; como = 'escolhido no lançamento'; }
 
-    if (!grupo) {
+    // Regra de TEXTO da configuracao NAO vale para ENTRADA em conta de
+    // receita (recebimento de cliente, cartao). Ela pegava o PIX de um
+    // cliente cujo historico por acaso continha a palavra ("PIX JOAO
+    // ALUGUEL") e o jogava, com sinal de estorno, dentro de um grupo de
+    // custo: a receita inteira ABATIA o custo operacional (auditoria
+    // externa de 11/11/2026). Nas contas genericas a regra continua
+    // valendo nos dois sentidos — e' la' que o parcelamento que entra e
+    // sai se anula e o resgate de aplicacao ganha nome.
+    var grupoProprio = nat === 'entrada' ? grupoDaConta(conta, config.porConta) : null;
+    var entradaDeReceita = !!(grupoProprio && GRUPOS[grupoProprio] && GRUPOS[grupoProprio].tipo === 'receita');
+    if (!grupo && !entradaDeReceita) {
       var regras = config.regras || [];
       for (var i = 0; i < regras.length && !grupo; i++) {
         var alvo = App.normalizarTexto(regras[i].contem || '');
@@ -463,6 +477,7 @@
   function resumoDoMes(lancamentos, config) {
     var grupos = {}, tipos = {}, pendentes = [];
     var transferencias = 0, entradas = 0, saidas = 0;
+    var entradasAClassificar = { qtd: 0, centavos: 0, lancamentos: [] };
     Object.keys(TIPOS).forEach(function (t) { tipos[t] = 0; });
 
     (lancamentos || []).forEach(function (l) {
@@ -470,6 +485,21 @@
       if (c.natureza === 'transferencia') { transferencias += l.valorCentavos; return; }
       if (c.natureza === 'outro') return;
       if (c.natureza === 'saida') saidas += l.valorCentavos; else entradas += l.valorCentavos;
+
+      // ENTRADA que ninguem classificou NAO e' estorno de despesa. O
+      // caso real: deposito/PIX de cliente ainda nao identificado, que o
+      // contador lanca em "valores a regularizar". Tratada como estorno
+      // (sinal -1) ela entrava NEGATIVA no "a classificar", que faz
+      // parte do custo total — um deposito de R$ 30.000 derrubava o
+      // custo da loja em R$ 30.000. Fica fora de todos os grupos e sai
+      // contada a' parte, para a tela avisar. Quem souber que aquela
+      // entrada E' estorno escolhe o grupo no lancamento (grupoCusto).
+      if (c.natureza === 'entrada' && c.grupo === 'a_classificar') {
+        entradasAClassificar.qtd++;
+        entradasAClassificar.centavos += l.valorCentavos;
+        entradasAClassificar.lancamentos.push(l);
+        return;
+      }
 
       // Custo: saida soma, entrada (estorno) abate. Receita e' o
       // contrario: a entrada soma e a saida (devolucao ao cliente) abate.
@@ -492,6 +522,7 @@
       custoTotalCentavos: custoTotalCentavos(tipos),
       pendentes: pendentes,
       pendenteCentavos: tipos.pendente,
+      entradasAClassificar: entradasAClassificar,
       saidasCentavos: saidas,
       entradasCentavos: entradas,
       transferenciasCentavos: transferencias
